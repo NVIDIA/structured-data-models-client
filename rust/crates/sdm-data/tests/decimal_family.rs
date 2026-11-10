@@ -2,24 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The decimal family's DuckDB statements (folded in), pinned
-//! as text beside `duckdb_catalog.rs`'s: each data request the `decimal.*`
-//! cases make through `from_source` and `materialize` on the pure-Rust host
-//! that no other file here pins already, as `sdm-testkit` recorded it, with
-//! the one statement this layer renders for it. A statement that changes
-//! without its pin changing here fails this test, and `sdm-testkit`'s
-//! `tests/decimal_sql.rs` runs the cases on DuckDB and fails on any
-//! statement they run that is pinned nowhere in these files. A decimal
-//! column changes no statement's text, only what it reads: the two of its
-//! own are `decimal.class-target-38-18`'s preview of `users`, which reads
-//! its static target `tier` with the rest, and its entity sample, which
-//! reads `tier` beside the key for the labels.
-//!
-//! exact-decimal cases add nine more, as `sdm-testkit` recorded
-//! them: the previews of the tables their decimal columns (`d`, `f` and
-//! `g`, `t`, `amount`) widen, the entity samples of their static targets,
-//! and `decimal.sum-10-2`'s and `decimal.feature-inexact-38-18`'s
-//! neighbour and lookup reads over `amount`, `f` and `g`.
+//! Focused SQL rendering expectations for this data-type family.
+//! Companion sdm-testkit tests execute the family cases through DuckDB
+//! and check outcomes, result encoding and query-log consistency.
 
 use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
 use sdm_data::Data;

@@ -26,6 +26,7 @@ from typing import Any
 
 import duckdb
 import pyarrow as pa
+from request_kind_assertions import assert_source_answer, source_answer
 
 from sdm_client._rust import codec
 from sdm_client._rust.providers.duckdb import DuckDBProvider
@@ -266,7 +267,7 @@ KINDS = json.loads(
 
 
 def _cell(value: Any) -> Any:
-    r"""A cell as ``contract/request-kinds.json`` writes one."""
+    r"""A lossless scalar representation for comparing admitted and source rows."""
     if value is None or isinstance(value, (bool, str)):
         return value
     if isinstance(value, int):
@@ -314,11 +315,8 @@ def _base(name: str) -> Any:
     return connection
 
 
-def test_every_request_kind_runs_on_every_base_as_the_vectors_say() -> None:
-    #: every data request kind, planned by the core's data layer for
-    # DuckDB, answered by this host's provider and admitted, is the Arrow
-    # schema and rows contract/request-kinds.json records, which the
-    # pure-Rust host's provider is held to as well.
+def test_every_request_kind_returns_source_data_on_every_base() -> None:
+    # Host execution and core admission must preserve source values/types.
     fetches = KINDS['fetches']
     kinds = {fetch['request']['request'] for fetch in fetches}
     assert kinds == {
@@ -351,14 +349,7 @@ def test_every_request_kind_runs_on_every_base_as_the_vectors_say() -> None:
             data, _ = _keyed(connection, fetch['request'], seeds)
         else:
             data, _ = _admitted(connection, fetch['request'])
-        where = f'{fetch["base"]}: {fetch["name"]}'
-        assert [[f.name, str(f.type)] for f in data.schema] == fetch[
-            'schema'
-        ], where
-        assert _canonical(data) == fetch['rows'], where
-    # Not vacuous: rows on every base, a key set bound on each.
-    assert all(
-        any(f['rows'] for f in fetches if f['base'] == base)
-        for base in connections
-    )
-    assert sum(1 for f in fetches if 'keys' in f and f['rows']) == 6
+        expected = source_answer(connection, fetch)
+        assert_source_answer(data, expected, fetch['request'], _canonical)
+    assert len(fetches) == 45
+    assert sum('keys' in f for f in fetches) == 6

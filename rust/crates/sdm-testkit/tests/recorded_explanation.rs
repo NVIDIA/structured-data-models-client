@@ -2,26 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! exit on `rust-host` (the package's test author's), beside
-//! `contract/tests/test_result_observation.py`, which holds
-//! `python-core` to the same: the host records a result's explanation and
-//! its items' metadata, so the gate's `core` rule compares them across
-//! hosts (exits; round 1, P3 3).
-//!
-//! Where: `core.predicted.result.explanation`, the JSON text the core put
-//! on the result's Arrow schema metadata under `explanation`, absent where
-//! the core gives none; each item's metadata in the result rows'
-//! `metadata` column. The values are the reference's
-//! (`contract/option-vectors.json`); a forecast's whole explanation
-//! (`{"by_forecast_step":...}`) is on the schema metadata only, so
-//! `explain.forecast` tells a recorded explanation from the rows' column.
-//!
-//! Each is read from the observation as `sdm-contract-run` writes it
-//! (`observation::write`), not from the in-process answer: the gate
-//! overlays the checkpoint's writer, so the explanation reaches the
-//! observation through the writer alone.
+//! Result observations preserve authored endpoint explanations and per-item metadata.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use sdm_testkit::bases;
 use sdm_testkit::case;
@@ -33,13 +16,16 @@ fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
-fn read_json(path: &Path) -> Value {
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-}
-
-fn vector(id: &str) -> Value {
-    let all = read_json(&root().join("contract/option-vectors.json"));
-    all["vectors"][id].clone()
+fn expected_explanation(call: u64) -> Value {
+    // Authored endpoint answers for row zero of calls zero and one.
+    let (rank, score) = match call {
+        0 => (1, 0.1),
+        1 => (4, 0.4),
+        _ => unreachable!(),
+    };
+    serde_json::json!({"format":"scripted", "summary":format!("row 0 of call {call}"),
+        "score":score, "rank":rank, "path":[call,0],
+        "detail":{"call":call,"row_index":0,"note":null}})
 }
 
 /// The case's observation on DuckDB, as `sdm-contract-run` writes it: its
@@ -80,8 +66,11 @@ fn the_result_s_explanation_is_recorded() {
         "explain.forecast",
         "metadata.items-explained",
     ] {
-        let wanted = vector(id)["explanation"].clone();
-        assert!(!wanted.is_null(), "{id}: the vector holds no explanation");
+        let wanted = if id == "explain.forecast" {
+            serde_json::json!({"by_forecast_step":{"1":expected_explanation(0),"2":expected_explanation(1)}})
+        } else {
+            expected_explanation(0)
+        };
         let answer = predicted(id);
         let Some(text) = answer["result"]["explanation"].as_str() else {
             panic!("{id}: no explanation recorded: {}", answer["result"]);
@@ -97,7 +86,6 @@ fn the_result_s_explanation_is_recorded() {
 #[test]
 fn a_result_with_no_explanation_records_none() {
     for id in ["explain.not-answered", "metadata.items"] {
-        assert!(vector(id)["explanation"].is_null());
         let answer = predicted(id);
         assert!(
             answer["result"].get("explanation").is_none(),
@@ -127,15 +115,24 @@ fn each_item_s_metadata_is_recorded() {
                 cell => serde_json::from_str(cell["utf8"].as_str().unwrap()).unwrap(),
             })
             .collect();
-        let wanted = vector(id)["item_metadata"].clone();
-        let wanted = wanted.as_array().unwrap();
-        assert_eq!(recorded.len(), wanted.len(), "{id}");
-        for pair in wanted {
-            assert!(
-                recorded.iter().any(|got| same(&pair[1], got)),
-                "{id}: no item metadata {} in {recorded:?}",
-                pair[1]
-            );
+        let positions = if id == "metadata.items-across-calls" {
+            vec![(0, 0), (0, 1), (1, 0)]
+        } else {
+            vec![(0, 0), (0, 1)]
+        };
+        let wanted: Vec<_> = positions
+            .iter()
+            .map(|(call, row)| serde_json::json!({"call":call,"row_index":row,"source":"scripted"}))
+            .collect();
+        assert_eq!(recorded, wanted);
+        let index = result["columns"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .position(|column| column["name"] == "row_index")
+            .unwrap();
+        for (i, row) in result["rows"].as_array().unwrap().iter().enumerate() {
+            assert_eq!(row[index], serde_json::json!({"i64":i.to_string()}));
         }
     }
 }

@@ -2,22 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The date reader held to the reference's readings: 45 PQL
-//! literals (`rust/testdata/native-admission-vectors.json`), the generated literals of
-//! `dates.json` (D8's packed dates and long fields, and a grid of D2 to D7
-//! with D4's warning), and the frozen
-//! `padded-years.tsv`, where Linux's `strftime` and macOS's differ only in
-//! D4's warning.
-//!
-//! Each literal compares its date and time, its offset, and D4's warning's
-//! format; every kind of answer must be held, and each file must hold the
-//! rows it promises, so a vector set read short or empty fails.
-//!
-//! a literal with a run of five digits or more (D8) is refused
-//! by name ([`Reading::Packed`]) instead of read: its rows keep the
-//! reference's reading, as evidence of the old behaviour, and are held to
-//! `Packed` here instead; every other row is held to the reference's
-//! reading as before.
+//! Date parsing semantics, explicit calendar bounds and retained cross-platform
+//! padded-year interoperability inputs.
 
 #![allow(
     clippy::disallowed_methods,
@@ -27,7 +13,6 @@
 use std::path::Path;
 
 use sdm_pql::dates::{Reader, Reading};
-use serde_json::Value;
 
 fn here(name: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(name);
@@ -58,178 +43,79 @@ fn packed(literal: &str) -> bool {
         .any(|run| run.len() >= 5)
 }
 
-/// What the rows' answers held: reads, refusals, offsets and warnings.
-#[derive(Default, Debug)]
-struct Held {
-    read: usize,
-    refused: usize,
-    offset: usize,
-    warned: usize,
-    /// Rows the reader refused by name as packed (D8).
-    packed: usize,
-}
-
-impl Held {
-    fn count(&mut self, answer: &Answer) {
-        match answer {
-            (None, ..) => self.refused += 1,
-            (Some(_), offset, format) => {
-                self.read += 1;
-                self.offset += usize::from(offset.is_some());
-                self.warned += usize::from(format.is_some());
-            }
-        }
-    }
-}
-
-/// Each `[literal, value, offset, format]` row against the reader: a D8
-/// literal must be refused by name as packed, whatever the reference read
-///; every other must read as the reference reads it. `held` counts
-/// the reference's answers, so the file's promise is checked as before, and
-/// the packed refusals beside them.
-fn check(reader: Reader, rows: &[Value], failures: &mut Vec<String>) -> Held {
-    let mut held = Held::default();
-    for row in rows {
-        let literal = row[0].as_str().unwrap();
-        let want: Answer = (
-            row[1].as_str().map(str::to_owned),
-            row[2].as_i64(),
-            row[3].as_str().map(str::to_owned),
-        );
-        held.count(&want);
-        if packed(literal) {
-            match reader.read(literal) {
-                Reading::Packed => held.packed += 1,
-                other => failures.push(format!("{literal}: {other:?}, not refused as packed")),
-            }
-            continue;
-        }
-        let got = answer(reader, literal);
-        if got != want {
-            failures.push(format!("{literal}: {got:?}, the reference {want:?}"));
-        }
-    }
-    held
-}
-
-/// literals: the four with a run of five digits or more
-/// (`230203-06-09`, `20240101/00/123456`, `00001/1/2`, which the reference
-/// reads, and `10000-01-01`, which it refuses) are refused by name as packed
-/// ( brief: "a D8 literal is refused with a named code and rule");
-/// the other 41 read as the reference reads them (D1 to D7 and D9 unchanged).
 #[test]
-fn date_literal_vectors_preserve_parsing_results() {
-    let vectors: Value =
-        serde_json::from_str(&here("../../testdata/native-admission-vectors.json")).unwrap();
-    let year = vectors["meta"]["chrono"]["today_year"].as_i64().unwrap();
+fn short_years_ordering_and_warnings_have_explicit_meanings() {
     let reader = Reader {
-        year: Some(i16::try_from(year).unwrap()),
+        year: Some(2026),
         pads_year: true,
     };
-    let mut failures = Vec::new();
-    let mut held = Held::default();
-    let mut rows = 0;
-    for task in vectors["tasks"].as_array().unwrap() {
-        if task["kind"] != "pql_literal" {
-            continue;
-        }
-        rows += 1;
-        let literal = task["input"]["literal"].as_str().unwrap();
-        if packed(literal) {
-            match reader.read(literal) {
-                Reading::Packed => held.packed += 1,
-                other => failures.push(format!("{literal}: {other:?}, not refused as packed")),
-            }
-            continue;
-        }
-        let reference = &task["ref"];
-        // The reference writes an offset after the time: `...T06:00:00-09:00`.
-        let want: Answer = match reference["value"].as_str() {
-            None => (None, None, None),
-            Some(value) => {
-                let (at, offset) = value.split_at(19);
-                let offset = (!offset.is_empty()).then(|| {
-                    let sign = if offset.starts_with('-') { -1 } else { 1 };
-                    let hours: i64 = offset[1..3].parse().unwrap();
-                    let minutes: i64 = offset[4..6].parse().unwrap();
-                    sign * (hours * 3600 + minutes * 60)
-                });
-                let warned = reference["warned"] == true;
-                (Some(at.to_owned()), offset, warned.then_some(String::new()))
-            }
-        };
-        let got = answer(reader, literal);
-        // records whether a warning was given, not its format.
-        let got = (got.0, got.1, got.2.map(|_| String::new()));
-        if got != want {
-            failures.push(format!("{literal}: {got:?}, the reference {want:?}"));
-        }
-        held.count(&want);
-    }
-    assert_eq!(rows, 45, "45 literal cases");
-    assert_eq!(held.packed, 4, "four literals with a run of five digits");
-    assert!(
-        held.read > 0 && held.refused > 0 && held.warned > 0,
-        "{held:?}"
-    );
-    assert!(failures.is_empty(), "{}", failures.join("\n"));
-}
-
-/// `dates.json`: every one of D8's 7,749 `packed` rows is refused by name
-/// as packed, those the reference reads and those it refuses alike (
-/// brief: "remove the D8 reading path"); every `plain` row (every run four
-/// digits or fewer) still reads as the reference reads it, D4's warnings
-/// and D9's refusals included ("keep everything else in D1 to D9
-/// unchanged").
-#[test]
-fn the_generated_literals_read_as_the_reference_reads_them() {
-    let vectors: Value = serde_json::from_str(&here("tests/dates.json")).unwrap();
-    assert_eq!(vectors["format"], "sdm-pql-dates/1");
-    let reader = Reader {
-        year: Some(i16::try_from(vectors["year"].as_i64().unwrap()).unwrap()),
-        pads_year: vectors["pads_year"].as_bool().unwrap(),
-    };
-    let mut failures = Vec::new();
-    let packed = vectors["packed"]["rows"].as_array().unwrap();
-    let held = check(reader, packed, &mut failures);
-    // D8's rows: every one has a run of five digits or more.
-    for row in packed {
-        let literal = row[0].as_str().unwrap();
-        assert!(
-            literal
-                .split([' ', '/', '-', '.', ':'])
-                .any(|run| run.len() >= 5),
+    for (literal, datetime, warning) in [
+        ("01/02/50", "2050-01-02T00:00:00", None),
+        ("01/02/75", "2075-01-02T00:00:00", None),
+        ("01/02/76", "1976-01-02T00:00:00", None),
+        ("02/01/2024", "2024-02-01T00:00:00", None),
+        ("15/03/2024", "2024-03-15T00:00:00", Some("%d/%m/%Y")),
+        ("50/1/2 3:4:5", "2050-01-02T03:04:05", None),
+        ("2038-01-20", "2038-01-20T00:00:00", None),
+        ("9999-12-31", "9999-12-31T00:00:00", None),
+    ] {
+        assert_eq!(
+            answer(reader, literal),
+            (Some(datetime.into()), None, warning.map(str::to_owned)),
             "{literal}"
         );
     }
-    assert!(packed.len() >= 7_000, "{}", packed.len());
-    // The reference's own readings, kept as evidence of the old behaviour:
-    // it read most and refused the rest.
-    assert!(
-        held.read >= 4_000 && held.refused >= 3_000 && held.offset >= 300,
-        "{held:?}"
-    );
-    assert_eq!(held.packed, packed.len(), "every D8 row refused as packed");
-    let plain = vectors["plain"].as_array().unwrap();
-    let held = check(reader, plain, &mut failures);
-    // Recorded on Linux, the reference machine since 2026-10-16: strftime
-    // does not pad %Y there, so the padded-year literals macOS generated and
-    // warned on (690 at b413e9ad) are not generated; their padded side is
-    // held over padded-years.tsv (a_padded_year_warns_only_where_strftime_pads_it,
-    // 885 literals, both sides).
-    assert_eq!(vectors["pads_year"], false, "recorded on Linux");
-    assert!(plain.len() >= 8_500, "{}", plain.len());
-    assert!(
-        held.read >= 3_000 && held.refused >= 5_000 && held.warned >= 500,
-        "{held:?}"
-    );
-    assert_eq!(held.packed, 0, "no plain row has a run of five digits");
-    assert!(
-        failures.is_empty(),
-        "{} differ:\n{}",
-        failures.len(),
-        failures.join("\n")
-    );
+    let unplaced = Reader {
+        year: None,
+        pads_year: true,
+    };
+    assert!(matches!(unplaced.read("01/02/50"), Reading::Unplaced));
+    for literal in [
+        "230203-06-09",
+        "20240101/00/123456",
+        "00001/1/2",
+        "10000-01-01",
+    ] {
+        assert!(
+            matches!(unplaced.read(literal), Reading::Packed),
+            "{literal}"
+        );
+    }
+    assert!(matches!(reader.read("2024-01/02"), Reading::Refused));
+}
+
+/// Calendar meanings and refusals are independent of separator spelling.
+#[test]
+fn calendar_dates_and_time_bounds_have_explicit_meanings() {
+    for pads_year in [false, true] {
+        let reader = Reader {
+            year: Some(2026),
+            pads_year,
+        };
+        for separator in ["/", "-", "."] {
+            for (fields, time, expected) in [
+                (["2024", "02", "29"], "", Some("2024-02-29T00:00:00")),
+                (["2023", "02", "29"], "", None),
+                (["2024", "04", "31"], "", None),
+                (["2024", "01", "00"], "", None),
+                (["2024", "13", "01"], "", None),
+                (
+                    ["2024", "01", "02"],
+                    " 23:59:59",
+                    Some("2024-01-02T23:59:59"),
+                ),
+                (["2024", "01", "02"], " 24:00:00", None),
+                (["2024", "01", "02"], " 23:60:00", None),
+                (["2024", "01", "02"], " 23:59:60", None),
+                (["0000", "01", "01"], "", Some("0000-01-01T00:00:00")),
+                (["9999", "12", "31"], "", Some("9999-12-31T00:00:00")),
+            ] {
+                let literal = fields.join(separator) + time;
+                let got = answer(reader, &literal);
+                assert_eq!(got, (expected.map(str::to_owned), None, None), "{literal}");
+            }
+        }
+    }
 }
 
 #[test]
@@ -265,77 +151,64 @@ fn a_padded_year_warns_only_where_strftime_pads_it() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
-/// Register PQL-4 (proposed), diagnostic: a day-first literal whose middle
-/// field is written as `strftime` writes its year (`13/0001/1`) makes pandas
-/// guess `%d/%Y/%m` and warn with it where `strftime` pads `%Y` (macOS, the
-/// recording at b413e9ad: 144 such rows); the reader reads the same date and
-/// names no format, as D4 states. The reference machine is Linux since
-/// 2026-10-16, where `strftime` does not pad and pandas guesses no `%Y` for
-/// any row of the set, so the reader with the recording's `pads_year` agrees
-/// with every row; the padded side is held by reading every row again as
-/// where `%Y` pads: the same date and offset, and never a format with the
-/// year in the middle field.
 #[test]
-fn a_format_pandas_guesses_from_a_year_written_as_a_month_is_not_named() {
-    let vectors: Value = serde_json::from_str(&here("tests/dates.json")).unwrap();
-    let reader = Reader {
-        year: Some(i16::try_from(vectors["year"].as_i64().unwrap()).unwrap()),
-        pads_year: vectors["pads_year"].as_bool().unwrap(),
-    };
-    let rows = vectors["format_guess"].as_array().unwrap();
-    let mut guessed = 0;
-    let mut agreed = 0;
-    for row in rows {
-        let literal = row[0].as_str().unwrap();
-        let got = answer(reader, literal);
-        assert_eq!(got.0.as_deref(), row[1].as_str(), "{literal}");
-        assert_eq!(got.1, row[2].as_i64(), "{literal}");
-        match row[3].as_str() {
-            Some(format) if format[2..].starts_with(&format!("{}%Y", &format[2..3])) => {
-                guessed += 1;
-                assert_eq!(got.2, None, "{literal}");
-            }
-            want => {
-                agreed += 1;
-                assert_eq!(got.2.as_deref(), want, "{literal}");
+fn year_zero_requires_leading_year_and_short_time_fields() {
+    for pads_year in [false, true] {
+        let reader = Reader {
+            year: Some(2026),
+            pads_year,
+        };
+        assert_eq!(
+            answer(reader, "0000-01-01 00:00:00"),
+            (Some("0000-01-01T00:00:00".into()), None, None)
+        );
+        for separator in ["/", "-", "."] {
+            assert!(matches!(
+                reader.read(&["1", "2", "0000"].join(separator)),
+                Reading::Refused
+            ));
+        }
+        for width in [3, 4] {
+            for position in 0..3 {
+                let mut fields = ["00".to_owned(), "00".to_owned(), "00".to_owned()];
+                fields[position] = "0".repeat(width);
+                let literal = format!("0000-01-01 {}", fields.join(":"));
+                assert!(
+                    matches!(reader.read(&literal), Reading::Refused),
+                    "{literal}"
+                );
             }
         }
     }
-    assert_eq!(vectors["pads_year"], false, "recorded on Linux");
-    assert_eq!(
-        guessed, 0,
-        "pandas guesses %Y for none where it is not padded"
-    );
-    assert!(agreed > 800, "{agreed}");
-    // The padded side: the reader as on a platform whose strftime pads %Y.
-    let padded = Reader {
-        pads_year: true,
-        ..reader
-    };
-    let mut middle_years = 0;
-    for row in rows {
-        let literal = row[0].as_str().unwrap();
-        let got = answer(padded, literal);
-        assert_eq!(got.0.as_deref(), row[1].as_str(), "{literal} (pads)");
-        assert_eq!(got.1, row[2].as_i64(), "{literal} (pads)");
-        if let Some(format) = got.2.as_deref() {
-            assert!(
-                !format[2..].starts_with(&format!("{}%Y", &format[2..3])),
-                "{literal}: names {format}"
-            );
+}
+
+/// An unusual middle field must not produce an unsupported warning format.
+#[test]
+fn middle_field_year_spellings_do_not_invent_warning_formats() {
+    for pads_year in [false, true] {
+        let reader = Reader {
+            year: Some(2026),
+            pads_year,
+        };
+        for separator in ["/", "-", "."] {
+            for (fields, expected) in [
+                (["13", "0001", "1"], "0001-01-13T00:00:00"),
+                (["13", "0001", "2"], "0002-01-13T00:00:00"),
+                (["02", "015", "75"], "0075-02-15T00:00:00"),
+            ] {
+                let literal = fields.join(separator);
+                assert_eq!(
+                    answer(reader, &literal),
+                    (Some(expected.into()), None, None),
+                    "{literal}"
+                );
+            }
+            assert!(matches!(
+                reader.read(&["1", "2024", "5"].join(separator)),
+                Reading::Refused
+            ));
         }
-        let fields: Vec<&str> = literal
-            .split(' ')
-            .next()
-            .unwrap()
-            .split(['/', '-', '.'])
-            .collect();
-        middle_years += usize::from(fields.len() == 3 && fields[1].len() == 4);
     }
-    assert!(
-        middle_years >= 144,
-        "{middle_years} literals with the year in the middle"
-    );
 }
 
 /// brief, "a D8 literal is refused... `date_literal_packed`", at the

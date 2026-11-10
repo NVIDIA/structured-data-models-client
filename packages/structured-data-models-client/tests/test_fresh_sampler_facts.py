@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import base64
 import importlib.util
 import json
 import re
@@ -35,7 +34,7 @@ QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 
 
 class _MetricWarehouse(_warehouse._CompletingWarehouse):
-    """Existing captured source rows, with live local SQL over changed views."""
+    """Authored metric-view metadata, with live local SQL over changed views."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -48,25 +47,37 @@ class _MetricWarehouse(_warehouse._CompletingWarehouse):
         self.definition = self.definition.replace(
             'source.price > 20', 'source.order_id < 40'
         )
-        from scripts.rust_core.fixture_tables import unpack
-
-        captures = unpack(
-            json.loads((ROOT / 'contract/view-captures.json').read_text())
+        # DESCRIBE TABLE EXTENDED supplies field rows followed by view metadata.
+        # Keep the driver-shaped Arrow schema, without a serialized warehouse dump.
+        fields = [
+            ('order_id', 'bigint'),
+            ('user_id', 'bigint'),
+            ('ts', 'timestamp_ntz'),
+            ('price', 'double'),
+            ('country', 'string'),
+            ('age', 'int'),
+            ('revenue', 'double measure'),
+            ('', ''),
+            ('# Detailed Table Information', ''),
+            ('Catalog', 'main'),
+            ('Database', 'shop'),
+            ('Table', 'view_metric_regression'),
+            ('Type', 'METRIC_VIEW'),
+            ('View Text', self.definition),
+            ('Language', 'YAML'),
+        ]
+        self.view_description = pa.table(
+            {
+                'col_name': pa.array(
+                    [name for name, _ in fields], type=pa.string()
+                ),
+                'data_type': pa.array(
+                    [value for _, value in fields], type=pa.string()
+                ),
+                'comment': pa.array([None] * len(fields), type=pa.string()),
+                'metadata': pa.array([None] * len(fields), type=pa.string()),
+            }
         )
-        recorded = next(
-            c
-            for c in captures['cases']
-            if c['case'] == 'view.metric.regression'
-            and c['leg'] == 'databricks-sql'
-        )
-        described = next(
-            s
-            for s in recorded['statements']
-            if s['text'].startswith('DESCRIBE TABLE EXTENDED')
-        )
-        self.view_description = pa.ipc.open_stream(
-            base64.b64decode(captures['tables'][described['result']])
-        ).read_all()
 
     def answer(self, operation: str, parameters: list[Any]) -> pa.Table:
         text = _warehouse._normal(operation)

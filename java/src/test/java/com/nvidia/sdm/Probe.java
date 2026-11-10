@@ -55,10 +55,7 @@ public final class Probe {
     /** The core answers again: a validation as S0's first case asks it,
      * accepted, and a test-only run to its end. */
     private static void stillAnswers(String scenario) throws Exception {
-        Map<String, Object> vector = Json.object(Json.object(Json.object(
-                Names.vectors().get("binding")).get("validate")).get("s0.accept.binary-classification"));
-        Object run = Names.startRun((String) vector.get("operation"),
-                Names.attachments(Json.object(vector.get("attachments"))));
+        Object run = Names.validation("s0.accept.binary-classification");
         String done = new String(Names.next(run), StandardCharsets.UTF_8);
         Names.close(run);
         check(done.contains("\"accepted\":true"), scenario + ": a later validation is answered");

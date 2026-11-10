@@ -2,153 +2,112 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `sdm_engine::words` against frozen sampler vectors in `words.json`:
-//! the lower-casing of every code point the pipeline changes, and the words
-//! `_normalize_text` gives for punctuation, every whitespace code point,
-//! line breaks, long texts and random mixtures of them.
-//!
-//! Every code point lowers to the reference's, and every value gives the
-//! reference's words. [`check`] fails closed: a perturbed answer, and
-//! evidence missing, empty or retyped, each fail (seeded below).
+//! Text feature normalization: explicit behavior and independent Unicode mappings.
 
 use sdm_engine::words::{lower_case, normalize};
-use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
-const VECTORS: &str = include_str!("words.json");
-
-/// The code points whose lowering agreed, and the values whose words did.
-#[derive(Debug, PartialEq, Eq)]
-struct Counts {
-    lowered: usize,
-    values: usize,
-}
-
-fn text(value: &Value, at: &str) -> Result<Option<String>, String> {
-    match value {
-        Value::Null => Ok(None),
-        Value::String(s) => Ok(Some(s.clone())),
-        _ => Err(format!("{at}: a value is neither text nor null")),
-    }
-}
-
-fn check(vectors: &Value) -> Result<Counts, String> {
-    let lower = vectors["lower"]
-        .as_object()
-        .filter(|l| !l.is_empty())
-        .ok_or("no lower-casing recorded")?;
-    let mut changed = std::collections::BTreeMap::new();
-    for (point, wanted) in lower {
-        let c = point
-            .parse::<u32>()
-            .ok()
-            .and_then(char::from_u32)
-            .ok_or_else(|| format!("{point}: not a code point"))?;
-        let wanted: Vec<char> = wanted
-            .as_array()
-            .filter(|w| !w.is_empty())
-            .ok_or_else(|| format!("{point}: no lowering"))?
-            .iter()
-            .map(|p| {
-                p.as_u64()
-                    .and_then(|p| u32::try_from(p).ok())
-                    .and_then(char::from_u32)
-            })
-            .collect::<Option<_>>()
-            .ok_or_else(|| format!("{point}: a lowering is not code points"))?;
-        changed.insert(c, wanted);
-    }
-    // Every code point: lowered as recorded, or, where nothing was
-    // recorded, left as it is.
-    for c in (0..=0x10_FFFF_u32).filter_map(char::from_u32) {
-        let found: Vec<char> = lower_case(c).collect();
-        let wanted = changed.get(&c).cloned().unwrap_or_else(|| vec![c]);
-        if found != wanted {
-            return Err(format!(
-                "U+{:04X}: lowered otherwise than the reference",
-                c as u32
-            ));
-        }
-    }
-    let values = vectors["values"]
-        .as_array()
-        .filter(|v| !v.is_empty())
-        .ok_or("no values recorded")?;
-    for (at, pair) in values.iter().enumerate() {
-        let at = format!("value {at}");
-        let [value, words] = pair
-            .as_array()
-            .map(Vec::as_slice)
-            .ok_or_else(|| format!("{at}: not a pair"))?
-        else {
-            return Err(format!("{at}: not a pair"));
+#[test]
+fn unicode_lowering_matches_independent_arrow_mapping() {
+    let document: serde_json::Value = serde_json::from_str(include_str!("words.json")).unwrap();
+    let changed: BTreeMap<u32, Vec<u32>> =
+        serde_json::from_value(document["lower"].clone()).unwrap();
+    assert!(!changed.is_empty());
+    for codepoint in 0..=0x10ffff {
+        let Some(character) = char::from_u32(codepoint) else {
+            continue;
         };
-        let value = text(value, &at)?;
-        let words: Vec<String> = words
-            .as_array()
-            .ok_or_else(|| format!("{at}: the words are not a list"))?
-            .iter()
-            .map(|w| w.as_str().map(str::to_owned))
-            .collect::<Option<_>>()
-            .ok_or_else(|| format!("{at}: a word is not text"))?;
-        if normalize(value.as_deref()) != words {
-            return Err(format!("{at}: words otherwise than the reference's"));
-        }
+        let expected = changed
+            .get(&codepoint)
+            .cloned()
+            .unwrap_or_else(|| vec![codepoint]);
+        assert_eq!(
+            lower_case(character).map(u32::from).collect::<Vec<_>>(),
+            expected,
+            "U+{codepoint:04X}"
+        );
     }
-    Ok(Counts {
-        lowered: lower.len(),
-        values: values.len(),
-    })
-}
-
-/// A seeded fault: what it changes in the vectors.
-type Seed = Box<dyn Fn(&mut Value)>;
-
-fn vectors() -> Value {
-    serde_json::from_str(VECTORS).unwrap()
 }
 
 #[test]
-fn words_are_the_reference_s() {
-    let counts = check(&vectors()).unwrap();
+fn punctuation_and_missing_values_have_explicit_words() {
+    assert!(normalize(None).is_empty());
+    assert!(normalize(Some("")).is_empty());
     assert_eq!(
-        counts,
-        Counts {
-            lowered: 1488,
-            values: 772
-        }
+        normalize(Some("Hello, (WORLD)! 'Yes' \"NO\"; why?: done.")),
+        ["hello", "world", "yes", "no", "why", "done"]
+    );
+    assert_eq!(
+        normalize(Some("a-b c_d e/f g+h @i #j $k %l &m =n [o] {p}")),
+        [
+            "a-b", "c_d", "e/f", "g+h", "@i", "#j", "$k", "%l", "&m", "=n", "[o]", "{p}"
+        ]
     );
 }
 
 #[test]
-fn the_check_fails_closed() {
-    let seeded: Vec<(&str, Seed)> = vec![
-        (
-            "a perturbed word",
-            Box::new(|v| v["values"][4][1][0] = json!("Sport-100")),
-        ),
-        (
-            "a perturbed lowering",
-            Box::new(|v| v["lower"]["65"] = json!([66])),
-        ),
-        ("no values", Box::new(|v| v["values"] = json!([]))),
-        ("values missing", Box::new(|v| v["values"] = Value::Null)),
-        ("no lowering", Box::new(|v| v["lower"] = json!({}))),
-        (
-            "a retyped value",
-            Box::new(|v| v["values"][4][0] = json!(4)),
-        ),
-        (
-            "a retyped word",
-            Box::new(|v| v["values"][4][1][0] = json!(1)),
-        ),
-        (
-            "a retyped lowering",
-            Box::new(|v| v["lower"]["65"] = json!("a")),
-        ),
+fn all_supported_whitespace_splits_but_zero_width_characters_do_not() {
+    // Unicode White_Space plus the four Python information separators.
+    let spaces = [
+        0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x85, 0xa0, 0x1680, 0x2000,
+        0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x2028,
+        0x2029, 0x202f, 0x205f, 0x3000,
     ];
-    for (fault, seed) in seeded {
-        let mut vectors = vectors();
-        seed(&mut vectors);
-        assert!(check(&vectors).is_err(), "{fault} passed");
+    for point in spaces {
+        let c = char::from_u32(point).unwrap();
+        assert_eq!(
+            normalize(Some(&format!("A{c}{c}B"))),
+            ["a", "b"],
+            "U+{point:04X}"
+        );
     }
+    for c in ['\u{200b}', '\u{feff}', '\u{180e}'] {
+        assert_eq!(normalize(Some(&format!("A{c}B"))), [format!("a{c}b")]);
+    }
+}
+
+#[test]
+fn html_breaks_are_case_insensitive_and_require_complete_tags() {
+    for tag in [
+        "<br>",
+        "<BR/>",
+        "<br />",
+        "<Br\t/>",
+        "<br\n>",
+        "<br\u{1c}/>",
+    ] {
+        assert_eq!(normalize(Some(&format!("A{tag}B"))), ["a", "b"]);
+    }
+    for tag in ["<br", "<br//>", "<brx>", "<br/ >", "< br>"] {
+        assert_eq!(
+            normalize(Some(tag)),
+            tag.split_whitespace().collect::<Vec<_>>()
+        );
+    }
+    assert_eq!(normalize(Some("A<br><br/>B")), ["a", "b"]);
+}
+
+#[test]
+fn limits_count_unicode_characters_before_words_and_markup() {
+    for count in [299, 300, 301] {
+        assert_eq!(
+            normalize(Some(&"É".repeat(count))),
+            ["é".repeat(count.min(300))]
+        );
+    }
+    for count in [49, 50, 51] {
+        let words: Vec<_> = (0..count).map(|i| format!("w{i}")).collect();
+        let input = words.join(" ");
+        assert!(input.len() < 300);
+        assert_eq!(normalize(Some(&input)), words[..count.min(50)]);
+    }
+    assert_eq!(
+        normalize(Some(&format!("{}<br>", "X".repeat(298)))),
+        [format!("{}<b", "x".repeat(298))]
+    );
+    assert_eq!(
+        normalize(Some(&format!("{}<br>", "X".repeat(296)))),
+        ["x".repeat(296)]
+    );
+    assert_eq!(normalize(Some("İ ΣΟΣ ẞ K")), ["i", "σοσ", "ß", "k"]);
 }

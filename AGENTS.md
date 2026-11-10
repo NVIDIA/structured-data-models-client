@@ -57,7 +57,8 @@ Regenerate these; never edit them:
 - `packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt` --
   regenerate with `python scripts/rust_core/rust_notices.py --write` and verify with `--check`.
   This covers dependencies in the supported native wheel targets; do not edit its entries by hand.
-- `tests/golden/` -- the exported surface and the recorded wire payloads.
+- `tests/golden/` -- the exported public API surface.
+  Wire behavior uses independent assertions in `scripts/check_wire_behavior.py`, not generated snapshots.
 
 ## Gates that fail on prose
 

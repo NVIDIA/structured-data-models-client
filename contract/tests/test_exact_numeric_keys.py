@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import functools
 import importlib.util
-import json
 import os
 import sys
 from decimal import Decimal
@@ -24,7 +23,6 @@ RUNNER = ROOT / 'contract/runners/run_python.py'
 
 CASES = ROOT / 'contract/cases/s1'
 
-VECTORS = ROOT / 'contract/exact-key-vectors.json'
 
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 
@@ -80,70 +78,231 @@ def _server() -> bool:
     pytest.skip('SDM_POSTGRES_TEST_DSN is not configured')
 
 
-RECORDED: dict[str, Any] = json.loads(VECTORS.read_text(encoding='utf-8'))
-
-BY_ID = {vector['id']: vector for vector in RECORDED['vectors']}
+BY_ID = {vector['id']: vector for vector in R.VECTORS}
 
 
-def _projection(answer: dict[str, Any]) -> dict[str, Any]:
-    r"""An answer as a given key is held to its control's: its outcome,
-    public schema and request."""
-    return {k: answer[k] for k in ('outcome', 'schema', 'payloads')}
+@functools.cache
+def observed(vector_id: str) -> dict[str, Any]:
+    _server()
+    return R.observe(BY_ID[vector_id], os.environ['SDM_POSTGRES_TEST_DSN'])
 
 
-def _differs(got: dict[str, Any], want: dict[str, Any]) -> list[str]:
-    return sorted(k for k in want if got.get(k) != want[k])
+def assert_exact_materialization(
+    answer: dict[str, Any], vector_id: str
+) -> None:
+    import pandas as pd
+
+    assert answer['outcome'] == {
+        'result': 'success',
+        'stage': 'materialize',
+        'error': None,
+        'code': None,
+    }
+    assert answer['postgres'] == {
+        'users.user_id': 'numeric',
+        'orders.user_id': 'numeric',
+    }
+    schema = answer['schema']
+    assert schema['links'] == [['orders', 'user_id', 'users', 'user_id']]
+    tables = {t['name']: t for t in schema['tables']}
+    assert set(tables) == {'users', 'orders'}
+    for name, table in tables.items():
+        assert table['primary_key'] == (
+            'user_id' if name == 'users' else 'order_id'
+        )
+        assert table['time_column'] == (None if name == 'users' else 'ts')
+        assert table['duplicate_keys'] == 0
+        columns = (
+            [('user_id', 'string', 'ID'), ('age', 'float64', 'numerical')]
+            if name == 'users'
+            else [
+                ('order_id', 'int64', 'ID'),
+                ('user_id', 'string', 'ID'),
+                ('price', 'float64', 'numerical'),
+                ('ts', 'timestamp[us]', 'timestamp'),
+            ]
+        )
+        assert table['columns'] == [
+            dict(name=col, dtype=dtype, stype=stype)
+            for col, dtype, stype in columns
+        ]
+    assert len(answer['raw_payloads']) == 1
+    for payload in answer['raw_payloads']:
+        assert payload['task'] == {
+            'kind': 'regression',
+            'target': {'column_name': 'TARGET', 'dtype': 'float32'},
+            'entity_table_names': ['users'],
+            'anchor_time_column': '__kumo_anchor_time',
+        }
+        wire_schema = payload['schema']
+        assert wire_schema['instance_table']['columns'][
+            '__kumo_entity_ref_0'
+        ] == {'dtype': 'string', 'stype': 'ID'}
+        for name in ('users', 'orders'):
+            assert (
+                wire_schema['related_tables'][name]['columns']['user_id'][
+                    'dtype'
+                ]
+                == 'string'
+            )
+        assert wire_schema['relationships'] == [
+            {
+                'source_columns': ['__kumo_entity_ref_0'],
+                'target_table': 'users',
+                'target_columns': ['user_id'],
+            },
+            {
+                'source_table': 'orders',
+                'source_columns': ['user_id'],
+                'target_table': 'users',
+                'target_columns': ['user_id'],
+            },
+        ]
+        target = payload['task']['target']['column_name']
+        for half in ('context', 'predict'):
+            table = payload[half]['instance_table']
+            rows = [
+                dict(zip(table['columns'], row, strict=True))
+                for row in table['rows']
+            ]
+            assert len(rows) == (
+                1
+                if half == 'predict'
+                else 19
+                if vector_id.startswith('pk.')
+                else 20
+            )
+            keys = [row['__kumo_entity_ref_0'] for row in rows]
+            expected_keys = (
+                {str(FIRST + 1)}
+                if half == 'predict'
+                else {
+                    str(FIRST + i)
+                    for i in range(20)
+                    if not (vector_id.startswith('pk.') and i == 1)
+                }
+            )
+            assert set(keys) == expected_keys and len(set(keys)) == len(keys)
+            by_instance = {r['instance_id']: r for r in rows}
+            assert len(by_instance) == len(rows)
+            for row in rows:
+                key = row['__kumo_entity_ref_0']
+                assert type(key) is str and FIRST <= int(key) < FIRST + 20
+                expected_day = (
+                    31
+                    if half == 'predict' or vector_id.startswith('pk.')
+                    else 1
+                )
+                assert row['__kumo_anchor_time'] == (
+                    '2024-02-01T00:00:00.000000Z'
+                    if expected_day == 31
+                    else '2024-01-02T00:00:00.000000Z'
+                )
+                if half == 'predict':
+                    assert key == str(FIRST + 1)
+                elif vector_id.startswith('pk.'):
+                    assert type(row[target]) is float
+                    assert row[target] == 20.0 + (int(key) - FIRST)
+                else:
+                    day = (
+                        pd.Timestamp(row['__kumo_anchor_time'])
+                        - pd.Timestamp('2024-01-01', tz='UTC')
+                    ).days
+                    expected = sum(
+                        10 + order * 1.5
+                        for order in range(60)
+                        if FIRST + order % 20 == int(key)
+                        and day < order <= day + 30
+                    )
+                    assert type(row[target]) is float
+                    assert row[target] == float(expected)
+            assert set(payload[half]['related_tables']) == {'users', 'orders'}
+            for name, related in payload[half]['related_tables'].items():
+                for values in related['rows']:
+                    row = dict(zip(related['columns'], values, strict=True))
+                    key = row['user_id']
+                    assert type(key) is str and FIRST <= int(key) < FIRST + 20
+                    assert (
+                        key
+                        == by_instance[row['instance_id']][
+                            '__kumo_entity_ref_0'
+                        ]
+                    )
+                    if name == 'users' and vector_id.startswith('pk.'):
+                        assert (
+                            'age' not in row
+                        )  # Target values must not leak into features.
+                    elif name == 'users':
+                        assert row['age'] == 20.0 + (int(key) - FIRST)
+                    else:
+                        order = int((row['price'] - 10) / 1.5)
+                        assert key == str(FIRST + order % 20)
+                if name == 'users':
+                    assert related['columns'] == ['instance_id', 'user_id'] + (
+                        [] if vector_id.startswith('pk.') else ['age']
+                    )
+                    assert related['rows'] == [
+                        [r['instance_id'], r['__kumo_entity_ref_0']]
+                        + (
+                            []
+                            if vector_id.startswith('pk.')
+                            else [
+                                20.0 + (int(r['__kumo_entity_ref_0']) - FIRST)
+                            ]
+                        )
+                        for r in rows
+                    ]
+                else:
+                    assert related['columns'] == [
+                        'instance_id',
+                        '__node_id',
+                        'price',
+                        'ts',
+                        'user_id',
+                    ]
+                    assert len({(r[0], r[1]) for r in related['rows']}) == len(
+                        related['rows']
+                    )
+                    for instance, item in by_instance.items():
+                        expected_orders = [
+                            order
+                            for order in reversed(range(60))
+                            if FIRST + order % 20
+                            == int(item['__kumo_entity_ref_0'])
+                            and order <= expected_day
+                        ]
+                        history = [
+                            dict(zip(related['columns'], r, strict=True))
+                            for r in related['rows']
+                            if r[0] == instance
+                        ]
+                        assert [r['price'] for r in history] == [
+                            10 + order * 1.5 for order in expected_orders
+                        ]
+                        assert [r['ts'] for r in history] == [
+                            (
+                                pd.Timestamp('2024-01-01', tz='UTC')
+                                + pd.Timedelta(days=order)
+                            ).strftime('%Y-%m-%dT%H:%M:%S.000000Z')
+                            for order in expected_orders
+                        ]
 
 
 @pytest.mark.parametrize('vector_id', sorted(set(R.CONTROL.values())))
-def test_python_core_answers_a_catalog_key_as_the_reference(
+def test_catalog_numeric_keys_materialize_without_rounding(
     vector_id: str,
 ) -> None:
-    r"""Exit "as with a catalog key", the controls: python-core answers the
-    tables with the key and link declared as python-ref does (outcome,
-    public schema, request, each column's type), the key its text."""
-    if not _server():
-        return
-
-    def check() -> None:
-        want = BY_ID[vector_id]['reference']
-        got = R.observe(BY_ID[vector_id], os.environ['SDM_POSTGRES_TEST_DSN'])
-        found = _differs(got, want)
-        assert not found, (
-            f'{vector_id}: {found} differ: got {got["outcome"]}, the '
-            f'reference {want["outcome"]}'
-        )
-
-    check()
+    assert_exact_materialization(observed(vector_id), vector_id)
 
 
 @pytest.mark.parametrize('vector_id', GIVEN_VECTORS)
-def test_python_core_answers_a_given_or_edited_key_as_a_catalog_key(
-    vector_id: str,
-) -> None:
-    r"""Exit "the reproduction and its supplied-foreign-key and
-    edited-relationship variants work on Postgres as with a catalog key":
-    python-core answers the key given (``pk.given``), the keys and link
-    given (``fk.given``) or the link set by an edit (``fk.edited``), nothing
-    declared, exactly as python-ref answers its control with the key and
-    link declared: the outcome, the public schema (each ``user_id`` its
-    text) and the request."""
-    if not _server():
-        return
-
-    def check() -> None:
-        control = R.CONTROL[vector_id]
-        want = _projection(BY_ID[control]['reference'])
-        got = _projection(
-            R.observe(BY_ID[vector_id], os.environ['SDM_POSTGRES_TEST_DSN'])
-        )
-        found = _differs(got, want)
-        assert not found, (
-            f'{vector_id}: {found} differ from python-ref on {control}: got '
-            f'{got["outcome"]}, schema {got["schema"]}'
-        )
-
-    check()
+def test_given_and_edited_keys_match_catalog_semantics(vector_id: str) -> None:
+    got = observed(vector_id)
+    assert_exact_materialization(got, vector_id)
+    control = observed(R.CONTROL[vector_id])
+    assert_exact_materialization(control, R.CONTROL[vector_id])
+    for field in ('outcome', 'schema', 'payloads'):
+        assert got[field] == control[field], field
 
 
 @functools.cache

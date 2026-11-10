@@ -4,7 +4,7 @@
 
 """Native result observations preserve explanations and per-item metadata.
 
-Pinned option vectors provide expected values; no old client is installed.
+Expected values come from the authored scripted endpoint responses.
 """
 
 from __future__ import annotations
@@ -26,7 +26,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 CASES = ROOT / 'contract/cases/s1'
-VECTORS = ROOT / 'contract/option-vectors.json'
 EXPLAINED = ('explain.answered', 'explain.forecast', 'metadata.items-explained')
 UNEXPLAINED = ('explain.not-answered', 'metadata.items')
 WITH_METADATA = ('metadata.items', 'metadata.items-across-calls')
@@ -43,10 +42,16 @@ def _module(name: str, path: Path) -> ModuleType:
     return sys.modules[name]
 
 
-@functools.cache
-def vectors() -> dict[str, Any]:
-    document = json.loads(VECTORS.read_text(encoding='utf-8'))
-    return document['vectors']
+def expected_explanation(call: int) -> dict[str, Any]:
+    rank, score = [(1, 0.1), (4, 0.4)][call]
+    return {
+        'format': 'scripted',
+        'summary': f'row 0 of call {call}',
+        'rank': rank,
+        'score': score,
+        'path': [call, 0],
+        'detail': {'call': call, 'row_index': 0, 'note': None},
+    }
 
 
 @functools.cache
@@ -95,9 +100,17 @@ def same(a: Any, b: Any) -> bool:
 @pytest.mark.parametrize('case_id', EXPLAINED)
 def test_the_result_s_explanation_is_recorded(case_id: str) -> None:
     r"""python-core records the explanation the core gave the result, as
-    JSON text matching the pinned expectation."""
-    wanted = vectors()[case_id]['explanation']
-    assert wanted is not None, case_id  # the vector holds one
+    JSON text preserving the authored endpoint answer."""
+    wanted = (
+        {
+            'by_forecast_step': {
+                '1': expected_explanation(0),
+                '2': expected_explanation(1),
+            }
+        }
+        if case_id == 'explain.forecast'
+        else expected_explanation(0)
+    )
     result = observed(case_id)['core']['predicted']['result']
     text = result.get('explanation')
     assert isinstance(text, str), f'{case_id}: no explanation recorded'
@@ -106,15 +119,13 @@ def test_the_result_s_explanation_is_recorded(case_id: str) -> None:
 
 @pytest.mark.parametrize('case_id', UNEXPLAINED)
 def test_a_result_with_no_explanation_records_none(case_id: str) -> None:
-    assert vectors()[case_id]['explanation'] is None
     result = observed(case_id)['core']['predicted']['result']
     assert 'explanation' not in result, result.get('explanation')
 
 
 @pytest.mark.parametrize('case_id', WITH_METADATA)
 def test_each_item_s_metadata_is_recorded(case_id: str) -> None:
-    r"""Each item's pinned metadata in the result rows'
-    ``metadata`` column, row by row."""
+    """Metadata retains its call, local row and global result-row identity."""
     result = observed(case_id)['core']['predicted']['result']
     names = [column['name'] for column in result['columns']]
     assert 'metadata' in names, names
@@ -123,10 +134,18 @@ def test_each_item_s_metadata_is_recorded(case_id: str) -> None:
     recorded = [
         None if cell is None else json.loads(cell['utf8']) for cell in cells
     ]
-    wanted = [pair[1] for pair in vectors()[case_id]['item_metadata']]
-    assert len(recorded) == len(wanted)
-    for each in wanted:
-        assert any(same(each, got) for got in recorded), (each, recorded)
+    positions = [(0, 0), (0, 1)]
+    if case_id == 'metadata.items-across-calls':
+        positions.append((1, 0))
+    wanted = [
+        {'call': call, 'row_index': row, 'source': 'scripted'}
+        for call, row in positions
+    ]
+    assert recorded == wanted
+    row_index = names.index('row_index')
+    assert [row[row_index] for row in result['rows']] == [
+        {'i64': str(i)} for i in range(len(wanted))
+    ]
 
 
 def test_the_observation_schema_takes_the_explanation() -> None:

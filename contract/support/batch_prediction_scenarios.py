@@ -16,15 +16,9 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/prediction-batch-vectors.json'
 CASES = ROOT / 'contract/cases/s1'
-FORMAT = 'sdm-t28c-multicall-vectors/1'
 PREFIX = 'multicall.'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
-#: A result of at most this many rows is kept whole.
-ROWS_KEPT = 200
-#: Of a longer one, this many rows at each end.
-ENDS_KEPT = 3
 #: The calls that raise an error that is not the client's own, by case:
 #: the call's number from zero. A transport may raise one mid-request (the
 #: Databricks SDK's ``ValueError`` on a failed OAuth refresh), and the
@@ -106,7 +100,7 @@ def _cell(value: Any) -> Any:
 
 def projection(result: Any) -> dict[str, Any] | None:
     r"""A ``PredictionResult`` through ``to_pandas()``: its columns, its
-    row count and its rows (all, or both ends of a long one)."""
+    row count and all rows, including the middle of large batches."""
     if result is None or not hasattr(result, 'to_pandas'):
         return None
     frame = result.to_pandas()
@@ -118,11 +112,7 @@ def projection(result: Any) -> dict[str, Any] | None:
         'columns': [str(name) for name in frame.columns],
         'count': len(rows),
     }
-    if len(rows) <= ROWS_KEPT:
-        kept['rows'] = rows
-    else:
-        kept['first'] = rows[:ENDS_KEPT]
-        kept['last'] = rows[-ENDS_KEPT:]
+    kept['rows'] = rows
     return kept
 
 
@@ -231,8 +221,3 @@ def observe(
     finally:
         cleanup()
     return observed
-
-
-def load() -> dict[str, Any]:
-    r"""The vector file, as committed."""
-    return json.loads(OUT.read_text(encoding='utf-8'))

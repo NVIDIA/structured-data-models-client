@@ -70,7 +70,8 @@ final class Names {
             return Paths.get(given).toAbsolutePath();
         }
         for (Path at = Paths.get("").toAbsolutePath(); at != null; at = at.getParent()) {
-            if (Files.isRegularFile(at.resolve("contract/native-binding-vectors.json"))) {
+            if (Files.isRegularFile(at.resolve("rust/Cargo.toml"))
+                    && Files.isDirectory(at.resolve("contract/cases"))) {
                 return at;
             }
         }
@@ -79,10 +80,20 @@ final class Names {
                         + ": set -Dsdm.repo");
     }
 
-    /** contract/native-binding-vectors.json, read. */
-    static Map<String, Object> vectors() throws IOException {
-        Path file = root().resolve("contract/native-binding-vectors.json");
-        return Json.object(Json.read(Files.readString(file, StandardCharsets.UTF_8)));
+    /** Build a validation request from the maintained case input, without recorded outputs. */
+    static Object validation(String caseName) throws Exception {
+        Map<String, Object> spec = Json.object(Json.read(Files.readString(
+                root().resolve("contract/cases/s0/" + caseName + ".json"), StandardCharsets.UTF_8)));
+        return validation(spec, (String) Json.object(spec.get("input")).get("pql"));
+    }
+
+    static Object validation(Map<String, Object> spec, String text) throws Exception {
+        Map<String, Object> validation = Json.object(Json.object(spec.get("core")).get("validate_query"));
+        Map<String, Object> operation = Map.of("op", "validate_query", "query", 1,
+                "schema", 2, "profile", validation.get("profile"));
+        return startRun(new String(com.nvidia.sdm.internal.Json.write(operation), StandardCharsets.UTF_8),
+                Map.of(1, com.nvidia.sdm.internal.Json.write(text),
+                       2, com.nvidia.sdm.internal.Json.write(validation.get("schema"))));
     }
 
     /** The contract version, read from the crate (lesson 11: never

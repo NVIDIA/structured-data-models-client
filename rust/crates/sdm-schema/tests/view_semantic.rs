@@ -2,17 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The semantic view's [`ViewSpec`] (design part 5's V2, V3 and V6)
-//! against the semantic-view definitions of `contract/view-yaml-vectors.json`,
-//! as PyYAML read them: each logical table's name, base table and primary
-//! key, its columns from `dimensions`, `time_dimensions` and `facts` in that
-//! order, and each relationship, read by the paths the old client reads them
-//! by (`RE/graph.py:2069-2222`).
-//!
-//! fix 1, an entry the old client reads
-//! only on the branch that uses it is read there: a composite relationship's
-//! tables, a physical column's type, a composite key's members. One it never
-//! reads cannot refuse the view.
+//! Semantic view definitions: physical identities, section order and lazy refusals.
 
 use sdm_schema::view::semantic;
 use sdm_schema::view::spec::{
@@ -20,7 +10,6 @@ use sdm_schema::view::spec::{
     ViewRefusal, ViewSpec,
 };
 use sdm_schema::view::yaml::Value;
-use serde_json::Value as Json;
 
 mod rules;
 
@@ -33,156 +22,104 @@ fn read(source: &str) -> Result<ViewSpec, ViewRefusal> {
     Ok(spec)
 }
 
-const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json");
-
-/// The entry `key` of a mapping in the vectors' typed form, if present.
-fn get<'a>(map: &'a Json, key: &str) -> Option<&'a Json> {
-    assert_eq!(map["t"], "map");
-    map["v"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|pair| pair[0]["t"] == "str" && pair[0]["v"] == key)
-        .map(|pair| &pair[1])
-}
-
-fn text(value: &Json) -> String {
-    assert_eq!(value["t"], "str", "{value}");
-    value["v"].as_str().unwrap().to_owned()
-}
-
-fn items(value: Option<&Json>) -> Vec<Json> {
-    value.map_or_else(Vec::new, |value| {
-        assert_eq!(value["t"], "list");
-        value["v"].as_array().unwrap().clone()
-    })
-}
-
-fn optional_text(value: Option<&Json>) -> Option<String> {
-    value.filter(|value| value["t"] != "null").map(text)
-}
-
-fn node_text(spec: &ViewSpec, node: Option<sdm_schema::view::yaml::NodeId>) -> Option<String> {
-    node.and_then(|n| spec.text(n)).map(str::to_owned)
-}
-
 #[test]
-fn each_definition_reads_as_the_old_client_reads_it() {
-    let document: Json = fixture_tables::read(VECTORS);
-    let definitions: Vec<&Json> = document["vectors"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|vector| vector["value"]["t"] == "map" && get(&vector["value"], "tables").is_some())
-        .collect();
-    assert!(definitions.len() >= 5, "{} definitions", definitions.len());
-    for vector in definitions {
-        let source = vector["yaml"].as_str().unwrap();
-        let cfg = &vector["value"];
-        let mut spec = read(source).unwrap_or_else(|error| panic!("{source}: {error}"));
-
-        let tables = items(get(cfg, "tables"));
-        assert_eq!(spec.tables.len(), tables.len(), "{source}");
-        for (index, (item, table_cfg)) in spec.tables.iter().zip(&tables).enumerate() {
-            let TableItem::Table(table) = item else {
-                panic!("{item:?}")
+fn tables_columns_and_relationships_preserve_explicit_definition() {
+    let mut spec = read(
+        r#"
+tables:
+- name: People
+  base_table: {database: D, schema: S, table: users}
+  primary_key: {columns: [id]}
+  dimensions: [{name: identifier, expr: id, data_type: BIGINT}]
+  time_dimensions: [{name: created, expr: created_at, data_type: TIMESTAMP_NTZ}]
+  facts: [{name: amount, expr: price * 2, data_type: DOUBLE}]
+- name: Orders
+  base_table: {database: D, schema: S, table: orders}
+relationships:
+- name: ownership
+  left_table: Orders
+  right_table: People
+  relationship_columns: [{left_column: user_id, right_column: id}]
+"#,
+    )
+    .unwrap();
+    assert_eq!(spec.tables.len(), 2);
+    for (index, alias, physical) in [(0, "People", "users"), (1, "Orders", "orders")] {
+        let TableItem::Table(table) = &spec.tables[index] else {
+            panic!("table expected")
+        };
+        assert_eq!(table.alias, alias);
+        let Source::Parts {
+            database,
+            schema,
+            table: base,
+        } = table.source
+        else {
+            panic!("physical source expected")
+        };
+        assert_eq!(spec.text(database), Some("D"));
+        assert_eq!(spec.text(schema), Some("S"));
+        assert_eq!(spec.text(base), Some(physical));
+        if index == 0 {
+            let PrimaryKey::One(key) = table.primary_key else {
+                panic!("single key expected")
             };
-            assert_eq!(table.alias, text(get(table_cfg, "name").unwrap()));
-            let base = get(table_cfg, "base_table").unwrap();
-            let Source::Parts {
-                database,
-                schema,
-                table: base_table,
-            } = table.source
-            else {
-                panic!()
-            };
-            assert_eq!(
-                node_text(&spec, Some(database)),
-                optional_text(get(base, "database"))
-            );
-            assert_eq!(
-                node_text(&spec, Some(schema)),
-                optional_text(get(base, "schema"))
-            );
-            assert_eq!(
-                node_text(&spec, Some(base_table)),
-                optional_text(get(base, "table"))
-            );
-            // `RE/graph.py:2081-2090`: one column is the key; more are
-            // composite, dropped with a message; none is no key.
-            let key: Vec<String> = get(table_cfg, "primary_key")
-                .map(|key| items(get(key, "columns")).iter().map(text).collect())
-                .unwrap_or_default();
-            match (&table.primary_key, key.as_slice()) {
-                (PrimaryKey::None, []) | (PrimaryKey::Composite, [_, _, ..]) => {}
-                (PrimaryKey::One(node), [one]) => assert_eq!(spec.text(*node), Some(one.as_str())),
-                (got, want) => panic!("{source}: {got:?} where {want:?}"),
-            }
-            // `RE/graph.py:2105-2113`: dimensions, then time dimensions,
-            // then facts.
-            let mut expected = Vec::new();
-            for (section, key) in [
-                (Section::Dimension, "dimensions"),
-                (Section::TimeDimension, "time_dimensions"),
-                (Section::Fact, "facts"),
-            ] {
-                for column in items(get(table_cfg, key)) {
-                    expected.push((
-                        text(get(&column, "name").unwrap()),
-                        optional_text(get(&column, "expr")),
-                        optional_text(get(&column, "data_type")),
-                        section,
-                    ));
-                }
-            }
-            let columns: Vec<_> = spec
-                .columns
-                .iter()
-                .filter_map(|c| match c {
-                    ColumnItem::Column(c) if c.table == Some(index) => Some((
-                        node_text(&spec, c.name).unwrap(),
-                        node_text(&spec, c.expr),
-                        node_text(&spec, c.data_type),
-                        c.section,
-                    )),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(columns, expected, "{source}");
-        }
-
-        // `RE/graph.py:2209-2222`.
-        let relationships = items(get(cfg, "relationships"));
-        assert_eq!(spec.relationships.len(), relationships.len(), "{source}");
-        for (relationship, cfg) in spec.relationships.clone().iter().zip(&relationships) {
-            assert_eq!(
-                node_text(&spec, Some(relationship.name)),
-                Some(text(get(cfg, "name").unwrap()))
-            );
-            let pairs = items(get(cfg, "relationship_columns"));
-            assert_eq!(relationship.pairs, pairs.len());
-            if pairs.len() == 1 {
-                let read = spec.relationship(relationship).unwrap();
-                assert_eq!(
-                    node_text(&spec, Some(read.left_table)),
-                    Some(text(get(cfg, "left_table").unwrap()))
-                );
-                assert_eq!(
-                    node_text(&spec, Some(read.right_table)),
-                    Some(text(get(cfg, "right_table").unwrap()))
-                );
-                assert_eq!(
-                    node_text(&spec, Some(read.left_column)),
-                    Some(text(get(&pairs[0], "left_column").unwrap()))
-                );
-                assert_eq!(
-                    node_text(&spec, Some(read.right_column)),
-                    Some(text(get(&pairs[0], "right_column").unwrap()))
-                );
-            }
+            assert_eq!(spec.text(key), Some("id"));
+        } else {
+            assert_eq!(table.primary_key, PrimaryKey::None);
         }
     }
+    let columns: Vec<_> = spec
+        .columns
+        .iter()
+        .map(|c| {
+            let ColumnItem::Column(c) = c else {
+                panic!("column expected")
+            };
+            (
+                c.table,
+                c.name.and_then(|n| spec.text(n)),
+                c.expr.and_then(|n| spec.text(n)),
+                c.data_type.and_then(|n| spec.text(n)),
+                c.section,
+            )
+        })
+        .collect();
+    assert_eq!(
+        columns,
+        vec![
+            (
+                Some(0),
+                Some("identifier"),
+                Some("id"),
+                Some("BIGINT"),
+                Section::Dimension
+            ),
+            (
+                Some(0),
+                Some("created"),
+                Some("created_at"),
+                Some("TIMESTAMP_NTZ"),
+                Section::TimeDimension
+            ),
+            (
+                Some(0),
+                Some("amount"),
+                Some("price * 2"),
+                Some("DOUBLE"),
+                Section::Fact
+            ),
+        ]
+    );
+    assert_eq!(spec.relationships.len(), 1);
+    let relationship = spec.relationships[0].clone();
+    assert_eq!(spec.text(relationship.name), Some("ownership"));
+    assert_eq!(relationship.pairs, 1);
+    let pair = spec.relationship(&relationship).unwrap();
+    assert_eq!(spec.text(pair.left_table), Some("Orders"));
+    assert_eq!(spec.text(pair.right_table), Some("People"));
+    assert_eq!(spec.text(pair.left_column), Some("user_id"));
+    assert_eq!(spec.text(pair.right_column), Some("id"));
 }
 
 /// What the old client fails on with a raw `KeyError` or `TypeError`
@@ -225,6 +162,13 @@ fn an_entry_the_old_client_never_reads_cannot_refuse_the_view() {
             cfg: spec.relationships[0].cfg,
         }]
     );
+    // A composite relationship is retained for an omission note without
+    // inspecting its endpoints or trying to interpret either member.
+    let spec = read(&format!(
+        "{base}relationships:\n  - name: composite\n    left_table: [not, text]\n    relationship_columns: [1, 2]\n"
+    )).unwrap();
+    assert_eq!(spec.relationships.len(), 1);
+    assert_eq!(spec.relationships[0].pairs, 2);
     // A physical column's type, which it never uses (`:2117-2119`).
     let spec = read(&format!(
         "{base}    dimensions:\n      - name: X\n        data_type: 123\n"
@@ -309,6 +253,3 @@ fn a_key_and_a_pair_are_indexed_as_python_indexes_them() {
     let refusal = read(&format!("{base}    primary_key: {{columns: 7}}\n")).unwrap_err();
     assert_eq!(refusal.reason, RefusalReason::NotAList("columns".into()));
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

@@ -319,24 +319,6 @@ def test_the_item_metadata_null_transform_and_text_option_cases() -> None:
     assert _case(DAY_FIRST)['until'] == 'materialize'
 
 
-# --- the reference ---------------------------------------------------------------
-
-
-@functools.cache
-def expected_cases() -> dict[str, dict[str, Any]]:
-    """Independent expected facts, indexed by case key."""
-    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
-    return {
-        json.loads(line)['case']: json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
-    }
-
-
-@functools.cache
-def vectors() -> dict[str, Any]:
-    return recorder().load()
-
-
 def _expected(case: dict[str, Any]) -> tuple[Any, ...]:
     expect = case['expect']
     return (
@@ -420,44 +402,48 @@ ITEM_METADATA = {
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_expected_outcome_matches_case(case_key: str) -> None:
-    """Independent expected facts agree with this case's stated behavior."""
+def test_query_options_preserve_authored_behavior(case_key: str) -> None:
+    """Execute the cases against authored outcomes and endpoint facts."""
     case_id = case_key.split('@')[0]
-    case, digest = cases()[case_id]
-    line = expected_cases().get(case_key)
-    assert line is not None, f'{case_key}: no expected facts'
-    assert _outcome(line) == _expected(case)
-    assert len(line['public']['payloads']) == len(CALLS.get(case_id, []))
-
-
-@pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
-    r"""The cases exercise what they name, on the reference (so none is
-    vacuous): the rows each call scores; the entity filter's notice
-    quoting the filter, and the explanation's absence noticed; the
-    entities named in the query sent as written while the indices given
-    are scored; EVALUATE and EXPLAIN sent in the query; the endpoint's
-    explanation on the result and its metadata on each item; the text
-    options sent as the engine reads them; the day-first warning beside
-    U1's refusal; and each refusal's message naming what it is about."""
-    case_id = case_key.split('@')[0]
-    case, digest = cases()[case_id]
-    document = vectors()
-    line = expected_cases()[case_key]
-    vector = document['vectors'].get(case_key)
-    assert vector is not None, f'{case_key}: no vector'
-    assert _outcome({'outcome': vector['outcome']}) == _expected(case)
-    assert vector['calls'] == CALLS.get(case_id, [])
+    database = case_key.partition('@')[2] or 'duckdb'
+    if database == 'postgres' and not _server():
+        pytest.skip('Postgres test DSN is not configured')
+    case, _ = cases()[case_id]
+    vector = core_carried(case_key)
+    expected = _expected(case)
+    if case_id == 'explain.two-entities':
+        expected = ('success', 'predict', None, None)
+    assert same_outcome(expected, _outcome(vector))
+    assert vector['calls'] == (
+        [2] if case_id == 'explain.two-entities' else CALLS.get(case_id, [])
+    )
+    expected_warnings = WARNED.get(case_id, [])
+    if case_id == 'explain.query':
+        expected_warnings = [
+            ('SDMWarning', "kumo-relational answered without ['explanation']")
+        ]
     warned = [
         (kind, text[: len(opening)])
         for kind, text in vector['warnings']
-        for wanted, opening in WARNED.get(case_id, [])
+        for wanted, opening in expected_warnings
         if kind == wanted
     ]
-    assert warned == WARNED.get(case_id, []), vector['warnings']
-    assert len(vector['warnings']) == len(WARNED.get(case_id, []))
+    assert warned == expected_warnings, vector['warnings']
+    assert len(vector['warnings']) == len(expected_warnings)
+    if case_id in FILTERED and FILTERED[case_id] is not None:
+        text = vector['warnings'][0][1]
+        count = len(case['input']['materialize']['indices'])
+        assert f'does not narrow the {count} rows named for scoring' in text
+        assert 'Pass only indices that satisfy the condition' in text
+    if case_id in {'explain.query', 'explain.not-answered'}:
+        text = vector['warnings'][0][1]
+        assert 'no column of to_pandas() will carry it' in text
+        assert 'rest of the request is unaffected' in text
     explanation = EXPLANATIONS.get(case_id)
-    assert vector['explanation'] == (explanation() if explanation else None)
+    expected_explanation = explanation() if explanation else None
+    if case_id == 'explain.two-entities':
+        expected_explanation = _explained(0, 0)
+    assert vector['explanation'] == expected_explanation
     if vector['item_metadata'] is not None:
         assert vector['item_metadata'] == ITEM_METADATA.get(
             case_id,
@@ -465,7 +451,18 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
         )
     else:
         assert case_id not in ITEM_METADATA
-    sent = [_plain(p) for p in payloads(line)]
+    if case_id in NAMED_ENTITIES and vector['result']:
+        at = vector['result']['columns'].index('id')
+        assert [row[at] for row in vector['result']['rows']] == (
+            case['input']['materialize']['indices']
+        )
+    if case_id in NAMED and case_id != 'explain.two-entities':
+        for word in NAMED[case_id]:
+            assert word in vector['message'], (word, vector['message'])
+
+
+def assert_request_options(case: dict[str, Any], sent: list[Any]) -> None:
+    case_id = case['id']
     for payload in sent:
         query = payload['metadata']['source_query']
         if case_id == 'filter.ranking':
@@ -479,60 +476,12 @@ def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
         elif case_id != 'explain.forecast':
             # A forecast is asked a step at a time, each its own query.
             assert query == case['input']['pql']
-    if case_id in NAMED_ENTITIES and vector['result']:
-        at = vector['result']['columns'].index('id')
-        assert [row[at] for row in vector['result']['rows']] == (
-            case['input']['materialize']['indices']
-        )
     if case_id in CONFIG_TEXT and CONFIG_TEXT[case_id][1] is not None:
         for payload in sent:
             assert (
                 payload['inference']['inference_config']
                 == (CONFIG_TEXT[case_id][1])
             )
-    if case_id in NAMED:
-        for word in NAMED[case_id]:
-            assert word in vector['message'], (word, vector['message'])
-
-
-# Current EXPLAIN admission follows the gradient explanation contract:
-# the prefix requests explanations and multiple entities are supported.
-# Keep archived cases/vectors immutable; every other field still compares exactly.
-def current_line(case_key: str) -> dict[str, Any]:
-    case_id, _, database = case_key.partition('@')
-    if case_id not in {'explain.query', 'explain.two-entities'}:
-        return expected_cases()[case_key]
-    given = cases()[case_id][0]['input']
-    source = cases()['explain.query'][0]['input']
-    assert {
-        k: v for k, v in given.items() if k not in {'outputs', 'explanation'}
-    } == source
-    line = copy.deepcopy(
-        expected_cases()[key('explain.query', database or 'duckdb')]
-    )
-    for payload in line['public']['payloads']:
-        payload['parsed']['output']['fields'] = ['prediction', 'explanation']
-    return line
-
-
-def current_vector(case_key: str) -> dict[str, Any]:
-    case_id, _, database = case_key.partition('@')
-    if case_id not in {'explain.query', 'explain.two-entities'}:
-        return vectors()['vectors'][case_key]
-    vector = copy.deepcopy(
-        vectors()['vectors'][key('explain.query', database or 'duckdb')]
-    )
-    if case_id == 'explain.query':
-        vector['warnings'] = [
-            [
-                'SDMWarning',
-                "kumo-relational answered without ['explanation'], which this request asked for, "
-                'so no column of to_pandas() will carry it. The answer to the rest of the request is unaffected.',
-            ]
-        ]
-    else:
-        vector['explanation'] = _explained(0, 0)
-    return vector
 
 
 @pytest.mark.parametrize('database', DATABASES)
@@ -540,7 +489,7 @@ def test_each_explained_entity_retains_its_own_raw_response(
     database, monkeypatch
 ):
     if database == 'postgres' and not _server():
-        return
+        pytest.skip('Postgres test DSN is not configured')
     record = recorder()
     project = record.projection
     observed = []
@@ -613,31 +562,6 @@ def core_run(database: str) -> dict[str, Any]:
         }
 
 
-def differences(want: Any, got: Any, at: str = '') -> list[str]:
-    r"""Where ``got`` differs from ``want``, a few paths."""
-    if isinstance(want, dict) and isinstance(got, dict):
-        found = []
-        for name in sorted(set(want) | set(got)):
-            found += differences(want.get(name), got.get(name), f'{at}/{name}')
-        return found[:8]
-    if (
-        isinstance(want, list)
-        and isinstance(got, list)
-        and len(want) == len(got)
-    ):
-        found = []
-        for i, (w, g) in enumerate(zip(want, got, strict=True)):
-            found += differences(w, g, f'{at}[{i}]')
-        return found[:8]
-    if want != got:
-        if isinstance(want, list) and isinstance(got, list):
-            return [
-                f'{at}: {len(got)} items where the reference has {len(want)}'
-            ]
-        return [f'{at}: {got!r:.80} where the reference has {want!r:.80}']
-    return []
-
-
 def same_outcome(want: tuple[Any, ...], got: tuple[Any, ...]) -> bool:
     r"""Two outcomes the same, but that the core route raises a refusal
     coded ``UNSUPPORTED_REQUEST`` as ``UnsupportedRequestError``, a
@@ -655,21 +579,13 @@ def same_outcome(want: tuple[Any, ...], got: tuple[Any, ...]) -> bool:
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_core_answers_each_case_as_the_reference_does(
+def test_current_client_sends_requested_query_and_output_options(
     case_key: str,
 ) -> None:
-    r"""Exits "``entity_filter``", "``entity_ids``", "``assuming``",
-    "``evaluate``", "``explain``", "``target_transform_null``" and
-    "``inference_config_text``", each "cases per rule": python-core runs
-    the case on the database on the core route (the native module loaded,
-    each of the case's core operations run), and its outcome, each request
-    the scripted endpoint received (the context the filter or the
-    assumption gathered, the query as sent, the options as read) and its
-    result through ``to_pandas`` (columns, row count and the rows'
-    digest) are python-ref's."""
+    """Assert current-client behavior and native routing without recorded payload equality."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
-        return
+        pytest.skip('Postgres test DSN is not configured')
 
     def check() -> None:
         run = core_run(database)
@@ -681,16 +597,29 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert identity['native_loaded'] and line['core'] is not None
         missing = sorted(set(case['core']) - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
-        want = current_line(case_key)
-        assert same_outcome(_outcome(want), _outcome(line)), (
-            f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
+        case_id = case['id']
+        expected = _expected(case)
+        if case_id == 'explain.two-entities':
+            # Multiple-entity explanations are supported by the current API.
+            expected = ('success', 'predict', None, None)
+        assert same_outcome(expected, _outcome(line)), (
+            case_key,
+            _outcome(line),
         )
-        found = differences(payloads(want), payloads(line))
-        assert not found, f'{case_key}: the payload differs: ' + '; '.join(
-            found
+        sent = [_plain(p) for p in payloads(line)]
+        counts = (
+            [2] if case_id == 'explain.two-entities' else CALLS.get(case_id, [])
         )
-        found = differences(want['public']['result'], line['public']['result'])
-        assert not found, f'{case_key}: the result differs: ' + '; '.join(found)
+        assert [
+            len(body['predict']['instance_table']['rows']) for body in sent
+        ] == counts
+        for body in sent:
+            outputs = case['input'].get('outputs')
+            if outputs is not None:
+                assert body['output']['fields'] == outputs
+            if case['input']['pql'].startswith('EXPLAIN '):
+                assert 'explanation' in body['output']['fields']
+        assert_request_options(case, sent)
 
     check()
 
@@ -704,72 +633,90 @@ def core_carried(case_key: str) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
-    r"""Exits "``response_field`` for explanations and item metadata",
-    U1 and the notices of ``entity_filter`` and ``explain``: python-core,
-    on the core route, sends calls of the reference's sizes, answers with
-    the reference's rows, row by row, the reference's explanation
-    (``PredictionResult.explanation``, a forecast's by step) and each
-    item's metadata, and gives the warnings the reference gives (the
-    entity filter's notice, an explanation asked for and not given, the
-    day-first literal's warning kept on U1's refusal), each by class and
-    words, a core code's prefix aside."""
-    database = case_key.partition('@')[2] or 'duckdb'
+def test_query_option_results_preserve_requested_rows(case_key: str) -> None:
+    """Check output shape, identity and values from the scripted response rule."""
+    case_id, _, database = case_key.partition('@')
     if database == 'postgres' and not _server():
+        pytest.skip('Postgres test DSN is not configured')
+    case, _ = cases()[case_id]
+    got = core_carried(case_key)
+    expected = _expected(case)
+    if case_id == 'explain.two-entities':
+        expected = ('success', 'predict', None, None)
+    assert same_outcome(expected, _outcome(got))
+    if expected[0] != 'success':
+        assert got['result'] is None
+        assert got['item_metadata'] is None
         return
-
-    def check() -> None:
-        want = current_vector(case_key)
-        got = core_carried(case_key)
-        outcome = (
-            _outcome({'outcome': want['outcome']}),
-            _outcome({'outcome': got['outcome']}),
-        )
-        assert same_outcome(*outcome), (
-            f'{case_key}: {outcome[1]} where python-ref has {outcome[0]}'
-        )
-        assert got['calls'] == want['calls'], (
-            f'{case_key}: calls of {got["calls"]} rows where python-ref '
-            f'sends {want["calls"]}'
-        )
-        found = differences(want['result'], got['result'], '/result')
-        found += differences(
-            want['explanation'], got['explanation'], '/explanation'
-        )
-        found += differences(
-            want['item_metadata'], got['item_metadata'], '/item_metadata'
-        )
-        assert not found, f'{case_key}: ' + '; '.join(found)
-        assert sorted(map(tuple, got['warnings'])) == sorted(
-            map(tuple, want['warnings'])
-        ), (
-            f'{case_key}: warns {got["warnings"]} where python-ref warns '
-            f'{want["warnings"]}'
-        )
-
-    check()
+    indices = case['input']['materialize']['indices']
+    forecast = case_id == 'explain.forecast'
+    ranking = case_id == 'filter.ranking'
+    columns = ['row_index', 'id']
+    if forecast:
+        columns.append('forecast_step')
+    columns.append('prediction')
+    if ranking:
+        columns.append('rankings')
+    result = got['result']
+    assert result['columns'] == columns
+    assert (
+        result['count']
+        == len(result['rows'])
+        == len(indices) * (2 if forecast else 1)
+    )
+    identities = [(i, entity) for i, entity in enumerate(indices)]
+    if forecast:
+        identities *= 2
+    assert [tuple(row[:2]) for row in result['rows']] == identities
+    if forecast:
+        assert [row[2] for row in result['rows']] == [1, 2]
+    binary = case_id in {
+        'assuming.binary',
+        'evaluate.binary',
+        'filter.entity-text',
+        'explain.explanation-only',
+        'metadata.items-across-calls',
+        'config-text.class-shuffle',
+    }
+    for i, row in enumerate(result['rows']):
+        prediction = row[columns.index('prediction')]
+        if ranking:
+            candidates = case['input']['materialize']['candidates']
+            scores = [
+                (candidate, ((3 * call + 5 * i) % 9 + 1) / 10)
+                for call, candidate in enumerate(candidates)
+            ]
+            ranked = sorted(scores, key=lambda pair: -pair[1])[:2]
+            assert prediction == [candidate for candidate, _ in ranked]
+            assert row[-1] == [
+                {'candidate': c, 'score': score} for c, score in ranked
+            ]
+        elif binary:
+            assert prediction is False
+        else:
+            assert type(prediction) is float and prediction == 1.0
+    expected_metadata = ITEM_METADATA.get(
+        case_id, [[i, None] for i, _ in identities]
+    )
+    assert got['item_metadata'] == expected_metadata
 
 
 @pytest.mark.parametrize('case_key', NAMED_KEYS)
-def test_python_core_names_what_the_reference_names(case_key: str) -> None:
+def test_invalid_query_options_name_the_supplied_input(case_key: str) -> None:
     r"""The brief's carried item, for the refusals options reach:
     python-core refuses as the reference does and its message names what
     the reference's names (the filter, the column, the option), never only
     that the request is not one the core accepts."""
     case_id, _, database = case_key.partition('@')
     if database == 'postgres' and not _server():
-        return
+        pytest.skip('Postgres test DSN is not configured')
 
     def check() -> None:
-        want = current_vector(case_key)
+        case, _ = cases()[case_id]
         got = core_carried(case_key)
-        outcome = (
-            _outcome({'outcome': want['outcome']}),
-            _outcome({'outcome': got['outcome']}),
-        )
-        assert same_outcome(*outcome), (
-            f'{case_key}: {outcome[1]} where python-ref has {outcome[0]}'
-        )
+        expected = _expected(case)
+        actual = _outcome({'outcome': got['outcome']})
+        assert same_outcome(expected, actual), (case_key, expected, actual)
         missing = [w for w in NAMED[case_id] if w not in (got['message'] or '')]
         assert not missing, (
             f'{case_key}: the refusal does not name {missing}: '

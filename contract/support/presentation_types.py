@@ -15,8 +15,6 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/result-conversion-vectors.json'
-FORMAT = 'sdm-l5-vectors/1'
 
 #: The L5 table, built on DuckDB: the test's ``SETUP``, which the test holds
 #: equal to this.

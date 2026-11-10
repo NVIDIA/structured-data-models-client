@@ -226,3 +226,34 @@ fn a_dotted_name_is_one_table_under_the_schema() {
         "{columns}"
     );
 }
+
+#[test]
+fn string_order_casts_are_kept_in_per_seed_and_final_order() {
+    let request: sdm_contract::data::DataRequest = serde_json::from_value(serde_json::json!({
+        "request":"neighbors", "table":{"source":["public","orders"]},
+        "key":["user_id"], "columns":["user_id","code"],
+        "seeds":{"attachment":1,"columns":[
+            {"name":"key","nullable":false,"type":{"type":"int64"}},
+            {"name":"batch","nullable":false,"type":{"type":"int64"}}
+        ]},
+        "window":null,"per_seed":2,
+        "order":[{"column":"code","as_timestamp":false,"string_like":true,"descending":false,"nulls_last":true},{"column":"user_id","as_timestamp":false,"string_like":false,"descending":false,"nulls_last":true}]
+    })).unwrap();
+    let sdm_contract::data::FetchPlan::Sql { statements, .. } = Data::new()
+        .plan(
+            &request,
+            &sdm_contract::data::ProviderChoice::sql("postgres"),
+        )
+        .unwrap()
+    else {
+        panic!("SQL")
+    };
+    let text = &statements.last().unwrap().text;
+    assert_eq!(
+        text.matches("CAST(t.\"code\" AS text) ASC NULLS LAST")
+            .count(),
+        2,
+        "{text}"
+    );
+    assert!(!text.contains("CAST(t.\"user_id\" AS text)"));
+}

@@ -8288,6 +8288,11 @@
       "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
       "record": "api_contracts/automatic-batch-sessions",
       "reason": "Candidate-free temporal link prediction is refused before any source read, so its 200-row batches are never built; the note describes the refusal the linked batching tests now cover."
+    },
+    {
+      "base_commit": "a441e59a7dfb507185a11e3d157cd762529c9e40",
+      "record": "type_contracts/arrow-admission-and-inference",
+      "reason": "Fixture cleanup removes unused historical observation/provenance fields. All 110 vector IDs and every retained type, witness, admission and inference fact remain unchanged; update the whole-file checksum and reference the renamed test that checks actual runtime refusals instead of recorded expectations."
     }
   ],
   "capabilities": [
@@ -9826,11 +9831,11 @@
           "rust/crates/sdm-host/tests/type_set.rs::every_variant_of_data_type_has_a_vector_and_no_type_has_two",
           "rust/crates/sdm-host/tests/type_set.rs::each_parameterized_family_has_each_parameter",
           "rust/crates/sdm-host/tests/type_set.rs::each_type_is_admitted_and_inferred_as_its_vector_says",
-          "rust/crates/sdm-host/tests/type_set.rs::every_expected_refusal_is_named"
+          "rust/crates/sdm-host/tests/type_set.rs::every_actual_refusal_is_named"
         ]
       },
       "evidence_level": "local-boundary",
-      "vectors_sha256": "b1ae6bd5fd9eebe14020b88ce02326696f70757a7a6535cd79da5e491995adef"
+      "vectors_sha256": "98cd6e5638af8bad60583b0bdc537bd8d47ca363608350d96c5555b2b2e3b515"
     },
     {
       "id": "semantic-types",

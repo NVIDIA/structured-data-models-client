@@ -7,9 +7,7 @@
 //! cases make through `from_source` and `materialize` on the pure-Rust
 //! host, as `sdm-testkit` recorded it, with the one statement this layer
 //! renders for it. A statement that changes without its pin changing here
-//! fails this test, and `sdm-testkit`'s `tests/keys_sql.rs` runs
-//! the cases on DuckDB and fails on any statement they run that is pinned
-//! nowhere in these files. The key's type changes no statement but one:
+//! fails this test. The key's type changes no statement but one:
 //! its values travel in the key set the statements join, which DuckDB reads
 //! in the key's own type; a `decimal128(38, 0)` seed key naming an integer
 //! key type the core read from the catalog is cast to that type (

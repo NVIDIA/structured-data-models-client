@@ -13,12 +13,11 @@ Each case builds its database fixture and calls Schema.from_source,
 materialize and predict through the installed Python client.
 A local scripted endpoint exercises the real transport without a model server.
 Native operation inputs, fetches and responses are recorded for cross-language
-checks and SQL goldens; --record-fetches also supplies Rust Postgres replay.
+checks; --record-fetches also supplies Rust provider replay tests.
 The optional driver capture records SQL and results without changing them.
 
 Public API exceptions are recorded as outcomes for the expectation checker.
 Runner failures produce a nonzero exit and no observation file.
-Frozen-client recording remains available in the external migration archive.
 This module also supplies shared case-loading and capture helpers to Java
 and provider tests.
 """
@@ -41,7 +40,6 @@ import sys
 import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from pathlib import Path
-from types import ModuleType
 from typing import Any
 
 HERE = Path(__file__).resolve().parent
@@ -464,24 +462,44 @@ def case_files(paths: Iterable[Path]) -> list[Path]:
 
 
 def expand_input_factory(case: dict[str, Any]) -> None:
-    """Build only the two named entity-limit inputs, identically for both hosts."""
+    """Build named boundary indices, identically for public and core hosts."""
     if 'input_factory' not in case:
         return
     name = case['input_factory']
-    count = (
-        {'entity_limit_100000': 100_000, 'entity_limit_100001': 100_001}.get(
-            name
+    if name == 'query_attachment_72082':
+        if (
+            case.get('id') != 's0.boundary.start-past-64kb'
+            or case['input']['pql'] != '<generated-query>'
+        ):
+            raise RunnerFailure(
+                'query factory requires its case id and query placeholder'
+            )
+        case['input']['pql'] = (
+            'PREDICT COUNT(orders.* WHERE orders.price IN ('
+            + ', '.join(['10.0', '11.5', '13.0', '14.5'] * 3000)
+            + '), 0, 30, days) FOR EACH users.user_id'
         )
-        if isinstance(name, str)
-        else None
-    )
-    if count is None or case.get('id') != f'multicall.entities.{count}':
-        raise RunnerFailure('invalid entity-limit input factory or case id')
+        del case['input_factory']
+        return
+    factories = {
+        'call_limit_100': ('multicall.calls.100', 100),
+        'call_limit_101': ('multicall.calls.101', 101),
+        'ranking_product_100000': ('rank.entities-by-candidates.at', 500),
+        'ranking_product_100200': ('rank.entities-by-candidates.over', 501),
+        'entity_limit_100000': ('multicall.entities.100000', 100_000),
+        'entity_limit_100001': ('multicall.entities.100001', 100_001),
+        'ranking_batch_10001': ('rank.batched', 10_001),
+        'prediction_batch_10001': ('multicall.entities-per-call.10001', 10_001),
+    }
+    spec = factories.get(name) if isinstance(name, str) else None
+    if spec is None or case.get('id') != spec[0]:
+        raise RunnerFailure('invalid boundary input factory or case id')
+    count = spec[1]
     public = case.get('input', {}).get('materialize', {})
     core = case.get('core', {}).get('materialize', {})
     if public.get('indices') != [] or core.get('indices') != []:
         raise RunnerFailure(
-            'entity-limit factory requires empty indices placeholders'
+            'boundary factory requires empty indices placeholders'
         )
     public['indices'] = list(range(count))
     core['indices'] = [{'t': 'i64', 'v': str(i)} for i in range(count)]
@@ -621,31 +639,6 @@ def _environment() -> str:
         }
     )
     return digest('\n'.join(names).encode())
-
-
-# --- the reference guard -----------------------------------------------------------
-
-
-class _Guard:
-    r"""The reference checkout's guard, loaded by path."""
-
-    def __init__(self, reference: Path) -> None:
-        path = reference / 'scripts/reference_guard.py'
-        spec = importlib.util.spec_from_file_location('reference_guard', path)
-        if spec is None or spec.loader is None or not path.is_file():
-            raise RunnerFailure('the reference checkout has no guard')
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        self._module = module
-
-    def check(self, when: str) -> None:
-        try:
-            self._module.require_isolation()
-        except Exception:  # noqa: BLE001 - any failure of the guard stops
-            raise RunnerFailure(
-                f'the reference guard failed {when}; the reference '
-                'environment can load the Rust core'
-            ) from None
 
 
 # --- the core's boundary, for python-core --------------------------------------------
@@ -2709,11 +2702,6 @@ PRIVATE_ENVIRONMENT = (
 #: The shortest value counted as a private name: a shorter one ("db",
 #: "1") would match ordinary words and refuse every capture.
 _PRIVATE_MIN = 4
-#: The recording mode's own format: one line per case
-#: and leg, the input ``captures.py import`` turns into the capture
-#: (``sdm-capture/1``), which ``capture_check.py
-#: recording`` holds complete.
-RECORD_FORMAT = 'sdm-record/1'
 #: A statement's random draw: Databricks' ``TABLESAMPLE (p PERCENT)
 #: [REPEATABLE (seed)]`` with the percentage as the old client printed it
 #: (RE/backend/databricks/sampler.py:255-262), and Snowflake's unseeded
@@ -3037,15 +3025,6 @@ def arrow_ipc(table: Any) -> str:
     with pa.ipc.new_stream(sink, combined.schema, options=options) as writer:
         writer.write_table(combined)
     return base64.b64encode(sink.getvalue().to_pybytes()).decode('ascii')
-
-
-def read_arrow_ipc(text: str) -> Any:
-    r"""The Arrow table:func:`arrow_ipc` wrote."""
-    import base64
-
-    import pyarrow as pa
-
-    return pa.ipc.open_stream(base64.b64decode(text)).read_all()
 
 
 class Recorder:
@@ -3793,38 +3772,6 @@ def session_zone(leg: str, connection: Any) -> str | None:
     return str(rows[0][names.index('value')])
 
 
-#: Each leg's driver distributions, whose versions a capture records.
-_DRIVERS = {
-    'databricks-sql': ('databricks-sql-connector', 'databricks-sdk'),
-    'databricks-spark': ('pyspark', 'databricks-connect'),
-    'snowflake': ('snowflake-connector-python', 'snowflake-snowpark-python'),
-    'lakebase': ('psycopg', 'databricks-sdk'),
-}
-
-
-def _driver_version(live: Live, name: str) -> str | None:
-    r"""A driver's distribution version, or its consumed managed module.
-
-    Managed Spark can supply PySpark without distribution metadata. Read
-    only that already loaded client's declared version, never the server's
-    version or the notebook runtime release, and leave other legs alone.
-    """
-    found = _version(name)
-    if found is not None or name != 'pyspark' or live.leg != 'databricks-spark':
-        return found
-    connection = getattr(live, 'connection', None)
-    if not any(
-        cls.__name__ == 'SparkSession' and cls.__module__.startswith('pyspark.')
-        for cls in type(connection).__mro__
-    ):
-        return None
-    module = sys.modules.get('pyspark')
-    if not isinstance(module, ModuleType):
-        return None
-    version = vars(module).get('__version__')
-    return version if isinstance(version, str) and version.strip() else None
-
-
 def _workspace(options: dict[str, Any]) -> Any:
     r"""The workspace client a connect function is given: the profile the
     configuration names, else the ambient one."""
@@ -4115,81 +4062,6 @@ class Live:
                 self._undo.pop()()
             except Exception:  # noqa: BLE001, S110 - closing after the case
                 pass
-
-
-def capture_line(
-    live: Live,
-    case: dict[str, Any],
-    bases: dict[str, list[str]],
-    log: DriverLog,
-    observation: dict[str, Any],
-    relations: list[dict[str, Any]],
-) -> dict[str, Any]:
-    r"""One case's capture on its leg, before placeholders:
-    the reference line, every statement with its parameters and each
-    result whole, every table of the case as the warehouse returns it, each
-    view-derived relation as the warehouse evaluates it, every random draw
-    with the rows it picked, the session zone, the versions, and the
-    case's input hash."""
-    recorder = log.recorder
-    statements = []
-    draws = []
-    for position, statement in enumerate(log.statements):
-        results = []
-        for read, result in enumerate(statement['results']):
-            kept = recorder.kept.get((position, read)) if recorder else None
-            if kept is None:
-                table = None
-            elif isinstance(kept, tuple):
-                table = rows_table(*kept)
-                if not same_rows(table, kept[1]):
-                    raise RunnerFailure(
-                        f'{observation["case"]}: statement {position} read '
-                        f'{read} kept a table that is not the rows read; '
-                        'nothing is written'
-                    )
-            else:
-                table = kept
-            results.append({**result, 'arrow': table})
-        statements.append({**statement, 'results': results})
-        for draw in draws_of(statement['sql']):
-            draws.append({'statement': position, **draw})
-    versions = dict(observation['identity']['versions'])
-    for name in _DRIVERS[live.leg]:
-        found = _driver_version(live, name)
-        if found is not None:
-            versions[name] = found
-    runtime = os.environ.get('DATABRICKS_RUNTIME_VERSION')
-    if runtime:
-        versions['runtime'] = runtime
-    reference = observation['identity'].get('reference') or {}
-    return {
-        'format': RECORD_FORMAT,
-        'case': observation['case'],
-        'leg': live.leg,
-        'input': input_hash(case, bases),
-        'recording': {
-            'commit': observation['identity']['commit']['sha'],
-            'reference': (reference.get('commit') or {}).get('sha'),
-            # Why a tree that was not clean may stand (capture_check.py's
-            # dirty-tree rule), as the recording run is given it.
-            **(
-                {'excuse': os.environ['SDM_RECORD_EXCUSE']}
-                if os.environ.get('SDM_RECORD_EXCUSE')
-                else {}
-            ),
-        },
-        'versions': versions,
-        'zone': live.zone,
-        'observation': observation,
-        'statements': statements,
-        'tables': [
-            {'name': name, 'arrow': table} for name, table in live.tables
-        ],
-        'relations': relations,
-        'draws': draws,
-        'incomplete': sorted(set(log.incomplete)),
-    }
 
 
 def saved_digest(result: dict[str, Any], table: Any) -> str:
@@ -5194,7 +5066,7 @@ def publish_observations(
 ) -> list[dict[str, Any]]:
     """A publication copy, after raw starts/fetches have been recorded.
 
-    Java and reference warehouse runners already publish through Placeheld.
+    Java warehouse observations already publish through Placeheld.
     Python core and Rust keep their private replay data unchanged and use
     this same mapping only at the final observation-file boundary.
     """

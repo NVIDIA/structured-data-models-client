@@ -15,8 +15,6 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/result-conversion-vectors.json'
-SECTION = 'postgres_values'
 
 #: Each column, its Postgres type, its values (``id`` 1 onwards, a null
 #: last) and the rule of the provider it exercises.

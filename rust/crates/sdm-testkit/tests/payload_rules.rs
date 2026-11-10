@@ -2,55 +2,17 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! exits on `rust-host`, held from outside the implementation (the
-//! package's independent test author), against what the reference gave:
-//! the vectors are `payload-rules.json`, recorded from the reference
-//! by `payload_rules_record.py` beside it, which the Python test
-//! holds `python-core` to as well, so the two hosts agree through them.
-//!
-//! - Exit "on both core hosts, over `base.binary` and `base.multiclass`,
-//!   the classes, their order, the positive class and the context-leakage
-//!   payload fields match the reference", from the real payload (not the
-//!   test-only labels operation): the task, the context's and predicted
-//!   rows, and each related table's columns and the instance ids it keeps
-//!   (the context that answers the question taken out; a static target's
-//!   column left out).
-//! - Exit "python-core and rust-host public outcomes match for context
-//!   leakage and limits": the leakage fields above, and the entity count's
-//!   limit. The reference at b413e9ad refused 1,001 entities
-//!   `UNSUPPORTED_REQUEST`; since main's 1fc5a686 (6298913c) it takes up to
-//!   10,000, so on `base.regression` (8 users) it refuses the 1,001 indices
-//!   `INVALID_REQUEST` for another reason, while the core's 1,000-entity
-//!   limit, field `indices`, still refuses them first, `UNSUPPORTED_REQUEST`
-//!   (B-3, until ); `python-core` is held to the same.
-//!
-//! Before the core refuses both classification cases by its rule
-//! `classification_task`, and these tests say so.
+//! Classification labels, leakage and limits through the real Rust/DuckDB host.
 
 use std::path::PathBuf;
 
 use sdm_testkit::case::Case;
 use sdm_testkit::host::{self, Answer};
 use sdm_testkit::{bases, case};
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
-}
-
-fn recorded() -> Value {
-    let path = root().join("packages/structured-data-models-client/tests/payload-rules.json");
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
-}
-
-fn expected(name: &str) -> Value {
-    recorded()["cases"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|c| c["name"] == name)
-        .unwrap_or_else(|| panic!("{name} is recorded"))["expected"]
-        .clone()
 }
 
 fn the_case(id: &str) -> (Case, bases::Bases) {
@@ -80,38 +42,6 @@ fn numbers(value: Value) -> Value {
     }
 }
 
-fn rows(table: &Value) -> Value {
-    json!({"columns": table["columns"], "rows": table["rows"]})
-}
-
-/// Each related table's columns and the sorted instance ids its rows hang
-/// off, as the recorder keeps them.
-fn instances(related: &Value) -> Value {
-    let mut out = Map::new();
-    let Some(tables) = related.as_object() else {
-        return Value::Null;
-    };
-    for (name, table) in tables {
-        let columns = table["columns"].as_array().cloned().unwrap_or_default();
-        let at = columns.iter().position(|c| c == "instance_id");
-        let mut ids: Vec<Value> = Vec::new();
-        if let Some(at) = at {
-            for row in table["rows"].as_array().into_iter().flatten() {
-                let id = row[at].clone();
-                if !ids.contains(&id) {
-                    ids.push(id);
-                }
-            }
-        }
-        ids.sort_by_key(|v| v.as_i64());
-        out.insert(
-            name.clone(),
-            json!({"columns": columns, "instance_ids": ids}),
-        );
-    }
-    Value::Object(out)
-}
-
 /// The payload `rust-host` materializes for `id`, or the refusal's rule.
 fn payload(id: &str) -> Value {
     let (case, bases) = the_case(id);
@@ -130,75 +60,119 @@ fn payload(id: &str) -> Value {
 }
 
 fn classification(id: &str) {
-    let want = expected(id);
     let got = payload(id);
-    assert_eq!(got["task"], want["task"], "{id}: the task");
+    let binary = id == "base.binary";
+    let (_, bases) = the_case(id);
+    let db = sdm_testkit::duck::open().unwrap();
+    for statement in &bases["shop"] {
+        db.execute_batch(statement).unwrap();
+    }
+    let target = if binary {
+        json!({"column_name":"TARGET","dtype":"bool","classes":["false","true"],"positive_class":"true"})
+    } else {
+        json!({"column_name":"TARGET","dtype":"string","classes":["IN","DE","US"]})
+    };
     assert_eq!(
-        rows(&got["context"]["instance_table"]),
-        want["context"],
-        "{id}: the context's rows"
+        got["task"],
+        json!({"kind":if binary {"binary_classification"} else {"multiclass_classification"},"target":target,"entity_table_names":["users"],"anchor_time_column":"__kumo_anchor_time"})
     );
+    for half in ["context", "predict"] {
+        let table = &got[half]["instance_table"];
+        let expected_columns = if half == "context" {
+            json!([
+                "instance_id",
+                "__kumo_entity_ref_0",
+                "__kumo_anchor_time",
+                "TARGET"
+            ])
+        } else {
+            json!(["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"])
+        };
+        assert_eq!(table["columns"], expected_columns);
+        let rows = table["rows"].as_array().unwrap();
+        if half == "predict" {
+            assert_eq!(
+                rows.iter()
+                    .map(|r| r[1].as_i64().unwrap())
+                    .collect::<Vec<_>>(),
+                [0, 1]
+            );
+        } else {
+            assert_eq!(rows.len(), if binary { 112 } else { 6 });
+            for row in rows {
+                let entity = row[1].as_i64().unwrap();
+                if binary {
+                    let anchor = row[2].as_str().unwrap();
+                    let expected: bool = db.query_row("SELECT COUNT(*) > 0 FROM orders WHERE user_id = ? AND ts > CAST(? AS TIMESTAMP) AND ts <= CAST(? AS TIMESTAMP) + INTERVAL 30 DAY", duckdb::params![entity, anchor, anchor], |r|r.get(0)).unwrap();
+                    assert_eq!(row[3].as_bool(), Some(expected));
+                } else {
+                    assert!(
+                        ![0, 1].contains(&entity),
+                        "scored entities cannot train their own static labels"
+                    );
+                    let expected: String = db
+                        .query_row(
+                            "SELECT country FROM users WHERE user_id = ?",
+                            [entity],
+                            |r| r.get(0),
+                        )
+                        .unwrap();
+                    assert_eq!(row[3].as_str(), Some(expected.as_str()));
+                }
+            }
+        }
+        let ids: std::collections::BTreeSet<_> =
+            rows.iter().map(|r| r[0].as_i64().unwrap()).collect();
+        assert_eq!(ids.len(), rows.len());
+        let related_tables = got[half]["related_tables"].as_object().unwrap();
+        assert_eq!(related_tables.len(), 2);
+        assert!(related_tables.contains_key("users") && related_tables.contains_key("orders"));
+        for (name, table) in related_tables {
+            let columns = table["columns"].as_array().unwrap();
+            let at = columns.iter().position(|c| c == "instance_id").unwrap();
+            if !binary && name == "users" {
+                assert!(!columns.iter().any(|c| c == "country"));
+            }
+            let related = table["rows"].as_array().unwrap();
+            assert!(!related.is_empty(), "{id}/{half}/{name}");
+            let actual: std::collections::BTreeSet<_> =
+                related.iter().map(|r| r[at].as_i64().unwrap()).collect();
+            if name == "users" {
+                assert_eq!(actual, ids);
+            } else {
+                let expected: std::collections::BTreeSet<_> = rows.iter().filter(|r| {
+                    let count: i64 = db.query_row("SELECT COUNT(*) FROM orders WHERE user_id = ? AND ts <= CAST(? AS TIMESTAMP)", duckdb::params![r[1].as_i64().unwrap(), r[2].as_str().unwrap()], |v| v.get(0)).unwrap();
+                    count > 0
+                }).map(|r| r[0].as_i64().unwrap()).collect();
+                assert_eq!(actual, expected);
+            }
+            assert!(
+                related
+                    .iter()
+                    .all(|r| ids.contains(&r[at].as_i64().unwrap())),
+                "related rows from leaked instances"
+            );
+        }
+    }
     assert_eq!(
-        instances(&got["context"]["related_tables"]),
-        want["context_related"],
-        "{id}: the context's related tables"
+        got["metadata"]["num_context_examples"],
+        if binary { 112 } else { 8 }
     );
-    assert_eq!(
-        rows(&got["predict"]["instance_table"]),
-        want["predict"],
-        "{id}: the predicted rows"
-    );
-    assert_eq!(
-        instances(&got["predict"]["related_tables"]),
-        want["predict_related"],
-        "{id}: the predicted rows' related tables"
-    );
+    assert_eq!(got["metadata"]["num_prediction_examples"], 2);
 }
 
 #[test]
-fn the_recording_names_the_two_base_cases() {
-    // Independent vectors cover both classification payloads.
-    assert_eq!(
-        expected("base.binary")["task"]["kind"],
-        "binary_classification"
-    );
-    assert_eq!(
-        expected("base.binary")["task"]["target"]["positive_class"],
-        "true"
-    );
-    assert_eq!(
-        expected("base.multiclass")["task"]["kind"],
-        "multiclass_classification"
-    );
-    // base.multiclass's static target leaks: the reference took rows out.
-    let leaked = expected("base.multiclass")["notices"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|n| n.as_str().unwrap().contains("rows sampled as context"));
-    assert!(leaked);
-}
-
-#[test]
-fn base_binary_s_classification_payload_is_the_reference_s() {
+fn binary_labels_match_source_counts() {
     classification("base.binary");
 }
-
 #[test]
-fn base_multiclass_s_classification_payload_and_leakage_are_the_reference_s() {
+fn multiclass_labels_and_leakage_match_source_entities() {
     classification("base.multiclass");
 }
 
 #[test]
 fn more_entities_than_one_materialize_holds_are_refused_by_its_limit() {
-    // The entity count, on base.regression. the core takes up to
-    // 100,000 entities, in calls of at most 10,000, as the reference at
-    // 6298913c (main's 1fc5a686): 1,001 entities are refused INVALID_REQUEST
-    // for the reference's reason (the base holds 8 users), never by a limit
-    // (B-3, retired).
-    let want = expected("base.regression.entities-1001");
-    assert_eq!(want["outcome"], "refused");
-    assert_eq!(want["code"], "INVALID_REQUEST");
+    // Missing IDs and the public materialization limit are distinct refusals.
     let with = |n: u64| {
         let (mut case, bases) = the_case("base.regression");
         let materialize = case

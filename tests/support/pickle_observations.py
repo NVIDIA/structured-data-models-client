@@ -125,7 +125,7 @@ def projection(value: Any) -> dict[str, Any]:
 
 def predicted(request: Any) -> dict[str, Any]:
     r"""What predicting ``request`` sends and answers, against the scripted
-    endpoint: each body by its digest (its request id left out), and the
+    endpoint: each decoded body (its request id left out), and the
     result through ``to_pandas()``; unexpected failures retain their traceback."""
     from sdm_client import KumoRelational, SDMClient
 
@@ -137,11 +137,11 @@ def predicted(request: Any) -> dict[str, Any]:
         out: dict[str, Any] = {}
         with SDMClient(url) as client:
             result = client.predict(request, model=KumoRelational())
-        out['result'] = _frame(result.to_pandas())
+        out['result'] = result.to_pandas()
         bodies = []
         for _, _, body in received.requests:
             parsed = json.loads(body)
             parsed.get('metadata', {}).pop('request_id', None)
-            bodies.append(_digest(parsed))
+            bodies.append(parsed)
         out['bodies'] = bodies
     return out

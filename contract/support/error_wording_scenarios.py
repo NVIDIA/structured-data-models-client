@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import re
 import sys
 import warnings
@@ -17,9 +16,7 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/error-wording-vectors.json'
 CASES = ROOT / 'contract/cases/s1'
-FORMAT = 'sdm-t214b-wording-vectors/1'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 #: own cases.
 OWN = (
@@ -217,8 +214,3 @@ def probe(name: str) -> dict[str, Any]:
     finally:
         cleanup()
     return observed
-
-
-def load() -> dict[str, Any]:
-    r"""The vector file, as committed."""
-    return json.loads(OUT.read_text(encoding='utf-8'))

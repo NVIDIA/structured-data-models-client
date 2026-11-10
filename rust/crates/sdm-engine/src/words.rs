@@ -20,7 +20,7 @@
 //! separators U+001C to U+001F, which Unicode does not count.
 //!
 //! `words.json`, recorded in the reference's environment, holds the
-//! lowering of every code point and the words of 772 values.
+//! lowering of every code point; normalization boundaries are tested directly.
 
 /// The most words a value keeps (`max_words`).
 pub const MAX_WORDS: usize = 50;

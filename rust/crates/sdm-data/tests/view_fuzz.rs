@@ -4,7 +4,7 @@
 
 //! No expression, name or table panics the view expressions' readers (
 //! fix 2, the owner's stop rule): a few seconds of expressions made of SQL's
-//! pieces, of the recorded expressions cut and spliced, and of table names
+//! pieces, of independently authored expressions cut and spliced, and of table names
 //! the patterns are made of, a 100,000-character one among them, each through the lexer, the checks, the name reader and
 //! every pattern built from a definition's text. Each may refuse; none may
 //! panic.
@@ -14,7 +14,6 @@ use sdm_data::view_expr::{
     self, ExprDialect, mask_literals, name_references, qualifier_found, string_literals,
     strip_comments, strip_qualifier, unsafe_reason, untrusted_call_reason,
 };
-use serde_json::Value as Json;
 
 /// Python's white space (`str.isspace`), which the core hands in from
 /// `sdm-pql`: the 29 characters Python 3.12 counts, with the class the
@@ -42,8 +41,6 @@ fn spaces() -> &'static Spaces {
 }
 
 use sdm_data::view_expr::Spaces;
-
-const EXPR: &str = include_str!("../../../../contract/view-expr-vectors.json");
 
 /// The pieces the expressions are made of.
 const PIECES: &[&str] = &[
@@ -193,14 +190,21 @@ fn no_expression_panics_a_reader() {
             .collect();
         read_every_way(&expr, &table);
     }
-    let document: Json = fixture_tables::read(EXPR);
-    let exprs: Vec<&str> = document["unsafe"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|vector| vector["expr"].as_str())
-        .filter(|expr| expr.len() < 2_000)
-        .collect();
+    // Independent valid and malformed seeds complement the generated SQL tokens.
+    let exprs = [
+        "abs(t.x)",
+        "CASE WHEN x > 0 THEN 'yes' ELSE 'no' END",
+        "CAST(x AS DECIMAL(10,2))",
+        "`a.b` + t.x",
+        "'a''b'",
+        "(SELECT x FROM t)",
+        "secret('s', 'k')",
+        "x /* unfinished",
+        "'unclosed",
+        "t.x + 't.y'",
+        "é + 1",
+        "x; DROP TABLE t",
+    ];
     for _ in 0..1_000 {
         let a = exprs[rng.below(exprs.len())];
         let b = exprs[rng.below(exprs.len())];
@@ -257,6 +261,3 @@ fn no_description_panics_its_reader() {
         let _ = view_expr::describe::describe_view(&rows, spaces());
     }
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

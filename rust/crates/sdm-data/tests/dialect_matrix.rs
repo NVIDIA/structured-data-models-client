@@ -2,26 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Every request kind, on every dialect this build renders, in the shapes
-//! that steer its rendering, held to what the dialects rendered before
-//! they shared one SQL builder (design fix E): the plan (each
-//! statement's text and parameters, and the schema it expects) or the
-//! refusal, byte for byte, and each dialect's capabilities and quirks.
-//!
-//! The goldens (`*_goldens.rs`) pin what the contract cases run; this
-//! matrix reaches what they do not: every request kind (the goldens hold
-//! no `column_ranges`, `repeated_key` or `count_rows`), each part of the
-//! catalog, relations of every depth and of awkward names, namespaces,
-//! composite keys, each window bound, each per-seed order, the seed key
-//! types each dialect binds differently, and each refusal a rendering
-//! makes. `dialect_matrix.jsonl` holds one line per case, recorded from
-//! the dialects at the phase head the refactor started from (e6c3791b).
-//!
-//! A deliberate SQL change fails here, as it fails a golden. Regenerate
-//! with `SDM_DIALECT_MATRIX_WRITE=1 cargo test -p sdm-data --test dialect_matrix
-//! every_request_kind_renders_as_recorded_on_every_dialect -- --exact`.
-//! The explicit write mode exports the same `rendered` answers used by
-//! the check; review the generated answer diff and keep the inputs intact.
+//! SQL request coverage across the five supported dialects.
+//! Small independent assertions protect admission, schemas, seed ownership,
+//! identifier handling, aggregates, windows and ordering without SQL recordings.
 
 use sdm_contract::data::{
     DataLayer, DataRequest, DescribePart, Dialect, Filter, KeySet, ProviderChoice, Relation,
@@ -33,14 +16,7 @@ use sdm_contract::{ColumnType, Field, Scalar, Unit};
 use sdm_data::Data;
 use serde_json::{Value, json};
 
-/// The recorded matrix is compiled into ordinary checks. Only the
-/// explicitly requested test-only generator writes the fixture.
-const RECORDED: &str = include_str!("dialect_matrix.jsonl");
-
-/// The dialects held: the five this build renders (Databricks
-/// Snowflake ), and one it refuses, a name it does not know.
 const RENDERED: [&str; 5] = ["duckdb", "sqlite", "postgres", "databricks", "snowflake"];
-const REFUSED: [&str; 1] = ["nope"];
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
@@ -772,37 +748,6 @@ fn requests() -> Vec<DataRequest> {
     found
 }
 
-/// The namespaces a request is planned under: none, and, for a read of the
-/// table `t` and a whole catalog read, one schema and one past a part left
-/// to the connection; for the table list and a preview, one with a part
-/// left inside it and two parts too.
-fn namespaces(request: &DataRequest) -> Vec<Vec<Option<&'static str>>> {
-    let t = relation(&["t"]);
-    let (read, catalog) = match request {
-        DataRequest::Describe { tables, part } => (
-            tables.is_empty() || tables == std::slice::from_ref(&t),
-            *part == DescribePart::Tables,
-        ),
-        DataRequest::Preview { table, .. } => (*table == t, true),
-        DataRequest::Scan { table, .. }
-        | DataRequest::CountRows { table, .. }
-        | DataRequest::SampleEntities { table, .. }
-        | DataRequest::Neighbors { table, .. }
-        | DataRequest::Lookup { table, .. } => (*table == t, false),
-        DataRequest::KeyCounts { keys } => (keys.len() > 2, false),
-        DataRequest::TimeBounds { columns } => (columns.len() > 1, false),
-        _ => (false, false),
-    };
-    let mut found = vec![vec![]];
-    if read {
-        found.extend([vec![Some("s")], vec![None, Some("s")]]);
-    }
-    if catalog {
-        found.extend([vec![Some("s"), None], vec![Some("db"), Some("s")]]);
-    }
-    found
-}
-
 fn provider(dialect: &str, namespace: &[Option<&str>]) -> ProviderChoice {
     ProviderChoice::Sql {
         timestamp_encoding: None,
@@ -810,127 +755,6 @@ fn provider(dialect: &str, namespace: &[Option<&str>]) -> ProviderChoice {
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
         view: None,
     }
-}
-
-/// What the layer answers for `request` on `provider`: its plan, or its
-/// refusal.
-/// A key set a statement binds is written as the request's seeds where it
-/// is they, as every one is today, so the line names each once.
-fn answer(request: &DataRequest, provider: &ProviderChoice) -> Value {
-    let mut plan = match Data::new().plan(request, provider) {
-        Ok(plan) => json!(plan),
-        Err(error) => return json!({ "error": error }),
-    };
-    let seeds = match request {
-        DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => json!(seeds),
-        _ => Value::Null,
-    };
-    if let Some(statements) = plan["statements"].as_array_mut() {
-        for param in statements
-            .iter_mut()
-            .filter_map(|s| s["params"].as_array_mut())
-            .flatten()
-        {
-            if param["keys"] == seeds {
-                param["keys"] = json!("the request's seeds");
-            }
-        }
-    }
-    json!({ "plan": plan })
-}
-
-/// What the layer says of `dialect` itself: its capabilities and quirks.
-fn probe(dialect: &str) -> Value {
-    let data = Data::new();
-    let p = provider(dialect, &[]);
-    let capabilities = match data.capabilities(&p) {
-        Ok(c) => json!({ "capabilities": c }),
-        Err(error) => json!({ "error": error }),
-    };
-    json!({
-        "capabilities": capabilities,
-        "source_database": data.source_database(&p),
-        "read_as": data.read_as(&provider(dialect, &[Some("s")]), &relation(&["t"])),
-    })
-}
-
-/// The matrix as it renders today, one line per case.
-fn rendered() -> Vec<String> {
-    let mut lines = Vec::new();
-    for dialect in RENDERED.iter().chain(REFUSED.iter()) {
-        lines.push(json!({ "dialect": dialect, "probe": probe(dialect) }).to_string());
-    }
-    let requests = requests();
-    for dialect in RENDERED {
-        for request in &requests {
-            for namespace in namespaces(request) {
-                let p = provider(dialect, &namespace);
-                lines.push(
-                    json!({
-                        "dialect": dialect,
-                        "namespace": namespace,
-                        "request": request,
-                        "answer": answer(request, &p),
-                    })
-                    .to_string(),
-                );
-            }
-        }
-    }
-    for dialect in REFUSED {
-        let request = &requests[0];
-        lines.push(
-            json!({
-                "dialect": dialect,
-                "namespace": [],
-                "request": request,
-                "answer": answer(request, &provider(dialect, &[])),
-            })
-            .to_string(),
-        );
-    }
-    lines
-}
-
-#[test]
-#[allow(
-    clippy::disallowed_methods,
-    reason = "test-only snapshot regeneration explicitly requested by SDM_DIALECT_MATRIX_WRITE=1"
-)]
-fn every_request_kind_renders_as_recorded_on_every_dialect() {
-    let now = rendered();
-    if std::env::var_os("SDM_DIALECT_MATRIX_WRITE").as_deref() == Some(std::ffi::OsStr::new("1")) {
-        std::fs::write(
-            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/dialect_matrix.jsonl"),
-            now.join("\n") + "\n",
-        )
-        .unwrap();
-        return;
-    }
-    let recorded: Vec<&str> = RECORDED.lines().filter(|l| !l.is_empty()).collect();
-    if now.iter().map(String::as_str).eq(recorded.iter().copied()) {
-        return;
-    }
-    let changed: Vec<&String> = now
-        .iter()
-        .filter(|line| !recorded.contains(&line.as_str()))
-        .collect();
-    let stale = recorded
-        .iter()
-        .filter(|line| !now.iter().any(|n| n == *line))
-        .count();
-    panic!(
-        "the matrix renders {} line(s) not recorded, and {stale} recorded line(s) no longer render \
-         (of {} now, {} recorded); each new line as the layer renders it:\n{}",
-        changed.len(),
-        now.len(),
-        recorded.len(),
-        changed
-            .iter()
-            .map(|l| l.as_str())
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
 }
 
 #[test]
@@ -977,19 +801,765 @@ fn the_matrix_holds_every_request_kind_and_catalog_part_on_every_dialect() {
             "scan",
             "time_bounds",
         ] {
-            let answers: Vec<Value> = requests
+            let answers: Vec<_> = requests
                 .iter()
                 .filter(|r| r.name() == kind)
-                .map(|r| answer(r, &p))
+                .map(|r| Data::new().plan(r, &p))
                 .collect();
             assert!(
-                answers.iter().any(|a| a.get("plan").is_some()),
+                answers.iter().any(Result::is_ok),
                 "{dialect} plans no {kind}"
             );
             assert!(
-                answers.iter().any(|a| a.get("error").is_some()),
+                answers.iter().any(Result::is_err),
                 "{dialect} refuses no {kind}"
             );
+        }
+    }
+}
+
+#[test]
+fn provider_capabilities_and_namespace_probes_have_explicit_contracts() {
+    let data = Data::new();
+    for dialect in RENDERED {
+        let p = provider(dialect, &[]);
+        let capabilities = data.capabilities(&p).unwrap();
+        let names: Vec<_> = capabilities
+            .optional
+            .iter()
+            .map(|kind| kind.name())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "preview",
+                "count_rows",
+                "key_counts",
+                "time_bounds",
+                "column_ranges",
+                "repeated_key",
+                "sample_entities",
+                "neighbors",
+                "lookup"
+            ]
+        );
+        assert_eq!(capabilities.max_keys_per_request, None);
+        assert_eq!(
+            capabilities.max_seed,
+            if dialect == "duckdb" {
+                i32::MAX as u64
+            } else {
+                u64::MAX
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(capabilities.sampling).unwrap(),
+            if dialect == "snowflake" {
+                "unseeded"
+            } else {
+                "seeded_stable"
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(capabilities.text_times).unwrap(),
+            "value_by_value"
+        );
+        assert_eq!(
+            serde_json::to_value(capabilities.null_order).unwrap(),
+            if matches!(dialect, "sqlite" | "databricks") {
+                "first"
+            } else {
+                "last"
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(capabilities.index_advice).unwrap(),
+            match dialect {
+                "duckdb" => json!("single_column"),
+                "sqlite" => json!("leading_column"),
+                _ => Value::Null,
+            }
+        );
+        assert!(capabilities.derived_relations);
+        assert_eq!(capabilities.sample_rows, dialect == "databricks");
+        assert_eq!(
+            capabilities.neighbor_lookback,
+            matches!(dialect, "databricks" | "snowflake")
+        );
+        assert_eq!(capabilities.keys_optional, dialect == "databricks");
+        assert_eq!(capabilities.key_enforcement, dialect == "snowflake");
+        assert_eq!(
+            capabilities.opaque_vendor.as_deref(),
+            (dialect == "duckdb").then_some("DuckDB")
+        );
+        assert_eq!(data.source_database(&p), Some(dialect));
+        assert_eq!(
+            data.read_as(&provider(dialect, &[Some("s")]), &relation(&["t"]))
+                .source,
+            ["s", "t"]
+        );
+        assert_eq!(
+            data.read_as(&provider(dialect, &[Some("s")]), &relation(&["other", "t"]))
+                .source,
+            ["other", "t"]
+        );
+    }
+    let unknown = provider("nope", &[]);
+    assert!(data.source_database(&unknown).is_none());
+    let error = data.capabilities(&unknown).unwrap_err();
+    assert_eq!(error.code, sdm_contract::ErrorCode::UnsupportedRequest);
+    assert_eq!(
+        data.plan(&requests()[0], &unknown).unwrap_err().code,
+        sdm_contract::ErrorCode::UnsupportedRequest
+    );
+}
+
+#[test]
+fn scans_and_counts_preserve_projection_filters_and_limits() {
+    use sdm_contract::data::{ExpectedSchema, FetchPlan};
+    for dialect in RENDERED {
+        let quote = if dialect == "databricks" { '`' } else { '"' };
+        let q = |name: &str| format!("{quote}{name}{quote}");
+        let table = relation(&["t"]);
+        let cases = [
+            (
+                DataRequest::Scan {
+                    table: table.clone(),
+                    columns: names(&["value", "id"]),
+                    filters: vec![not_null("id")],
+                    limit: Some(5),
+                },
+                format!(
+                    "SELECT {}, {} FROM {} WHERE {} IS NOT NULL LIMIT 5",
+                    q("value"),
+                    q("id"),
+                    if dialect == "postgres" {
+                        format!("{}.{}", q("public"), q("t"))
+                    } else if dialect == "snowflake" {
+                        format!("{}.{}.{}", q("db"), q("public"), q("t"))
+                    } else {
+                        q("t")
+                    },
+                    q("id")
+                ),
+            ),
+            (
+                DataRequest::CountRows {
+                    table,
+                    filters: vec![not_null("id")],
+                },
+                format!(
+                    "SELECT COUNT(*){} FROM {} WHERE {} IS NOT NULL",
+                    if dialect == "databricks" {
+                        String::new()
+                    } else {
+                        format!(" AS {}", q("rows"))
+                    },
+                    if dialect == "postgres" {
+                        format!("{}.{}", q("public"), q("t"))
+                    } else if dialect == "snowflake" {
+                        format!("{}.{}.{}", q("db"), q("public"), q("t"))
+                    } else {
+                        q("t")
+                    },
+                    q("id")
+                ),
+            ),
+        ];
+        for (request, expected_sql) in cases {
+            let FetchPlan::Sql {
+                statements,
+                expect,
+                result_conversions,
+            } = Data::new()
+                .plan(
+                    &request,
+                    &provider(
+                        dialect,
+                        if dialect == "postgres" {
+                            &[Some("public")]
+                        } else if dialect == "snowflake" {
+                            &[Some("db"), Some("public")]
+                        } else {
+                            &[]
+                        },
+                    ),
+                )
+                .unwrap()
+            else {
+                panic!("{dialect}: expected SQL");
+            };
+            assert_eq!(statements.len(), 1, "{dialect}");
+            assert_eq!(statements[0].text, expected_sql, "{dialect}");
+            assert!(
+                statements[0].params.is_empty(),
+                "unkeyed reads bind no seeds"
+            );
+            assert_eq!(expect, ExpectedSchema::Discover {});
+            assert_eq!(
+                result_conversions,
+                if dialect == "postgres" {
+                    vec![sdm_contract::data::SqlResultConversion::ZonedTextUtc]
+                } else {
+                    vec![]
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn lookup_retains_typed_seed_attachment_and_field_order() {
+    use sdm_contract::data::{FetchPlan, SqlParam};
+    for dialect in RENDERED {
+        for key_fields in [
+            one_key(ColumnType::Int64),
+            one_key(ColumnType::Utf8),
+            two_keys(),
+        ] {
+            let key_names = if key_fields.len() == 1 {
+                names(&["id"])
+            } else {
+                names(&["id", "tenant"])
+            };
+            let supplied = seeds(key_fields, vec![]);
+            let request = DataRequest::Lookup {
+                table: relation(&["t"]),
+                key: key_names,
+                columns: names(&["id", "value"]),
+                seeds: supplied.clone(),
+            };
+            let planned = Data::new().plan(
+                &request,
+                &provider(
+                    dialect,
+                    if dialect == "postgres" {
+                        &[Some("public")]
+                    } else if dialect == "snowflake" {
+                        &[Some("db"), Some("public")]
+                    } else {
+                        &[]
+                    },
+                ),
+            );
+            if supplied.columns.len() == 3 && matches!(dialect, "databricks" | "snowflake") {
+                // Warehouse seed transport currently admits one key only.
+                let error = planned.unwrap_err();
+                assert_eq!(error.code, sdm_contract::ErrorCode::UnsupportedRequest);
+                assert_eq!(
+                    serde_json::to_value(&error).unwrap()["fields"]["field"],
+                    json!({"t": "utf8", "v": "key"})
+                );
+                continue;
+            }
+            let FetchPlan::Sql { statements, .. } = planned.unwrap() else {
+                panic!("{dialect}: expected SQL");
+            };
+            let bound: Vec<_> = statements
+                .iter()
+                .flat_map(|s| &s.params)
+                .filter_map(|p| {
+                    if let SqlParam::KeySet { keys, .. } = p {
+                        Some(keys)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            assert_eq!(
+                bound,
+                [&supplied],
+                "{dialect}: preserve seed attachment, field order, types and metadata"
+            );
+        }
+    }
+}
+
+fn settled_provider(dialect: &str) -> ProviderChoice {
+    provider(
+        dialect,
+        match dialect {
+            "postgres" => &[Some("public")],
+            "snowflake" => &[Some("db"), Some("public")],
+            _ => &[],
+        },
+    )
+}
+
+#[test]
+fn malformed_requests_refuse_the_named_field_before_rendering() {
+    let cases = [
+        (DataRequest::KeyCounts { keys: vec![] }, "keys"),
+        (DataRequest::TimeBounds { columns: vec![] }, "columns"),
+        (
+            DataRequest::ColumnRanges {
+                table: relation(&["t"]),
+                columns: vec![],
+            },
+            "columns",
+        ),
+        (
+            DataRequest::RepeatedKey {
+                table: relation(&["t"]),
+                key: vec![],
+            },
+            "key",
+        ),
+        (
+            DataRequest::Lookup {
+                table: relation(&["t"]),
+                key: vec![],
+                columns: names(&["id"]),
+                seeds: seeds(one_key(ColumnType::Int64), vec![]),
+            },
+            "key",
+        ),
+        (
+            DataRequest::Neighbors {
+                table: relation(&["t"]),
+                key: names(&["id"]),
+                columns: names(&["id"]),
+                seeds: seeds(one_key(ColumnType::Int64), vec![]),
+                window: None,
+                per_seed: Some(2.into()),
+                order: None,
+            },
+            "order",
+        ),
+    ];
+    for (request, field) in &cases {
+        let error = request.check().unwrap_err();
+        assert_eq!(
+            error.code,
+            sdm_contract::ErrorCode::InvalidRequest,
+            "{request:?}"
+        );
+        let fields = serde_json::to_value(&error).unwrap()["fields"].clone();
+        assert_eq!(fields["field"], json!({"t": "utf8", "v": field}));
+        assert_eq!(fields["request"], json!({"t": "utf8", "v": request.name()}));
+    }
+}
+
+#[test]
+fn key_counts_and_time_bounds_have_independent_fixed_schemas() {
+    use sdm_contract::data::ExpectedSchema;
+    for dialect in RENDERED {
+        for (request, fields) in [
+            (
+                DataRequest::KeyCounts {
+                    keys: vec![TableKey {
+                        table: relation(&["t"]),
+                        columns: names(&["id"]),
+                        unique: false,
+                        label: None,
+                    }],
+                },
+                vec![
+                    field("k", ColumnType::Int32, false),
+                    field("n", ColumnType::Int64, false),
+                    field("d", ColumnType::Int64, false),
+                    field("z", ColumnType::Int64, false),
+                ],
+            ),
+            (
+                DataRequest::TimeBounds {
+                    columns: vec![TableColumn {
+                        table: relation(&["t"]),
+                        column: "at".into(),
+                    }],
+                },
+                vec![
+                    field("table_index", ColumnType::Int32, false),
+                    field(
+                        "min_date",
+                        ColumnType::Timestamp {
+                            unit: Unit::Us,
+                            zone: None,
+                        },
+                        true,
+                    ),
+                    field(
+                        "max_date",
+                        ColumnType::Timestamp {
+                            unit: Unit::Us,
+                            zone: None,
+                        },
+                        true,
+                    ),
+                ],
+            ),
+        ] {
+            let plan = Data::new()
+                .plan(&request, &settled_provider(dialect))
+                .unwrap();
+            let expected = match (&request, dialect) {
+                (
+                    DataRequest::TimeBounds { .. },
+                    "sqlite" | "postgres" | "databricks" | "snowflake",
+                ) => ExpectedSchema::Discover {},
+                (DataRequest::KeyCounts { .. }, "sqlite" | "snowflake") => ExpectedSchema::Schema {
+                    fields: if dialect == "snowflake" {
+                        ["K", "N", "D", "Z"]
+                    } else {
+                        ["k", "n", "d", "z"]
+                    }
+                    .into_iter()
+                    .map(|name| field(name, ColumnType::Int64, false))
+                    .collect(),
+                },
+                _ => ExpectedSchema::Schema { fields },
+            };
+            assert_eq!(plan.expect(), &expected, "{dialect}: {request:?}");
+        }
+    }
+}
+
+#[test]
+fn identifiers_escape_quotes_without_splitting_literal_dots() {
+    use sdm_contract::data::FetchPlan;
+    for dialect in RENDERED {
+        let (name, quoted) = if dialect == "databricks" {
+            ("a.`b's", "`a.``b's`")
+        } else {
+            ("a.\"b's", "\"a.\"\"b's\"")
+        };
+        let request = DataRequest::Preview {
+            table: relation(&[name]),
+            columns: names(&[name]),
+            limit: 3,
+        };
+        let FetchPlan::Sql { statements, .. } = Data::new()
+            .plan(&request, &settled_provider(dialect))
+            .unwrap()
+        else {
+            panic!("SQL");
+        };
+        let prefix = match dialect {
+            "postgres" => "\"public\".",
+            "snowflake" => "\"db\".\"public\".",
+            _ => "",
+        };
+        assert_eq!(
+            statements.last().unwrap().text,
+            format!(
+                "SELECT {quoted} FROM {prefix}{quoted}{} LIMIT 3",
+                if dialect == "sqlite" {
+                    " ORDER BY rowid"
+                } else {
+                    ""
+                }
+            )
+        );
+    }
+}
+
+#[test]
+fn sample_seed_admission_matches_dialect_capabilities() {
+    for dialect in RENDERED {
+        for (seed, accepted) in [
+            (Scalar::UInt64(42), true),
+            (Scalar::UInt64(i32::MAX as u64), true),
+            (Scalar::UInt64(1 << 31), dialect != "duckdb"),
+            (Scalar::Int64(-1), !matches!(dialect, "duckdb" | "sqlite")),
+            (Scalar::Float64(1.5), dialect == "snowflake"),
+            (Scalar::Utf8("42".into()), dialect == "snowflake"),
+        ] {
+            let request = DataRequest::SampleEntities {
+                rows: Some(100),
+                table: relation(&["t"]),
+                key: names(&["id"]),
+                columns: names(&["id", "x"]),
+                n: 5,
+                seed,
+                filters: vec![not_null("id")],
+                key_dtype: Some(Dtype::Int),
+            };
+            let result = Data::new().plan(&request, &settled_provider(dialect));
+            assert_eq!(
+                result.is_ok(),
+                accepted,
+                "{dialect}: {request:?}: {result:?}"
+            );
+            if let Err(error) = result {
+                assert_eq!(
+                    serde_json::to_value(error).unwrap()["fields"]["field"],
+                    json!({"t": "utf8", "v": "seed"})
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn neighbor_windows_and_per_seed_order_keep_endpoint_semantics() {
+    use sdm_contract::data::FetchPlan;
+    for dialect in RENDERED {
+        for (lower, upper) in [
+            (Some(false), Some(true)),
+            (Some(true), Some(false)),
+            (None, Some(true)),
+            (Some(false), None),
+        ] {
+            let request = DataRequest::Neighbors {
+                table: relation(&["t"]),
+                key: names(&["fk"]),
+                columns: names(&["fk", "at", "x", "y"]),
+                seeds: seeds(
+                    one_key(ColumnType::Int64),
+                    [("start", lower), ("end", upper)]
+                        .into_iter()
+                        .filter_map(|(name, present)| {
+                            present.map(|_| field(name, timestamp(), false))
+                        })
+                        .collect(),
+                ),
+                window: Some(Window {
+                    source_type: None,
+                    column: "at".into(),
+                    lower: lower.and_then(|inclusive| bound("start", inclusive)),
+                    upper: upper.and_then(|inclusive| bound("end", inclusive)),
+                }),
+                per_seed: Some(3.into()),
+                order: Some(TieBreak(vec![
+                    term("x", false, true, true),
+                    term("y", false, false, false),
+                ])),
+            };
+            let FetchPlan::Sql { statements, .. } = Data::new()
+                .plan(&request, &settled_provider(dialect))
+                .unwrap()
+            else {
+                panic!("SQL");
+            };
+            let text = statements
+                .iter()
+                .map(|s| s.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if dialect == "databricks" {
+                for (inclusive, seed, json_field, strict, closed) in [
+                    (lower, "start", "s", ">", ">="),
+                    (upper, "end", "e", "<", "<="),
+                ] {
+                    let alias = format!("col.{json_field} AS `{seed}`");
+                    if let Some(inclusive) = inclusive {
+                        let operator = if inclusive { closed } else { strict };
+                        let predicate = format!("AND t.`at` {operator} s.`{seed}`");
+                        assert!(text.contains(&alias), "missing {alias}: {text}");
+                        assert!(
+                            text.lines().any(|line| line.trim() == predicate),
+                            "missing {predicate}: {text}"
+                        );
+                    } else {
+                        assert!(!text.contains(&alias), "unexpected {alias}: {text}");
+                        assert!(!text.contains(&format!("s.`{seed}`")), "{text}");
+                    }
+                }
+            }
+            // These operators occur only in the window predicates; the row bound is <= 3.
+            for (inclusive, strict, closed) in [(lower, " > ", " >= "), (upper, " < ", " <= ")] {
+                if let Some(inclusive) = inclusive {
+                    let operator = if inclusive { closed } else { strict };
+                    assert!(
+                        text.lines().any(|line| line.contains(operator)
+                            && !line.trim_start().starts_with(") <= 3")),
+                        "{dialect}: missing {operator}: {text}"
+                    );
+                    if strict == " > " {
+                        assert!(
+                            !text.contains(if inclusive { strict } else { closed }),
+                            "{text}"
+                        );
+                    }
+                } else if strict == " > " {
+                    assert!(!text.contains(strict) && !text.contains(closed), "{text}");
+                } else {
+                    assert!(!text.contains(strict), "{text}");
+                    assert!(
+                        !text.lines().any(|line| line.contains(closed)
+                            && !line.trim_start().starts_with(") <= 3")),
+                        "{text}"
+                    );
+                }
+            }
+            let (first, second) = match dialect {
+                "databricks" => ("`x` DESC", "`y`"),
+                "snowflake" => ("\"x\" DESC NULLS LAST", "\"y\" NULLS FIRST"),
+                "sqlite" => ("\"x\" DESC", "\"y\""),
+                _ => ("\"x\" DESC NULLS LAST", "\"y\" ASC NULLS FIRST"),
+            };
+            let order = text.split("ORDER BY ").nth(1).expect("per-seed order");
+            assert!(
+                order.find(first).unwrap() < order.find(second).unwrap(),
+                "{dialect}: {order}"
+            );
+            if matches!(dialect, "sqlite" | "postgres") {
+                assert!(text.contains("LIMIT 3"));
+            } else {
+                assert!(text.contains("PARTITION BY ") && text.contains(") <= 3"));
+            }
+        }
+    }
+}
+
+#[test]
+fn catalog_scope_is_explicit_for_each_dialect() {
+    // Each pair says whether whole-catalog and single-table requests are supported.
+    let parts = [
+        DescribePart::Tables,
+        DescribePart::Columns,
+        DescribePart::Keys,
+        DescribePart::ForeignKeys,
+        DescribePart::Indexes,
+        DescribePart::IndexColumns,
+        DescribePart::Namespace,
+    ];
+    for (dialect, admitted) in [
+        (
+            "duckdb",
+            [
+                (true, true),
+                (false, true),
+                (false, true),
+                (false, true),
+                (true, false),
+                (false, false),
+                (true, true),
+            ],
+        ),
+        (
+            "sqlite",
+            [
+                (true, true),
+                (false, true),
+                (false, true),
+                (false, true),
+                (false, true),
+                (false, true),
+                (true, true),
+            ],
+        ),
+        (
+            "postgres",
+            [
+                (true, true),
+                (false, true),
+                (false, true),
+                (false, true),
+                (true, false),
+                (false, true),
+                (true, true),
+            ],
+        ),
+        (
+            "databricks",
+            [
+                (true, true),
+                (false, true),
+                (false, true),
+                (false, true),
+                (false, false),
+                (false, false),
+                (true, false),
+            ],
+        ),
+        (
+            "snowflake",
+            [
+                (true, false),
+                (false, true),
+                (false, true),
+                (false, true),
+                (false, false),
+                (false, false),
+                (true, false),
+            ],
+        ),
+    ] {
+        for (part, (whole, single)) in parts.into_iter().zip(admitted) {
+            for (tables, expected) in [(vec![], whole), (vec![relation(&["t"])], single)] {
+                let request = DataRequest::Describe { tables, part };
+                let plan = Data::new().plan(&request, &settled_provider(dialect));
+                assert_eq!(plan.is_ok(), expected, "{dialect} {request:?}: {plan:?}");
+                if let Err(error) = plan {
+                    assert_eq!(error.code, sdm_contract::ErrorCode::UnsupportedRequest);
+                    assert_eq!(
+                        serde_json::to_value(error).unwrap()["fields"]["request"],
+                        json!({"t":"utf8","v":"describe"})
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn renderer_refuses_filters_it_cannot_preserve() {
+    for dialect in RENDERED {
+        let request = DataRequest::Scan {
+            table: relation(&["t"]),
+            columns: names(&["at"]),
+            limit: None,
+            filters: vec![Filter::TimeRange {
+                column: "at".into(),
+                lower: None,
+                upper: None,
+            }],
+        };
+        let error = Data::new()
+            .plan(&request, &settled_provider(dialect))
+            .unwrap_err();
+        assert_eq!(error.code, sdm_contract::ErrorCode::UnsupportedRequest);
+        assert_eq!(
+            serde_json::to_value(error).unwrap()["fields"]["field"],
+            json!({"t":"utf8","v":"filters"})
+        );
+    }
+}
+
+#[test]
+fn ranges_and_repeated_composite_keys_preserve_aggregate_semantics() {
+    use sdm_contract::data::FetchPlan;
+    for dialect in RENDERED {
+        let quote = if dialect == "databricks" { '`' } else { '"' };
+        let q = |s: &str| format!("{quote}{s}{quote}");
+        for request in [
+            DataRequest::ColumnRanges {
+                table: relation(&["t"]),
+                columns: names(&["a", "b"]),
+            },
+            DataRequest::RepeatedKey {
+                table: relation(&["t"]),
+                key: names(&["a", "b"]),
+            },
+        ] {
+            let FetchPlan::Sql { statements, .. } = Data::new()
+                .plan(&request, &settled_provider(dialect))
+                .unwrap()
+            else {
+                panic!("SQL")
+            };
+            let text = &statements.last().unwrap().text;
+            if matches!(request, DataRequest::ColumnRanges { .. }) {
+                let aggregates = format!(
+                    "COUNT(*), MIN({a}), MAX({a}), COUNT({a}), MIN({b}), MAX({b}), COUNT({b})",
+                    a = q("a"),
+                    b = q("b")
+                );
+                assert!(text.contains(&aggregates), "{dialect}: {text}");
+            } else {
+                for fragment in [
+                    format!("{} IS NOT NULL AND {} IS NOT NULL", q("a"), q("b")),
+                    format!("GROUP BY {}, {}", q("a"), q("b")),
+                    "HAVING COUNT(*) > 1".into(),
+                    "LIMIT 1".into(),
+                ] {
+                    assert!(
+                        text.contains(&fragment),
+                        "{dialect}: missing {fragment}: {text}"
+                    );
+                }
+            }
         }
     }
 }

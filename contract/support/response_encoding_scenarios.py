@@ -18,7 +18,6 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/encoding-vectors.json'
 
 
 def _marked(mark: bytes, codec: str) -> Callable[[str], bytes]:
@@ -270,8 +269,3 @@ def answers() -> dict[str, Any]:
 def observe() -> dict[str, Any]:
     """Exercise response encodings through the installed client."""
     return {'answers': answers()}
-
-
-def load() -> dict[str, Any]:
-    r"""The vector file, as committed."""
-    return json.loads(OUT.read_text(encoding='utf-8'))

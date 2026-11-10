@@ -257,12 +257,7 @@ def test_the_request_carries_the_facts_the_core_resolved(
     check()
 
 
-# --- against the reference -----------------------------------------------------------
-
-
-@functools.cache
-def vectors() -> dict[str, Any]:
-    return recorder().load()
+# --- current request behavior -------------------------------------------------
 
 
 @functools.cache
@@ -270,94 +265,115 @@ def core_observed() -> dict[str, Any]:
     return recorder().observe()
 
 
-def test_the_vectors_are_the_reference_s() -> None:
-    r"""Control: the vectors were recorded from the reference commit the
-    contract names, by the committed recorder, and exercise what they
-    name: a static target and another entity table among the facts, a
-    refusal said of each part, and repeats that ``dict.fromkeys`` drops."""
-    document = vectors()
-    facts = document['facts']
-    assert facts['static']['windowed'] is False
-    assert facts['other-entity']['entity_table'] == 'orders'
-    assert len(facts['forecast']['parts']) == 2
-    for name, said in (
-        ('forecast-fail-1', 'forecast step 2 of 2'),
-        ('ranking-fail-1', 'candidate 1, one of 3'),
-    ):
-        assert said in document['steps'][name]['refusal']['message']
-    for name, asked in (
-        ('ints', 3),
-        ('int-float-bool', 2),
-        ('decimal-first', 2),
-        ('numpy-first', 2),
-        ('zero-false', 2),
-    ):
-        assert len(document['repeats'][name]['asked']) == asked, name
-
-
-def _same_refusal(want: Any, got: Any) -> list[str]:
-    r"""Two refusals the same: class, code and message, and each detail
-    the reference's carries (the core's may carry more fields)."""
-    if want is None or got is None:
-        return (
-            []
-            if want == got
-            else [f'{got!r:.200} where python-ref has {want!r:.200}']
-        )
-    found = [
-        f'{field}: {got.get(field)!r:.200} where python-ref has '
-        f'{want.get(field)!r:.200}'
-        for field in ('error', 'code', 'message')
-        if want.get(field) != got.get(field)
-    ]
-    for name, value in want['details'].items():
-        if got['details'].get(name) != value:
-            found.append(
-                f'details.{name}: {got["details"].get(name)!r} where '
-                f'python-ref has {value!r}'
-            )
-    return found
-
-
 @pytest.mark.parametrize('name', list(recorder().QUERIES))
-def test_each_request_holds_the_reference_s_facts(name: str) -> None:
-    r"""Guard of the move (passes on the base): python-core's request, and
-    each of a forecast's and a ranking's parts, holds the reference's
-    entity table and windowing."""
-    assert core_observed()['facts'][name] == vectors()['facts'][name]
+def test_requests_preserve_entity_window_and_decomposition(name: str) -> None:
+    facts = core_observed()['facts'][name]
+    assert facts['entity_table'] == (
+        'orders' if name == 'other-entity' else 'users'
+    )
+    windowed = name not in ('static', 'other-entity')
+    assert facts['windowed'] is windowed
+    count = {'forecast': 2, 'ranking': 3}.get(name)
+    if count is None:
+        assert facts['parts'] is None
+    else:
+        assert (
+            facts['parts']
+            == [{'entity_table': 'users', 'windowed': True}] * count
+        )
 
 
-@pytest.mark.parametrize(
-    'name',
-    ['forecast-fail-0', 'forecast-fail-1', 'ranking-fail-0', 'ranking-fail-1'],
-)
-def test_a_refused_call_is_said_of_the_reference_s_part(name: str) -> None:
-    r"""Guard of the move (passes on the base): a call the endpoint refuses
-    is said of the forecast's step or the ranking's candidate the
-    reference names, with the parts answered before it; the calls made are
-    the reference's."""
-    want = vectors()['steps'][name]
-    got = core_observed()['steps'][name]
-    assert got['asked'] == want['asked']
-    found = _same_refusal(want.get('refusal'), got.get('refusal'))
-    assert not found, f'{name}: ' + '; '.join(found)
+def _ranking_query(candidate: int) -> str:
+    return f'PREDICT COUNT(buys.* WHERE buys.item_id = {candidate}, 0, 30, days) > 0 FOR EACH users.user_id'
+
+
+@pytest.mark.parametrize('kind', ['forecast', 'ranking'])
+@pytest.mark.parametrize('failed', [0, 1])
+def test_refused_calls_identify_part_and_preserve_completed_answers(
+    kind, failed
+):
+    got = core_observed()['steps'][f'{kind}-fail-{failed}']
+    queries = [
+        (
+            f'PREDICT SUM(orders.price, {step * 30}, {(step + 1) * 30}, days) FOR EACH users.user_id'
+            if kind == 'forecast'
+            else _ranking_query(step)
+        )
+        for step in range(failed + 1)
+    ]
+    assert got['asked'] == queries
+    refusal = got['refusal']
+    assert refusal['error'] == 'NimRequestError'
+    assert refusal['code'] is None
+    assert (
+        '[500]' in refusal['message']
+        and 'scripted_failure' in refusal['message']
+    )
+    assert (
+        f'forecast step {failed + 1} of 2'
+        if kind == 'forecast'
+        else f'candidate {failed}, one of 3'
+    ) in refusal['message']
+    details = refusal['details']
+    assert details['error'] == 'scripted_failure'
+    assert details['call'] == failed
+    if failed:
+        assert details['parts_answered'] == failed
+        if kind == 'forecast':
+            assert details['answered']['type'] == 'PredictionResult'
+            assert '2 rows' in details['answered']['text']
+    else:
+        assert 'parts_answered' not in details and 'answered' not in details
 
 
 @pytest.mark.parametrize('name', list(recorder().CANDIDATES))
-def test_repeated_candidates_are_asked_as_the_reference_keeps_them(
-    name: str,
-) -> None:
-    r"""Brief, "the candidate repeats, as the reference's ``dict.fromkeys``
-    keeps them" (guard of the move, passes on the base): python-core asks
-    one question per candidate the reference keeps, the first of each
-    repeat by Python's equality, in the reference's order, and answers with
-    the reference's rankings, each candidate as the caller first gave it."""
-    want = vectors()['repeats'][name]
+def test_candidates_keep_first_representative_and_rank_by_endpoint_score(name):
     got = core_observed()['repeats'][name]
-    assert got['asked'] == want['asked']
-    assert got.get('rankings') == want.get('rankings')
-    found = _same_refusal(want.get('refusal'), got.get('refusal'))
-    assert not found, f'{name}: ' + '; '.join(found)
+    if name in ('bool-first', 'missing-twice'):
+        assert got['asked'] == []
+        assert 'rankings' not in got
+        refusal = got['refusal']
+        assert refusal['error'] == 'StructuredDataError'
+        assert refusal['code'] == 'INVALID_REQUEST'
+        assert (
+            'True and False' if name == 'bool-first' else 'missing value'
+        ) in refusal['message']
+        return
+    assert 'refusal' not in got
+    # Explicit first representatives of the authored candidate lists.
+    numbers = (
+        [2, 1, 0]
+        if name == 'ints'
+        else [0, 1]
+        if name in ('zero-false', 'negative-zero')
+        else [1, 2]
+    )
+    representatives = list(numbers)
+    if name in ('decimal-first', 'decimal-scales', 'numpy-first'):
+        representatives[0] = {
+            'type': 'int64' if name == 'numpy-first' else 'Decimal',
+            'text': '1.0' if name == 'decimal-scales' else '1',
+        }
+    elif name in ('float-first', 'negative-zero'):
+        representatives[0] = float(numbers[0])
+    assert got['asked'] == [_ranking_query(n) for n in numbers]
+    assert len(got['rankings']) == 2
+    for row, ranking in enumerate(got['rankings']):
+        # The scripted endpoint gives positive probability d/10 for
+        # d=(3*call+5*row)%9+1; top two are highest scores first.
+        scores = [(3 * call + 5 * row) % 9 + 1 for call in range(len(numbers))]
+        winners = sorted(range(len(numbers)), key=lambda call: -scores[call])[
+            :2
+        ]
+        assert len(ranking) == len(winners)
+        for item, call in zip(ranking, winners, strict=True):
+            expected = representatives[call]
+            assert type(item['candidate']) is type(expected)
+            assert item['candidate'] == expected
+            if name == 'negative-zero' and call == 0:
+                assert str(item['candidate']) == '0.0'
+            assert type(item['score']) is float
+            assert item['score'] == scores[call] / 10
 
 
 # --- the request state's version ----------------------------------------------------
@@ -396,15 +412,6 @@ def test_another_request_state_version_is_refused_by_name() -> None:
 
 
 # --- the repeats case on python-core ---------------------------------------------------
-
-
-@functools.cache
-def expected_cases() -> dict[str, dict[str, Any]]:
-    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
-    return {
-        json.loads(line)['case']: json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
-    }
 
 
 def _server() -> bool:
@@ -463,41 +470,46 @@ def core_run(database: str) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize('case_key', CASE_KEYS)
-def test_expected_requests_score_each_candidate_once(case_key: str) -> None:
-    """Independent expected facts agree with this case's stated behavior."""
-    [(case, digest)] = runner().load_cases([CASES / f'{REPEATS_CASE}.json'])
-    assert case['input']['materialize']['candidates'] == [2, 1, 2, 1, 0]
-    line = expected_cases().get(case_key)
-    assert line is not None, f'{case_key}: no expected facts'
-    assert line['outcome']['result'] == 'success'
-    asked = [
-        p['metadata']['source_query'].split(' WHERE ')[1].split(',')[0]
-        for p in _payloads(line)
-    ]
-    assert asked == [f'buys.item_id = {c}' for c in (2, 1, 0)]
-
-
-@pytest.mark.parametrize('case_key', CASE_KEYS)
-def test_python_core_asks_the_repeats_case_as_the_reference(
+def test_repeated_candidates_are_scored_once_in_first_occurrence_order(
     case_key: str,
 ) -> None:
-    r"""Brief, the candidate repeats on python-core, all three databases:
-    the core route asks the reference's questions, payload by payload, and
-    answers with its result."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
-        return
-
-    def check() -> None:
-        run = core_run(database)
-        assert '' not in run, run.get('')
-        line = run.get(case_key)
-        assert line is not None, f'{case_key}: not observed'
-        assert line['identity']['native_loaded']
-        assert 'materialize' in line['identity']['operations']
-        want = expected_cases()[case_key]
-        assert line['outcome'] == want['outcome']
-        assert _payloads(line) == _payloads(want)
-        assert line['public']['result'] == want['public']['result']
-
-    check()
+        pytest.skip('Postgres test DSN is not configured')
+    run = core_run(database)
+    assert '' not in run, run.get('')
+    line = run[case_key]
+    assert line['identity']['native_loaded']
+    assert 'materialize' in line['identity']['operations']
+    assert line['outcome'] == {
+        'result': 'success',
+        'stage': 'predict',
+        'error': None,
+        'code': None,
+    }
+    payloads = _payloads(line)
+    asked = [
+        body['metadata']['source_query'].split(' WHERE ')[1].split(',')[0]
+        for body in payloads
+    ]
+    assert asked == [f'buys.item_id = {candidate}' for candidate in (2, 1, 0)]
+    for body in payloads:
+        table = body['predict']['instance_table']
+        columns = table['columns']
+        entity = columns.index('__kumo_entity_ref_0')
+        assert [row[entity] for row in table['rows']] == [
+            {'number': '0'},
+            {'number': '1'},
+        ]
+        assert body['task']['kind'] == 'binary_classification'
+        assert body['task']['target']['classes'] == ['false', 'true']
+        assert body['task']['target']['positive_class'] == 'true'
+        assert 'TARGET' not in columns
+    result = line['public']['result']
+    assert result['rows'] == 2
+    assert [c['name'] for c in result['columns']] == [
+        'row_index',
+        'id',
+        'prediction',
+        'rankings',
+    ]

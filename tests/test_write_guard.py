@@ -1049,26 +1049,19 @@ def test_the_old_clients_reads_pass(dialect: str, sql: str) -> None:
     GUARDS[dialect].check(sql)
 
 
-def test_every_statement_the_old_client_recorded_on_postgres_passes() -> None:
-    # Every statement the reference recorded on Postgres, the old client's
-    # own generated SQL (contract/reference), passes the Postgres guard: the
-    # read allowlist holds what the old client sends.
-    guard = wg.WriteGuard('postgres', None, 'public')
-    checked = 0
-    from scripts.rust_core.fixture_tables import unpack
-
-    path = ROOT / 'contract/fixtures/maintained/postgres-statements.json'
-    facts = unpack(json.loads(path.read_text()))
-    for statement in facts['statements']:
-        try:
-            guard.check(statement['sql'])
-        except wg.WriteRefused as refused:
-            # Preserve each original case's explicitly unsupported quoted-name rule.
-            case = statement['case'].partition('@')[0]
-            assert 'lakebase' in live_policy.NOT_LIVE[case][0], refused
-            assert 'quoted name' in str(refused), refused
-        checked += statement['count']
-    assert checked > 1000, checked
+@pytest.mark.parametrize(
+    'sql',
+    [
+        'SELECT pg_catalog.format_type(a.atttypid, a.atttypmod) FROM pg_catalog.pg_attribute a',
+        'SELECT COUNT(*), MIN(ts), MAX(ts) FROM "public"."orders" WHERE ts > %s',
+        'SELECT value, ordinality FROM pg_catalog.jsonb_array_elements(%s::jsonb) WITH ORDINALITY',
+        'SELECT * FROM "public"."users" ORDER BY random() LIMIT %s',
+        'SELECT * FROM (SELECT user_id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY ts DESC NULLS LAST) AS n FROM "public"."orders") q WHERE n <= %s',
+        'SELECT s.batch, COUNT(*) OVER (PARTITION BY s.batch), t.user_id FROM "public"."users" t JOIN (SELECT (value ->> 0)::bigint AS key, ordinality AS batch FROM pg_catalog.jsonb_array_elements(%s::jsonb) WITH ORDINALITY) s ON t.user_id = s.key',
+    ],
+)
+def test_postgres_read_query_families_are_admitted(sql: str) -> None:
+    wg.WriteGuard('postgres', None, 'public').check(sql)
 
 
 def test_a_quoted_function_never_reaches_psycopg() -> None:

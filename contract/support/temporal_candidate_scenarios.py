@@ -17,7 +17,6 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/temporal-candidate-vectors.json'
 UTC = dt.timezone.utc
 PLUS_ONE = dt.timezone(dt.timedelta(hours=1))
 
@@ -342,8 +341,3 @@ def observe(dsn: str | None) -> dict[str, Any]:
         'where': where(),
         'json': None if dsn is None else json_documents(dsn),
     }
-
-
-def load() -> dict[str, Any]:
-    r"""The vector file, as committed."""
-    return json.loads(OUT.read_text(encoding='utf-8'))

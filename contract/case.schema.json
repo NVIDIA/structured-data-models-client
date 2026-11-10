@@ -22,8 +22,8 @@
   "properties": {
     "format": {"const": "sdm-case/1"},
     "input_factory": {
-      "description": "Generate the two large entity-limit cases; both indices arrays must be empty placeholders and the case id must match.",
-      "enum": ["entity_limit_100000", "entity_limit_100001"]
+      "description": "Generate named large boundary inputs for the matching case id: index factories require empty index arrays; the query factory requires the <generated-query> placeholder.",
+      "enum": ["entity_limit_100000", "entity_limit_100001", "ranking_batch_10001", "prediction_batch_10001", "query_attachment_72082", "call_limit_100", "call_limit_101", "ranking_product_100000", "ranking_product_100200"]
     },
     "id": {"$ref": "#/$defs/id"},
     "status": {

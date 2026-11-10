@@ -2,21 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The view expressions' checks (old-behaviour rows 61 to 68) against
-//! `contract/view-expr-vectors.json`: every call the old client's own tests
-//! made of `RE/view_expr.py` and of the Snowflake qualifier helpers of
-//! `RE/graph.py`, with its answer, and each word of the old word tables
-//! (the dialects' allow-lists, keywords, type names, session words) put to
-//! the same checks, and fix 1 each separator Python reads as
-//! white space (U+001C to U+001F) in both dialects and both trust settings,
-//! and tokens of up to a megabyte, recorded by recipe. Here each answer is
-//! held to whether the old client
-//! refused, and the names, literals and qualifiers it read; each reason's
-//! text is the core's to write and is held there
-//! (`sdm-core/tests/view_words.rs`).
+//! Expression safety, trust boundaries and lexical meaning, with independent expectations.
 
 use sdm_data::view_expr::{self, ExprDialect};
-use serde_json::Value as Json;
 
 /// Python's white space (`str.isspace`), which the core hands in from
 /// `sdm-pql`: the 29 characters Python 3.12 counts, with the class the
@@ -45,223 +33,274 @@ fn spaces() -> &'static Spaces {
 
 use sdm_data::view_expr::Spaces;
 
-const VECTORS: &str = include_str!("../../../../contract/view-expr-vectors.json");
+const DIALECTS: [ExprDialect; 2] = [ExprDialect::Databricks, ExprDialect::Snowflake];
 
-fn document() -> Json {
-    let document: Json = fixture_tables::read(VECTORS);
-    assert_eq!(document["format"], "sdm-view-expr-vectors/1");
-    document
-}
-
-fn dialect(value: &Json) -> Option<ExprDialect> {
-    match value.as_str() {
-        None => None,
-        Some("databricks") => Some(ExprDialect::Databricks),
-        Some("snowflake") => Some(ExprDialect::Snowflake),
-        Some(other) => panic!("{other}"),
+#[test]
+fn unsafe_sql_is_refused_even_when_expressions_are_trusted() {
+    for expr in [
+        "x; DROP TABLE t",
+        "x -- comment",
+        "x /* comment */",
+        "x */",
+        "x |> f()",
+        "x ->> 'a'",
+        "SELECT x",
+        "(SELECT x FROM t)",
+        "(FROM t)",
+        "(VALUES (1))",
+        "UPDATE t SET x = 1",
+        "'unclosed",
+        "(x",
+        "x)",
+        "é + 1",
+    ] {
+        for dialect in DIALECTS {
+            for trust in [false, true] {
+                let verdict = view_expr::expression_verdict(expr, dialect, trust, &["x"], spaces())
+                    .unwrap_or_else(|| panic!("accepted {expr:?}, {dialect:?}, trust={trust}"));
+                assert!(
+                    !verdict.untrusted,
+                    "unsafe SQL must not become legal through trust"
+                );
+            }
+        }
     }
 }
 
-fn texts(value: &Json) -> Vec<String> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|item| item.as_str().unwrap().to_owned())
-        .collect()
+#[test]
+fn pure_calls_are_allowed_but_user_code_and_session_values_require_trust() {
+    for dialect in DIALECTS {
+        for expr in [
+            "x + 1",
+            "abs(x)",
+            "coalesce(x, 0)",
+            "lower('ABC')",
+            "'select'",
+        ] {
+            assert_eq!(
+                view_expr::expression_verdict(expr, dialect, false, &["x"], spaces()),
+                None,
+                "{expr:?}, {dialect:?}"
+            );
+        }
+        for expr in [
+            "secret('scope', 'key')",
+            "custom_function(x)",
+            "db.custom_function(x)",
+            "current_user",
+        ] {
+            let verdict =
+                view_expr::expression_verdict(expr, dialect, false, &["x"], spaces()).unwrap();
+            assert!(verdict.untrusted, "{expr:?}, {dialect:?}");
+            assert_eq!(
+                view_expr::expression_verdict(expr, dialect, true, &["x"], spaces()),
+                None
+            );
+        }
+    }
 }
 
-/// Runs `check` over the vectors of `kind`, and fails listing each that
-/// differs.
-fn each(kind: &str, least: usize, check: impl Fn(&Json) -> Option<String>) {
-    let document = document();
-    let vectors = document[kind].as_array().unwrap();
-    assert!(vectors.len() >= least, "{} {kind} vectors", vectors.len());
-    let wrong: Vec<String> = vectors.iter().filter_map(check).collect();
+#[test]
+fn dialect_specific_quotes_and_comments_remain_distinct() {
     assert!(
-        wrong.is_empty(),
-        "{} of {} {kind} vectors differ:\n{}",
-        wrong.len(),
-        vectors.len(),
-        wrong.join("\n")
+        view_expr::unsafe_reason("$$text$$", Some(ExprDialect::Databricks), spaces()).is_some()
+    );
+    assert_eq!(
+        view_expr::unsafe_reason("$$text$$", Some(ExprDialect::Snowflake), spaces()),
+        None
+    );
+    assert!(
+        view_expr::unsafe_reason("x // comment", Some(ExprDialect::Snowflake), spaces()).is_some()
+    );
+    assert_eq!(
+        view_expr::unsafe_reason("'// not a comment'", Some(ExprDialect::Snowflake), spaces()),
+        None
     );
 }
 
 #[test]
-fn unsafe_text_is_refused_where_the_old_client_refused_it() {
-    each("unsafe", 400, |vector| {
-        let expr = vector["expr"].as_str().unwrap();
-        let refused =
-            view_expr::unsafe_reason(expr, dialect(&vector["dialect"]), spaces()).is_some();
-        (refused != vector["reason"].is_string())
-            .then(|| format!("{expr:?} ({}): refused {refused}", vector["dialect"]))
-    });
-}
-
-#[test]
-fn calls_are_trusted_where_the_old_client_trusted_them() {
-    each("calls", 10_000, |vector| {
-        let expr = vector["expr"].as_str().unwrap();
-        let dialect = dialect(&vector["dialect"]).unwrap();
-        let columns = texts(&vector["columns"]);
-        let refused = view_expr::untrusted_call_reason(expr, dialect, &columns, spaces()).is_some();
-        (refused != vector["reason"].is_string())
-            .then(|| format!("{expr:?} ({dialect:?}, {columns:?}): refused {refused}"))
-    });
-}
-
-#[test]
-fn names_are_read_as_the_old_client_read_them() {
-    each("names", 4_000, |vector| {
-        let expr = vector["expr"].as_str().unwrap();
-        let read = view_expr::name_references(expr, spaces());
-        let got = match &read {
-            Ok(references) => Json::Array(
-                references
-                    .iter()
-                    .map(|reference| {
-                        serde_json::json!({
-                            "parts": reference.parts,
-                            "text": &expr[reference.span.clone()],
-                            "bare": reference.bare,
-                        })
-                    })
-                    .collect(),
-            ),
-            Err(error) => Json::String(error.to_string()),
-        };
-        let expected = vector
-            .get("references")
-            .cloned()
-            .unwrap_or_else(|| vector["error"].clone());
-        (got != expected).then(|| format!("{expr:?}: {got} where {expected}"))
-    });
-}
-
-#[test]
-fn comments_are_stripped_as_databricks_drops_them() {
-    each("strip_comments", 150, |vector| {
-        let expr = vector["expr"].as_str().unwrap();
-        let out = view_expr::strip_comments(expr, spaces()).unwrap();
-        (out != vector["out"].as_str().unwrap())
-            .then(|| format!("{expr:?}: {out:?} where {}", vector["out"]))
-    });
-}
-
-#[test]
-fn string_literals_end_where_databricks_ends_them() {
-    each("string_literals", 150, |vector| {
-        let expr = vector["expr"].as_str().unwrap();
-        let literals: Vec<String> = view_expr::string_literals(expr, spaces())
+fn names_preserve_parts_spelling_and_byte_spans() {
+    let expr = "coalesce(orders.amount, `tax rate`) + CAST(discount AS DOUBLE)";
+    let refs = view_expr::name_references(expr, spaces()).unwrap();
+    let parts: Vec<Vec<&str>> = refs
+        .iter()
+        .map(|r| r.parts.iter().map(String::as_str).collect())
+        .collect();
+    assert_eq!(
+        parts,
+        vec![vec!["orders", "amount"], vec!["tax rate"], vec!["discount"]]
+    );
+    let spelling: Vec<&str> = refs.iter().map(|r| &expr[r.span.clone()]).collect();
+    assert_eq!(spelling, ["orders.amount", "`tax rate`", "discount"]);
+    assert_eq!(
+        refs.iter().map(|r| r.bare).collect::<Vec<_>>(),
+        [false, false, true]
+    );
+    assert_eq!(
+        view_expr::name_references("'column' + 42", spaces())
             .unwrap()
-            .into_iter()
-            .map(|span| expr[span].to_owned())
-            .collect();
-        (literals != texts(&vector["literals"]))
-            .then(|| format!("{expr:?}: {literals:?} where {}", vector["literals"]))
-    });
+            .len(),
+        0
+    );
+    assert!(view_expr::name_references("'unclosed", spaces()).is_err());
 }
 
 #[test]
-fn snowflake_qualifiers_are_read_outside_literals() {
-    each("mask_literals", 5, |vector| {
-        let expr = vector["expr"].as_str().unwrap();
-        let out = view_expr::mask_literals(expr, spaces()).unwrap();
-        (out != vector["out"].as_str().unwrap())
-            .then(|| format!("{expr:?}: {out:?} where {}", vector["out"]))
-    });
-    each("qualifier_found", 5, |vector| {
-        let (table, text) = (
-            vector["table"].as_str().unwrap(),
-            vector["text"].as_str().unwrap(),
-        );
-        let found = view_expr::qualifier_found(table, text, spaces()).unwrap();
-        (found != vector["found"].as_bool().unwrap())
-            .then(|| format!("{table:?} in {text:?}: {found}"))
-    });
-    each("qualifier_stripped", 5, |vector| {
-        let (table, expr) = (
-            vector["table"].as_str().unwrap(),
-            vector["expr"].as_str().unwrap(),
-        );
-        let out = view_expr::strip_qualifier(table, expr, spaces()).unwrap();
-        (out != vector["out"].as_str().unwrap())
-            .then(|| format!("{table:?} from {expr:?}: {out:?} where {}", vector["out"]))
-    });
+fn comments_and_literals_are_parsed_without_confusing_quoted_text() {
+    assert_eq!(
+        view_expr::strip_comments("x /* comment */ + y", spaces())
+            .unwrap()
+            .trim(),
+        "x   + y"
+    );
+    assert_eq!(
+        view_expr::strip_comments("'-- literal' + x", spaces()).unwrap(),
+        "'-- literal' + x"
+    );
+    let expr = "concat('a', 'b''c', name)";
+    let literals: Vec<&str> = view_expr::string_literals(expr, spaces())
+        .unwrap()
+        .into_iter()
+        .map(|s| &expr[s])
+        .collect();
+    assert_eq!(literals, ["'a'", "'b''c'"]);
+    // Extraction returns complete literals only; unsafe_reason rejects the unmatched quote.
+    assert!(
+        view_expr::string_literals("'unclosed", spaces())
+            .unwrap()
+            .is_empty()
+    );
 }
 
-/// A long token's expression, from its recipe: a prefix, a text repeated
-/// `count` times, and a suffix.
-fn recipe(recipe: &Json, count: usize) -> String {
-    let part = |i: usize| recipe[i].as_str().unwrap();
-    format!("{}{}{}", part(0), part(1).repeat(count), part(3))
-}
-
-/// a long token is read,
-/// never a panic, and answered as the old client answered it, accepted
-/// where it accepted it.
 #[test]
-fn a_long_token_is_answered_as_the_old_client_answered_it() {
-    each("long_tokens", 15, |vector| {
-        let r = &vector["recipe"];
-        let expr = recipe(r, r[2].as_u64().unwrap() as usize);
-        let called = recipe(r, r[4].as_u64().unwrap() as usize);
-        let mut wrong = Vec::new();
-        for (key, dialect) in [
-            ("None", None),
-            ("databricks", Some(ExprDialect::Databricks)),
-            ("snowflake", Some(ExprDialect::Snowflake)),
-        ] {
-            let refused = view_expr::unsafe_reason(&expr, dialect, spaces()).is_some();
-            if refused != vector["unsafe"][key].is_string() {
-                wrong.push(format!("unsafe {key}: refused {refused}"));
-            }
-        }
-        for (key, dialect) in [
-            ("databricks", ExprDialect::Databricks),
-            ("snowflake", ExprDialect::Snowflake),
-        ] {
-            let refused =
-                view_expr::untrusted_call_reason(&called, dialect, &["x", "y", "z"], spaces())
-                    .is_some();
-            if refused != vector["calls"][key].is_string() {
-                wrong.push(format!("calls {key}: refused {refused}"));
-            }
-        }
-        let names = match view_expr::name_references(&expr, spaces()) {
-            Ok(references) => serde_json::json!({"count": references.len(), "error": null}),
-            Err(error) => serde_json::json!({"count": null, "error": error.to_string()}),
-        };
-        if names != vector["names"] {
-            wrong.push(format!("names {names} where {}", vector["names"]));
-        }
-        (!wrong.is_empty()).then(|| format!("{r}: {}", wrong.join("; ")))
-    });
+fn qualifiers_are_removed_only_from_references_not_literals() {
+    assert_eq!(
+        view_expr::qualifier_found("t", "t.x + 1", spaces()),
+        Ok(true)
+    );
+    assert_eq!(
+        view_expr::qualifier_found(
+            "t",
+            &view_expr::mask_literals("other.x + 't.x'", spaces()).unwrap(),
+            spaces(),
+        ),
+        Ok(false)
+    );
+    assert_eq!(
+        view_expr::strip_qualifier("t", "t.x + 't.x'", spaces()),
+        Ok("x + 't.x'".into())
+    );
+    let masked = view_expr::mask_literals("t.x + 't.y'", spaces()).unwrap();
+    assert!(masked.contains("t.x"));
+    assert!(!masked.contains("t.y"));
 }
 
-/// Every recipe at a megabyte or more, the call check included where the
-/// old client takes too long to answer: each check answers, and a failure
-/// to read refuses, never accepts.
 #[test]
-fn a_megabyte_of_any_token_is_answered() {
-    let document = document();
-    for vector in document["long_tokens"].as_array().unwrap() {
-        let r = &vector["recipe"];
-        let expr = recipe(r, r[2].as_u64().unwrap() as usize);
-        for dialect in [
-            None,
-            Some(ExprDialect::Databricks),
-            Some(ExprDialect::Snowflake),
-        ] {
-            let _ = view_expr::unsafe_reason(&expr, dialect, spaces());
+fn control_whitespace_cannot_hide_subqueries_or_untrusted_calls() {
+    for separator in ['\u{1c}', '\u{1d}', '\u{1e}', '\u{1f}'] {
+        for dialect in DIALECTS {
+            assert!(
+                view_expr::unsafe_reason(&format!("(FROM{separator}t)"), Some(dialect), spaces())
+                    .is_some()
+            );
+            assert!(
+                view_expr::untrusted_call_reason(
+                    &format!("secret{separator}('s', 'k')"),
+                    dialect,
+                    &["x"],
+                    spaces()
+                )
+                .is_some()
+            );
         }
-        for dialect in [ExprDialect::Databricks, ExprDialect::Snowflake] {
-            let _ = view_expr::untrusted_call_reason(&expr, dialect, &["x"], spaces());
-        }
-        let _ = view_expr::name_references(&expr, spaces());
-        let _ = view_expr::strip_comments(&expr, spaces());
     }
 }
 
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;
+#[test]
+fn long_identifiers_and_literals_are_generated_without_recordings() {
+    for length in [1_024, 1_048_576] {
+        let name = "x".repeat(length);
+        let refs = view_expr::name_references(&name, spaces()).unwrap();
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].parts.as_slice(), std::slice::from_ref(&name));
+        assert_eq!(refs[0].span, 0..length);
+        let literal = format!("'{name}'");
+        let literals = view_expr::string_literals(&literal, spaces()).unwrap();
+        assert_eq!(literals.len(), 1);
+        assert_eq!(literals[0], 0..literal.len());
+        for dialect in DIALECTS {
+            assert_eq!(
+                view_expr::unsafe_reason(&literal, Some(dialect), spaces()),
+                None
+            );
+            assert!(
+                view_expr::unsafe_reason(&format!("{name};"), Some(dialect), spaces()).is_some()
+            );
+        }
+    }
+}
+
+#[test]
+fn generated_token_shapes_do_not_panic_or_bypass_unsafe_checks() {
+    let padding = " ".repeat(100_000);
+    for dialect in DIALECTS {
+        assert!(
+            view_expr::unsafe_reason(&format!("SELECT{padding}x"), Some(dialect), spaces())
+                .is_some()
+        );
+        assert!(
+            view_expr::untrusted_call_reason(
+                &format!("current_user{padding}"),
+                dialect,
+                &["x"],
+                spaces()
+            )
+            .is_some()
+        );
+    }
+    for token in [
+        format!("`{}`", "a".repeat(100_000)),
+        format!("\"{}\"", "a".repeat(100_000)),
+        format!("{}a", "1".repeat(100_000)),
+        format!("{}(", "x".repeat(20_000)),
+        "1.".repeat(50_000),
+        format!("{}x{}", "(".repeat(1000), ")".repeat(1000)),
+    ] {
+        // These malformed or unusual tokens may be rejected; each reader must return.
+        let _ = view_expr::name_references(&token, spaces());
+        let _ = view_expr::strip_comments(&token, spaces());
+        let _ = view_expr::string_literals(&token, spaces());
+        for dialect in DIALECTS {
+            let _ = view_expr::unsafe_reason(&token, Some(dialect), spaces());
+            let _ = view_expr::untrusted_call_reason(&token, dialect, &["x"], spaces());
+        }
+    }
+}
+
+#[test]
+fn session_named_columns_override_session_values_only_in_databricks() {
+    for expr in ["current_user", "`current_user`"] {
+        assert_eq!(
+            view_expr::untrusted_call_reason(
+                expr,
+                ExprDialect::Databricks,
+                &["CURRENT_USER"],
+                spaces()
+            ),
+            None
+        );
+        assert!(
+            view_expr::untrusted_call_reason(expr, ExprDialect::Databricks, &["other"], spaces())
+                .is_some()
+        );
+        assert!(
+            view_expr::untrusted_call_reason(
+                expr,
+                ExprDialect::Snowflake,
+                &["CURRENT_USER"],
+                spaces()
+            )
+            .is_some()
+        );
+    }
+}

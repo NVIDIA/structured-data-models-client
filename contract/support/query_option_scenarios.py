@@ -17,9 +17,7 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/option-vectors.json'
 CASES = ROOT / 'contract/cases/s1'
-FORMAT = 'sdm-t213-option-vectors/1'
 #: The cases, by the start of their ids.
 PREFIXES = (
     'filter.',
@@ -216,8 +214,3 @@ def observe(case: dict[str, Any], database: str) -> dict[str, Any]:
     finally:
         cleanup()
     return observed
-
-
-def load() -> dict[str, Any]:
-    r"""The vector file, as committed."""
-    return json.loads(OUT.read_text(encoding='utf-8'))

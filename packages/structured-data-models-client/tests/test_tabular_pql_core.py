@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -392,11 +391,12 @@ def test_profile_independent_orders_do_not_read_numpy_producer(
     }
     data = frame()
     data.index = indexes[family]
-    expected = json.loads(
-        (
-            Path(__file__).parent / 'data/tabular_pql_profile_reference.json'
-        ).read_text()
-    )[family]
+    expected = (
+        data.iloc[:-1]
+        .sample(n=3, random_state=42)
+        .sort_index(kind='stable')['id']
+        .tolist()
+    )
     request = query(data).materialize(
         indices=[10],
         num_context_samples=3,

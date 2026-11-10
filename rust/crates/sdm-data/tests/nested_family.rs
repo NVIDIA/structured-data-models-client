@@ -2,18 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The nested family's DuckDB statements (folded in), pinned
-//! as text beside `duckdb_catalog.rs`'s: each data request the `nested.*`
-//! cases make through `from_source` and `materialize` on the pure-Rust
-//! host that `duckdb_catalog.rs` does not pin already, as `sdm-testkit`
-//! recorded it, with the one statement this layer renders for it. A
-//! statement that changes without its pin changing here fails this test,
-//! and `sdm-testkit`'s `tests/nested_sql.rs` runs the cases on
-//! DuckDB and fails on any statement they run that is pinned nowhere in
-//! these files. A nested column changes no statement but the preview,
-//! which reads every column of the table, the one left out among them, as
-//! the reference's engine reads it; nothing after the description reads
-//! it.
+//! Focused SQL rendering expectations for this data-type family.
+//! Companion sdm-testkit tests execute the family cases through DuckDB
+//! and check outcomes, result encoding and query-log consistency.
 
 use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
 use sdm_data::Data;

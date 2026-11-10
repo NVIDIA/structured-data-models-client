@@ -21,10 +21,7 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/sqlite-key-pair-vectors.json'
 RUNNER = ROOT / 'contract/runners/run_python.py'
-FORMAT = 'sdm-sqlite-key-pair-vectors/1'
-REGISTER_REF = 'contract/sqlite-key-pair-vectors.json#'
 DATABASE = 'sqlite'
 
 

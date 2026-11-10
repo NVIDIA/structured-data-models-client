@@ -2,45 +2,18 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Both Databricks providers' own code over a fake cursor returning the
-warehouse's recorded Arrow (the brief's exit 5; blind spot B3).
+"""SQL and Spark adapters preserve Arrow data, bindings and caller ownership.
 
-The SQL-warehouse provider runs a plan's statements on one cursor of a
-``databricks.sql`` connection and hands back ``cursor.fetchall_arrow``
-(the old client's fetch, DB/sampler.py:152,160,275, DB/table.py:383,430);
-the Spark provider runs each through the notebook's session,
-``spark.sql(text, args=[...])``, and hands back ``frame.toArrow``
-(CN/backends/spark.py:58-91), refusing by name a session whose frames
-cannot (DBR 17.3 or later, serverless environment 4 or later,
-CN/backends/spark.py:33-35,:132). Neither reads pandas or converts
-anything: the recorded Arrow crosses as recorded.
-
-The recorded Arrow is ``contract/fixtures/databricks/capture.json``'s,
-shaped as the design's ``sdm-capture/1``, a synthetic unit fixture recorded
-once from the reference on an offline stand-in connection since removed (owner
-B-lite); C-1's capture replaces it.
-Each fake answers only a statement the capture holds, by its exact text, so
-a provider that rewrites a statement fails.
-
-The providers' names are this test's reading of the brief ("the SQL-warehouse
-provider (``fetchall_arrow``) and the Spark provider (``spark.sql(...)
-.toArrow``)", in ``sdm_client/_rust/providers/``), beside the DuckDB,
-SQLite and Postgres providers' ``<Name>Provider``; a plan is the core's
-fetch step as those take it.
+Driver doubles accept exact authored plan text and never use pandas.
+These are local adapter tests, not live warehouse validation.
 """
 
 from __future__ import annotations
 
-import base64
-import json
-from pathlib import Path
 from typing import Any
 
 import pyarrow as pa
 import pytest
-
-ROOT = Path(__file__).resolve().parents[3]
-CAPTURE = ROOT / 'contract' / 'fixtures' / 'databricks' / 'capture.json'
 
 
 def _providers() -> tuple[Any, Any]:
@@ -52,41 +25,70 @@ def _providers() -> tuple[Any, Any]:
     return DatabricksSqlProvider, DatabricksSparkProvider
 
 
-# --- the recorded capture -----------------------------------------------------
+def _statement(case: str, kind: str) -> dict[str, Any]:
+    """Small input tables test transport, not SQL generation or sampling."""
+    if kind == 'preview':
+        text, parameters = 'SELECT id, age, ts, label FROM shop.users', []
+        result = pa.table(
+            {
+                'id': pa.array([1, 2], pa.int64()),
+                'age': pa.array([20, None], pa.int32()),
+                'ts': pa.array([0, None], pa.timestamp('us')),
+                'label': pa.array(['café', None], pa.string()),
+            }
+        )
+    elif kind == 'describe/columns':
+        text, parameters = (
+            'SELECT column_name, data_type FROM catalog WHERE schema_name = ? AND table_name = ?',
+            ['shop', 'users'],
+        )
+        result = pa.table(
+            {'column_name': ['id', 'age'], 'data_type': ['BIGINT', 'INT']}
+        )
+    elif kind == 'lookup':
+        text, parameters = (
+            'SELECT batch, id FROM lookup_keys(?)',
+            ['["2", "1", "2"]'],
+        )
+        result = pa.table(
+            {
+                'batch': pa.array([0, 1, 2], pa.int64()),
+                'id': pa.array([2, 1, 2], pa.int64()),
+            }
+        )
+    elif kind == 'count_rows':
+        text, parameters = 'SELECT COUNT(*) AS n FROM shop.users', []
+        result = pa.table({'n': pa.array([2], pa.int64())})
+    else:
+        assert kind == 'describe/keys'
+        declared = case == 'key.declared-int32'
+        text, parameters = (
+            f'SELECT constraint_name FROM keys_{"declared" if declared else "empty"} WHERE schema_name = ? AND table_name = ?',
+            ['shop', 'users'],
+        )
+        result = pa.table(
+            {
+                'constraint_name': pa.array(
+                    ['users_pk'] if declared else [], pa.string()
+                )
+            }
+        )
+    return {'text': text, 'parameters': parameters, 'result': result}
 
 
-def _capture() -> dict[str, Any]:
-    capture = json.loads(CAPTURE.read_text(encoding='utf-8'))
-    assert capture['format'] == 'sdm-capture/1'
-    return capture
-
-
-def _arrow(result: dict[str, Any]) -> Any:
-    data = base64.b64decode(result['arrow'])
-    return pa.ipc.open_stream(pa.py_buffer(data)).read_all()
-
-
-def _recorded() -> dict[str, tuple[list[Any], Any]]:
-    r"""Each statement the capture holds, by its text: its parameters and
-    its result as the driver fetched it."""
-    found: dict[str, tuple[list[Any], Any]] = {}
-    for case in _capture()['cases']:
-        for statement in case['statements']:
-            found.setdefault(
-                statement['text'],
-                (statement['parameters'], _arrow(statement['result'])),
-            )
-    return found
-
-
-def _statement(case: str, kind: str, *, containing: str = '') -> dict[str, Any]:
-    for recorded in _capture()['cases']:
-        if recorded['case'] != case:
-            continue
-        for statement in recorded['statements']:
-            if statement['kind'] == kind and containing in statement['text']:
-                return statement
-    raise AssertionError(f'the capture holds no {kind} of {case}')
+def _answers() -> dict[str, tuple[list[Any], pa.Table]]:
+    statements = [
+        _statement('base.binary', kind)
+        for kind in (
+            'preview',
+            'describe/columns',
+            'lookup',
+            'count_rows',
+            'describe/keys',
+        )
+    ]
+    statements.append(_statement('key.declared-int32', 'describe/keys'))
+    return {s['text']: (s['parameters'], s['result']) for s in statements}
 
 
 # --- the fakes ------------------------------------------------------------------
@@ -216,7 +218,7 @@ def _table(answer: Any) -> Any:
     return reader.read_all()
 
 
-def _providers_over_the_capture(
+def _providers_over_answers(
     recorded: dict[str, tuple[list[Any], Any]],
 ) -> list[tuple[str, Any, Any]]:
     r"""Each provider over its fake: its name, the provider, the fake."""
@@ -237,17 +239,17 @@ def _ran(fake: Any) -> list[tuple[str, Any]]:
 
 
 @pytest.mark.parametrize('kind', ['preview', 'describe/columns', 'lookup'])
-def test_each_provider_hands_back_the_recorded_arrow_as_recorded(
+def test_each_provider_preserves_arrow_values_types_and_nulls(
     kind: str,
 ) -> None:
     r"""The driver's Arrow crosses unchanged: the same schema, types and
-    values as recorded (a naive time in microseconds, ``int32`` beside
+    authored values (a naive time in microseconds, ``int32`` beside
     ``int64``, a catalog of strings), with no pandas round trip."""
-    recorded = _recorded()
+    recorded = _answers()
     statement = _statement('base.binary', kind)
-    expected = _arrow(statement['result'])
+    expected = statement['result']
     assert expected.num_rows > 0
-    for leg, provider, fake in _providers_over_the_capture(recorded):
+    for leg, provider, fake in _providers_over_answers(recorded):
         if kind == 'lookup':
             answer = provider(
                 _step((statement['text'], [_key_text(7)])),
@@ -262,15 +264,13 @@ def test_each_provider_hands_back_the_recorded_arrow_as_recorded(
         assert [text for text, _ in _ran(fake)] == [statement['text']], leg
 
 
-def test_the_catalog_statements_bind_schema_and_table_as_recorded() -> None:
-    r"""A plan's text parameters reach the driver as the old client bound
-    them (``lower(?)``, DB/table.py:240), in order: the warehouse cursor's
-    ``parameters``, the session's ``args``."""
-    recorded = _recorded()
+def test_the_catalog_statements_bind_schema_and_table_as_answers() -> None:
+    """Schema/table bindings preserve their order on both driver APIs."""
+    recorded = _answers()
     statement = _statement('key.declared-int32', 'describe/keys')
     parameters = statement['parameters']
     assert parameters[0] == 'shop' and len(parameters) == 2
-    for leg, provider, fake in _providers_over_the_capture(recorded):
+    for leg, provider, fake in _providers_over_answers(recorded):
         provider(_step((statement['text'], [_text(p) for p in parameters])))
         ((text, bound),) = _ran(fake)
         assert text == statement['text'], leg
@@ -278,24 +278,21 @@ def test_the_catalog_statements_bind_schema_and_table_as_recorded() -> None:
 
 
 def test_a_statement_without_parameters_binds_none() -> None:
-    r"""As the old client runs one (``spark.sql(text)``, CN/backends/spark.py:64):
-    no parameters, never an empty list Spark would read as markers."""
-    recorded = _recorded()
+    """Unparameterized plans do not introduce Spark argument markers."""
+    recorded = _answers()
     statement = _statement('base.binary', 'count_rows')
-    for leg, provider, fake in _providers_over_the_capture(recorded):
+    for leg, provider, fake in _providers_over_answers(recorded):
         provider(_step((statement['text'], [])))
         ((_, bound),) = _ran(fake)
         assert not bound, leg
 
 
 def test_a_key_set_s_text_is_bound_as_one_parameter_as_written() -> None:
-    r"""A key set is bound as the old client binds it (DB/sampler.py:39,
-    :116-160): one JSON text parameter, which the core writes and
-    the provider binds as it was handed, byte for byte."""
-    recorded = _recorded()
+    """The attachment is bound byte-for-byte as one JSON text parameter."""
+    recorded = _answers()
     statement = _statement('base.binary', 'lookup')
     (payload,) = statement['parameters']
-    for leg, provider, fake in _providers_over_the_capture(recorded):
+    for leg, provider, fake in _providers_over_answers(recorded):
         provider(
             _step((statement['text'], [_key_text(3)])), {3: _cell(payload)}
         )
@@ -305,12 +302,12 @@ def test_a_key_set_s_text_is_bound_as_one_parameter_as_written() -> None:
 
 def test_an_empty_result_keeps_its_schema() -> None:
     r"""A statement answering no rows (a catalog that declares no key) is an
-    empty table of the recorded schema, not an error and not schema-less."""
-    recorded = _recorded()
+    empty table of the declared schema, not an error and not schema-less."""
+    recorded = _answers()
     statement = _statement('base.binary', 'describe/keys')
-    expected = _arrow(statement['result'])
+    expected = statement['result']
     assert expected.num_rows == 0
-    for leg, provider, _ in _providers_over_the_capture(recorded):
+    for leg, provider, _ in _providers_over_answers(recorded):
         got = _table(
             provider(
                 _step(
@@ -328,12 +325,12 @@ def test_an_empty_result_keeps_its_schema() -> None:
 def test_the_last_statement_s_rows_are_the_answer() -> None:
     r"""A plan of several statements runs each, in order, on one session,
     and answers with the last one's rows (the contract's ``FetchPlan``)."""
-    recorded = _recorded()
+    recorded = _answers()
     first = _statement('base.binary', 'count_rows')
     last = _statement('base.binary', 'preview')
-    for leg, provider, fake in _providers_over_the_capture(recorded):
+    for leg, provider, fake in _providers_over_answers(recorded):
         got = _table(provider(_step((first['text'], []), (last['text'], []))))
-        assert got.equals(_arrow(last['result'])), leg
+        assert got.equals(last['result']), leg
         assert [text for text, _ in _ran(fake)] == [
             first['text'],
             last['text'],
@@ -343,9 +340,9 @@ def test_the_last_statement_s_rows_are_the_answer() -> None:
 def test_a_plan_for_another_dialect_or_a_host_is_not_run() -> None:
     r"""As the other providers refuse it: a host plan, or a statement of
     another dialect, raises before any statement runs."""
-    recorded = _recorded()
+    recorded = _answers()
     text = _statement('base.binary', 'count_rows')['text']
-    for leg, provider, fake in _providers_over_the_capture(recorded):
+    for leg, provider, fake in _providers_over_answers(recorded):
         with pytest.raises(Exception):  # noqa: B017, PT011 - the provider's own class
             provider({'plan': {'plan': 'host', 'expect': {}}})
         other = _step((text, []))
@@ -356,10 +353,8 @@ def test_a_plan_for_another_dialect_or_a_host_is_not_run() -> None:
 
 
 def test_the_warehouse_provider_leaves_the_connection_open() -> None:
-    r"""The connection is the caller's (CN/source.py: a source never closes
-    the connection it was given): each request's cursor is closed, the
-    connection never."""
-    recorded = _recorded()
+    """Close request cursors while retaining the caller-owned connection."""
+    recorded = _answers()
     sql_provider, _ = _providers()
     connection = _Connection(recorded)
     provider = sql_provider(connection)
@@ -372,12 +367,12 @@ def test_the_warehouse_provider_leaves_the_connection_open() -> None:
 
 def test_a_spark_session_without_arrow_is_refused_by_name() -> None:
     r"""A session whose frames cannot return Arrow (before Spark 4: DBR 17.3
-    LTS, serverless environment 4) is refused with the old client's reason,
+    LTS, serverless environment 4) is refused with an actionable error,
     naming the runtime to use, never read through pandas."""
-    recorded = _recorded()
+    recorded = _answers()
     _, spark_provider = _providers()
     session = _Session(recorded, arrow=False)
     statement = _statement('base.binary', 'count_rows')
-    with pytest.raises(Exception, match=r'17\.3') as raised:  # noqa: PT011 - the old client's ConnectorError
+    with pytest.raises(Exception, match=r'17\.3') as raised:  # noqa: PT011 - adapter-specific connector error
         spark_provider(session)(_step((statement['text'], [])))
     assert 'serverless environment 4' in str(raised.value)

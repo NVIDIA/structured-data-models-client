@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/ranking-vectors.json'
 #: The S1 case whose data every vector reads: the shop base and its setup.
 DATA_CASE = 'rank.top-k'
 
@@ -969,16 +968,12 @@ def gathered(query: str, materialize: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def controls() -> list[dict[str, Any]]:
+def controls(cases: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     r"""Each case of:data:`CONTROLS`, its own call's outcome and its
     control's."""
     out = []
     for case_id, change in CONTROLS.items():
-        case = json.loads(
-            (ROOT / f'contract/cases/s1/{case_id}.json').read_text(
-                encoding='utf-8'
-            )
-        )
+        case = cases[case_id]
         query = case['input']['pql']
         materialize = dict(case['input']['materialize'])
         control = dict(materialize)
