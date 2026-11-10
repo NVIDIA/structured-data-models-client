@@ -100,12 +100,13 @@ The public API snapshot records this version update; publication remains pending
 - A related table sampled from frames sends its own primary key, where
   1.0.0 sent a generated `__node_id`.
 - Each `materialize()` on a schema from `Schema.from_source` reads its
-  tables' catalog again, one query per table, and a semantic model's
-  definition, so a column dropped or retyped since is found. A table whose
-  catalog changed is read again in full, its keys and first rows included.
-  1.0.0 read them once and kept them on the schema. A table emptied since it
-  was described is refused as empty by a warehouse's row count; elsewhere it
-  reads as a table with no times, as 1.0.0 read it.
+  tables' catalog again, one query per table, so a column dropped or
+  retyped since is found. A table whose catalog declares a column otherwise
+  is read again in full, its keys and first rows included, as are SQLite's
+  tables and a semantic model's, with its definition. 1.0.0 read them once
+  and kept them on the schema. A table emptied since it was described is
+  refused as empty by a warehouse's row count; elsewhere it reads as a
+  table with no times, as 1.0.0 read it.
 - An HTTP 408 from `POST /v1/predictions` is retried, as 429, 502, 503 and
   504 are.
 - A relational request reached over three or more hops fills a foreign key

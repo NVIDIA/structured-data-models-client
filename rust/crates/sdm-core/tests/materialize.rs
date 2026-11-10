@@ -80,7 +80,7 @@ fn column(
         nullable: !unique,
         unique,
         declared_type: None,
-        catalog_type: None,
+        catalog: None,
         exact_number: None,
     }
 }

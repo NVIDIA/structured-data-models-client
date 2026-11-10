@@ -863,12 +863,12 @@ pub struct DescribedColumn {
     /// Other columns keep none. Absent when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
-    /// The type the source's catalog declares the column, as it spells it,
-    /// for every column a catalog lists. A later `materialize` compares it
-    /// with the catalog then, and reads the table's preview again only
+    /// How the source's catalog declared the column when it was read, for
+    /// every column a catalog lists. A later `materialize` compares it with
+    /// the catalog then, and reads the table's keys and preview again only
     /// where they differ. Absent where no catalog was read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub catalog_type: Option<String>,
+    pub catalog: Option<CatalogDeclaration>,
     /// Set for a column of numbers the host provider handed over as their
     /// exact decimal text (marked [`crate::data::EXACT_NUMBER_MARKER`]):
     /// whether its catalog declares it a key. The schema reads such a column
@@ -1046,6 +1046,33 @@ pub struct HeldColumn {
     pub source: Option<SourceFacts>,
 }
 
+/// One column as its source's catalog declared it
+/// ([`crate::catalog::CatalogColumn`], less its name).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CatalogDeclaration {
+    pub declared_type: String,
+    pub not_null: bool,
+    pub primary_key: bool,
+    pub key_nullable: bool,
+    pub unique: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dtype: Option<Dtype>,
+}
+
+impl From<&crate::catalog::CatalogColumn> for CatalogDeclaration {
+    fn from(column: &crate::catalog::CatalogColumn) -> Self {
+        Self {
+            declared_type: column.declared_type.clone(),
+            not_null: column.not_null,
+            primary_key: column.primary_key,
+            key_nullable: column.key_nullable,
+            unique: column.unique,
+            dtype: column.dtype,
+        }
+    }
+}
+
 /// What the source said of one column ([`DescribedColumn`]'s facts), which
 /// a host keeps on the column and hands back whole (contract v28).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1073,9 +1100,9 @@ pub struct SourceFacts {
     /// [`DescribedColumn::declared_type`]; absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_type: Option<String>,
-    /// [`DescribedColumn::catalog_type`]; absent from the JSON when none.
+    /// [`DescribedColumn::catalog`]; absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub catalog_type: Option<String>,
+    pub catalog: Option<CatalogDeclaration>,
     /// [`DescribedColumn::exact_number`]; absent from the JSON when none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exact_number: Option<ExactNumber>,

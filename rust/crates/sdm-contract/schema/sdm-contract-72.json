@@ -2040,11 +2040,15 @@
             "null"
           ]
         },
-        "catalog_type": {
-          "description": "[`DescribedColumn::catalog_type`]; absent from the JSON when none.",
-          "type": [
-            "string",
-            "null"
+        "catalog": {
+          "description": "[`DescribedColumn::catalog`]; absent from the JSON when none.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogDeclaration"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "exact_number": {
@@ -2561,6 +2565,45 @@
         "uint16",
         "uint32",
         "uint64"
+      ]
+    },
+    "CatalogDeclaration": {
+      "description": "One column as its source's catalog declared it\n([`crate::catalog::CatalogColumn`], less its name).",
+      "type": "object",
+      "properties": {
+        "declared_type": {
+          "type": "string"
+        },
+        "not_null": {
+          "type": "boolean"
+        },
+        "primary_key": {
+          "type": "boolean"
+        },
+        "key_nullable": {
+          "type": "boolean"
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "dtype": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dtype"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "declared_type",
+        "not_null",
+        "primary_key",
+        "key_nullable",
+        "unique"
       ]
     },
     "ExactNumber": {
@@ -11111,11 +11154,15 @@
             "null"
           ]
         },
-        "catalog_type": {
-          "description": "The type the source's catalog declares the column, as it spells it,\nfor every column a catalog lists. A later `materialize` compares it\nwith the catalog then, and reads the table's preview again only\nwhere they differ. Absent where no catalog was read.",
-          "type": [
-            "string",
-            "null"
+        "catalog": {
+          "description": "How the source's catalog declared the column when it was read, for\nevery column a catalog lists. A later `materialize` compares it with\nthe catalog then, and reads the table's keys and preview again only\nwhere they differ. Absent where no catalog was read.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CatalogDeclaration"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "exact_number": {

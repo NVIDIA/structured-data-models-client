@@ -596,7 +596,7 @@ pub(crate) fn describe(
                         })?;
                     crate::discover::retained_source_type(field, declared).map(str::to_owned)
                 }),
-                catalog_type: None,
+                catalog: None,
                 exact_number: None,
             });
         }

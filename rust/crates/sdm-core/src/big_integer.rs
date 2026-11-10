@@ -215,7 +215,7 @@ mod tests {
             nullable: true,
             unique: false,
             declared_type: Some("HUGEINT".into()),
-            catalog_type: None,
+            catalog: None,
             exact_number: None,
         };
         let mut refreshed = old.clone();

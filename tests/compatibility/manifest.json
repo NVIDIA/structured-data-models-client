@@ -8261,6 +8261,12 @@
       "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
       "record": "type_contracts/arrow-admission-and-inference",
       "reason": "Arrow moves from 58.4.0 to 58.4.1 for RUSTSEC-2026-0442, so the vectors name the locked arrow-schema version; every type vector and expected outcome is unchanged. Update the whole-file digest."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "live_api_tests",
+      "reason": "No released Kumo Relational NIM serves temporal link prediction: 1.2.0 refuses it with UNSUPPORTED_TASK. The two live link-batching tests could never pass, so they are removed; the offline batching tests keep the 200-row call cap and entity order covered.",
+      "retained_test": "packages/structured-data-models-client/tests/test_temporal_link_batching.py::test_pql_link_batches_preserve_every_entity"
     }
   ],
   "capabilities": [

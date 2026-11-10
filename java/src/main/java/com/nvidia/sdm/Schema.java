@@ -658,8 +658,8 @@ public final class Schema {
         if (column.get("declared_type") != null) {
           facts.put("declared_type", column.get("declared_type"));
         }
-        if (column.get("catalog_type") != null) {
-          facts.put("catalog_type", column.get("catalog_type"));
+        if (column.get("catalog") != null) {
+          facts.put("catalog", column.get("catalog"));
         }
         if (column.get("exact_number") != null) {
           facts.put("exact_number", column.get("exact_number"));

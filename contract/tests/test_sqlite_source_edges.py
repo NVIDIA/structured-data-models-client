@@ -184,7 +184,7 @@ def test_a_partial_unique_index_keeps_the_key_unique(
     wanted = _reference('partial-unique')
     locate: list[int] = []
     got = _on_the_core(monkeypatch, 'partial-unique', locate)
-    assert locate == [2]
+    assert locate == [7]
     assert got['schema'] == wanted['schema']
     assert got['statements'] == {
         **wanted['statements'],
@@ -203,7 +203,7 @@ def test_each_sql_materialize_refreshes_its_sampler_facts_once(
     wanted = _reference('materialize-twice')
     locate: list[int] = []
     got = _on_the_core(monkeypatch, 'materialize-twice', locate)
-    assert locate == [2, 2]
+    assert locate == [6, 6]
     assert got['outcome'] == wanted['outcome']
     assert got['statements'] == {
         **wanted['statements'],

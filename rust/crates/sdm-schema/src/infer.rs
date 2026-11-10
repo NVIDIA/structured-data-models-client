@@ -652,8 +652,7 @@ impl Keyed {
             nullable: !declared.not_null && (!is_primary || declared.key_nullable),
             unique: self.unique.contains(&declared.name),
             declared_type: None,
-            catalog_type: (!declared.declared_type.is_empty())
-                .then(|| declared.declared_type.clone()),
+            catalog: Some(declared.into()),
             exact_number: exact_number(field, constraints),
         })
     }

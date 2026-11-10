@@ -80,7 +80,7 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> DescribedColumn {
         nullable: true,
         unique: false,
         declared_type: None,
-        catalog_type: None,
+        catalog: None,
         exact_number: None,
     }
 }
@@ -132,7 +132,7 @@ fn held(description: &SourceDescription) -> HeldSchema {
                             nullable: c.nullable,
                             unique: c.unique,
                             declared_type: c.declared_type.clone(),
-                            catalog_type: None,
+                            catalog: None,
                             exact_number: c.exact_number,
                         }),
                     })

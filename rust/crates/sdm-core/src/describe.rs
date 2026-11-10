@@ -17,8 +17,8 @@ use arrow_schema::TimeUnit;
 use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey, KeyKind};
 use sdm_contract::data::{DataRequest, DescribePart, ProviderError, Relation, TableKey};
 use sdm_contract::ops::{
-    ColumnRef, DescribedSource, HeldSchema, HeldTable, NamedTable, OperationResult,
-    SourceDescription, SourceFacts, SourceSpec,
+    CatalogDeclaration, ColumnRef, DescribedSource, HeldSchema, HeldTable, NamedTable,
+    OperationResult, SourceDescription, SourceFacts, SourceSpec,
 };
 use sdm_contract::{CoreError, Detail, ErrorCode, HostFacts, Scalar, Sentence, Unit};
 use sdm_engine::time::text::Reader;
@@ -117,9 +117,9 @@ pub(crate) async fn run(
     let mut tables = Vec::with_capacity(names.len());
     // Catalog types retained for big-integer key casts and temporal windows.
     let mut source_types = Vec::with_capacity(names.len());
-    // Every column's catalog type, which a later run compares with the
-    // catalog then.
-    let mut catalog_types = Vec::with_capacity(names.len());
+    // Every column as its catalog declares it, which a later run compares
+    // with the catalog then.
+    let mut catalogs = Vec::with_capacity(names.len());
     let mut primary_constraints = Vec::with_capacity(names.len());
     for table in &names {
         // The table read as `materialize` reads a column it holds no facts
@@ -133,10 +133,10 @@ pub(crate) async fn run(
             ..
         } = crate::discover::table(&asker, table, caller_named, None).await?;
         source_types.push(types);
-        catalog_types.push(
+        catalogs.push(
             declared
                 .iter()
-                .map(|c| (c.name.clone(), c.declared_type.clone()))
+                .map(|c| (c.name.clone(), CatalogDeclaration::from(c)))
                 .collect::<Vec<_>>(),
         );
         primary_constraints.push(
@@ -311,16 +311,16 @@ pub(crate) async fn run(
         .tables
         .iter_mut()
         .zip(source_types)
-        .zip(catalog_types)
+        .zip(catalogs)
     {
         for column in &mut table.columns {
             column.declared_type = types
                 .iter()
                 .find(|(name, _)| *name == column.name)
                 .map(|(_, declared)| declared.clone());
-            column.catalog_type = catalog
+            column.catalog = catalog
                 .iter()
-                .find(|(name, declared)| *name == column.name && !declared.is_empty())
+                .find(|(name, _)| *name == column.name)
                 .map(|(_, declared)| declared.clone());
         }
     }
@@ -979,25 +979,30 @@ async fn read_as_it_stands(
 }
 
 /// The facts `tables` hold of their columns, where the catalog of
-/// `relation` declares each of them now as it did when they were read: the
-/// run then reads neither the table's keys nor its preview again. None
-/// where a column is gone, is declared another type or holds no catalog
-/// type, and where the table projects its source: the whole read then says
-/// what changed. A catalog that cannot be read is refused as the whole
-/// read refuses it.
+/// `relation` declares each of them now as it did when they were read (its
+/// type, nullability and keys): the run then reads neither the table's keys
+/// nor its preview again. None where a column is gone, is declared
+/// otherwise or holds no declaration, where the table projects its source,
+/// and where the source's columns hold affinities rather than types
+/// (SQLite's), whose values decide a column's type: the whole read then
+/// says what changed. A catalog that cannot be read is refused as the
+/// whole read refuses it.
 async fn unchanged(
     asker: &Asker,
     relation: &Relation,
     tables: &[&HeldTable],
 ) -> Result<Option<Vec<((String, String), SourceFacts)>>, CoreError> {
-    if relation.is_derived() || tables.iter().any(|t| !t.calculated_columns.is_empty()) {
+    let typed = asker
+        .data()
+        .is_none_or(crate::compose::DataAccess::holds_column_types);
+    if !typed || relation.is_derived() || tables.iter().any(|t| !t.calculated_columns.is_empty()) {
         return Ok(None);
     }
     let mut kept = Vec::new();
     for table in tables {
         for column in &table.columns {
-            let Some(facts) = sdm_schema::held::facts_held(table, column)
-                .filter(|facts| facts.catalog_type.is_some())
+            let Some(facts) =
+                sdm_schema::held::facts_held(table, column).filter(|facts| facts.catalog.is_some())
             else {
                 return Ok(None);
             };
@@ -1007,7 +1012,7 @@ async fn unchanged(
     let declared = crate::discover::catalog(asker, relation).await?;
     let same = kept.iter().all(|((_, name), facts)| {
         declared.iter().any(|c| {
-            c.name == *name && facts.catalog_type.as_deref() == Some(c.declared_type.as_str())
+            c.name == *name && facts.catalog.as_ref() == Some(&CatalogDeclaration::from(c))
         })
     });
     Ok(same.then_some(kept))

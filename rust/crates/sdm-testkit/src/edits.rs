@@ -179,7 +179,7 @@ pub fn held(described: &SourceDescription) -> HeldSchema {
                             nullable: column.nullable,
                             unique: column.unique,
                             declared_type: column.declared_type.clone(),
-                            catalog_type: column.catalog_type.clone(),
+                            catalog: column.catalog.clone(),
                             exact_number: column.exact_number,
                         }),
                     })
@@ -212,7 +212,7 @@ pub fn described(held: &HeldSchema) -> Option<SourceDescription> {
                 nullable: facts.nullable,
                 unique: facts.unique,
                 declared_type: facts.declared_type,
-                catalog_type: facts.catalog_type,
+                catalog: facts.catalog,
                 exact_number: facts.exact_number,
             });
         }

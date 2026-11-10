@@ -53,7 +53,7 @@ fn column(name: &str, dtype: Dtype, stype: Stype) -> DescribedColumn {
         nullable: true,
         unique: false,
         declared_type: None,
-        catalog_type: None,
+        catalog: None,
         exact_number: None,
     }
 }

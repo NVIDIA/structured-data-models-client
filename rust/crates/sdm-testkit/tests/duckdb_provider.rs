@@ -236,8 +236,18 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
             "origin": "inferred"
         }]
     });
-    // The snapshot also predates each column's catalog type, which a later
-    // materialize compares with the catalog then.
+    // The snapshot also predates each column's catalog declaration, which a
+    // later materialize compares with the catalog then; none of this
+    // fixture's columns is declared NOT NULL, a key or unique.
+    let declared = |declared_type: &str| {
+        serde_json::json!({
+            "declared_type": declared_type,
+            "not_null": false,
+            "primary_key": false,
+            "key_nullable": false,
+            "unique": false,
+        })
+    };
     let catalog_types = [
         ("orders", "order_id", "BIGINT"),
         ("orders", "user_id", "BIGINT"),
@@ -247,7 +257,8 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
         ("users", "age", "INTEGER"),
         ("users", "country", "VARCHAR"),
     ];
-    for (table, column, declared) in catalog_types {
+    for (table, column, declared_type) in catalog_types {
+        let declared = declared(declared_type);
         let columns = expected_description["tables"]
             .as_array_mut()
             .unwrap()
@@ -257,7 +268,7 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
             .as_array_mut()
             .unwrap();
         let held = columns.iter_mut().find(|c| c["name"] == column).unwrap();
-        held["catalog_type"] = serde_json::json!(declared);
+        held["catalog"] = serde_json::json!(declared);
     }
     assert_eq!(described, expected_description);
     let mut expected_materialized = pinned["materialized"].clone();
@@ -308,9 +319,9 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
         .retain(|fetch| fetch.get("purpose").is_none() || fetch["request"]["part"] == "columns");
     assert_eq!(Value::from(observed.fetches), expected_fetches);
     let mut expected_inputs = pinned["inputs"].clone();
-    // The schema each later run is handed keeps those catalog types with
+    // The schema each later run is handed keeps those declarations with
     // its columns' facts.
-    fn with_catalog_types(value: &mut Value, types: &[(&str, &str, &str)]) {
+    fn with_catalogs(value: &mut Value, types: &[(&str, &str, &str)]) {
         match value {
             Value::Object(object) => {
                 if let (Some(Value::String(table)), Some(Value::Array(columns))) =
@@ -322,21 +333,28 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
                             && let Some((_, _, declared)) =
                                 types.iter().find(|(t, c, _)| *t == table && *c == name)
                         {
-                            facts.insert("catalog_type".into(), serde_json::json!(declared));
+                            facts.insert(
+                                "catalog".into(),
+                                serde_json::json!({
+                                    "declared_type": declared,
+                                    "not_null": false,
+                                    "primary_key": false,
+                                    "key_nullable": false,
+                                    "unique": false,
+                                }),
+                            );
                         }
                     }
                 }
                 for child in object.values_mut() {
-                    with_catalog_types(child, types);
+                    with_catalogs(child, types);
                 }
             }
-            Value::Array(items) => items
-                .iter_mut()
-                .for_each(|item| with_catalog_types(item, types)),
+            Value::Array(items) => items.iter_mut().for_each(|item| with_catalogs(item, types)),
             _ => {}
         }
     }
-    with_catalog_types(&mut expected_inputs, &catalog_types);
+    with_catalogs(&mut expected_inputs, &catalog_types);
     expected_inputs[2]["state"] = expected_materialized;
     assert_eq!(Value::from(observed.inputs.clone()), expected_inputs);
     // predict's call and result: the call's request id compared by
