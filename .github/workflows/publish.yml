@@ -7,21 +7,21 @@
 # Kitmaker owns NVIDIA's PyPI organization, and this project's open source
 # review record commits to releasing through it. Kitmaker does not accept an
 # upload; it fetches an artifact from a URL and publishes it itself, to pypi.org
-# and pypi.nvidia.com together. This workflow's job is to produce those URLs:
-# build every distribution and attach it to the GitHub Release. Asking Kitmaker
-# to publish from them is a separate step that a person runs, because Kitmaker's
-# Portal is on NVIDIA's internal network and a GitHub-hosted runner cannot
-# resolve it, let alone reach it. RELEASING.md says who runs that step and
-# what it has to do; the procedure itself is not kept in a public tree.
+# and pypi.nvidia.com together. So the release here is two steps, each behind
+# its own approval: `release` attaches every distribution to the GitHub
+# Release, and `kitmaker` asks Kitmaker's Portal to publish from those asset
+# URLs. Portal is on NVIDIA's network, which a GitHub-hosted runner reaches only
+# through Charon; see the `kitmaker` job.
 #
 # Two consequences worth stating rather than discovering.
 #
-# Nothing here can publish to an index. There is no stored publishing
-# credential and no environment secret; the most this workflow can do is attach
-# files to a Release. The approval on `pypi` still gates the job, because
-# attaching the distributions is what makes them public and Kitmaker refuses
-# private assets, so that approval is the last point before the artifacts are
-# visible to anyone.
+# There is a stored credential. Portal authenticates with a long-lived bearer
+# token, so `KITMAKER_API_TOKEN` is a secret on the `kitmaker` environment
+# rather than a repository secret: an environment secret reaches only the refs
+# that environment admits, `main` and `v*` tags, and only after a required
+# reviewer approves the job, where a repository secret would be readable from
+# a workflow on any branch. It can publish only to the three Portal projects it
+# owns.
 #
 # This workflow does not sign what it ships. PEP 740 attestations are issued
 # to whoever uploads, and that is Kitmaker, so nothing here produces one
@@ -34,8 +34,10 @@
 # publish anything itself. It can still decide what gets published, because it
 # is what produces the distributions, and `assemble` can
 # too, for the same reason; it holds `contents: read` alone. `release` holds
-# `contents: write` to create the Release and attach to it, and is the only job
-# behind the protected environment.
+# `contents: write` to create the Release and attach to it, behind the `pypi`
+# environment. `kitmaker` holds the Portal token, `id-token: write` for
+# Charon, and `contents: write` to mark the release Latest once it is
+# published, behind the `kitmaker` environment.
 name: publish
 
 on:
@@ -347,8 +349,8 @@ jobs:
             # Not Latest yet. Kitmaker needs public asset URLs, so the
             # release cannot be a draft and has to exist before anything is
             # published from it. Marking it Latest here would advertise a
-            # version that is not on the index, so that is done by hand once
-            # the Kitmaker publish has worked. This only withholds the
+            # version that is not on the index, so `kitmaker` does that once
+            # the publish has worked. This only withholds the
             # promotion: with no earlier release to stay Latest, GitHub still
             # reports the newest non-draft release as the latest one.
             prerelease=()
@@ -389,24 +391,107 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" "$path" --repo "$GITHUB_REPOSITORY"
           done
 
-      # The release is built and attached, and the person who approved this is
-      # the one who has to finish it. What the index holds is deliberately not
-      # asserted here: this job never asks, and a dispatch against a tag that
-      # was already published would make any claim about it wrong.
+      # The release is built and attached. Publishing it is the `kitmaker` job,
+      # which waits for its own approval, so declining that leaves a release
+      # on GitHub and nothing on the index.
       - name: Say what is left to do
         run: |
           {
             echo "### Attached, not published"
             echo
             echo "\`$GITHUB_REF_NAME\` is on the Releases page with every"
-            echo "distribution and the SBOM attached. This workflow publishes"
-            echo "nothing to PyPI; that is a separate step, run from inside"
-            echo "NVIDIA's network. RELEASING.md says who runs it and what it"
-            echo "has to do."
-            echo
-            if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
-              echo "This is a pre-release: leave it unmarked."
-            else
-              echo "Mark this release Latest once the index has all three distributions."
-            fi
+            echo "distribution and the SBOM attached. Approve the \`kitmaker\`"
+            echo "job to publish it to PyPI."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Kitmaker's Portal is on NVIDIA's network. A hosted runner reaches it through
+  # Charon, a gateway that opens a Teleport tunnel on the runner and admits this
+  # repository, from `main` and `v*` tags, to the three projects' routes alone.
+  # Charon reads which repository and ref is asking from a GitHub OIDC token
+  # sent with every request, hence `id-token: write`.
+  #
+  # From a tag, after `release` has attached the distributions, this publishes
+  # them: every project is dry-run before any is uploaded, and the release is
+  # marked Latest only once the index holds what was built. Dispatched from
+  # `main`, it only asks Portal for each project and publishes nothing, which
+  # is how a change to this route is proved before a release depends on it.
+  kitmaker:
+    needs: release
+    if: >-
+      ${{ !cancelled() && (needs.release.result == 'success'
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) }}
+    runs-on: ubuntu-latest
+    environment: kitmaker      # required reviewers; admits `main` and `v*` tags
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      KITMAKER_API_TOKEN: ${{ secrets.KITMAKER_API_TOKEN }}
+      PIC: ${{ vars.KITMAKER_PIC }}
+    steps:
+      # Before the download, because checkout cleans the working directory.
+      # `kitmaker_release.py` ships in the repository, not in the artifact.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: github.ref_type == 'tag'
+        with:
+          name: distributions
+          path: dist/
+
+      - uses: teleport-actions/setup@b638ff596557cc3959eb6b5287d5e58e0c8ac6a6 # v1.1.1
+        with:
+          version: auto
+          proxy: ext-nv-prd-apps.teleport.sh:443
+
+      - name: Open the Charon tunnel
+        uses: teleport-actions/application-tunnel@bb7a8fbfb67b85d26013554f10d71dd032c1c764 # v1.0.1
+        with:
+          proxy: ext-nv-prd-apps.teleport.sh:443
+          token: charon-gha-runners
+          app: charon
+          listen: tcp://127.0.0.1:8888
+
+      - name: Ask Portal for each project, publishing nothing
+        if: github.ref_type != 'tag'
+        run: python3 .github/workflows/kitmaker_release.py check
+
+      - name: Publish each distribution through Kitmaker
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # `browser_download_url`, not `url`: in the REST response `url` is
+          # the API metadata endpoint, and fetching it without an
+          # `Accept: application/octet-stream` header returns JSON about the
+          # asset rather than the asset. Kitmaker is given only the URL. The
+          # digest is only in the REST response, which is why this uses it.
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+            --jq '.assets[] | "\(.name)\t\(.browser_download_url)\t\(.digest // "")"' \
+            > assets.tsv
+          test -s assets.tsv
+          python3 .github/workflows/kitmaker_release.py
+
+      # Only now, because until this point a failure could have left a
+      # release marked Latest for a version that never reached PyPI.
+      - name: Mark the release Latest, now that it is published
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
+            echo "a pre-release stays unmarked"
+          else
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --latest
+          fi
+
+      # Into the job log, so a failed release says where it got to without
+      # anyone opening an artifact. The GitHub Release body is the changelog
+      # entry and is not touched.
+      - name: Print what each project ended up with
+        if: always() && github.ref_type == 'tag'
+        run: cat kitmaker-summary.txt 2>/dev/null || true
