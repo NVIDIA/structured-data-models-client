@@ -4,7 +4,7 @@
 
 //! Result observations preserve authored endpoint explanations and per-item metadata.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use sdm_testkit::bases;
 use sdm_testkit::case;
@@ -14,10 +14,6 @@ use serde_json::Value;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
-}
-
-fn read_json(path: &Path) -> Value {
-    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
 fn expected_explanation(call: u64) -> Value {

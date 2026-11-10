@@ -147,3 +147,6 @@ CI exposed a Python formatting issue, a stale type-vector checksum in the capabi
 Local corrections preserve all 110 type-vector IDs/retained fields, document the manifest change against the PR base, and move the unchanged token test into the parser crate.
 The compatibility test selection passes all 91 tests; dependency and architecture policies pass after the move.
 The hosted run remains in progress; these corrections do not yet constitute green final CI.
+
+The Rust CI job also found an unused JSON loader in the explanation test; removed it and passed `cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings` locally (`/tmp/fixture-step4-testkit-clippy.log`).
+The actual compatibility gate passes against both the PR target and manual-CI baseline: 250 Python and 567 Java declarations (`/tmp/fixture-step4-ledger-{target,manual}.log`).
