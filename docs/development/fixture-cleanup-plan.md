@@ -6,7 +6,7 @@
 
 Base: PR #75, `b450c957f`; branch: `rust-fixture-cleanup`.
 Step 2 is complete, including final independent coverage review and reconciliation of all file/group totals.
-Step 3 is active: simplify obsolete test plumbing while retaining useful correctness and compatibility gates.
+Step 3 is complete: obsolete plumbing is removed, and retained tooling has current consumers and useful checks.
 Do not merge this branch without instruction.
 
 ## Result so far
@@ -89,7 +89,7 @@ No claim is made here of exhaustive live warehouse/model coverage or a fresh int
 | --- | --- |
 | 1. Map and prioritize | Complete: inventory, consumer mapping and independent audit. |
 | 2. Replace and delete | Complete: replacements, focused validation, reconciled tracking and final independent review. |
-| 3. Simplify plumbing | In progress: unused loaders/recorders, obsolete CI comparison steps, manifests/generators and contributor rules. Keep useful API/protocol enforcement. |
+| 3. Simplify plumbing | Complete: dead compression/recording code removed; active correctness/API/protocol checks and developer guidance reconciled. |
 | 4. Review and validate | Then run integrated Rust/Python/Java suites, connector checks, lint/type checks and schema/capability gates. Run live checks where changed behavior or maintained requirements require them. |
 
 Step 2 completion requires actual file totals, no unresolved deleted-input consumers, independent review of coverage decisions and honest affected-test evidence.
@@ -111,3 +111,25 @@ Removed the uncalled reference-client guard, warehouse `capture_line` exporter a
 The exporter was the only non-test consumer of its driver-version helper, so that helper and its six isolated recorder-metadata tests were removed together.
 Active current-client observation, capture conservation and Rust replay paths remain; their data/transport checks are separate from the retired exporter.
 Compression cleanup: 43 tests passed and the repository-size gate passed (`/tmp/fixture-step3-compression-removal.log`, `/tmp/fixture-step3-size-gate.log`).
+
+### Step 3 completion audit
+
+| Retained tooling | Why it stays |
+| --- | --- |
+| Python/Java API inventories and compatibility ledger | Detect removed or changed public declarations and require behavior/test mappings. |
+| Current observation runners and outcome checks | Exercise installed native clients across dependency/connector cells; reject frozen-client identity and malformed/missing evidence. |
+| Capture conservation and Rust replay | Check that instrumentation preserves behavior and that provider responses cross the native boundary correctly. |
+| Sort, timezone and RNG generators | Produce independent external-library controls, with generated-file checks; not SDM output recordings. |
+| Provider-kit `record.py` | Despite its name, it is a read-only independent source-data evaluator, not an output writer. |
+| Size/consumer registry and schema locks | Prevent oversized unowned fixtures, missing consumers and unlocked schemas from returning. |
+
+All seven current consumer-registry entries name existing files and useful active consumers; no registry deletion was needed.
+The workflow audit found current execution/compatibility gates, not obsolete frozen-output comparison jobs.
+Observation artifacts remain for failure diagnosis; obsolete SQL-golden comments were removed without deleting execution coverage.
+The three unresolved inputs remain untouched, as do product behavior, language bindings and the five-dialect tests.
+
+Focused validation: 13 wire/source tests, 43 size/Snowflake tests, 113 observation/capture/replay tests and 6 size/generator tests passed in separate, overlapping runs.
+Ruff, the generated-sort check, repository-size gate and repository hygiene all passed.
+Logs: `/tmp/fixture-step3-first-batch.log`, `/tmp/fixture-step3-compression-removal.log`, `/tmp/fixture-step3-runner-cleanup-final.log`, `/tmp/fixture-step3-gates.log`, `/tmp/fixture-step3-size-gate.log` and `/tmp/fixture-step3-hygiene.log`.
+No live warehouse/model run or integrated Rust/Java suite is claimed for this tooling-only step.
+Step 4 remains the integrated validation milestone.
