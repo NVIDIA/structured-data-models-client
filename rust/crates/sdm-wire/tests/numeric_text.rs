@@ -2,48 +2,80 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A probability written as text is read as Python's `float` reads it, as
-//! the bindings' `_finite` does ( fix round 1): each text of
-//! `numeric-text.json`, recorded from the reference's interpreter, read to
-//! the same double or refused alike.
-
-#![allow(
-    clippy::disallowed_methods,
-    reason = "test code: reads the recorded texts"
-)]
+//! Numeric response text accepts decimal syntax, supported Unicode digits and
+//! whitespace, while rejecting malformed separators and incomplete numbers.
 
 use sdm_wire::response::numeric_text;
 
 #[test]
-fn text_is_read_as_the_reference_s_float_reads_it() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/numeric-text.json");
-    let recorded: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let cases = recorded["cases"].as_array().unwrap();
-    assert!(cases.len() >= 40);
-    let (mut read, mut refused) = (0, 0);
-    for case in cases {
-        let text = case["text"].as_str().unwrap();
-        let got = numeric_text(text).map(|v| format!("{:016x}", v.to_bits()));
-        let want = case["float"].as_str().map(str::to_owned);
-        // Python's NaN and this reading's are both NaN; their payloads may
-        // differ.
-        if want.as_deref() == Some("7ff8000000000000") {
-            assert!(numeric_text(text).is_some_and(f64::is_nan), "{text:?}");
-        } else {
-            assert_eq!(got, want, "{text:?}");
-        }
-        if want.is_some() {
-            read += 1;
-        } else {
-            refused += 1;
-        }
+fn decimal_spellings_have_independent_numeric_values() {
+    for text in [
+        "0.5",
+        " 0.5 ",
+        "\t0.5\n",
+        "0_0.5",
+        ".5",
+        "+.5",
+        "\u{0660}.\u{0665}",
+        "\u{ff10}.\u{ff15}",
+        "\u{00a0}0.5\u{3000}",
+    ] {
+        assert_eq!(numeric_text(text), Some(0.5), "{text:?}");
     }
-    // Not vacuous: both outcomes are held.
-    assert!(
-        read >= 15 && refused >= 15,
-        "{read} read, {refused} refused"
-    );
+    for (text, value) in [
+        ("1_000.25", 1000.25_f64),
+        ("5.", 5.0),
+        ("-1e-3", -0.001),
+        ("1E+05", 100_000.0),
+        ("1e5_0", 1e50),
+        ("\u{0661}\u{0662}", 12.0),
+        ("\u{0660}_\u{0665}", 5.0),
+        ("\u{0085} 2", 2.0),
+        ("-0", -0.0),
+    ] {
+        assert_eq!(
+            numeric_text(text).map(f64::to_bits),
+            Some(value.to_bits()),
+            "{text:?}"
+        );
+    }
+}
+
+#[test]
+fn special_values_preserve_sign_and_nan_semantics() {
+    for text in ["inf", "1e400"] {
+        assert_eq!(numeric_text(text), Some(f64::INFINITY), "{text:?}");
+    }
+    assert_eq!(numeric_text("-Infinity"), Some(f64::NEG_INFINITY));
+    for text in ["nan", "NaN", "+nan"] {
+        assert!(numeric_text(text).is_some_and(f64::is_nan), "{text:?}");
+    }
+}
+
+#[test]
+fn malformed_numeric_text_is_refused() {
+    for text in [
+        "1__0",
+        "_1",
+        "1_",
+        "1_.5",
+        "1._5",
+        "1e_5",
+        "0.5\u{200b}",
+        "0x1",
+        "1,5",
+        "",
+        "  ",
+        "1.2.3",
+        "e5",
+        ".",
+        "1e",
+        "--1",
+        "0.5 0",
+        "1\u{001c}",
+    ] {
+        assert_eq!(numeric_text(text), None, "{text:?}");
+    }
 }
 
 /// The digits every supported Python takes, and no more ( fix round

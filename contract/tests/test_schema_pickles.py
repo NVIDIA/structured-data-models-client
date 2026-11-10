@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import io
-import json
 import pickle
 import warnings
 from pathlib import Path
@@ -65,52 +64,105 @@ def projection(schema: Any) -> dict[str, Any]:
     }
 
 
-EXPECTED = json.loads((PICKLES / 'expected.json').read_text(encoding='utf-8'))
+NAMES = ('one-table', 'two-tables', 'edited')
 
 
-def test_every_pickle_the_reference_wrote_is_listed() -> None:
-    written = {path.stem for path in PICKLES.glob('*.pkl')}
-    assert (
-        written
-        == set(EXPECTED['schemas'])
-        == {
-            'one-table',
-            'two-tables',
-            'edited',
-        }
+def assert_saved_schema(schema: Any, name: str) -> None:
+    """Check authored declaration/edit semantics, without a projection snapshot."""
+    assert schema.source is None
+    assert list(schema.tables) == (
+        ['orders'] if name == 'one-table' else ['users', 'orders']
+    )
+    for table_name, table in schema.tables.items():
+        assert type(table).__name__ == 'Table'
+        assert table.duplicate_keys == 0
+        assert len(table.data) == (6 if table_name == 'users' else 12)
+        assert table.time_column == (
+            'ts' if table_name == 'orders' and name != 'edited' else None
+        )
+        assert table.primary_key == (
+            'order_id'
+            if table_name == 'orders'
+            else 'age'
+            if name == 'edited'
+            else 'user_id'
+        )
+        columns = (
+            [('user_id', 'int64'), ('age', 'int64'), ('score', 'float64')]
+            if table_name == 'users'
+            else [
+                ('order_id', 'int64'),
+                ('user_id', 'int64'),
+                ('price', 'float64'),
+                ('ts', 'timestamp[us]'),
+            ]
+        )
+        assert list(table.columns) == [column for column, _ in columns]
+        for column, dtype in columns:
+            c = table.columns[column]
+            assert c.dtype == dtype
+            key = column == table.primary_key or (
+                table_name == 'orders'
+                and column == 'user_id'
+                and name == 'two-tables'
+            )
+            assert c.stype == (
+                'ID' if key else 'timestamp' if column == 'ts' else 'numerical'
+            )
+            assert c._stype_before_key == (
+                'categorical'
+                if name == 'edited' and column == 'age'
+                else 'numerical'
+                if key
+                else None
+            )
+            assert c.stype_declared is (
+                column == 'ts' or (name == 'edited' and column == 'age')
+            )
+    links = [
+        (
+            link.source_table,
+            link.source_column,
+            link.target_table,
+            link.target_column,
+        )
+        for link in schema.relationships
+    ]
+    assert links == (
+        [('orders', 'user_id', 'users', 'user_id')]
+        if name == 'two-tables'
+        else []
     )
 
 
-@pytest.mark.parametrize('name', sorted(EXPECTED['schemas']))
-def test_a_schema_the_reference_pickled_loads_as_the_reference_reads_it(
-    name: str,
-) -> None:
-    # A pickled frame loads in its own pandas or a later one: the
-    # reference wrote these with pandas 3, which the contract tests run on.
-    assert int(pd.__version__.split('.')[0]) >= int(
-        EXPECTED['pandas'].split('.')[0]
+def test_historical_schema_pickle_inventory():
+    assert {path.stem for path in PICKLES.glob('*.pkl')} == set(NAMES)
+    assert all(
+        (PICKLES / f'{name}.pkl').read_bytes().startswith(b'\x80\x04')
+        for name in NAMES
     )
+
+
+@pytest.mark.parametrize('name', NAMES)
+def test_historical_schema_preserves_declarations_and_edits(name: str) -> None:
+    # Historical frames were written with pandas 3.
+    assert int(pd.__version__.split('.')[0]) >= 3
     from sdm_client import Relationship, Schema, StructuredDataError
 
     with warnings.catch_warnings(record=True) as shown:
         warnings.simplefilter('always')
         loaded = pickle.loads((PICKLES / f'{name}.pkl').read_bytes())
     assert isinstance(loaded, Schema)
-    # A copy is not a new declaration: loading says nothing.
     assert [
         w for w in shown if not issubclass(w.category, ResourceWarning)
     ] == []
-    assert projection(loaded) == EXPECTED['schemas'][name]
+    assert_saved_schema(loaded, name)
     assert not _described_on_the_core(loaded)
-    assert loaded.source is None
-    # Its relationships are still checked when edited.
     with pytest.raises(StructuredDataError):
         loaded.relationships.append(
             Relationship('orders', 'nothing', 'users', 'user_id')
         )
-    # And it pickles again to what it was.
-    again = pickle.loads(pickle.dumps(loaded))
-    assert projection(again) == EXPECTED['schemas'][name]
+    assert_saved_schema(pickle.loads(pickle.dumps(loaded)), name)
 
 
 def _described_on_the_core(schema: Any) -> bool:

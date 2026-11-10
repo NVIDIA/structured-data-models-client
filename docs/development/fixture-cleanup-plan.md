@@ -586,3 +586,9 @@ Evidence: `/tmp/fixture-result-conversion-review.md`, `/tmp/fixture-other-input-
 
 PostgreSQL value tests now report explicit skips when the DSN is absent instead of silently returning as passes.
 Combined result/value validation: `/tmp/fixture-conversion-pruned.log`; no new live PostgreSQL execution claimed.
+
+Schema-pickle output replacement preserves the three historical serialized inputs and directly checks declarations, edits, links, detached state and round trips.
+Independent review approved removing the 4,265-byte output JSON; all six affected tests passed.
+
+Numeric-text recording removed after independent review: all 41 inputs remain covered by direct values, IEEE special-value rules and syntax refusals, with negative-zero coverage added.
+Four Rust tests and Clippy passed; the independent NumPy temporal-sort and MT19937 coefficient oracles remain because their exact ordering and seeded values protect interoperability.
