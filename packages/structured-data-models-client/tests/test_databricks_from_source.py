@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Databricks connector regressions using recorded rows and local SQL stubs.
+"""Databricks connector regressions using authored rows and local SQL stubs.
 
 These checks cover schema inference, qualified reads, current session state,
 source changes, error ordering and foreign-key metadata.
@@ -11,13 +11,13 @@ They do not constitute live Databricks or model-endpoint validation.
 
 from __future__ import annotations
 
-import base64
 import copy
 import json
 import re
 import sys
 import types
 from collections.abc import Iterator
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +28,6 @@ from sdm_connectors import DatabricksSource
 from sdm_client import Schema
 
 ROOT = Path(__file__).resolve().parents[3]
-CAPTURE = ROOT / 'contract' / 'fixtures' / 'databricks' / 'capture.json'
 
 # Both routes project posexplode's position, with the core widening it to i64.
 _SEED_PREFIXES = (
@@ -41,22 +40,193 @@ def _normal(text: str) -> str:
     return ' '.join(text.split())
 
 
-def _recorded() -> dict[tuple[str, str], pa.Table]:
-    r"""base.binary's statements on the warehouse, by their text (each run
-    of whitespace one space) and parameters, with the Arrow fetched."""
-    capture = json.loads(CAPTURE.read_text(encoding='utf-8'))
-    found: dict[tuple[str, str], pa.Table] = {}
-    for case in capture['cases']:
-        if case['case'] != 'base.binary':
-            continue
-        for statement in case['statements']:
-            data = base64.b64decode(statement['result']['arrow'])
-            found[
-                (
-                    _normal(statement['text']),
-                    json.dumps(statement['parameters']),
-                )
-            ] = pa.ipc.open_stream(pa.py_buffer(data)).read_all()
+def _shop_preview(table: str) -> pa.Table:
+    """Source rows, authored independently of captured warehouse responses."""
+    if table == 'users':
+        return pa.table(
+            {
+                'user_id': pa.array(range(8), pa.int64()),
+                'age': pa.array(range(20, 28), pa.int32()),
+                'country': [['US', 'DE', 'IN'][i % 3] for i in range(8)],
+            }
+        )
+    assert table == 'orders'
+    return pa.table(
+        {
+            'order_id': pa.array(range(80), pa.int64()),
+            'user_id': pa.array([i % 8 for i in range(80)], pa.int64()),
+            'price': pa.array([10 + 1.5 * i for i in range(80)], pa.float64()),
+            'ts': pa.array(
+                [
+                    datetime(2023, 1, 1) + timedelta(days=7 * i)
+                    for i in range(80)
+                ],
+                pa.timestamp('us'),
+            ),
+        }
+    )
+
+
+def _shop_catalog(kind: str, parameters: list[Any]) -> pa.Table:
+    """Typed information-schema inputs for the two physical shop tables."""
+    if kind == 'describe/tables':
+        assert parameters == ['shop']
+        return pa.table({'table_name': ['orders', 'users']})
+    assert len(parameters) == 2 and parameters[0] == 'shop'
+    table = parameters[1]
+    assert table in ('orders', 'users')
+    if kind == 'describe/columns':
+        columns = (
+            [
+                ('order_id', 'bigint'),
+                ('user_id', 'bigint'),
+                ('price', 'double'),
+                ('ts', 'timestamp_ntz'),
+            ]
+            if table == 'orders'
+            else [('user_id', 'bigint'), ('age', 'int'), ('country', 'string')]
+        )
+        return pa.table(
+            {
+                'column_name': [name for name, _ in columns],
+                'full_data_type': [dtype for _, dtype in columns],
+                'is_nullable': ['YES'] * len(columns),
+                'table_catalog': ['main'] * len(columns),
+                'table_schema': ['shop'] * len(columns),
+                'table_name': [table] * len(columns),
+                'table_type': ['MANAGED'] * len(columns),
+            }
+        )
+    if kind == 'describe/keys':
+        names = ['constraint_type', 'constraint_name', 'column_name']
+    else:
+        assert kind == 'describe/foreign_keys'
+        # This legacy driver input intentionally has duplicate headers;
+        # the query adapter below renames both roles for current SQL.
+        names = [
+            'constraint_name',
+            'column_name',
+            'table_catalog',
+            'table_schema',
+            'table_name',
+            'column_name',
+        ]
+    return pa.Table.from_arrays(
+        [pa.array([], pa.string()) for _ in names], names=names
+    )
+
+
+# Exact protocol inputs accepted by the local warehouse double.
+# SQL spelling is input here; output rows are independently constructed below.
+_SHOP_QUERIES = [
+    (
+        'describe/tables',
+        "SELECT table_name FROM `main`.information_schema.tables WHERE table_schema = ? AND table_type != 'METRIC_VIEW'",
+        ['shop'],
+    ),
+    (
+        'describe/columns',
+        'SELECT c.column_name, c.full_data_type, c.is_nullable, c.table_catalog, c.table_schema, c.table_name, t.table_type FROM `main`.information_schema.columns c JOIN `main`.information_schema.tables t ON t.table_catalog = c.table_catalog AND t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = lower(?) AND c.table_name = lower(?) ORDER BY c.ordinal_position',
+        ['shop', 'orders'],
+    ),
+    (
+        'describe/keys',
+        "SELECT tc.constraint_type, tc.constraint_name, kcu.column_name FROM `main`.information_schema.table_constraints tc JOIN `main`.information_schema.key_column_usage kcu ON tc.constraint_catalog = kcu.constraint_catalog AND tc.constraint_schema = kcu.constraint_schema AND tc.constraint_name = kcu.constraint_name WHERE tc.table_schema = lower(?) AND tc.table_name = lower(?) AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+        ['shop', 'orders'],
+    ),
+    (
+        'preview',
+        'SELECT `order_id`, `user_id`, `price`, `ts` FROM `main`.`shop`.`orders` LIMIT 1000',
+        [],
+    ),
+    (
+        'describe/columns',
+        'SELECT c.column_name, c.full_data_type, c.is_nullable, c.table_catalog, c.table_schema, c.table_name, t.table_type FROM `main`.information_schema.columns c JOIN `main`.information_schema.tables t ON t.table_catalog = c.table_catalog AND t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = lower(?) AND c.table_name = lower(?) ORDER BY c.ordinal_position',
+        ['shop', 'users'],
+    ),
+    (
+        'describe/keys',
+        "SELECT tc.constraint_type, tc.constraint_name, kcu.column_name FROM `main`.information_schema.table_constraints tc JOIN `main`.information_schema.key_column_usage kcu ON tc.constraint_catalog = kcu.constraint_catalog AND tc.constraint_schema = kcu.constraint_schema AND tc.constraint_name = kcu.constraint_name WHERE tc.table_schema = lower(?) AND tc.table_name = lower(?) AND tc.constraint_type IN ('PRIMARY KEY', 'UNIQUE')",
+        ['shop', 'users'],
+    ),
+    (
+        'preview',
+        'SELECT `user_id`, `age`, `country` FROM `main`.`shop`.`users` LIMIT 1000',
+        [],
+    ),
+    (
+        'describe/foreign_keys',
+        "SELECT tc.constraint_name, kcu.column_name, ccu.table_catalog, ccu.table_schema, ccu.table_name, ccu.column_name FROM `main`.information_schema.table_constraints tc JOIN `main`.information_schema.referential_constraints rc ON tc.constraint_catalog = rc.constraint_catalog AND tc.constraint_schema = rc.constraint_schema AND tc.constraint_name = rc.constraint_name JOIN `main`.information_schema.key_column_usage kcu ON tc.constraint_catalog = kcu.constraint_catalog AND tc.constraint_schema = kcu.constraint_schema AND tc.constraint_name = kcu.constraint_name JOIN `main`.information_schema.constraint_column_usage ccu ON rc.unique_constraint_catalog = ccu.constraint_catalog AND rc.unique_constraint_schema = ccu.constraint_schema AND rc.unique_constraint_name = ccu.constraint_name WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = lower(?) AND tc.table_name = lower(?)",
+        ['shop', 'orders'],
+    ),
+    (
+        'describe/foreign_keys',
+        "SELECT tc.constraint_name, kcu.column_name, ccu.table_catalog, ccu.table_schema, ccu.table_name, ccu.column_name FROM `main`.information_schema.table_constraints tc JOIN `main`.information_schema.referential_constraints rc ON tc.constraint_catalog = rc.constraint_catalog AND tc.constraint_schema = rc.constraint_schema AND tc.constraint_name = rc.constraint_name JOIN `main`.information_schema.key_column_usage kcu ON tc.constraint_catalog = kcu.constraint_catalog AND tc.constraint_schema = kcu.constraint_schema AND tc.constraint_name = kcu.constraint_name JOIN `main`.information_schema.constraint_column_usage ccu ON rc.unique_constraint_catalog = ccu.constraint_catalog AND rc.unique_constraint_schema = ccu.constraint_schema AND rc.unique_constraint_name = ccu.constraint_name WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = lower(?) AND tc.table_name = lower(?)",
+        ['shop', 'users'],
+    ),
+    (
+        'key_counts',
+        'SELECT 0 AS k, COUNT(*) AS n, COUNT(DISTINCT `order_id`) AS d, COUNT(CASE WHEN `order_id` IS NULL THEN 1 END) AS z FROM `main`.`shop`.`orders` UNION ALL SELECT 1 AS k, COUNT(*) AS n, COUNT(DISTINCT `user_id`) AS d, COUNT(CASE WHEN `user_id` IS NULL THEN 1 END) AS z FROM `main`.`shop`.`users`',
+        [],
+    ),
+    ('count_rows', 'SELECT COUNT(*) FROM `main`.`shop`.`orders`', []),
+    ('count_rows', 'SELECT COUNT(*) FROM `main`.`shop`.`users`', []),
+    (
+        'time_bounds',
+        'SELECT 0 as table_index, MIN(`ts`) as min_date, MAX(`ts`) as max_date FROM `main`.`shop`.`orders`',
+        [],
+    ),
+    (
+        'sample_entities',
+        'SELECT `user_id` FROM `main`.`shop`.`users` TABLESAMPLE (100.0 PERCENT) REPEATABLE (42) WHERE `user_id` IS NOT NULL LIMIT 10000',
+        [],
+    ),
+]
+
+
+def _shop_answers() -> dict[tuple[str, str], pa.Table]:
+    found = {}
+    for kind, text, parameters in _SHOP_QUERIES:
+        if kind.startswith('describe/'):
+            result = _shop_catalog(kind, parameters)
+        elif kind == 'preview':
+            result = _shop_preview(
+                'orders' if '`orders` LIMIT' in text else 'users'
+            )
+        elif kind == 'key_counts':
+            result = pa.table(
+                {
+                    'k': pa.array([0, 1], pa.int32()),
+                    'n': pa.array([80, 8], pa.int64()),
+                    'd': pa.array([80, 8], pa.int64()),
+                    'z': pa.array([0, 0], pa.int64()),
+                }
+            )
+        elif kind == 'count_rows':
+            result = pa.table(
+                {
+                    'count_star()': pa.array(
+                        [80 if '`orders`' in text else 8], pa.int64()
+                    )
+                }
+            )
+        elif kind == 'time_bounds':
+            result = pa.table(
+                {
+                    'table_index': pa.array([0], pa.int32()),
+                    'min_date': pa.array(
+                        [datetime(2023, 1, 1)], pa.timestamp('us')
+                    ),
+                    'max_date': pa.array(
+                        [datetime(2023, 1, 1) + timedelta(days=79 * 7)],
+                        pa.timestamp('us'),
+                    ),
+                }
+            )
+        else:
+            assert kind == 'sample_entities'
+            result = pa.table({'user_id': pa.array(range(8), pa.int64())})
+        found[(text, json.dumps(parameters))] = result
     return found
 
 
@@ -98,13 +268,12 @@ class _Cursor:
 
 
 class _Warehouse:
-    r"""A Databricks SQL connection answering base.binary's recorded
-    statements, the session's current catalog ``main`` and schema ``shop``;
+    r"""A Databricks SQL connection answering the shop protocol inputs, the session's current catalog ``main`` and schema ``shop``;
     with ``fail_constraints``, every key and foreign-key read fails as a
     warehouse without the privilege fails it."""
 
     def __init__(self, *, fail_constraints: bool = False) -> None:
-        self._recorded = _recorded()
+        self._answers = _shop_answers()
         self._fail_constraints = fail_constraints
         self.asked: list[str] = []
         #: Each statement asked with its parameters.
@@ -147,16 +316,16 @@ class _Warehouse:
             return pa.table({'name': parts})
         # The fixed catalog query names the two column roles separately;
         # the immutable old recording still carries the same six values.
-        recorded_text = text.replace(
+        input_text = text.replace(
             'kcu.column_name AS source_column', 'kcu.column_name'
         ).replace('ccu.column_name AS referenced_column', 'ccu.column_name')
-        key = (recorded_text, json.dumps(parameters))
-        if key not in self._recorded:
+        key = (input_text, json.dumps(parameters))
+        if key not in self._answers:
             raise AssertionError(
-                f'no recorded answer for {text!r} {parameters!r}'
+                f'no authored answer for {text!r} {parameters!r}'
             )
-        found = self._recorded[key]
-        if recorded_text != text:
+        found = self._answers[key]
+        if input_text != text:
             names = list(found.column_names)
             if 'kcu.column_name AS source_column' in text:
                 names[1] = 'source_column'
@@ -765,7 +934,7 @@ def test_an_edit_keeps_each_table_where_it_was_read(
 
 class _CompletingWarehouse(_SessionWarehouse):
     r"""The session warehouse, which also answers the core's neighbor reads
-    the capture does not hold, by running them over the capture's own rows
+    the base input map does not hold, by running them over the authored shop rows
     in DuckDB (only Spark's JSON-to-table syntax replaced), so a
     ``materialize`` completes on both routes; ``other``'s ``users`` holds a
     country of its own, ``OTHER``, which only a read of it puts in a
@@ -779,7 +948,7 @@ class _CompletingWarehouse(_SessionWarehouse):
         for name in ('users', 'orders'):
             rows = next(
                 found
-                for (text, _), found in self._recorded.items()
+                for (text, _), found in self._answers.items()
                 if f'FROM `main`.`shop`.`{name}` LIMIT 1000' in text
             )
             self._db.register('rows', rows)
@@ -792,7 +961,7 @@ class _CompletingWarehouse(_SessionWarehouse):
         except AssertionError:
             text = _normal(operation)
             if text.startswith('SELECT ') and not parameters:
-                # A read the capture does not hold, such as the folded key
+                # A read outside the base input map, such as the folded key
                 # of a table keyed by several columns, over the same rows.
                 text = re.sub(r'`main`\.`\w+`\.', '', text).replace('`', '"')
                 found = self._db.execute(text).to_arrow_table()

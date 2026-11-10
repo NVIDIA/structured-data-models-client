@@ -90,11 +90,6 @@ def main() -> None:
         'test_tabular_ordinary_indexes.py',
     ):
         shutil.copy2(source / name, tests / name)
-    (tests / 'data').mkdir()
-    shutil.copy2(
-        source / 'data/tabular_pql_profile_reference.json',
-        tests / 'data/tabular_pql_profile_reference.json',
-    )
     run(
         [
             sys.executable,

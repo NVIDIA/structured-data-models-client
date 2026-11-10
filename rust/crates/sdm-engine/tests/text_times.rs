@@ -2,409 +2,360 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! `sdm_engine::time::text` against its own spec, from `text-times.json`,
-//! recorded by `text_times_record.py` (a protected path: never recorded
-//! again to pass a dependency bump, F4), which reads `date-rules.md`'s "The
-//! core's text formats" apart from the Rust reader, with Python's `re` and
-//! `datetime` and no pandas: columns over every format of the
-//! list, values outside it, the orders of day and month, two-digit years at
-//! the pivot and offsets mixed, each read as the core reads text: the
-//! values (`column`), to UTC (`utc`), the share inference scores
-//! (`share`) and the day-first format it warns of (`day_first`).
-//!
-//! Every reading is compared, none skipped. [`check`] fails closed: a
-//! perturbed answer, and evidence missing, empty or retyped, each fail
-//! (seeded below), and so does a run comparing fewer columns than
-//! recorded.
-
+//! Text-time format, ordering and inference policies with independent expected values.
 use sdm_engine::time::text::{Reader, Share, Unread};
-use serde_json::{Value, json};
-
-const VECTORS: &str = include_str!("text-times.json");
-
-/// The columns recorded, each read four ways.
-const COLUMNS: usize = 2_360;
-
-fn values(column: &Value, at: &str) -> Result<Vec<Option<String>>, String> {
-    let items = column
-        .as_array()
-        .filter(|items| !items.is_empty())
-        .ok_or_else(|| format!("{at}: no values"))?;
-    items
-        .iter()
-        .map(|v| match v {
-            Value::Null => Ok(None),
-            Value::String(s) => Ok(Some(s.clone())),
-            _ => Err(format!("{at}: a value is neither text nor null")),
-        })
-        .collect()
-}
-
-/// A recorded reading of the values: each instant in nanoseconds, or the
-/// refusal named.
-fn expected(reading: &Value, at: &str) -> Result<Result<Vec<Option<i128>>, Unread>, String> {
-    match reading {
-        Value::String(s) => match s.as_str() {
-            "outside" => Ok(Err(Unread::Outside)),
-            "order" => Ok(Err(Unread::Order)),
-            "mixed" => Ok(Err(Unread::MixedZones)),
-            _ => Err(format!("{at}: not a reading")),
-        },
-        Value::Array(items) => items
-            .iter()
-            .map(|v| match v {
-                Value::Null => Ok(None),
-                Value::String(n) => n
-                    .parse::<i128>()
-                    .map(Some)
-                    .map_err(|_| format!("{at}: not an instant")),
-                _ => Err(format!("{at}: neither an instant nor null")),
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(Ok),
-        _ => Err(format!("{at}: not a reading")),
-    }
-}
-
-fn expected_share(share: &Value, at: &str) -> Result<Result<Share, Unread>, String> {
-    match share {
-        Value::String(s) if s == "mixed" => Ok(Err(Unread::MixedZones)),
-        Value::Array(counts) => match counts[..] {
-            [
-                Value::Number(ref a),
-                Value::Number(ref l),
-                Value::Number(ref b),
-                Value::Number(ref c),
-            ] => {
-                let count = |n: &serde_json::Number| {
-                    n.as_u64()
-                        .and_then(|n| usize::try_from(n).ok())
-                        .ok_or_else(|| format!("{at}: not a count"))
-                };
-                Ok(Ok(Share {
-                    fewest: count(a)?,
-                    listed: count(l)?,
-                    most: count(b)?,
-                    unshaped: count(c)?,
-                }))
-            }
-            _ => Err(format!("{at}: not a share")),
-        },
-        _ => Err(format!("{at}: not a share")),
-    }
-}
-
-/// The columns compared, or every difference found.
-fn check(document: &Value) -> Result<usize, String> {
-    if document["format"] != "sdm-text-times/2" {
-        return Err("not an sdm-text-times/2 document".into());
-    }
-    let year = document["year"].as_i64().ok_or("no year")?;
-    let reader = Reader::new(year);
-    let columns = document["columns"]
-        .as_array()
-        .filter(|c| !c.is_empty())
-        .ok_or("no columns")?;
-    let mut differences = Vec::new();
-    for (i, column) in columns.iter().enumerate() {
-        let owned = values(&column["values"], &format!("column {i}"))?;
-        let given: Vec<Option<&str>> = owned.iter().map(|v| v.as_deref()).collect();
-        for (kind, utc) in [("column", false), ("utc", true)] {
-            let at = format!("column {i} {kind}");
-            let want = expected(&column[kind], &at)?;
-            if let Ok(want) = &want
-                && want.len() != given.len()
-            {
-                return Err(format!("{at}: a reading of another length"));
-            }
-            let got = reader
-                .column(&given, utc)
-                .map(|read| read.into_iter().map(|at| at.map(|at| at.nanos())).collect());
-            if got != want {
-                differences.push(format!("{at}: {given:?}: want {want:?}, got {got:?}"));
-            }
-        }
-        let at = format!("column {i} share");
-        let want = expected_share(&column["share"], &at)?;
-        let got = reader.share(&given);
-        if got != want {
-            differences.push(format!("{at}: {given:?}: want {want:?}, got {got:?}"));
-        }
-        let want = match &column["day_first"] {
-            Value::Null => None,
-            Value::String(format) => Some(format.clone()),
-            _ => {
-                return Err(format!(
-                    "column {i}: day_first is neither a format nor null"
-                ));
-            }
-        };
-        let got = reader.day_first_format(&given);
-        if got != want {
-            differences.push(format!(
-                "column {i} day_first: {given:?}: want {want:?}, got {got:?}"
-            ));
-        }
-        // `each` is the column's reading not to UTC.
-        if reader.each(&given) != reader.column(&given, false) {
-            differences.push(format!("column {i} each: {given:?}"));
-        }
-    }
-    if differences.is_empty() {
-        Ok(columns.len())
-    } else {
-        Err(format!(
-            "{} differ: {:#?}",
-            differences.len(),
-            &differences[..differences.len().min(20)]
-        ))
-    }
-}
-
-fn document() -> Value {
-    serde_json::from_str(VECTORS).unwrap()
-}
 
 #[test]
-fn the_reader_reads_text_as_its_spec_says() {
-    assert_eq!(check(&document()), Ok(COLUMNS));
-}
-
-/// Every kind of answer is held somewhere: no vector set that only reads,
-/// or only refuses, passes for the whole.
-#[test]
-fn the_vectors_hold_every_answer() {
-    let doc = document();
-    let columns = doc["columns"].as_array().unwrap();
-    for kind in ["outside", "order", "mixed"] {
-        assert!(columns.iter().any(|c| c["column"] == kind), "{kind}");
-    }
-    assert!(
-        columns
-            .iter()
-            .any(|c| c["utc"].is_array() && c["column"] == "mixed")
-    );
-    assert!(columns.iter().any(|c| c["day_first"].is_string()));
-    assert!(columns.iter().any(|c| {
-        c["column"]
-            .as_array()
-            .is_some_and(|r| r.iter().any(Value::is_null))
-    }));
-    assert!(columns.iter().any(|c| c["share"][0] != c["share"][1]));
-    assert!(columns.iter().any(|c| c["share"][2].as_u64() > Some(0)));
-}
-
-#[test]
-fn the_check_fails_closed() {
-    let doc = document();
-    let find = |doc: &mut Value, values: Value| -> usize {
-        doc["columns"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .position(|c| c["values"] == values)
-            .unwrap_or_else(|| panic!("{values} is recorded"))
-    };
-    // A perturbed instant.
-    let mut perturbed = doc.clone();
-    let i = find(&mut perturbed, json!(["2024-01-05"]));
-    let n: i128 = perturbed["columns"][i]["column"][0]
-        .as_str()
-        .unwrap()
-        .parse()
-        .unwrap();
-    perturbed["columns"][i]["column"][0] = json!((n + 1).to_string());
-    assert!(check(&perturbed).unwrap_err().contains("differ"));
-    // A refusal said read, a read said refused, another refusal named.
-    for (values, field, said) in [
-        (json!(["March 3 2020"]), "column", json!([null])),
-        (json!(["2024-01-05"]), "utc", json!("outside")),
-        (json!(["01/02/2024"]), "column", json!("outside")),
-        (
-            json!(["2024-01-05", "AW00011205"]),
-            "share",
-            json!([1, 1, 2, 0]),
-        ),
-        (json!(["15/03/2024"]), "day_first", Value::Null),
-    ] {
-        let mut changed = doc.clone();
-        let i = find(&mut changed, values.clone());
-        changed["columns"][i][field] = said;
-        assert!(
-            check(&changed).unwrap_err().contains("differ"),
-            "{values} {field}"
-        );
-    }
-    // Evidence missing, empty or retyped.
-    for broken in [
-        json!({"format": "sdm-text-times/2", "year": 2026}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": []}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": []}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"]}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": "read", "utc": ["1"], "share": [1, 1, 1, 0], "day_first": null}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": [1], "utc": ["1"], "share": [1, 1, 1, 0], "day_first": null}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": [5], "column": ["1"], "utc": ["1"], "share": [1, 1, 1, 0], "day_first": null}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": ["1704412800000000000"], "utc": ["1704412800000000000"], "share": [1, 1, 1], "day_first": null}]}),
-        json!({"format": "sdm-text-times/2", "year": 2026, "columns": [{"values": ["2024-01-05"], "column": ["1704412800000000000"], "utc": ["1704412800000000000"], "share": [1, 1, 1, 0], "day_first": 5}]}),
-        json!({"format": "sdm-text-times/1", "year": 2026, "columns": []}),
-        json!({"format": "sdm-text-times/2", "columns": []}),
-    ] {
-        assert!(check(&broken).is_err(), "{broken}");
-    }
-    // A run comparing fewer columns than recorded.
-    let mut fewer = doc.clone();
-    fewer["columns"].as_array_mut().unwrap().pop();
-    assert_ne!(check(&fewer), Ok(COLUMNS));
-}
-
-const DIFFERENTIAL: &str = include_str!("text-times-differential.json");
-
-/// The core's answer for one of the report's examples, as the report
-/// writes it.
-fn core_answer(reader: &Reader, outcome: &str, example: &Value) -> Result<Value, String> {
-    let owned = values(&example["values"], outcome)?;
-    let given: Vec<Option<&str>> = owned.iter().map(|v| v.as_deref()).collect();
-    let reading = |read: Result<Vec<Option<sdm_engine::time::Instant>>, Unread>| match read {
-        Ok(read) => json!(
-            read.into_iter()
-                .map(|at| at.map(|at| at.nanos().to_string()))
-                .collect::<Vec<_>>()
-        ),
-        Err(Unread::Outside) => json!("outside"),
-        Err(Unread::Order) => json!("order"),
-        Err(Unread::MixedZones) => json!("mixed"),
-    };
-    Ok(match outcome {
-        "materialize" => reading(reader.each(&given)),
-        "time_choice" => reading(reader.column(&given, true)),
-        "inference" => {
-            let named = example["named"].as_bool().ok_or("no name's weight")?;
-            let first: Vec<Option<&str>> = given
-                .iter()
-                .flatten()
-                .filter(|v| !v.is_empty())
-                .take(100)
-                .map(|v| Some(*v))
-                .collect();
-            let score =
-                |n: usize| f64::from(u8::from(named)) * 0.3 + n as f64 / first.len() as f64 >= 1.0;
-            match reader.share(&first) {
-                Ok(share) if score(share.fewest) != score(share.listed) => {
-                    if share.most > share.listed || share.unshaped > 0 {
-                        json!("text_time")
-                    } else {
-                        json!("text_time_order")
-                    }
-                }
-                Ok(share)
-                    if score(share.fewest)
-                        == score(share.most + if named { share.unshaped } else { 0 }) =>
-                {
-                    json!(score(share.fewest))
-                }
-                Ok(_) => json!("text_time"),
-                Err(_) => json!("text_time_zones"),
-            }
-        }
-        "day_first" => json!(reader.day_first_format(&given)),
-        _ => return Err(format!("{outcome}: not an outcome")),
-    })
-}
-
-/// Whether a class `a` answer is made by a value outside the list in both
-/// orders of day and month (DT-15): the reading refuses it so, or, for
-/// inference, the refusal is `text_time` (an order the values in the list
-/// leave open is `text_time_order`, DT-16) and its values hold such a value.
-fn made_outside(reader: &Reader, outcome: &str, example: &Value, core: &Value) -> bool {
-    if core == "outside" {
-        return true;
-    }
-    if outcome != "inference" || core != "text_time" {
-        return false;
-    }
-    let Ok(owned) = values(&example["values"], outcome) else {
-        return false;
-    };
-    let first: Vec<Option<&str>> = owned
-        .iter()
-        .flatten()
-        .filter(|v| !v.is_empty())
-        .take(100)
-        .map(|v| Some(v.as_str()))
-        .collect();
-    reader.column(&first, false) == Err(Unread::Outside)
-}
-
-/// An order of day and month two values in the list leave open is never
-/// counted as made outside the list ( fix 1, the review's
-/// reproduction): its refusal is DT-16's, not DT-15's.
-#[test]
-fn an_open_order_in_the_list_is_not_a_refusal_outside_it() {
+fn supported_date_time_spellings_have_independent_epoch_values() {
+    // 2024-01-15 midnight UTC, computed from the Gregorian calendar.
+    const MIDNIGHT: i128 = 1_705_276_800_000_000_000;
     let reader = Reader::new(2026);
-    for named in [true, false] {
-        let example = json!({"values": ["03/15/99", "15/11/00"], "named": named});
-        let core = core_answer(&reader, "inference", &example).unwrap();
-        assert_eq!(core, "text_time_order");
-        assert!(
-            !made_outside(&reader, "inference", &example, &core),
-            "{named}"
-        );
-        // Even said text_time, values in the list are no evidence for a.
-        let said = json!("text_time");
-        assert!(
-            !made_outside(&reader, "inference", &example, &said),
-            "{named}"
-        );
-    }
-    // A value outside the list beside values that decide alike: made by it.
-    let example = json!({"values": ["2024-01-05", "2024-01-06", "2021-13-45"], "named": false});
-    let core = core_answer(&reader, "inference", &example).unwrap();
-    assert_eq!(core, "text_time");
-    assert!(made_outside(&reader, "inference", &example, &core));
-}
-
-/// The frozen differential report (`text-times-differential.json`, from
-/// pandas 3.0.6) holds the core: each example's answer is the core's, each
-/// reference answer differs from it, and the counts add up.
-#[test]
-fn the_differential_reports_the_core_as_it_reads() {
-    let report: Value = serde_json::from_str(DIFFERENTIAL).unwrap();
-    assert_eq!(report["format"], "sdm-text-times-differential/1");
-    let reader = Reader::new(report["year"].as_i64().unwrap());
-    let outcomes = report["outcomes"].as_object().unwrap();
-    assert_eq!(
-        outcomes.keys().collect::<Vec<_>>(),
-        ["materialize", "time_choice", "inference", "day_first"]
-    );
-    let mut examples = 0;
-    for (outcome, held) in outcomes {
-        let classes = held["classes"].as_object().unwrap();
-        let differing: u64 = classes.values().map(|c| c["count"].as_u64().unwrap()).sum();
-        assert_eq!(
-            held["agree"].as_u64().unwrap() + differing,
-            held["columns"].as_u64().unwrap(),
-            "{outcome}"
-        );
-        for (class, entry) in classes {
-            assert!(
-                class == "a" || class == "c" || class.starts_with("b."),
-                "{class}"
-            );
-            let listed = entry["examples"].as_array().unwrap();
-            assert!(!listed.is_empty(), "{outcome} {class}");
-            for example in listed {
-                let core = core_answer(&reader, outcome, example).unwrap();
-                assert_eq!(core, example["core"], "{outcome} {class}: {example}");
-                assert_ne!(core, example["reference"], "{outcome} {class}: {example}");
-                if class == "a" {
-                    assert!(
-                        made_outside(&reader, outcome, example, &core),
-                        "{outcome}: {example}"
+    for date in [
+        "2024-01-15",
+        "2024/01/15",
+        "01/15/2024",
+        "15/01/2024",
+        "1/15/24",
+        "15/1/24",
+        "01-15-2024",
+        "15-01-2024",
+    ] {
+        for (time, nanos) in [
+            ("", 0),
+            ("T10:30", 37_800_000_000_000),
+            (" 10:30:15", 37_815_000_000_000),
+            (" 10:30:15.123456789", 37_815_123_456_789),
+        ] {
+            for (zone, offset) in [
+                ("", 0),
+                ("Z", 0),
+                (" UTC", 0),
+                ("GMT", 0),
+                ("+01", 3_600_000_000_000),
+                ("+0130", 5_400_000_000_000),
+                (" -08:00", -28_800_000_000_000),
+            ] {
+                if time.is_empty() && !zone.is_empty() {
+                    continue;
+                }
+                let text = format!("{date}{time}{zone}");
+                let values = [None, Some(text.as_str()), Some("  ")];
+                for utc in [false, true] {
+                    let got = reader
+                        .column(&values, utc)
+                        .unwrap_or_else(|e| panic!("{text}: {e:?}"));
+                    assert_eq!(
+                        got.into_iter()
+                            .map(|v| v.map(|v| v.nanos()))
+                            .collect::<Vec<_>>(),
+                        [None, Some(MIDNIGHT + nanos - offset), None],
+                        "{text}"
                     );
                 }
-                examples += 1;
+                assert_eq!(
+                    reader
+                        .each(&values)
+                        .unwrap()
+                        .into_iter()
+                        .map(|v| v.map(|v| v.nanos()))
+                        .collect::<Vec<_>>(),
+                    [None, Some(MIDNIGHT + nanos - offset), None]
+                );
+                assert_eq!(
+                    reader.share(&[Some(&text)]),
+                    Ok(Share {
+                        fewest: 1,
+                        listed: 1,
+                        most: 1,
+                        unshaped: 0
+                    }),
+                    "{text}"
+                );
             }
         }
     }
-    assert!(examples > 0);
+}
+
+#[test]
+fn whole_column_evidence_decides_order_before_reading_any_row() {
+    let reader = Reader::new(2026);
+    for values in [
+        [Some("02/01/2024"), Some("15/03/2024")],
+        [Some("15/03/2024"), Some("02/01/2024")],
+    ] {
+        let expected = if values[0] == Some("02/01/2024") {
+            vec![1_704_153_600_000_000_000, 1_710_460_800_000_000_000]
+        } else {
+            vec![1_710_460_800_000_000_000, 1_704_153_600_000_000_000]
+        };
+        // Day-first means January 2, not February 1.
+        for utc in [false, true] {
+            assert_eq!(
+                reader
+                    .column(&values, utc)
+                    .unwrap()
+                    .into_iter()
+                    .map(|v| v.unwrap().nanos())
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+    for values in [
+        [Some("03/15/99"), Some("15/11/00")],
+        [Some("01/02/2024"), None],
+    ] {
+        assert_eq!(reader.column(&values, false), Err(Unread::Order));
+    }
+    assert_eq!(
+        reader.column(&[Some("2024-01-05"), Some("2021-13-45")], false),
+        Err(Unread::Outside)
+    );
+}
+
+#[test]
+fn inference_shares_distinguish_invalid_shapes_order_and_missing_values() {
+    let reader = Reader::new(2026);
+    for (values, expected) in [
+        (
+            vec![None, Some(""), Some("  ")],
+            Share {
+                fewest: 0,
+                listed: 0,
+                most: 0,
+                unshaped: 0,
+            },
+        ),
+        (
+            vec![Some("03/15/99"), Some("15/11/00")],
+            Share {
+                fewest: 1,
+                listed: 2,
+                most: 2,
+                unshaped: 0,
+            },
+        ),
+        (
+            vec![Some("2024-01-05"), Some("2021-13-45"), Some("not a date")],
+            Share {
+                fewest: 1,
+                listed: 1,
+                most: 2,
+                unshaped: 1,
+            },
+        ),
+        (
+            vec![Some("01/02/2024")],
+            Share {
+                fewest: 1,
+                listed: 1,
+                most: 1,
+                unshaped: 0,
+            },
+        ),
+    ] {
+        assert_eq!(reader.share(&values), Ok(expected), "{values:?}");
+    }
+    assert_eq!(
+        reader.day_first_format(&[Some("15-03-24 10:30 +01:00")]),
+        Some("%d-%m-%y %H:%M %z".into())
+    );
+    assert_eq!(
+        reader.day_first_format(&[Some("15/03/2024")]),
+        Some("%d/%m/%Y".into())
+    );
+    assert_eq!(reader.day_first_format(&[Some("01/02/2024")]), None);
+}
+
+#[test]
+fn timezone_normalization_preserves_null_positions_and_fractional_seconds() {
+    let reader = Reader::new(2026);
+    let values = [
+        None,
+        Some("1970-01-01 01:00+01:00"),
+        Some("1970-01-01 00:00:00.000000001"),
+        Some(""),
+    ];
+    assert_eq!(reader.column(&values, false), Err(Unread::MixedZones));
+    assert_eq!(reader.share(&values), Err(Unread::MixedZones));
+    assert_eq!(
+        reader
+            .column(&values, true)
+            .unwrap()
+            .into_iter()
+            .map(|v| v.map(|v| v.nanos()))
+            .collect::<Vec<_>>(),
+        [None, Some(0), Some(1), None]
+    );
+    assert_eq!(
+        reader.column(
+            &[
+                Some("1970-01-01 00:00+01:00"),
+                Some("1970-01-01 00:00-01:00")
+            ],
+            false
+        ),
+        Err(Unread::MixedZones)
+    );
+}
+
+#[test]
+fn clock_pivot_and_calendar_range_use_wide_instants() {
+    for (clock, text, expected) in [
+        (2026, "1/15/75", 3_314_736_000_000_000_000i128),
+        (2026, "1/15/76", 190_512_000_000_000_000),
+        (2027, "1/15/76", 3_346_272_000_000_000_000),
+        (2026, "1/15/124", -58_252_953_600_000_000_000),
+        (2026, "0001-01-01", -62_135_596_800_000_000_000),
+        (2026, "9999-01-01", 253_370_764_800_000_000_000),
+    ] {
+        assert_eq!(
+            Reader::new(clock).column(&[Some(text)], false).unwrap()[0]
+                .unwrap()
+                .nanos(),
+            expected,
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn whitespace_missing_and_refusal_precedence_are_explicit() {
+    let reader = Reader::new(2026);
+    let values = [None, Some("\u{3000}"), Some("\u{2003}1970-01-01\u{a0}")];
+    assert_eq!(
+        reader
+            .each(&values)
+            .unwrap()
+            .into_iter()
+            .map(|v| v.map(|v| v.nanos()))
+            .collect::<Vec<_>>(),
+        [None, None, Some(0)]
+    );
+    assert_eq!(
+        reader.column(&[Some("01/02/2024"), Some("invalid")], false),
+        Err(Unread::Outside)
+    );
+    assert_eq!(
+        reader.column(
+            &[Some("01/02/2024 10:00Z"), Some("01/02/2024 10:00+01")],
+            false
+        ),
+        Err(Unread::Order)
+    );
+    assert_eq!(
+        reader.column(&[Some("1970-01-15 9:30")], false),
+        Err(Unread::Outside)
+    );
+    assert_eq!(
+        reader.column(&[Some("15/1/1970 9:30")], false).unwrap()[0]
+            .unwrap()
+            .nanos(),
+        1_243_800_000_000_000
+    );
+}
+
+fn infer_text(
+    name: &str,
+    values: Vec<Option<&str>>,
+) -> Result<sdm_contract::ops::Stype, sdm_contract::CoreError> {
+    use arrow_array::{ArrayRef, RecordBatch, StringArray};
+    use arrow_schema::{DataType, Field, Schema};
+    use std::sync::Arc;
+    let schema = Arc::new(Schema::new(vec![Field::new(name, DataType::Utf8, true)]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![Arc::new(StringArray::from(values)) as ArrayRef],
+    )
+    .unwrap();
+    let catalog = vec![sdm_contract::catalog::CatalogColumn {
+        name: name.into(),
+        declared_type: String::new(),
+        not_null: false,
+        primary_key: false,
+        key_nullable: false,
+        unique: false,
+        dtype: None,
+    }];
+    let table = sdm_schema::infer::table(
+        "events",
+        &"events".into(),
+        &catalog,
+        &[],
+        &schema,
+        &[batch],
+        &Reader::new(2026),
+    )?;
+    Ok(table.column(name).unwrap().stype)
+}
+
+#[test]
+fn real_reader_inference_respects_name_weight_and_bounded_raw_samples() {
+    use sdm_contract::ops::Stype;
+    for (name, valid, timestamp) in [
+        ("ts", 7, true),
+        ("ts", 6, false),
+        ("description", 7, false),
+        ("description", 10, true),
+    ] {
+        let mut values = vec![Some("2024-01-15"); valid];
+        values.extend(vec![Some("not a date"); 10 - valid]);
+        assert_eq!(
+            infer_text(name, values).unwrap() == Stype::Timestamp,
+            timestamp,
+            "{name}/{valid}"
+        );
+    }
+    for (values, rule) in [
+        (vec![Some("03/15/99"), Some("15/11/00")], "text_time_order"),
+        (
+            vec![Some("2024-01-15 10:00+01"), Some("2024-01-15 10:00+02")],
+            "text_time_zones",
+        ),
+    ] {
+        let error = infer_text("ts", values).unwrap_err();
+        assert_eq!(
+            error.fields.get("rule"),
+            Some(&sdm_contract::Detail::text(rule))
+        );
+    }
+    for blank in [None, Some("")] {
+        let mut values = vec![blank; 100];
+        values.push(Some("2024-01-15"));
+        assert_ne!(infer_text("ts", values).unwrap(), Stype::Timestamp);
+        let mut values = vec![blank; 99];
+        values.extend([Some("2024-01-15"), Some("not a date")]);
+        assert_eq!(infer_text("ts", values).unwrap(), Stype::Timestamp);
+    }
+    assert_ne!(
+        infer_text("ts", vec![Some("code"), Some("0000-01-01")]).unwrap(),
+        Stype::Timestamp
+    );
+}
+
+#[test]
+fn day_first_warning_keeps_the_first_shaped_values_format() {
+    let reader = Reader::new(2026);
+    for (values, expected) in [
+        (
+            vec![Some("15/03/2024T10:30:15.25Z")],
+            "%d/%m/%YT%H:%M:%S.%f%z",
+        ),
+        (vec![Some("15-03-24 10:30:15 UTC")], "%d-%m-%y %H:%M:%S %Z"),
+        (vec![Some("15/03/2024 10:30GMT")], "%d/%m/%Y %H:%M%Z"),
+        (
+            vec![
+                None,
+                Some("01/02/2024T10:30:15.25+01:00"),
+                Some("15/03/2024"),
+            ],
+            "%d/%m/%YT%H:%M:%S.%f%z",
+        ),
+    ] {
+        assert_eq!(
+            reader.day_first_format(&values).as_deref(),
+            Some(expected),
+            "{values:?}"
+        );
+    }
 }

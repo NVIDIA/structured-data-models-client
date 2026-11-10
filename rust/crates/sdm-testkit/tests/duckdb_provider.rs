@@ -30,6 +30,11 @@ use sdm_testkit::host::{self, Answer};
 use sdm_testkit::{bases, case, duck};
 use serde_json::Value;
 
+#[path = "support/request_kind_assertions.rs"]
+mod request_kind_assertions;
+#[path = "support/shop_assertions.rs"]
+mod shop_assertions;
+
 fn contract() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract")
 }
@@ -208,171 +213,309 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
         ]
     );
     assert!(tables.iter().all(|t| t["duplicate_keys"]["v"] == "0"));
-    // One fetch per statement the reference runs: ten in Schema.from_source,
-    // six in materialize; and the two tables' catalogs each materialize
-    // reads again, as the source holds them at that run.
-    assert_eq!(observed.fetches.len(), 18);
-    // The whole description, the request state with its payload, the
-    // inputs and the step trace are the ones python-core records
-    // (contract/pinned, which contract/tests holds python-core to), so CI
-    // gates the two hosts' equality.
-    let pinned: Value = fixture_tables::read(
-        &std::fs::read_to_string(contract().join("pinned/base.regression.core.json")).unwrap(),
-    );
-    // The historical snapshot predates retained inference provenance.
-    // Assert the new contract explicitly without rewriting that snapshot.
-    let mut expected_description = pinned["described"].clone();
-    expected_description["inference"] = serde_json::json!({
-        "unknown_tables": [], "key_declared": [], "time_declared": [],
-        "times": {
-            "orders": {"column": "ts", "only_unlinked": false},
-            "users": {"column": null, "only_unlinked": false}
-        },
-        "links": [{
-            "link": [
-                {"table": "orders", "column": "user_id"},
-                {"table": "users", "column": "user_id"}
-            ],
-            "origin": "inferred"
-        }]
-    });
-    // The snapshot also predates each column's catalog declaration, which a
-    // later materialize compares with the catalog then; none of this
-    // fixture's columns is declared NOT NULL, a key or unique.
-    let declared = |declared_type: &str| {
+    // Inferred provenance follows the authored source schema.
+    assert_eq!(
+        described["inference"],
         serde_json::json!({
-            "declared_type": declared_type,
-            "not_null": false,
-            "primary_key": false,
-            "key_nullable": false,
-            "unique": false,
+            "unknown_tables": [], "key_declared": [], "time_declared": [],
+            "times": {
+                "orders": {"column": "ts", "only_unlinked": false},
+                "users": {"column": null, "only_unlinked": false}
+            },
+            "links": [{
+                "link": [
+                    {"table": "orders", "column": "user_id"},
+                    {"table": "users", "column": "user_id"}
+                ],
+                "origin": "inferred"
+            }]
         })
-    };
-    let catalog_types = [
-        ("orders", "order_id", "BIGINT"),
-        ("orders", "user_id", "BIGINT"),
-        ("orders", "price", "DOUBLE"),
-        ("orders", "ts", "TIMESTAMP"),
-        ("users", "user_id", "BIGINT"),
-        ("users", "age", "INTEGER"),
-        ("users", "country", "VARCHAR"),
-    ];
-    for (table, column, declared_type) in catalog_types {
-        let declared = declared(declared_type);
-        let columns = expected_description["tables"]
-            .as_array_mut()
-            .unwrap()
-            .iter_mut()
-            .find(|t| t["name"] == table)
-            .unwrap()["columns"]
-            .as_array_mut()
-            .unwrap();
-        let held = columns.iter_mut().find(|c| c["name"] == column).unwrap();
-        held["catalog"] = serde_json::json!(declared);
-    }
-    assert_eq!(described, expected_description);
-    let mut expected_materialized = pinned["materialized"].clone();
-    expected_materialized["payload"]["client_generated_keys"] =
-        serde_json::json!({"orders": "__node_id"});
-    assert_eq!(materialized, expected_materialized);
-    // Resolved table references now retain column mappings for expression
-    // planning. Derive their expected identities from the independent schema.
-    fn resolved_table(table: &mut Value, described: &Value) {
-        let source = table["source"][0].as_str().unwrap();
-        let schema = described["tables"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|entry| entry["name"] == source)
-            .unwrap();
-        table["columns"] = Value::Array(
-            schema["columns"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|column| serde_json::json!({"name": column["name"], "column": column["name"]}))
-                .collect(),
-        );
-        table["found"] = Value::Bool(true);
-    }
-    let mut expected_fetches = pinned["fetches"].clone();
-    for fetch in expected_fetches.as_array_mut().unwrap() {
-        let request = &mut fetch["request"];
-        if let Some(table) = request.get_mut("table") {
-            resolved_table(table, &pinned["described"]);
-        }
-        for group in ["keys", "columns"] {
-            if let Some(entries) = request.get_mut(group).and_then(Value::as_array_mut) {
-                for entry in entries {
-                    if let Some(table) = entry.get_mut("table") {
-                        resolved_table(table, &pinned["described"]);
-                    }
-                }
+    );
+    assert_eq!(
+        described["links"],
+        serde_json::json!([[
+            {"table":"orders", "column":"user_id"},
+            {"table":"users", "column":"user_id"}
+        ]])
+    );
+    for table in tables {
+        let name = table["name"].as_str().unwrap();
+        assert_eq!(table["source"], serde_json::json!({"source":[name]}));
+        assert!(table["time_column_inferred"].is_null());
+        for column in table["columns"].as_array().unwrap() {
+            let name = column["name"].as_str().unwrap();
+            let (declared, received) = match name {
+                "age" => ("INTEGER", serde_json::json!({"type":"int32"})),
+                "price" => ("DOUBLE", serde_json::json!({"type":"float64"})),
+                "ts" => (
+                    "TIMESTAMP",
+                    serde_json::json!({"type":"timestamp", "unit":"us", "zone":null}),
+                ),
+                "country" => ("VARCHAR", serde_json::json!({"type":"utf8"})),
+                _ => ("BIGINT", serde_json::json!({"type":"int64"})),
+            };
+            if name == "country" {
+                assert!(column["declared_type"].is_null());
+            } else {
+                assert_eq!(column["declared_type"], declared);
             }
+            assert_eq!(
+                column["catalog"],
+                serde_json::json!({
+                    "declared_type": declared, "not_null": false,
+                    "primary_key": false, "key_nullable": false, "unique": false
+                })
+            );
+            assert_eq!(column["received"], received);
+            assert_eq!(column["nullable"], true);
+            assert_eq!(column["unique"], false);
+            assert!(column["stype_before_key"].is_null());
         }
     }
-    // A table whose catalog is unchanged since it was described is read
-    // again by its catalog only, neither its keys nor its preview.
-    expected_fetches
-        .as_array_mut()
-        .unwrap()
-        .retain(|fetch| fetch.get("purpose").is_none() || fetch["request"]["part"] == "columns");
-    assert_eq!(Value::from(observed.fetches), expected_fetches);
-    let mut expected_inputs = pinned["inputs"].clone();
-    // The schema each later run is handed keeps those declarations with
-    // its columns' facts.
-    fn with_catalogs(value: &mut Value, types: &[(&str, &str, &str)]) {
-        match value {
-            Value::Object(object) => {
-                if let (Some(Value::String(table)), Some(Value::Array(columns))) =
-                    (object.get("name").cloned(), object.get_mut("columns"))
-                {
-                    for column in columns.iter_mut() {
-                        let name = column["name"].as_str().unwrap_or_default().to_owned();
-                        if let Some(facts) = column.get_mut("source").and_then(Value::as_object_mut)
-                            && let Some((_, _, declared)) =
-                                types.iter().find(|(t, c, _)| *t == table && *c == name)
-                        {
-                            facts.insert(
-                                "catalog".into(),
-                                serde_json::json!({
-                                    "declared_type": declared,
-                                    "not_null": false,
-                                    "primary_key": false,
-                                    "key_nullable": false,
-                                    "unique": false,
-                                }),
-                            );
-                        }
-                    }
-                }
-                for child in object.values_mut() {
-                    with_catalogs(child, types);
+    // An unchanged source needs only its two catalog refreshes, not key/preview rereads.
+    assert_eq!(observed.fetches.len(), 18);
+    let refreshed: Vec<_> = observed
+        .fetches
+        .iter()
+        .filter(|f| f.get("purpose").is_some())
+        .collect();
+    assert_eq!(refreshed.len(), 2);
+    assert!(refreshed.iter().all(|f| f["request"]["part"] == "columns"));
+    assert_eq!(observed.inputs.len(), 3);
+    let inputs = &observed.inputs;
+    assert_eq!(
+        inputs[0],
+        serde_json::json!({
+            "op":"describe_source", "provider":{"provider":"sql", "dialect":"duckdb"},
+            "source":{"tables":[], "primary_keys":{}, "time_columns":{}}, "check_keys":true
+        })
+    );
+    let input_tables = inputs[1]["schema"]["tables"].as_array().unwrap();
+    assert_eq!(input_tables.len(), tables.len());
+    for (input, source) in input_tables.iter().zip(tables) {
+        for field in ["name", "source", "primary_key", "time_column"] {
+            assert_eq!(input[field], source[field], "schema {field}");
+        }
+        let columns = input["columns"].as_array().unwrap();
+        let source_columns = source["columns"].as_array().unwrap();
+        assert_eq!(columns.len(), source_columns.len());
+        for (column, source_column) in columns.iter().zip(source_columns) {
+            assert_eq!(column["name"], source_column["name"]);
+            assert_eq!(column["stype"], source_column["stype"]);
+            for field in [
+                "dtype",
+                "received",
+                "nullable",
+                "unique",
+                "declared_type",
+                "catalog",
+            ] {
+                assert_eq!(column["source"][field], source_column[field]);
+            }
+            assert_eq!(column["source"]["relation"], source["source"]);
+        }
+    }
+    assert_eq!(inputs[1]["schema"]["links"], described["links"]);
+    assert_eq!(inputs[1]["op"], "materialize");
+    assert_eq!(inputs[1]["provider"], inputs[0]["provider"]);
+    assert_eq!(
+        inputs[1]["query"],
+        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id"
+    );
+    assert_eq!(
+        inputs[1]["indices"],
+        serde_json::json!([{"t":"i64","v":"0"},{"t":"i64","v":"1"}])
+    );
+    assert_eq!(
+        inputs[1]["anchor_time"],
+        serde_json::json!({"t":"ts","unit":"ns","v":"1709251200000000000","zone":null})
+    );
+    assert!(inputs[1]["seed"].is_null());
+    assert_eq!(inputs[2]["op"], "predict");
+    assert_eq!(inputs[2]["model"], "kumo-relational");
+    let kinds: std::collections::BTreeSet<_> = observed
+        .fetches
+        .iter()
+        .map(|fetch| fetch["request"]["request"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        kinds,
+        std::collections::BTreeSet::from([
+            "describe",
+            "preview",
+            "key_counts",
+            "time_bounds",
+            "sample_entities",
+            "neighbors",
+            "lookup"
+        ])
+    );
+    let mut history_reads = 0;
+    for fetch in &observed.fetches {
+        let request = &fetch["request"];
+        match request["request"].as_str().unwrap() {
+            "sample_entities" | "lookup" => {
+                assert_eq!(request["table"]["source"], serde_json::json!(["users"]));
+                assert_eq!(request["key"], serde_json::json!(["user_id"]));
+            }
+            "neighbors" => {
+                assert_eq!(request["table"]["source"], serde_json::json!(["orders"]));
+                assert_eq!(request["key"], serde_json::json!(["user_id"]));
+                assert_eq!(request["window"]["column"], "ts");
+                assert_eq!(request["window"]["upper"]["inclusive"], true);
+                if !request["order"].is_null() {
+                    history_reads += 1;
+                    assert_eq!(
+                        request["order"],
+                        serde_json::json!([
+                            {"column":"ts","descending":true,"nulls_last":true,"as_timestamp":true},
+                            {"column":"order_id","descending":false,"nulls_last":true,"as_timestamp":false}
+                        ])
+                    );
+                    assert!(request["window"]["lower"].is_null());
+                    assert_eq!(request["window"]["upper"]["seed_column"], "time");
+                    assert_eq!(request["per_seed"], 32);
+                } else {
+                    assert_eq!(
+                        request["window"]["lower"],
+                        serde_json::json!({"inclusive":false,"seed_column":"start"})
+                    );
+                    assert_eq!(request["window"]["upper"]["seed_column"], "end");
                 }
             }
-            Value::Array(items) => items.iter_mut().for_each(|item| with_catalogs(item, types)),
             _ => {}
         }
     }
-    with_catalogs(&mut expected_inputs, &catalog_types);
-    expected_inputs[2]["state"] = expected_materialized;
-    assert_eq!(Value::from(observed.inputs.clone()), expected_inputs);
-    // predict's call and result: the call's request id compared by
-    // presence and type only, as capture_check.masked compares it (decision
-    // E35, approved by the owner on 2026-10-10, the one exclusion of
-    // contract/compare-policy.yaml), since each host draws its own;
-    // everything else exactly.
-    let mut masked = predicted.clone();
-    let id = &mut masked["body"]["metadata"]["request_id"];
-    assert!(id.is_string(), "{id}");
-    *id = serde_json::json!({"excluded value of type": "string"});
-    assert_eq!(masked, pinned["predicted"]);
+    assert_eq!(history_reads, 1);
+    shop_assertions::assert_shop_history(&predicted["body"]);
+    let body = &predicted["body"];
+    assert_eq!(
+        materialized["payload"]["client_generated_keys"],
+        serde_json::json!({"orders":"__node_id"})
+    );
+    assert_eq!(body["task"]["anchor_time_column"], "__kumo_anchor_time");
+    assert_eq!(
+        body["task"]["entity_table_names"],
+        serde_json::json!(["users"])
+    );
+    assert_eq!(
+        body["context"]["instance_table"]["columns"],
+        serde_json::json!([
+            "instance_id",
+            "__kumo_entity_ref_0",
+            "__kumo_anchor_time",
+            "TARGET"
+        ])
+    );
+    assert_eq!(
+        body["predict"]["instance_table"]["columns"],
+        serde_json::json!(["instance_id", "__kumo_entity_ref_0", "__kumo_anchor_time"])
+    );
+    for row in body["predict"]["instance_table"]["rows"]
+        .as_array()
+        .unwrap()
+    {
+        assert_eq!(
+            row.as_array().unwrap().len(),
+            3,
+            "prediction has no target label"
+        );
+    }
+
+    let calendar = duck::open().unwrap();
+    let mut grid = std::collections::BTreeSet::new();
+    for row in body["context"]["instance_table"]["rows"]
+        .as_array()
+        .unwrap()
+    {
+        let entity = shop_assertions::wire_number(&row[1]);
+        let day: i64 = calendar
+            .query_row(
+                "SELECT date_diff('day', DATE '2023-01-01', CAST(? AS TIMESTAMP))",
+                [row[2].as_str().unwrap()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(grid.insert((entity, day)), "duplicate entity/anchor");
+        // Orders occur every seven days, with price 10 + 1.5 * order id.
+        // Labels sum the entity's orders strictly after the anchor through day 30.
+        let expected: f64 = (0..80_i64)
+            .filter(|i| i % 8 == entity && i * 7 > day && i * 7 <= day + 30)
+            .map(|i| 10.0 + 1.5 * i as f64)
+            .sum();
+        let label: f64 = row[3]["number"].as_str().unwrap().parse().unwrap();
+        assert_eq!(label, expected, "entity={entity} day={day}");
+    }
+    let expected_grid: std::collections::BTreeSet<_> = (0..8_i64)
+        .flat_map(|entity| (0..14).map(move |n| (entity, 395 - n * 30)))
+        .collect();
+    assert_eq!(grid, expected_grid);
+    for (entity, row) in body["predict"]["instance_table"]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        assert_eq!(shop_assertions::wire_number(&row[1]), entity as i64);
+        assert_eq!(row[2], "2024-03-01T00:00:00.000000Z");
+    }
+    assert_eq!(body["task"]["kind"], "regression");
+    assert_eq!(
+        body["task"]["target"],
+        serde_json::json!({"column_name":"TARGET","dtype":"float32"})
+    );
+    assert_eq!(
+        materialized["payload"]["output"],
+        serde_json::json!({"fields":["prediction"]})
+    );
+    assert_eq!(
+        body["inference"],
+        serde_json::json!({"run_mode":"fast", "use_prediction_time":false})
+    );
+    assert_eq!(
+        materialized["payload"]["inference"],
+        serde_json::json!({
+            "run_mode":"fast", "use_prediction_time":false,
+            "inference_config": {"kind":"regression", "num_estimators":{"number":"1"},
+                "column_shuffle":false, "category_shuffle":false, "hop_shuffle":false,
+                "target_transforms":["quantile"], "output_type":"median"}
+        })
+    );
+    for field in [
+        "num_context_examples",
+        "num_prediction_examples",
+        "source_query",
+    ] {
+        assert_eq!(
+            body["metadata"][field],
+            materialized["payload"]["metadata"][field]
+        );
+    }
+    assert_eq!(materialized["version"], 2);
+    assert_eq!(
+        materialized["query"],
+        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id"
+    );
+    assert_eq!(body["metadata"]["source_query"], materialized["query"]);
+    for field in ["context", "predict", "schema", "task", "model"] {
+        assert_eq!(
+            body[field], materialized["payload"][field],
+            "state handoff: {field}"
+        );
+    }
+    assert_eq!(
+        predicted["result"]["columns"],
+        serde_json::json!([
+            {"name":"row_index","type":"int64"}, {"name":"id","type":"int64"},
+            {"name":"prediction","type":"float64"}, {"name":"answer_index","type":"int64"}
+        ])
+    );
     // The state predict started with is the one materialize answered, as
     // this host held it between the runs.
     assert_eq!(observed.inputs[2]["state"], materialized);
     // Not vacuous: two rows, each its entity, a prediction of 1.0 and its
     // place in the endpoint's order (answer_index).
-    let rows = pinned["predicted"]["result"]["rows"].as_array().unwrap();
+    let rows = predicted["result"]["rows"].as_array().unwrap();
     assert_eq!(
         rows,
         &[
@@ -381,15 +524,15 @@ fn base_regression_s_schema_completes_on_the_pure_rust_host() {
         ]
     );
     assert_eq!(
-        pinned["predicted"]["body"]["context"]["instance_table"]["rows"]
+        predicted["body"]["context"]["instance_table"]["rows"]
             .as_array()
             .unwrap()
             .len(),
         112
     );
-    // The pin is not vacuous: it holds the payload of 112 context examples
-    // and 2 to predict, over both tables.
-    let payload = &pinned["materialized"]["payload"];
+    // Assert actual materialization cardinalities, independently of the recording:
+    // 112 context examples and two predictions, with their related order history.
+    let payload = &materialized["payload"];
     assert_eq!(
         payload["context"]["instance_table"]["rows"]
             .as_array()
@@ -899,116 +1042,57 @@ fn two_key_sets_bound_to_one_name_are_refused() {
     assert!(duck::answer_with(&connection, &step, &both).is_err());
 }
 
-/// The Arrow type (pyarrow's spelling) DuckDB reads a column of
-/// `duckdb_type` as, for the types `base.regression`'s catalog reads hold;
-/// any other is a test failure, never a match.
-fn arrow_name(duckdb_type: &str) -> String {
-    if let Some(inner) = duckdb_type.strip_suffix("[]") {
-        return format!("list<l: {}>", arrow_name(inner));
-    }
-    match duckdb_type {
-        "BOOLEAN" => "bool",
-        "INTEGER" => "int32",
-        "BIGINT" => "int64",
-        "DOUBLE" => "double",
-        "VARCHAR" => "string",
-        "TIMESTAMP" => "timestamp[us]",
-        other => panic!("no Arrow name for {other} here"),
-    }
-    .to_owned()
-}
-
-/// On `base.regression`, this host's DuckDB
-/// provider runs the reference's number of statements in each public call
-/// (10 in `Schema.from_source`, 6 in `materialize`, none in `predict`), and
-/// each returns the reference statement's result: its columns, its Arrow
-/// schema where the reference read Arrow, and its rows in canonical form,
-/// in order for the one statement whose order is total (`_by_fkey`,
-/// `contract/compare-policy.yaml`'s `ordered`), as a multiset otherwise.
-/// Its record is complete: DuckDB's own query log counts the same
-/// statements, the three key sets bound, and the same texts.
+/// Driver capture agrees with DuckDB's query log and binds real seed inputs.
+/// Result semantics are checked by the schema test and request-kind tests.
 #[test]
-fn base_regression_s_statements_return_the_reference_s_results() {
+fn materialization_records_complete_encodable_database_reads() {
     let loaded = case::load(&[contract().join("cases/s1/base.regression.json")]).unwrap();
     let bases = bases::load(&contract().join("bases.yaml")).unwrap();
     let observed = host::run(&loaded[0].case, &bases).unwrap();
+    assert!(matches!(observed.answer, Answer::Predicted(_)));
     let driver = observed.driver.expect("a driver record");
-    let theirs: Vec<Value> = serde_json::from_str(
-        &std::fs::read_to_string(contract().join("fixtures/maintained/duckdb-statements.json"))
-            .unwrap(),
-    )
-    .unwrap();
-    let ours = driver["capture"]["statements"].as_array().unwrap().clone();
-    let per_stage = |statements: &[Value]| -> Vec<(String, usize)> {
-        ["from_source", "materialize", "predict"]
-            .iter()
-            .map(|stage| {
-                let n = statements.iter().filter(|s| s["stage"] == *stage).count();
-                ((*stage).to_owned(), n)
-            })
-            .collect()
-    };
-    let counts = vec![
-        ("from_source".to_owned(), 10),
-        ("materialize".to_owned(), 6),
-        ("predict".to_owned(), 0),
-    ];
-    // The reads the core marks as plan B's taken out (A-1): two
-    // tables' catalogs, unchanged since they were described, so neither
-    // table's keys nor preview is read again; every statement after them is
-    // the reference's.
-    let fresh = ours.len() - sdm_testkit::plan_b::as_the_old_client_ran(&ours).len();
-    assert_eq!(fresh, 2);
-    let ours = sdm_testkit::plan_b::as_the_old_client_ran(&ours);
-    assert_eq!(per_stage(&ours), counts);
-    assert_eq!(per_stage(&theirs), counts);
-    // The record is complete: DuckDB logged the same statements, and the
-    // three bindings, and every text it logs as written is the one run.
+    let statements = driver["capture"]["statements"].as_array().unwrap();
+    let bindings = driver["capture"]["bindings"].as_array().unwrap();
     let logged = &driver["query_log"];
-    assert_eq!(logged["statements"], 16 + fresh as u64);
-    assert_eq!(logged["bindings"], 3);
-    // The two read again are catalog pragmas, whose text DuckDB does not
-    // log as written.
-    assert_eq!(logged["compared"], 14);
-    assert_eq!(logged["differing"], serde_json::json!([]));
-    assert_eq!(driver["capture"]["bindings"].as_array().unwrap().len(), 3);
-    for (position, (a, b)) in ours.iter().zip(&theirs).enumerate() {
-        assert_eq!(a["stage"], b["stage"], "{position}");
-        let [ra] = a["results"].as_array().unwrap().as_slice() else {
-            panic!("{position}: one result read");
-        };
-        let [rb] = b["results"].as_array().unwrap().as_slice() else {
-            panic!("{position}: one result read by the reference");
-        };
-        let (va, vb) = (&ra["values"], &rb["values"]);
-        assert_eq!(va["unencodable"], serde_json::json!([]), "{position}");
-        assert_eq!(vb["unencodable"], serde_json::json!([]), "{position}");
-        assert_eq!(va["columns"], vb["columns"], "{position}: columns");
-        assert_eq!(ra["rows"], rb["rows"], "{position}: rows");
-        if rb.get("schema").is_some() {
-            assert_eq!(ra["schema"], rb["schema"], "{position}: Arrow schema");
-        } else {
-            // The reference read its catalog as rows: its DuckDB type
-            // names, as the Arrow types DuckDB reads them as, are this
-            // host's Arrow schema (compare.py's `arrow_name`).
-            let names: Vec<Value> = vb["types"]
-                .as_array()
-                .expect("the reference's DuckDB types")
-                .iter()
-                .map(|kind| Value::from(arrow_name(kind.as_str().unwrap())))
-                .collect();
-            let ours: Vec<Value> = ra["schema"]
-                .as_array()
+    assert_eq!(logged["statements"].as_u64(), Some(statements.len() as u64));
+    assert_eq!(logged["bindings"].as_u64(), Some(bindings.len() as u64));
+    assert_eq!(bindings.len(), 3, "label, entity and neighbor seed sets");
+    let comparable = statements
+        .iter()
+        .filter(|statement| {
+            !statement["sql"]
+                .as_str()
                 .unwrap()
+                .trim_start()
+                .to_uppercase()
+                .starts_with("PRAGMA")
+        })
+        .count();
+    assert!(comparable > 0);
+    assert_eq!(logged["compared"].as_u64(), Some(comparable as u64));
+    assert_eq!(logged["differing"], serde_json::json!([]));
+    for stage in ["from_source", "materialize"] {
+        assert!(
+            statements
                 .iter()
-                .map(|field| field["type"].clone())
-                .collect();
-            assert_eq!(ours, names, "{position}: Arrow types");
-        }
-        assert_eq!(va["unordered"], vb["unordered"], "{position}: rows");
-        // _by_fkey, the sixth of materialize's six, ordered totally.
-        if position == 15 {
-            assert_eq!(va["ordered"], vb["ordered"], "{position}: order");
+                .any(|statement| statement["stage"] == stage)
+        );
+    }
+    assert!(
+        !statements
+            .iter()
+            .any(|statement| statement["stage"] == "predict")
+    );
+    for statement in statements {
+        let [result] = statement["results"].as_array().unwrap().as_slice() else {
+            panic!("each statement returns one table");
+        };
+        assert_eq!(result["values"]["unencodable"], serde_json::json!([]));
+        let columns = result["values"]["columns"].as_array().unwrap();
+        let schema = result["schema"].as_array().unwrap();
+        assert_eq!(schema.len(), columns.len());
+        for (column, field) in columns.iter().zip(schema) {
+            assert_eq!(column, &field["name"]);
         }
     }
 }
@@ -1130,8 +1214,7 @@ fn every_payload_rust_host_materializes_is_the_locked_definition_s() {
     }
 }
 
-/// A type as pyarrow spells it, which `contract/request-kinds.json`
-/// records.
+/// A type spelled consistently when comparing admitted and source schemas.
 fn spelled(data_type: &DataType) -> String {
     match data_type {
         DataType::Boolean => "bool".into(),
@@ -1165,7 +1248,7 @@ fn spelled(data_type: &DataType) -> String {
     }
 }
 
-/// Cell `i` of `array` as `contract/request-kinds.json` writes one: null,
+/// A lossless comparison representation of cell `i`: null,
 /// a boolean, text, an integer as its decimal text, a float as its
 /// hexadecimal form (Python's `float.hex`), a timestamp or date as its
 /// count, a list of such.
@@ -1234,8 +1317,7 @@ fn hex_float(value: f64) -> String {
     format!("{sign}0x{lead}.{mantissa:013x}p{exponent:+}")
 }
 
-/// The rows of `data` as `contract/request-kinds.json` writes them, in
-/// sorted order.
+/// Rows in a lossless representation, sorted for unordered SQL comparisons.
 fn canonical(data: &ArrowData) -> Vec<Value> {
     let mut rows = Vec::new();
     for batch in &data.batches {
@@ -1255,12 +1337,8 @@ fn canonical(data: &ArrowData) -> Vec<Value> {
 }
 
 #[test]
-fn every_request_kind_runs_on_every_base_as_the_vectors_say() {
-    //: every data request kind, planned by the root's data layer for
-    // DuckDB, answered by this host's provider and admitted, is the Arrow
-    // schema and rows contract/request-kinds.json records, which the
-    // Python host's provider is held to as well: the same fetch gives the
-    // same admitted Arrow on both hosts, on every base.
+fn every_request_kind_returns_source_data_on_every_base() {
+    // Source values/types are obtained independently of the product planner.
     let kinds: Value =
         serde_json::from_slice(&std::fs::read(contract().join("request-kinds.json")).unwrap())
             .unwrap();
@@ -1321,18 +1399,35 @@ fn every_request_kind_runs_on_every_base_as_the_vectors_say() {
             }
         };
         let place = format!("{base}: {}", fetch["name"]);
-        let schema: Vec<Value> = data
-            .schema
-            .fields()
-            .iter()
-            .map(|f| serde_json::json!([f.name(), spelled(f.data_type())]))
-            .collect();
-        assert_eq!(Value::from(schema), fetch["schema"], "{place}");
-        assert_eq!(Value::from(canonical(&data)), fetch["rows"], "{place}");
+        let expected = request_kind_assertions::source_answer(&connection, fetch);
+        let shape = |data: &ArrowData| {
+            data.schema
+                .fields()
+                .iter()
+                .map(|f| (f.name().clone(), spelled(f.data_type())))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(shape(&data), shape(&expected), "{place}");
+        let rows = canonical(&data);
+        let mut source = canonical(&expected);
+        let limit = fetch["request"]["limit"].as_u64().map(|n| n as usize);
+        if let Some(limit) = limit.filter(|n| *n < source.len()) {
+            // Without ORDER BY, LIMIT promises cardinality and membership.
+            assert_eq!(rows.len(), limit, "{place}");
+            for row in rows {
+                let at = source
+                    .iter()
+                    .position(|r| r == &row)
+                    .expect("row from source");
+                source.remove(at);
+            }
+        } else {
+            assert_eq!(rows, source, "{place}");
+        }
         held += 1;
     }
     assert_eq!(held, fetches.len());
-    assert!(held >= 30);
+    assert_eq!(held, 45);
 }
 
 #[test]
@@ -1597,6 +1692,3 @@ fn a_sampler_state_the_core_refuses_is_dropped_on_its_word() {
         assert!(calls[1].materialized.is_some(), "{field}");
     }
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

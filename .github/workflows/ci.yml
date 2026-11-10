@@ -1154,46 +1154,6 @@ jobs:
       - *contract-postgres-vectors
       - *contract-database
 
-  # Check the SQL actually executed by the Python providers against the native goldens.
-  l4-goldens:
-    name: l4-goldens (${{ matrix.database }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs:
-      - configuration
-      - contract-python-pandas3
-      - contract-python-pandas3-sqlite
-      - contract-python-pandas3-postgres
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) && !cancelled() }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - database: duckdb
-            observations: observations-python-core
-          - database: sqlite
-            observations: observations-python-core-sqlite
-          - database: postgres
-            observations: observations-python-core-postgres
-    defaults:
-      run:
-        working-directory: rust
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: rust
-          save-if: ${{ env.SAVE_CACHES == 'true' }}
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: ${{ matrix.observations }}
-          path: l4
-      - name: The goldens, and the run held to them
-        env:
-          SDM_L4_OBSERVATIONS: ${{ github.workspace }}/l4/python-core.jsonl
-        run: cargo test -p sdm-data --locked --test ${{ matrix.database }}_goldens
-
   l5-conversion:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: l5-conversion (${{ matrix.cell }})

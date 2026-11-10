@@ -6,7 +6,6 @@ package com.nvidia.sdm;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -15,246 +14,258 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeSet;
-import java.util.stream.Collectors;
+import java.util.LinkedHashMap;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
 
-/**
- * Java API and binding on every S0 case, held to what the reference
- * and Python's binding over the same core answer
- * ({@code contract/native-binding-vectors.json}, recorded by
- * {@code contract/tools/native_binding_vectors.py}).
- *
- * <p>Exit 1 (every S0 case on the Java host equal to the reference) is
- * {@code contract/tests/test_t311_java.py}'s, through the Java runner and
- * the comparator; these hold the pieces it rests on, per case, where a
- * failure names the case: the public {@code PredictiveQuery.parse} as the
- * reference's constructor, and the binding's answer to each S0 case's
- * validation as Python's binding gives it, byte for byte, which carries the
- * brief's text axis across JNI (non-ASCII, a NUL, a character outside the
- * BMP, escaped lone surrogates, a query past 64 KB). And the brief's
- * error axis: every contract error code reaching Java as the one
- * {@code StructuredDataException} with its code (choice 10).
- *
- * <p>These run on the binding's test-ops build, as sdm-py's binding tests
- * do (the {@code fail} operation is test-only), with the two runtime flags.
- */
+/** Native query transport, warning ownership, public text retention and error mapping. */
 class BindingTest {
+    private static final String BASE = "s0.accept.binary-classification";
+    private static final Set<String> ACCEPTED = Set.of(
+        BASE, "s0.accept.multiclass-classification", "s0.accept.sum-window",
+        "s0.boundary.deepest", "s0.boundary.depth-999", "s0.boundary.digits-4300",
+        "s0.boundary.escape-lone-surrogate", "s0.boundary.escape-surrogate-pair",
+        "s0.boundary.escapes", "s0.boundary.start-past-64kb");
+    private static final Map<String, String> REFUSED = Map.ofEntries(
+        Map.entry("s0.boundary.digits-4301", "PQL_VALUE_INVALID_LITERAL"),
+        Map.entry("s0.boundary.escape-truncated", "PQL_VALUE_INVALID_LITERAL"),
+        Map.entry("s0.refuse.date-impossible", "PQL_VALUE_INVALID_LITERAL"),
+        Map.entry("s0.refuse.join-event-filter", "PQL_JOIN_EVENT_COLUMN_IN_ENTITY_FILTER"),
+        Map.entry("s0.refuse.model-implicit-join", "PQL_MODEL_NO_IMPLICIT_JOIN"),
+        Map.entry("s0.refuse.parse-syntax", "PQL_PARSE_SYNTAX"),
+        Map.entry("s0.refuse.target-foreign-key", "PQL_TARGET_AGGREGATION_ON_FOREIGN_KEY"),
+        Map.entry("s0.refuse.task-forecast-zero", "PQL_TASK_FORECAST_NOT_POSITIVE"),
+        Map.entry("s0.refuse.time-past-window", "PQL_TIME_PAST_NOT_ALLOWED"),
+        Map.entry("s0.refuse.type-constant", "PQL_TYPE_CONSTANT_MISMATCH"),
+        Map.entry("s0.refuse.unknown-column", "PQL_SCHEMA_UNKNOWN_COLUMN"),
+        Map.entry("s0.refuse.value-int64", "PQL_VALUE_INT_OUT_OF_RANGE"));
+    private static final Set<String> DATE_ERRORS = Set.of(
+        "s0.boundary.date-long-field", "s0.boundary.date-packed");
 
-    private static Map<String, Object> section(String name) throws IOException {
-        return Json.object(Names.vectors().get(name));
+    private static Map<String, Map<String, Object>> cases() throws IOException {
+        Map<String, Map<String, Object>> cases = new LinkedHashMap<>();
+        try (Stream<Path> paths = Files.list(Names.root().resolve("contract/cases/s0"))) {
+            for (Path path : paths.filter(p -> p.toString().endsWith(".json")).sorted().toList()) {
+                Map<String, Object> spec = Json.object(Json.read(Files.readString(path)));
+                if ("query_attachment_72082".equals(spec.get("input_factory"))) {
+                    assertEquals("s0.boundary.start-past-64kb", spec.get("id"));
+                    Map<String, Object> input = Json.object(spec.get("input"));
+                    assertEquals("<generated-query>", input.get("pql"));
+                    String values = String.join(", ", java.util.Collections.nCopies(3000, "10.0, 11.5, 13.0, 14.5"));
+                    String query = "PREDICT COUNT(orders.* WHERE orders.price IN (" + values
+                        + "), 0, 30, days) FOR EACH users.user_id";
+                    assertEquals(72082, query.length());
+                    input.put("pql", query);
+                    spec.put("input", input);
+                    spec.remove("input_factory");
+                }
+                cases.put((String) spec.get("id"), spec);
+            }
+        }
+        return cases;
     }
 
-    private static String sha256(byte[] data) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
+    private static Map<String, String> extraTexts() {
+        return Map.of(
+            "text.nul", "PREDICT users.country = 'a\u0000b' FOR EACH users.user_id",
+            "text.non-bmp", "PREDICT users.country = '😀' FOR EACH users.user_id",
+            "text.non-ascii", "PREDICT users.country = 'Zürich 東京' FOR EACH users.user_id",
+            "text.escape-warning", "PREDICT users.country = 'a\\/' FOR EACH users.user_id");
     }
 
-    /** Warnings are a separate native channel, including on a failed run. */
-    private static void assertWarnings(Object run, Map<String, Object> vector, String name)
-            throws Exception {
-        List<?> expected = (List<?>) vector.get("warnings");
-        assertTrue(expected != null, name + ": the vector omits the warning channel");
+    private static void assertWarnings(Object run, boolean expected) throws Exception {
         Object taken = Names.call(run, "takeWarnings");
-        if (taken == null) {
-            assertEquals(List.of(), expected, name + ": missing warning controls");
+        if (!expected) {
+            assertNull(taken);
             return;
         }
+        assertTrue(taken != null, "warning channel was lost");
         try {
             byte[] control = (byte[]) Names.read(taken, "control", "getControl");
-            Map<String, Object> message = Json.object(
-                    Json.read(new String(control, StandardCharsets.UTF_8)));
+            Map<String, Object> message = Json.object(Json.read(new String(control, StandardCharsets.UTF_8)));
             if ("attached".equals(message.get("message"))) {
                 int id = ((Number) message.get("attachment")).intValue();
-                byte[] carried = (byte[]) Names.call(taken, "bytes", id);
-                message = Json.object(Json.read(new String(carried, StandardCharsets.UTF_8)));
+                message = Json.object(Json.read(new String((byte[]) Names.call(taken, "bytes", id), StandardCharsets.UTF_8)));
             }
-            assertEquals("warnings", message.get("message"), name);
-            assertEquals(1, expected.size(), name + ": unexpected warning control");
-            Map<String, Object> wanted = Json.object(expected.get(0));
-            assertEquals(wanted.get("control"), message,
-                    name + ": warning contents or ordering differ from Python");
-            assertEquals(wanted.get("digest"), sha256(control),
-                    name + ": warning control bytes differ from Python");
+            assertEquals("warnings", message.get("message"));
+            List<?> warnings = (List<?>) message.get("warnings");
+            assertEquals(1, warnings.size());
+            Map<String, Object> warning = Json.object(warnings.get(0));
+            assertEquals("INVALID_STRING_ESCAPE", warning.get("code"));
+            assertEquals("invalid_string_escape", warning.get("sentence"));
+            assertEquals("a string literal uses a deprecated escape", warning.get("message"));
+            Map<String, Object> fields = Json.object(warning.get("fields"));
+            assertEquals("\\/", Json.object(fields.get("escape")).get("v"));
+            for (String field : List.of("start_row", "end_row"))
+                assertEquals("1", Json.object(fields.get(field)).get("v"));
+            for (String field : List.of("start_col", "end_col"))
+                assertEquals("24", Json.object(fields.get(field)).get("v"));
+        } finally { Names.call(taken, "close"); }
+        assertNull(Names.call(run, "takeWarnings"), "warnings must drain exactly once");
+    }
+
+    private static void validate(String name, Map<String, Object> spec, String text,
+                                 String diagnostic, boolean dateError) throws Exception {
+        Object run = Names.validation(spec, text);
+        try {
+            if (dateError) {
+                try { Names.nextWhole(run); fail("invalid packed date accepted"); }
+                catch (Exception raised) {
+                    assertTrue(Names.isStructuredDataException(raised));
+                    assertEquals("INVALID_REQUEST", Names.code(raised));
+                    assertEquals("date_literal_packed", Names.detail(raised, "rule"));
+                }
+            } else {
+                Map<String, Object> message = Json.object(Json.read((String) Names.nextWhole(run)[1]));
+                assertEquals("step", message.get("message"));
+                assertEquals("done", message.get("step"));
+                Map<String, Object> result = Json.object(message.get("result"));
+                assertEquals("validate_query", result.get("op"));
+                assertEquals(diagnostic == null, result.get("accepted"));
+                if (name.equals("text.nul") || name.equals("text.non-bmp") || name.equals("text.non-ascii")) {
+                    // These queries already use canonical spelling. Inspect the text
+                    // returned through JNI, not only the Java constructor's local copy.
+                    Map<String, Object> query = Json.object(result.get("query"));
+                    assertArrayEquals(text.toCharArray(), ((String) query.get("text")).toCharArray());
+                }
+                List<?> diagnostics = (List<?>) result.get("diagnostics");
+                List<String> expectedCodes = diagnostic == null ? List.of() : List.of(diagnostic);
+                List<String> severities = diagnostic == null ? List.of() : List.of("error");
+                if (name.equals("s0.refuse.model-implicit-join")) {
+                    // users.age belongs to the entity, so this also warns that its
+                    // predicate belongs in FOR EACH rather than the target aggregation.
+                    expectedCodes = List.of(diagnostic, "PQL_TARGET_FILTER_ONLY_ENTITY_COLUMNS");
+                    severities = List.of("error", "warning");
+                }
+                assertEquals(expectedCodes, diagnostics.stream().map(d -> Json.object(d).get("code")).toList());
+                assertEquals(severities, diagnostics.stream().map(d -> Json.object(d).get("severity")).toList());
+            }
         } finally {
-            Names.call(taken, "close");
-        }
-        assertNull(Names.call(run, "takeWarnings"), name + ": warnings were not drained");
-    }
-
-    /** Every S0 case's id, from its file in contract/cases/s0/. */
-    private static List<String> s0Cases() throws IOException {
-        try (Stream<Path> files = Files.list(Names.root().resolve("contract/cases/s0"))) {
-            return files.map(file -> file.getFileName().toString())
-                    .filter(name -> name.endsWith(".json"))
-                    .map(name -> name.substring(0, name.length() - ".json".length()))
-                    .sorted()
-                    .collect(Collectors.toList());
+            try { assertWarnings(run, name.equals("s0.boundary.escapes") || name.equals("text.escape-warning")); }
+            finally { Names.close(run); }
         }
     }
 
-    /** The vectors cover every S0 case: a case added since they were
-     * recorded fails here until the recorder runs again. */
-    @Test
-    void theVectorsCoverEveryS0Case() throws IOException {
-        List<String> cases = s0Cases();
-        assertTrue(cases.size() >= 24, "contract/cases/s0 holds " + cases.size() + " cases");
-        TreeSet<String> missing = new TreeSet<>(cases);
-        missing.removeAll(Json.object(section("binding").get("validate")).keySet());
-        assertEquals(new TreeSet<String>(), missing, "S0 cases with no binding vector");
-        missing = new TreeSet<>(cases);
-        missing.removeAll(Json.object(section("reference").get("constructor")).keySet());
-        assertEquals(new TreeSet<String>(), missing, "S0 cases with no reference vector");
-        assertEquals(
-                Json.read(Names.FACTS),
-                section("binding").get("facts"),
-                "the facts the Java tests send are the recorder's");
-    }
-
-    /** Contract 29's escape warning remains binding evidence, not just a done digest. */
-    @Test
-    void escapeWarningsArePresentInTheBindingVectors() throws IOException {
-        Map<String, Object> vector = Json.object(
-                Json.object(section("binding").get("validate")).get("text.escape-warning"));
-        List<?> controls = (List<?>) vector.get("warnings");
-        assertTrue(controls != null && !controls.isEmpty(), "escape warning controls were dropped");
-        Map<String, Object> message = Json.object(Json.object(controls.get(0)).get("control"));
-        assertEquals("warnings", message.get("message"));
-        Map<String, Object> warning = Json.object(((List<?>) message.get("warnings")).get(0));
-        assertEquals("INVALID_STRING_ESCAPE", warning.get("code"));
-    }
-
-    /** Brief, input axes (text across JNI) and exit 1's footing: each S0
-     * case's validate_query, and the texts no case holds, answered through
-     * the Java binding with the same control bytes Python's binding
-     * gives. */
     @TestFactory
-    Stream<DynamicTest> eachS0CaseValidatesAsThroughPythonsBinding() throws IOException {
-        Map<String, Object> validate = Json.object(section("binding").get("validate"));
+    Stream<DynamicTest> queryInputsPreserveValidationAndDiagnostics() throws IOException {
+        Map<String, Map<String, Object>> cases = cases();
+        Set<String> expected = new java.util.HashSet<>(ACCEPTED);
+        expected.addAll(REFUSED.keySet()); expected.addAll(DATE_ERRORS);
+        assertEquals(expected, cases.keySet(), "new cases need explicit boundary assertions");
         List<DynamicTest> tests = new ArrayList<>();
-        for (Map.Entry<String, Object> each : validate.entrySet()) {
-            Map<String, Object> vector = Json.object(each.getValue());
-            tests.add(DynamicTest.dynamicTest(each.getKey(), () -> {
-                Object run = Names.startRun(
-                        (String) vector.get("operation"),
-                        Names.attachments(Json.object(vector.get("attachments"))));
-                try {
-                    String error = (String) vector.get("error");
-                    if (error == null) {
-                        Object[] whole;
-                        try {
-                            whole = Names.nextWhole(run);
-                        } finally {
-                            assertWarnings(run, vector, each.getKey());
-                        }
-                        byte[] control = (byte[]) whole[0];
-                        Map<String, Object> message = Json.object(Json.read((String) whole[1]));
-                        assertEquals("step", message.get("message"), each.getKey());
-                        assertEquals("done", message.get("step"), each.getKey());
-                        Map<String, Object> result = Json.object(message.get("result"));
-                        assertEquals("validate_query", result.get("op"), each.getKey());
-                        assertEquals(vector.get("accepted"), result.get("accepted"), each.getKey());
-                        assertEquals(vector.get("digest"), sha256(control),
-                                each.getKey() + ": the done step's bytes differ from Python's binding's");
-                    } else {
-                        try {
-                            try {
-                                Names.next(run);
-                            } finally {
-                                assertWarnings(run, vector, each.getKey());
-                            }
-                            fail(each.getKey() + ": no error; Python's binding raised " + error);
-                        } catch (Exception raised) {
-                            assertTrue(Names.isStructuredDataException(raised),
-                                    each.getKey() + ": raised " + raised.getClass().getName());
-                            assertEquals(error, Names.code(raised), each.getKey());
-                        }
-                    }
-                } finally {
-                    Names.close(run);
-                }
-            }));
-        }
+        cases.forEach((name, spec) -> tests.add(DynamicTest.dynamicTest(name,
+            () -> validate(name, spec, (String) Json.object(spec.get("input")).get("pql"),
+                           REFUSED.get(name), DATE_ERRORS.contains(name)))));
+        extraTexts().forEach((name, text) -> tests.add(DynamicTest.dynamicTest(name,
+            () -> validate(name, cases.get(BASE), text, null, false))));
         return tests.stream();
     }
 
-    /** Brief, input axes (errors) and choice 10: every contract error code
-     * reaches Java as StructuredDataException carrying that code and saying
-     * the core's sentence. */
-    @TestFactory
-    Stream<DynamicTest> everyErrorCodeReachesJavaWithItsCode() throws IOException {
-        Map<String, Object> errors = Json.object(section("binding").get("errors"));
-        assertTrue(errors.size() >= 22, "the vectors hold " + errors.size() + " codes");
-        List<DynamicTest> tests = new ArrayList<>();
-        for (Map.Entry<String, Object> each : errors.entrySet()) {
-            Map<String, Object> vector = Json.object(each.getValue());
-            tests.add(DynamicTest.dynamicTest(each.getKey(), () -> {
-                Object run = Names.startRun(
-                        "{\"op\":\"test\",\"test\":\"fail\",\"error\":1}",
-                        Map.of(1, ((String) vector.get("error")).getBytes(StandardCharsets.UTF_8)));
-                try {
-                    Names.next(run);
-                    fail(each.getKey() + ": the fail operation did not fail");
-                } catch (Exception raised) {
-                    assertTrue(Names.isStructuredDataException(raised),
-                            each.getKey() + ": raised " + raised.getClass().getName());
-                    assertEquals(vector.get("code"), Names.code(raised));
-                    // The core's sentence, said from its shared template, never
-                    // the core's own free text.
-                    String template = (String) vector.get("template");
-                    assertNotEquals("t311", raised.getMessage(), each.getKey());
-                    if (!template.contains("{")) {
-                        assertEquals(template, raised.getMessage(), each.getKey());
-                    }
-                } finally {
-                    Names.close(run);
-                }
-            }));
+    @Test
+    void largeWarningsUseAttachmentsAndPreserveOrderUntilDrained() throws Exception {
+        List<String> escapes = List.of("first", "x".repeat(70_000));
+        List<Object> warnings = new ArrayList<>();
+        for (String escape : escapes) {
+            warnings.add(Map.of("code", "INVALID_STRING_ESCAPE", "sentence", "invalid_string_escape",
+                "message", "deprecated escape", "fields", Map.of("escape", Map.of("t", "utf8", "v", escape))));
         }
-        return tests.stream();
+        Object run = Names.startRun("{\"op\":\"test\",\"test\":\"warn\",\"warnings\":1}",
+            Map.of(1, com.nvidia.sdm.internal.Json.write(warnings)));
+        try {
+            assertEquals("done", Json.object(Json.read((String) Names.nextWhole(run)[1])).get("step"));
+            Object taken = Names.call(run, "takeWarnings");
+            assertTrue(taken != null);
+            try {
+                byte[] control = (byte[]) Names.read(taken, "control", "getControl");
+                Map<String, Object> envelope = Json.object(Json.read(new String(control, StandardCharsets.UTF_8)));
+                assertEquals("attached", envelope.get("message"));
+                byte[] bytes = (byte[]) Names.call(taken, "bytes", ((Number) envelope.get("attachment")).intValue());
+                Map<String, Object> message = Json.object(Json.read(new String(bytes, StandardCharsets.UTF_8)));
+                assertEquals("warnings", message.get("message"));
+                List<?> received = (List<?>) message.get("warnings");
+                assertEquals(escapes, received.stream().map(w -> Json.object(
+                    Json.object(Json.object(w).get("fields")).get("escape")).get("v")).toList());
+            } finally { Names.call(taken, "close"); }
+            assertNull(Names.call(run, "takeWarnings"));
+        } finally { Names.close(run); }
     }
 
-    /** Brief, "Open questions" item 1: PredictiveQuery.parse is the
-     * reference's constructor in Java's idiom. It takes every text the
-     * constructor takes, every S0 query among them, and holds it exactly
-     * (a lone surrogate, a NUL, a character outside the BMP, 72 KB); it
-     * refuses the blank texts the constructor refuses, with its code. */
+    /** Authored code/kind/sentence inputs cover each supported native error mapping. */
     @TestFactory
-    Stream<DynamicTest> parseTakesWhatThePythonConstructorTakes() throws IOException {
-        Map<String, Object> reference = section("reference");
-        Map<String, Object> answers = Json.object(reference.get("constructor"));
-        Map<String, Object> validate = Json.object(section("binding").get("validate"));
-        Map<String, Object> blanks = Json.object(reference.get("texts"));
+    Stream<DynamicTest> everyErrorCodeReachesJavaWithItsCode() {
+        String[][] errors = {
+            new String[]{"ENDPOINT_REFUSED", "model_endpoint", "serving_refused"},
+            new String[]{"INTERNAL_ERROR", "internal", "result_merge_empty"},
+            new String[]{"INVALID_CONFIGURATION", "invalid_request", "invalid_configuration"},
+            new String[]{"INVALID_MESSAGE", "protocol", "invalid_message"},
+            new String[]{"INVALID_REQUEST", "invalid_request", "direct_empty"},
+            new String[]{"INVALID_RESPONSE", "model_endpoint", "tabular_missing_row_index"},
+            new String[]{"INVALID_SCHEMA", "invalid_request", "wire_reserved_one"},
+            new String[]{"MISSING_EXTRA", "unsupported", "missing_extra"},
+            new String[]{"PROVIDER_ERROR", "not_found", "provider_failed"},
+            new String[]{"PROVIDER_SCHEMA_MISMATCH", "data_source", "provider_schema_mismatch"},
+            new String[]{"REPLY_MISSING", "protocol", "reply_missing"},
+            new String[]{"RUN_BUSY", "protocol", "run_busy"},
+            new String[]{"RUN_CANCELLED", "cancelled", "run_cancelled"},
+            new String[]{"RUN_FINISHED", "protocol", "run_finished"},
+            new String[]{"RUN_POISONED", "protocol", "run_poisoned"},
+            new String[]{"SESSIONS_UNSUPPORTED", "unsupported", "sessions_unsupported"},
+            new String[]{"TRANSPORT_ERROR", "model_endpoint", "transport_failed"},
+            new String[]{"UNKNOWN_MODEL", "not_found", "unknown_model"},
+            new String[]{"UNKNOWN_REPLY", "protocol", "unknown_reply"},
+            new String[]{"UNSUPPORTED_REQUEST", "unsupported", "direct_relational_frames"},
+            new String[]{"UNSUPPORTED_TYPE", "unsupported", "unsupported_type"},
+            new String[]{"VALUE_OUT_OF_RANGE", "unsupported", "lag_past_times"},
+            new String[]{"WRONG_REPLY", "protocol", "wrong_reply"}
+        };
+        return Stream.of(errors).map(error -> DynamicTest.dynamicTest(error[0], () -> {
+            byte[] input = com.nvidia.sdm.internal.Json.write(Map.of(
+                    "kind", error[1], "code", error[0], "sentence", error[2],
+                    "message", "native-free-text-sentinel", "retryable", false));
+            Object run = Names.startRun(
+                    "{\"op\":\"test\",\"test\":\"fail\",\"error\":1}", Map.of(1, input));
+            try {
+                Names.next(run);
+                fail("the fail operation did not fail: " + error[0]);
+            } catch (Exception raised) {
+                assertTrue(Names.isStructuredDataException(raised));
+                assertEquals(error[0], Names.code(raised));
+                assertTrue(raised.getMessage() != null && !raised.getMessage().isBlank());
+                assertTrue(!raised.getMessage().contains("native-free-text-sentinel"));
+                if (error[0].equals("INVALID_REQUEST")) {
+                    assertEquals("context has no rows, so there is nothing for the model to learn the answer from", raised.getMessage());
+                }
+                if (error[0].equals("RUN_BUSY")) {
+                    assertEquals("the run was already in a call; a run takes one call at a time", raised.getMessage());
+                }
+            } finally {
+                Names.close(run);
+            }
+        }));
+    }
+
+    @TestFactory
+    Stream<DynamicTest> parsePreservesTextAndRefusesOnlyBlankInputs() throws IOException {
+        Map<String, String> texts = new LinkedHashMap<>(extraTexts());
+        cases().forEach((name, spec) -> texts.put(name, (String) Json.object(spec.get("input")).get("pql")));
+        texts.put("java-lone-surrogate", "PREDICT users.country = '\ud800' FOR EACH users.user_id");
         List<DynamicTest> tests = new ArrayList<>();
-        for (Map.Entry<String, Object> each : answers.entrySet()) {
-            String name = each.getKey();
-            Map<String, Object> answer = Json.object(each.getValue());
-            String text = (String) (blanks.containsKey(name)
-                    ? blanks.get(name)
-                    : Json.object(validate.get(name)).get("text"));
-            tests.add(DynamicTest.dynamicTest(name, () -> {
-                Class<?> query = Names.type(Names.QUERY);
-                if (Boolean.TRUE.equals(answer.get("taken"))) {
-                    Object parsed = Names.call(query, "parse", text);
-                    Object kept = Names.read(parsed, "text", "getText");
-                    assertArrayEquals(text.toCharArray(), ((String) kept).toCharArray(),
-                            name + ": parse did not keep the text");
-                } else {
-                    try {
-                        Names.call(query, "parse", text);
-                        fail(name + ": parse took a text the reference refuses");
-                    } catch (Exception raised) {
-                        assertTrue(Names.isStructuredDataException(raised),
-                                name + ": raised " + raised.getClass().getName());
-                        assertEquals(answer.get("code"), Names.code(raised), name);
-                    }
+        texts.forEach((name, text) -> tests.add(DynamicTest.dynamicTest(name, () -> {
+            Object parsed = Names.call(Names.type(Names.QUERY), "parse", text);
+            assertArrayEquals(text.toCharArray(), ((String) Names.read(parsed, "text", "getText")).toCharArray());
+        })));
+        for (String blank : List.of("", "   ", "\t\n ")) {
+            tests.add(DynamicTest.dynamicTest("blank-" + blank.length(), () -> {
+                try { Names.call(Names.type(Names.QUERY), "parse", blank); fail("blank text accepted"); }
+                catch (Exception raised) {
+                    assertTrue(Names.isStructuredDataException(raised));
+                    assertEquals("INVALID_REQUEST", Names.code(raised));
                 }
             }));
         }

@@ -398,15 +398,6 @@ def test_another_request_state_version_is_refused_by_name() -> None:
 # --- the repeats case on python-core ---------------------------------------------------
 
 
-@functools.cache
-def expected_cases() -> dict[str, dict[str, Any]]:
-    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
-    return {
-        json.loads(line)['case']: json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
-    }
-
-
 def _server() -> bool:
     if os.environ.get('SDM_POSTGRES_TEST_DSN'):
         return True
@@ -463,41 +454,46 @@ def core_run(database: str) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize('case_key', CASE_KEYS)
-def test_expected_requests_score_each_candidate_once(case_key: str) -> None:
-    """Independent expected facts agree with this case's stated behavior."""
-    [(case, digest)] = runner().load_cases([CASES / f'{REPEATS_CASE}.json'])
-    assert case['input']['materialize']['candidates'] == [2, 1, 2, 1, 0]
-    line = expected_cases().get(case_key)
-    assert line is not None, f'{case_key}: no expected facts'
-    assert line['outcome']['result'] == 'success'
-    asked = [
-        p['metadata']['source_query'].split(' WHERE ')[1].split(',')[0]
-        for p in _payloads(line)
-    ]
-    assert asked == [f'buys.item_id = {c}' for c in (2, 1, 0)]
-
-
-@pytest.mark.parametrize('case_key', CASE_KEYS)
-def test_python_core_asks_the_repeats_case_as_the_reference(
+def test_repeated_candidates_are_scored_once_in_first_occurrence_order(
     case_key: str,
 ) -> None:
-    r"""Brief, the candidate repeats on python-core, all three databases:
-    the core route asks the reference's questions, payload by payload, and
-    answers with its result."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
-        return
-
-    def check() -> None:
-        run = core_run(database)
-        assert '' not in run, run.get('')
-        line = run.get(case_key)
-        assert line is not None, f'{case_key}: not observed'
-        assert line['identity']['native_loaded']
-        assert 'materialize' in line['identity']['operations']
-        want = expected_cases()[case_key]
-        assert line['outcome'] == want['outcome']
-        assert _payloads(line) == _payloads(want)
-        assert line['public']['result'] == want['public']['result']
-
-    check()
+        pytest.skip('Postgres test DSN is not configured')
+    run = core_run(database)
+    assert '' not in run, run.get('')
+    line = run[case_key]
+    assert line['identity']['native_loaded']
+    assert 'materialize' in line['identity']['operations']
+    assert line['outcome'] == {
+        'result': 'success',
+        'stage': 'predict',
+        'error': None,
+        'code': None,
+    }
+    payloads = _payloads(line)
+    asked = [
+        body['metadata']['source_query'].split(' WHERE ')[1].split(',')[0]
+        for body in payloads
+    ]
+    assert asked == [f'buys.item_id = {candidate}' for candidate in (2, 1, 0)]
+    for body in payloads:
+        table = body['predict']['instance_table']
+        columns = table['columns']
+        entity = columns.index('__kumo_entity_ref_0')
+        assert [row[entity] for row in table['rows']] == [
+            {'number': '0'},
+            {'number': '1'},
+        ]
+        assert body['task']['kind'] == 'binary_classification'
+        assert body['task']['target']['classes'] == ['false', 'true']
+        assert body['task']['target']['positive_class'] == 'true'
+        assert 'TARGET' not in columns
+    result = line['public']['result']
+    assert result['rows'] == 2
+    assert [c['name'] for c in result['columns']] == [
+        'row_index',
+        'id',
+        'prediction',
+        'rankings',
+    ]

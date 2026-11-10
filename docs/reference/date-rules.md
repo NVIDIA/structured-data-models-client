@@ -51,7 +51,7 @@ Across values in the day/month-first shape, some first field above 12 and no sec
 Otherwise the order is undecided.
 An undecided value is accepted only if both orders give the same date, such as `05/05/2024`; `02/01/2024` is refused with `text_time_order`.
 Year-first values do not depend on that decision.
-The relevant values are the fetched column for materialization, the preview for time-column selection, and the first 100 nonempty values for inference scoring.
+The relevant values are the fetched column for materialization, the preview for time-column selection, and nonempty text values within the first 100 sampled rows for inference scoring.
 Day-first inference can emit `DATES_READ_DAY_FIRST`, using `%y` for a two-digit year.
 
 ### Provider and inference behavior
@@ -61,10 +61,11 @@ Day-first inference can emit `DATES_READ_DAY_FIRST`, using `%y` for a two-digit 
 | `TextTimes::ValueByValue` materialization | Fixed format list; mixed offsets or mixed zoned/unzoned values are refused with `text_time_zones`. |
 | `TextTimes::ClientRules` and in-memory frame materialization | Same formats and order rules, but normalize mixed offsets to UTC. |
 | Time-column selection | Preview normalized to UTC; invalid/ambiguous text is refused when the selection needs that column's first time. |
-| Inference score | 0.3 for a time-like name plus the share of the first 100 nonempty values read as times; timestamp threshold 1.0. |
+| Inference score | 0.3 for a time-like name plus the readable share of nonempty text values within the first 100 sampled rows; timestamp threshold 1.0. |
 
-Inference compares the minimum and maximum plausible readable shares; uncertainty that changes the type decision is refused rather than guessed.
-This includes undecided day/month order and values outside the fixed list; mixed offsets are refused in this score path.
+Inference compares the least-readable date ordering with the share readable in either ordering; a difference that changes the type decision is refused rather than guessed.
+Values outside the supported formats do not contribute to the readable share.
+They can therefore leave a column as ordinary text; mixed offsets are refused in this score path.
 Under a name that does not suggest time, unshaped text such as a part code is not counted as a timestamp.
 Materialization reports unsupported formats as `text_time`, ambiguous order as `text_time_order`, and incompatible offsets as `text_time_zones`, using `UNSUPPORTED_REQUEST`.
 Unread blank time rows may be dropped with `TIME_VALUES_UNREAD`; null-key/time sanitization is a separate graph-preparation policy.
@@ -96,5 +97,5 @@ Named-zone handling is separate from the text-format list, which admits only UTC
 Arrow conversion checks the range of the requested unit; the text reader's calendar range does not promise that every year fits signed nanoseconds.
 PQL additionally honors `HostFacts.date_literal_range` where a host representation is narrower.
 
-Regression coverage: [`text_times.rs`](../../rust/crates/sdm-engine/tests/text_times.rs), its independent [`text_times_record.py`](../../rust/crates/sdm-engine/tests/text_times_record.py) recorder, [`PQL date cases`](../../rust/crates/sdm-pql/tests/dates.json) and [`materialization tests`](../../rust/crates/sdm-core/tests/materialize.rs).
+Regression coverage: [`text_times.rs`](../../rust/crates/sdm-engine/tests/text_times.rs), [`PQL date cases`](../../rust/crates/sdm-pql/tests/dates.rs) and [`materialization tests`](../../rust/crates/sdm-core/tests/materialize.rs).
 Do not refresh expected vectors merely to make a dependency change pass.

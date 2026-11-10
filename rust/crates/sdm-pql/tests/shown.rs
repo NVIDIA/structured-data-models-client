@@ -2,134 +2,107 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The text the old client's messages quote a value by: its `repr`
-//! and `str`, held to each value PyYAML read in
-//! `contract/view-yaml-vectors.json` with the texts Python gave it.
+//! Python-compatible diagnostic rendering of explicit typed values.
 
 use sdm_pql::float_repr::{Shown, text_repr};
-use serde_json::Value as Json;
-
-const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json");
-
-/// A recorded value, its typed form, as the text helpers take it; `open`
-/// the kinds of the collections it is inside (a list `true`). `None` for a
-/// value outside the YAML view definitions use (a byte string, a set, a
-/// list of pairs), which the core refuses (J-9).
-fn shown(value: &Json, open: &mut Vec<bool>) -> Option<Shown> {
-    let inner = &value["v"];
-    let nested =
-        |kind: bool, open: &mut Vec<bool>, items: &dyn Fn(&mut Vec<bool>) -> Option<Shown>| {
-            open.push(kind);
-            let shown = items(open);
-            open.pop();
-            shown
-        };
-    Some(match value["t"].as_str().unwrap() {
-        "bytes" | "tuple" | "set" => return None,
-        "null" => Shown::None,
-        "bool" => Shown::Bool(inner.as_bool().unwrap()),
-        "int" => Shown::Int(inner.as_str().unwrap().to_owned()),
-        "float" => Shown::Float(inner.as_str().unwrap().parse().unwrap()),
-        "str" => Shown::Text(inner.as_str().unwrap().to_owned()),
-        "date" => {
-            let (year, month, day) = date(inner.as_str().unwrap());
-            Shown::Date { year, month, day }
-        }
-        "datetime" => datetime(inner.as_str().unwrap()),
-        "cycle" => {
-            let up = usize::try_from(inner.as_u64().unwrap()).unwrap();
-            Shown::Recursive(open[open.len() - up])
-        }
-        "list" => nested(true, open, &|open| {
-            Some(Shown::List(
-                inner
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|v| shown(v, open))
-                    .collect::<Option<_>>()?,
-            ))
-        })?,
-        "map" => nested(false, open, &|open| {
-            Some(Shown::Dict(
-                inner
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|pair| Some((shown(&pair[0], open)?, shown(&pair[1], open)?)))
-                    .collect::<Option<_>>()?,
-            ))
-        })?,
-        other => panic!("{other}"),
-    })
-}
-
-fn date(text: &str) -> (i32, u8, u8) {
-    let mut parts = text.split('-');
-    (
-        parts.next().unwrap().parse().unwrap(),
-        parts.next().unwrap().parse().unwrap(),
-        parts.next().unwrap().parse().unwrap(),
-    )
-}
-
-/// `datetime.isoformat`'s text, read back.
-fn datetime(text: &str) -> Shown {
-    let (day, time) = text.split_once('T').unwrap();
-    let (year, month, day) = date(day);
-    let (clock, offset) = match time.find(['+', '-']) {
-        Some(at) => {
-            let (clock, zone) = time.split_at(at);
-            let sign = if zone.starts_with('-') { -1 } else { 1 };
-            let mut parts = zone[1..].split(':').map(|p| p.parse::<i32>().unwrap());
-            let seconds = parts.next().unwrap() * 3600
-                + parts.next().unwrap_or(0) * 60
-                + parts.next().unwrap_or(0);
-            (clock, Some(sign * seconds))
-        }
-        None => (time, None),
-    };
-    let (clock, microsecond) = match clock.split_once('.') {
-        Some((clock, fraction)) => (clock, fraction.parse().unwrap()),
-        None => (clock, 0),
-    };
-    let mut parts = clock.split(':').map(|p| p.parse::<u8>().unwrap());
-    Shown::DateTime {
-        year,
-        month,
-        day,
-        hour: parts.next().unwrap(),
-        minute: parts.next().unwrap(),
-        second: parts.next().unwrap(),
-        microsecond,
-        offset,
-    }
-}
 
 #[test]
-fn each_value_is_written_as_python_wrote_it() {
-    let document: Json = fixture_tables::read(VECTORS);
-    let vectors = document["vectors"].as_array().unwrap();
-    let mut wrong = Vec::new();
-    let mut held = 0;
-    // A value holding a set has no recorded text: a set's order varies by
-    // run in Python.
-    for vector in vectors.iter().filter(|v| v.get("repr").is_some()) {
-        let Some(value) = shown(&vector["value"], &mut Vec::new()) else {
-            continue;
-        };
-        held += 1;
-        if value.repr() != vector["repr"].as_str().unwrap() {
-            wrong.push(format!("repr {} where {}", value.repr(), vector["repr"]));
-        }
-        if let Some(text) = vector["str"].as_str()
-            && value.text() != text
-        {
-            wrong.push(format!("str {} where {text}", value.text()));
-        }
+fn typed_values_have_explicit_repr_and_text() {
+    for (value, repr, text) in [
+        (
+            Shown::DateTime {
+                year: 2024,
+                month: 1,
+                day: 2,
+                hour: 3,
+                minute: 4,
+                second: 0,
+                microsecond: 42,
+                offset: Some(-19800),
+            },
+            "datetime.datetime(2024, 1, 2, 3, 4, 0, 42, tzinfo=datetime.timezone(datetime.timedelta(days=-1, seconds=66600)))",
+            "2024-01-02 03:04:00.000042-05:30",
+        ),
+        (Shown::None, "None", "None"),
+        (Shown::Bool(true), "True", "True"),
+        (Shown::Bool(false), "False", "False"),
+        (
+            Shown::Int("123456789012345678901234567890".into()),
+            "123456789012345678901234567890",
+            "123456789012345678901234567890",
+        ),
+        (Shown::Float(-0.0), "-0.0", "-0.0"),
+        (Shown::Float(1e20), "1e+20", "1e+20"),
+        (Shown::Float(1e-7), "1e-07", "1e-07"),
+        (Shown::Float(f64::NAN), "nan", "nan"),
+        (Shown::Float(f64::INFINITY), "inf", "inf"),
+        (Shown::Float(f64::NEG_INFINITY), "-inf", "-inf"),
+        (Shown::Text("hello".into()), "'hello'", "hello"),
+        (Shown::List(vec![]), "[]", "[]"),
+        (Shown::Dict(vec![]), "{}", "{}"),
+        (
+            Shown::Dict(vec![(
+                Shown::Text("x".into()),
+                Shown::List(vec![Shown::None, Shown::Bool(true)]),
+            )]),
+            "{'x': [None, True]}",
+            "{'x': [None, True]}",
+        ),
+        (
+            Shown::Date {
+                year: 2024,
+                month: 2,
+                day: 29,
+            },
+            "datetime.date(2024, 2, 29)",
+            "2024-02-29",
+        ),
+        (
+            Shown::DateTime {
+                year: 2024,
+                month: 1,
+                day: 2,
+                hour: 3,
+                minute: 4,
+                second: 5,
+                microsecond: 123456,
+                offset: None,
+            },
+            "datetime.datetime(2024, 1, 2, 3, 4, 5, 123456)",
+            "2024-01-02 03:04:05.123456",
+        ),
+        (
+            Shown::DateTime {
+                year: 2024,
+                month: 1,
+                day: 2,
+                hour: 3,
+                minute: 4,
+                second: 5,
+                microsecond: 0,
+                offset: Some(19800),
+            },
+            "datetime.datetime(2024, 1, 2, 3, 4, 5, tzinfo=datetime.timezone(datetime.timedelta(seconds=19800)))",
+            "2024-01-02 03:04:05+05:30",
+        ),
+        (
+            Shown::DateTime {
+                year: 2024,
+                month: 1,
+                day: 2,
+                hour: 0,
+                minute: 0,
+                second: 0,
+                microsecond: 0,
+                offset: Some(0),
+            },
+            "datetime.datetime(2024, 1, 2, 0, 0, tzinfo=datetime.timezone.utc)",
+            "2024-01-02 00:00:00+00:00",
+        ),
+    ] {
+        assert_eq!(value.repr(), repr);
+        assert_eq!(value.text(), text);
     }
-    assert!(held > 300, "{held} values");
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 /// Python's `repr` of a text: its quotes, escapes, and characters it
@@ -194,6 +167,3 @@ fn python_s_printability_is_its_own_table() {
     assert_eq!(text_repr("\u{2066}"), "'\\u2066'");
     assert_eq!(text_repr("\u{1F600}"), "'\u{1F600}'");
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

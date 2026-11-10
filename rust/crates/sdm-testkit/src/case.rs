@@ -63,36 +63,67 @@ pub struct Case {
     pub source: String,
 }
 
-/// The two large boundary inputs use explicit factories rather than stored rows.
+/// Large boundary inputs use explicit factories rather than stored rows.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum InputFactory {
     #[serde(rename = "entity_limit_100000")]
     EntityLimit100000,
+    #[serde(rename = "call_limit_100")]
+    CallLimit100,
+    #[serde(rename = "call_limit_101")]
+    CallLimit101,
+    #[serde(rename = "ranking_product_100000")]
+    RankingProduct100000,
+    #[serde(rename = "ranking_product_100200")]
+    RankingProduct100200,
     #[serde(rename = "entity_limit_100001")]
     EntityLimit100001,
+    #[serde(rename = "ranking_batch_10001")]
+    RankingBatch10001,
+    #[serde(rename = "prediction_batch_10001")]
+    PredictionBatch10001,
+    #[serde(rename = "query_attachment_72082")]
+    QueryAttachment72082,
 }
 
 fn expand_input_factory(case: &mut Case) -> Result<()> {
     let Some(factory) = case.input_factory.take() else {
         return Ok(());
     };
-    let count = match factory {
-        InputFactory::EntityLimit100000 => 100_000,
-        InputFactory::EntityLimit100001 => 100_001,
+    if matches!(factory, InputFactory::QueryAttachment72082) {
+        if case.id != "s0.boundary.start-past-64kb" || case.input.pql != "<generated-query>" {
+            bail!("query factory requires its case id and query placeholder");
+        }
+        let values = ["10.0", "11.5", "13.0", "14.5"].repeat(3000).join(", ");
+        case.input.pql = format!(
+            "PREDICT COUNT(orders.* WHERE orders.price IN ({values}), 0, 30, days) FOR EACH users.user_id"
+        );
+        return Ok(());
+    }
+    let (id, count) = match factory {
+        InputFactory::QueryAttachment72082 => unreachable!(),
+        InputFactory::CallLimit100 => ("multicall.calls.100", 100),
+        InputFactory::CallLimit101 => ("multicall.calls.101", 101),
+        InputFactory::RankingProduct100000 => ("rank.entities-by-candidates.at", 500),
+        InputFactory::RankingProduct100200 => ("rank.entities-by-candidates.over", 501),
+        InputFactory::EntityLimit100000 => ("multicall.entities.100000", 100_000),
+        InputFactory::EntityLimit100001 => ("multicall.entities.100001", 100_001),
+        InputFactory::RankingBatch10001 => ("rank.batched", 10_001),
+        InputFactory::PredictionBatch10001 => ("multicall.entities-per-call.10001", 10_001),
     };
-    if case.id != format!("multicall.entities.{count}") {
-        bail!("entity-limit input factory has a different case id");
+    if case.id != id {
+        bail!("boundary input factory has a different case id");
     }
     let Some(core) = case
         .core
         .as_mut()
         .and_then(|core| core.materialize.as_mut())
     else {
-        bail!("entity-limit input factory requires core materialize inputs");
+        bail!("boundary input factory requires core materialize inputs");
     };
     if !case.input.materialize.indices.is_empty() || !core.indices.is_empty() {
-        bail!("entity-limit factory requires empty indices placeholders");
+        bail!("boundary factory requires empty indices placeholders");
     }
     case.input.materialize.indices = (0..count).map(|i| Index::Integer(i.to_string())).collect();
     core.indices = (0..count)
@@ -1086,10 +1117,43 @@ mod load_for_tests {
     use super::*;
 
     #[test]
+    fn large_query_factory_preserves_attachment_input() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../contract/cases/s0/s0.boundary.start-past-64kb.json");
+        let bytes = std::fs::read(&path).unwrap();
+        let loaded = load(&[path]).unwrap().remove(0);
+        assert_eq!(loaded.digest, sha256(&bytes));
+        assert!(loaded.case.input_factory.is_none());
+        assert_eq!(loaded.case.input.pql.len(), 72_082);
+        assert_eq!(
+            sha256(loaded.case.input.pql.as_bytes()),
+            "0e3bf299f1381fdd40d7bd7701fe49120c30da2a8f64933b7ab2567786424e8d"
+        );
+        for field in ["id", "pql"] {
+            let mut case: Case = serde_json::from_slice(&bytes).unwrap();
+            if field == "id" {
+                case.id = "other".into();
+            } else {
+                case.input.pql = "supplied query".into();
+            }
+            assert!(expand_input_factory(&mut case).is_err());
+        }
+    }
+
+    #[test]
     fn entity_limit_factories_expand_exact_public_and_core_keys() {
         let contract = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract");
-        for count in [100_000, 100_001] {
-            let path = contract.join(format!("cases/s1/multicall.entities.{count}.json"));
+        for (id, count) in [
+            ("multicall.entities.100000", 100_000),
+            ("multicall.calls.100", 100),
+            ("multicall.calls.101", 101),
+            ("rank.entities-by-candidates.at", 500),
+            ("rank.entities-by-candidates.over", 501),
+            ("multicall.entities.100001", 100_001),
+            ("rank.batched", 10_001),
+            ("multicall.entities-per-call.10001", 10_001),
+        ] {
+            let path = contract.join(format!("cases/s1/{id}.json"));
             let bytes = std::fs::read(&path).unwrap();
             let loaded = load(&[path]).unwrap().remove(0);
             assert_eq!(loaded.digest, sha256(&bytes));

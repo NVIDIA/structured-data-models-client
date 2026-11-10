@@ -506,13 +506,27 @@ def test_composite_names_never_collide() -> None:
     assert one == databases.composite_name(['t', 'v', 'a'])
 
 
-@pytest.mark.parametrize('count', [100_000, 100_001])
+@pytest.mark.parametrize(
+    ('case_id', 'count', 'outcome'),
+    [
+        ('multicall.entities.100000', 100_000, 'success'),
+        ('multicall.calls.100', 100, 'success'),
+        ('multicall.calls.101', 101, 'refusal'),
+        ('rank.entities-by-candidates.at', 500, 'refusal'),
+        ('rank.entities-by-candidates.over', 501, 'refusal'),
+        ('multicall.entities.100001', 100_001, 'refusal'),
+        ('rank.batched', 10_001, 'refusal'),
+        ('multicall.entities-per-call.10001', 10_001, 'success'),
+    ],
+)
 def test_entity_limit_factory_expands_exact_keys_and_preserves_source_digest(
+    case_id,
     count,
+    outcome,
 ):
     import hashlib
 
-    path = ROOT / f'contract/cases/s1/multicall.entities.{count}.json'
+    path = ROOT / f'contract/cases/s1/{case_id}.json'
     raw = path.read_bytes()
     [(case, digest)] = runner.load_cases([path])
     assert digest == hashlib.sha256(raw).hexdigest()
@@ -521,16 +535,27 @@ def test_entity_limit_factory_expands_exact_keys_and_preserves_source_digest(
     assert case['core']['materialize']['indices'] == [
         {'t': 'i64', 'v': str(i)} for i in range(count)
     ]
-    assert case['expect']['outcome'] == (
-        'success' if count == 100_000 else 'refusal'
-    )
+    assert case['expect']['outcome'] == outcome
 
 
+@pytest.mark.parametrize(
+    'case_id',
+    [
+        'multicall.entities.100000',
+        'multicall.calls.100',
+        'multicall.calls.101',
+        'rank.entities-by-candidates.at',
+        'rank.entities-by-candidates.over',
+        'multicall.entities.100001',
+        'rank.batched',
+        'multicall.entities-per-call.10001',
+    ],
+)
 @pytest.mark.parametrize('change', ['name', 'id', 'public', 'core'])
 def test_entity_limit_factory_refuses_unknown_or_conflicting_inputs(
-    tmp_path, change
+    tmp_path, change, case_id
 ):
-    original = ROOT / 'contract/cases/s1/multicall.entities.100000.json'
+    original = ROOT / f'contract/cases/s1/{case_id}.json'
     case = json.loads(original.read_text())
     if change == 'name':
         case['input_factory'] = 'unknown'
@@ -544,3 +569,26 @@ def test_entity_limit_factory_refuses_unknown_or_conflicting_inputs(
     path.write_text(json.dumps(case))
     with pytest.raises(runner.RunnerFailure):
         runner.load_cases([path])
+
+
+def test_large_query_factory_preserves_attachment_input():
+    import hashlib
+
+    path = ROOT / 'contract/cases/s0/s0.boundary.start-past-64kb.json'
+    [(case, digest)] = runner.load_cases([path])
+    assert digest == hashlib.sha256(path.read_bytes()).hexdigest()
+    query = case['input']['pql'].encode()
+    assert len(query) == 72_082
+    assert (
+        hashlib.sha256(query).hexdigest()
+        == '0e3bf299f1381fdd40d7bd7701fe49120c30da2a8f64933b7ab2567786424e8d'
+    )
+    assert 'input_factory' not in case
+    for change in ['id', 'pql']:
+        invalid = json.loads(path.read_text())
+        if change == 'id':
+            invalid['id'] = 'other'
+        else:
+            invalid['input']['pql'] = 'supplied query'
+        with pytest.raises(runner.RunnerFailure, match='query placeholder'):
+            runner.expand_input_factory(invalid)

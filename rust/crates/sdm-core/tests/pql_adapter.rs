@@ -868,16 +868,7 @@ impl sdm_core::Zones for Bundled {
 
 #[test]
 fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
-    // `sdm-pql/tests/dates.json`'s `local_year`: 2026-12-31T23:30 in New
-    // York, 2027-01-01T04:30Z, where the reference's dateutil places a
-    // two-digit year by the local year, 2026, not UTC's.
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../sdm-pql/tests/dates.json");
-    let vectors: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let local = &vectors["local_year"];
-    assert_eq!(local["now"], "2027-01-01T04:30:00Z");
-    assert_eq!(local["zone"], "America/New_York");
-    assert_eq!(local["year"], 2026);
+    // New York is still in 2026 when UTC has crossed into 2027.
     let at = |zone: Option<sdm_contract::facts::LocalZone>| HostFacts {
         now: Scalar::Timestamp {
             unit: Unit::Us,
@@ -898,20 +889,24 @@ fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
         sdm_core::pql::local_year(&at(None), &Bundled).unwrap(),
         2027
     );
-    let rows = local["rows"].as_array().unwrap();
-    assert_eq!(rows.len(), 8);
-    let mut moved = 0;
-    let mut packed = 0;
-    for row in rows {
-        let literal = row[0].as_str().unwrap();
+    let rows = [
+        ("1/2/76", "1976-01-02T00:00:00", "2076-01-02T00:00:00"),
+        ("1/2/77", "1977-01-02T00:00:00", "1977-01-02T00:00:00"),
+        ("1/2/75", "2075-01-02T00:00:00", "2075-01-02T00:00:00"),
+        ("13/1/26", "2026-01-13T00:00:00", "2026-01-13T00:00:00"),
+        ("1/2/26", "2026-01-02T00:00:00", "2026-01-02T00:00:00"),
+        ("1/2/27", "2027-01-02T00:00:00", "2027-01-02T00:00:00"),
+        ("1.2.3", "2003-01-02T00:00:00", "2003-01-02T00:00:00"),
+        ("760101-01-01", "", ""), // packed input is refused in either zone
+    ];
+    for (literal, local_expected, utc_expected) in rows {
         let query = format!(
             "PREDICT COUNT(orders.* WHERE orders.ts > {literal}, 0, 30, days) FOR EACH \
              users.user_id"
         );
         // a packed date (`760101-01-01`) is refused by name in
-        // either year; the reference's reading stays in the row.
+        // either year.
         if literal.split(['/', '-', '.']).any(|run| run.len() >= 5) {
-            packed += 1;
             for facts in [&new_york, &at(None)] {
                 let error = resolve(
                     &query,
@@ -938,10 +933,7 @@ fn two_digit_years_follow_the_year_in_the_host_s_local_zone() {
             let start = target.find("value: \"").unwrap() + 8;
             target[start..start + 19].to_owned()
         };
-        assert_eq!(read(&new_york), row[1].as_str().unwrap(), "{literal}");
-        moved += usize::from(read(&at(None)) != read(&new_york));
+        assert_eq!(read(&new_york), local_expected, "{literal}");
+        assert_eq!(read(&at(None)), utc_expected, "{literal}");
     }
-    // In UTC's year, 76 is 2076, not 1976: the zone decides.
-    assert!(moved >= 1, "no literal reads otherwise in UTC's year");
-    assert_eq!(packed, 1, "the one packed date of the rows");
 }

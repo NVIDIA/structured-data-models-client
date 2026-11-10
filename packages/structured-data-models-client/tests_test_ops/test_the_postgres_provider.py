@@ -560,52 +560,54 @@ def _canonical(table: pa.Table) -> list[list[Any]]:
     )
 
 
-def _reference_lookups() -> list[tuple[str, list[str], list[str]]]:
-    r"""Each key lookup the reference ran on Postgres, from its committed
-    ``@postgres`` lines (``contract/reference-env.txt``'s file): the
-    statement that keeps the first row of each batch, with its result's
-    column names and Postgres types."""
-    from scripts.rust_core.fixture_tables import unpack
-
-    path = ROOT / 'contract/fixtures/maintained/postgres-statements.json'
-    document = unpack(json.loads(path.read_text()))
-    return [tuple(lookup) for lookup in document['lookups']]
-
-
-def _helpers(columns: list[str]) -> tuple[list[str], list[str]]:
-    r"""The helper columns (``__kumo_*``) before and after a result's
-    row columns."""
-    before = []
-    for name in columns:
-        if not name.startswith('__kumo_'):
-            break
-        before.append(name)
-    after = []
-    for name in reversed(columns):
-        if not name.startswith('__kumo_'):
-            break
-        after.insert(0, name)
-    return before, after
-
-
-#: The reference's key lookup on Postgres: the helper columns before and
-#: after the row's own, the same in every committed lookup, each an int8.
+# Lookup helper layout: batch before user fields, row and match count after.
 REFERENCE_LOOKUP = (['__kumo_batch__'], ['__kumo_row__', '__kumo_matches__'])
 
 
-def test_the_reference_s_postgres_lookup_has_that_layout() -> None:
-    # Not hand-written: every key lookup the reference ran on Postgres in
-    # its committed lines has REFERENCE_LOOKUP's helper columns, as int8,
-    # and keeps only the first row of each batch.
-    lookups = _reference_lookups()
-    assert len(lookups) > 10
-    for sql, columns, types in lookups:
-        assert _helpers(columns) == REFERENCE_LOOKUP, columns
-        typed = dict(zip(columns, types, strict=True))
-        assert all(
-            typed[name] == 'int8' for part in REFERENCE_LOOKUP for name in part
-        ), (columns, types)
-        assert 'ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__' in sql
+def test_lookup_preserves_seed_batches_and_reports_duplicate_matches(
+    server: Server | None,
+) -> None:
+    if server is None:
+        pytest.skip('needs the local Postgres test service')
+    connection = server.database(
+        [
+            'CREATE TABLE users(user_id BIGINT, label VARCHAR)',
+            "INSERT INTO users VALUES (7, 'duplicate'), (7, 'duplicate'), (9, 'single')",
+        ]
+    )
+    try:
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'label'],
+                'key': ['user_id'],
+            },
+            pa.table(
+                {
+                    'key': pa.array([7, 99, 7, 9], pa.int64()),
+                    'batch': pa.array([0, 1, 2, 3], pa.int64()),
+                }
+            ),
+        )
+        assert result.schema == pa.schema(
+            [
+                ('__kumo_batch__', pa.int64()),
+                ('user_id', pa.int64()),
+                ('label', pa.string()),
+                ('__kumo_row__', pa.int64()),
+                ('__kumo_matches__', pa.int64()),
+            ]
+        )
+        rows = sorted(result.to_pylist(), key=lambda row: row['__kumo_batch__'])
+        assert [tuple(row.values()) for row in rows] == [
+            (0, 7, 'duplicate', 1, 2),
+            (2, 7, 'duplicate', 1, 2),
+            (3, 9, 'single', 1, 1),
+        ]
+    finally:
+        connection.close()
 
 
 def _as_the_reference_looks_up(fetch: dict[str, Any]) -> dict[str, Any]:

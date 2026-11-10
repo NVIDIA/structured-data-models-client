@@ -2,20 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The time and feature family's DuckDB statements (folded
-//! in), pinned as text beside `duckdb_catalog.rs`'s: each data request the
-//! `time.*` and `feature.*` cases make through `from_source` and
-//! `materialize` on the pure-Rust host that no other file here pins
-//! already, as `sdm-testkit` recorded it, with the one statement this layer
-//! renders for it. A statement that changes without its pin changing here
-//! fails this test, and `sdm-testkit`'s `tests/time_feature_sql.rs`
-//! runs the cases on DuckDB and fails on any statement they run that is
-//! pinned nowhere in these files. The family's own statements are those
-//! naming its columns: `time.text-declared`'s time column `happened` (its
-//! bounds, preview and both neighbor reads) and
-//! `time.feature-date-and-timestamp-with-null`'s `f_date` and `f_ts` (the
-//! preview, the entities sampled with `f_date` as the time column, and the
-//! lookup).
+//! Focused SQL rendering expectations for this data-type family.
+//! Companion sdm-testkit tests execute the family cases through DuckDB
+//! and check outcomes, result encoding and query-log consistency.
 
 use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
 use sdm_data::Data;

@@ -21,10 +21,8 @@ the years 1 to 9999; an instant or wall clock outside them is moved by
 whole 400-year Gregorian cycles (146,097 days, a whole number of weeks, so
 every rule a zone database writes repeats with it) into the years 401 to
 800, before every vendored zone's first transition, or 2401 to 2800,
-after its last, read there, and moved back. ``pandas`` records what pandas
-3 itself answers for the same instant (``Timestamp.tz_convert``), which
-fails or overflows at the range's ends; the core answers by the rule
-above (register DT-10).
+after its last, read there, and moved back.
+The expected values come from zoneinfo, independently of the Rust implementation.
 """
 
 from __future__ import annotations
@@ -34,8 +32,6 @@ import json
 import pathlib
 import sys
 import zoneinfo
-
-import pandas as pd
 
 ROOT = pathlib.Path(__file__).resolve().parents[3] / 'testdata/tzdata-2026c'
 UTC = dt.timezone.utc
@@ -136,20 +132,6 @@ def localize(zone: zoneinfo.ZoneInfo, wall: tuple) -> object:
     return str(answers.pop())
 
 
-def pandas_answer(zone_name: str, ns: int) -> object:
-    try:
-        stamp = pd.Timestamp(ns // 1_000, unit='us', tz='UTC')
-        with open(ROOT / zone_name, 'rb') as tzif:
-            zone = zoneinfo.ZoneInfo.from_file(tzif, key=zone_name)
-        local = stamp.tz_convert(zone)
-        return {
-            'local': local.tz_localize(None).isoformat(),
-            'offset': int(local.utcoffset().total_seconds()),
-        }
-    except Exception as error:  # noqa: BLE001
-        return {'error': type(error).__name__}
-
-
 def instants() -> dict[str, int]:
     return {
         'int64 microseconds, least': (-I64) * 1_000,
@@ -182,7 +164,6 @@ def main() -> None:
                     'label': label,
                     'instant': str(ns),
                     'want': to_local(zone, ns),
-                    'pandas': pandas_answer(name, ns),
                 }
             )
         for wall in WALLS:

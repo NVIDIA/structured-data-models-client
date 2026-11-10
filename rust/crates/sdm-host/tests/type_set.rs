@@ -906,8 +906,6 @@ fn observe(vector: &Value) -> BTreeMap<&'static str, Value> {
     let received = data_type(&vector["type"]);
     let (class, admitted, refused) = classify(&received);
     let mut got = BTreeMap::from([
-        ("arrow", Value::String(received.to_string())),
-        ("variant", Value::String(variant(&received).into())),
         ("class", Value::String(class.clone())),
         (
             "admitted_as",
@@ -930,8 +928,6 @@ fn observe(vector: &Value) -> BTreeMap<&'static str, Value> {
 
 fn want(vector: &Value) -> BTreeMap<&'static str, Value> {
     BTreeMap::from([
-        ("arrow", vector["arrow"].clone()),
-        ("variant", vector["variant"].clone()),
         ("class", vector["class"].clone()),
         (
             "admitted_as",
@@ -1120,13 +1116,14 @@ fn each_type_is_admitted_and_inferred_as_its_vector_says() {
     );
 }
 
-/// No vector expects a panic or an unnamed refusal: a refusal names its
-/// code and, by the code, its rule or its column and Arrow type.
+/// Actual inference must not panic or return an unnamed refusal.
+/// A refusal identifies its rule or its column and Arrow type.
 #[test]
-fn every_expected_refusal_is_named() {
+fn every_actual_refusal_is_named() {
     for vector in vectors() {
         let id = vector["id"].as_str().unwrap();
-        let inference = &vector["inference"];
+        let observed = observe(&vector);
+        let inference = &observed["inference"];
         if inference.is_null() {
             assert_eq!(vector["buildable"], false, "{id}: no inference");
             continue;

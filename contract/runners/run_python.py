@@ -464,24 +464,44 @@ def case_files(paths: Iterable[Path]) -> list[Path]:
 
 
 def expand_input_factory(case: dict[str, Any]) -> None:
-    """Build only the two named entity-limit inputs, identically for both hosts."""
+    """Build named boundary indices, identically for public and core hosts."""
     if 'input_factory' not in case:
         return
     name = case['input_factory']
-    count = (
-        {'entity_limit_100000': 100_000, 'entity_limit_100001': 100_001}.get(
-            name
+    if name == 'query_attachment_72082':
+        if (
+            case.get('id') != 's0.boundary.start-past-64kb'
+            or case['input']['pql'] != '<generated-query>'
+        ):
+            raise RunnerFailure(
+                'query factory requires its case id and query placeholder'
+            )
+        case['input']['pql'] = (
+            'PREDICT COUNT(orders.* WHERE orders.price IN ('
+            + ', '.join(['10.0', '11.5', '13.0', '14.5'] * 3000)
+            + '), 0, 30, days) FOR EACH users.user_id'
         )
-        if isinstance(name, str)
-        else None
-    )
-    if count is None or case.get('id') != f'multicall.entities.{count}':
-        raise RunnerFailure('invalid entity-limit input factory or case id')
+        del case['input_factory']
+        return
+    factories = {
+        'call_limit_100': ('multicall.calls.100', 100),
+        'call_limit_101': ('multicall.calls.101', 101),
+        'ranking_product_100000': ('rank.entities-by-candidates.at', 500),
+        'ranking_product_100200': ('rank.entities-by-candidates.over', 501),
+        'entity_limit_100000': ('multicall.entities.100000', 100_000),
+        'entity_limit_100001': ('multicall.entities.100001', 100_001),
+        'ranking_batch_10001': ('rank.batched', 10_001),
+        'prediction_batch_10001': ('multicall.entities-per-call.10001', 10_001),
+    }
+    spec = factories.get(name) if isinstance(name, str) else None
+    if spec is None or case.get('id') != spec[0]:
+        raise RunnerFailure('invalid boundary input factory or case id')
+    count = spec[1]
     public = case.get('input', {}).get('materialize', {})
     core = case.get('core', {}).get('materialize', {})
     if public.get('indices') != [] or core.get('indices') != []:
         raise RunnerFailure(
-            'entity-limit factory requires empty indices placeholders'
+            'boundary factory requires empty indices placeholders'
         )
     public['indices'] = list(range(count))
     core['indices'] = [{'t': 'i64', 'v': str(i)} for i in range(count)]

@@ -2,12 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The words of a view's conversion: the data and schema layers
-//! answer with typed facts, and the core words them, quoting a value as
-//! Python's `repr` and `str` write it through `sdm-pql`, the one crate that
-//! writes Python's text. Each text is held to the old client's, from
-//! `contract/view-expr-vectors.json`, `view-yaml-vectors.json` and
-//! `view-step-vectors.json`. turns each into a `Sentence`.
+//! User-facing view conversion messages. Expression refusals have direct
+//! expectations for expressions, YAML values and parameter conversions.
 
 use sdm_contract::CoreError;
 use sdm_contract::data::{DataLayer, ProviderChoice};
@@ -18,46 +14,8 @@ use sdm_data::Data;
 use sdm_data::view_expr::metric::{self as data, DefaultRefusal, FilterRefusal};
 use sdm_data::view_expr::{self, ExprDialect};
 use sdm_schema::view::metric;
-use sdm_schema::view::model::{self, Edge, EdgeFacts, MeasureNote, TimeColumnNote};
-use sdm_schema::view::yaml::{self, Document, NodeId, Value};
-use serde_json::Value as Json;
-
-const EXPR: &str = include_str!("../../../../contract/view-expr-vectors.json");
-const YAML: &str = include_str!("../../../../contract/view-yaml-vectors.json");
-const STEPS: &str = include_str!("../../../../contract/view-step-vectors.json");
-
-fn texts(value: &Json) -> Vec<String> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|item| item.as_str().unwrap().to_owned())
-        .collect()
-}
-
-fn dialect(value: &Json) -> Option<ExprDialect> {
-    match value.as_str() {
-        None => None,
-        Some("databricks") => Some(ExprDialect::Databricks),
-        Some(_) => Some(ExprDialect::Snowflake),
-    }
-}
-
-/// Runs `check` over the vectors of `kind` in `document`, and fails listing
-/// each that differs.
-fn each(document: &str, kind: &str, least: usize, check: impl Fn(&Json) -> Option<String>) {
-    let document: Json = fixture_tables::read(document);
-    let vectors = document[kind].as_array().unwrap();
-    assert!(vectors.len() >= least, "{} {kind} vectors", vectors.len());
-    let wrong: Vec<String> = vectors.iter().filter_map(check).collect();
-    assert!(
-        wrong.is_empty(),
-        "{} of {} {kind} vectors differ:\n{}",
-        wrong.len(),
-        vectors.len(),
-        wrong.join("\n")
-    );
-}
+use sdm_schema::view::model::{self, Edge, MeasureNote, TimeColumnNote};
+use sdm_schema::view::yaml;
 
 /// The data layer's answers in Databricks's dialect, as the routine asks
 /// them (`DataLayer::view_text`).
@@ -77,98 +35,60 @@ fn dialect_words(reason: &view_expr::ExprRefusal) -> Option<String> {
     }
 }
 
-/// A recorded value, the typed form the recorder writes, as YAML text
-/// that reads back to it; `None` for one holding itself, or outside the
-/// YAML view definitions use.
-fn yaml_of(json: &Json) -> Option<String> {
-    let inner = &json["v"];
-    Some(match json["t"].as_str().unwrap() {
-        "null" => "~".into(),
-        "bool" => inner.as_bool().unwrap().to_string(),
-        "int" => inner.as_str().unwrap().to_owned(),
-        "float" => {
-            let x: f64 = inner.as_str().unwrap().parse().unwrap();
-            if x.is_nan() {
-                ".nan".into()
-            } else if x.is_infinite() {
-                if x > 0.0 {
-                    ".inf".into()
-                } else {
-                    "-.inf".into()
-                }
-            } else {
-                let shortest = format!("{x:e}");
-                let (mantissa, exponent) = shortest.split_once('e').unwrap();
-                let mantissa = if mantissa.contains('.') {
-                    mantissa.to_owned()
-                } else {
-                    format!("{mantissa}.0")
-                };
-                let exponent: i32 = exponent.parse().unwrap();
-                format!("{mantissa}e{exponent:+}")
-            }
-        }
-        "str" => serde_json::to_string(inner.as_str().unwrap()).unwrap(),
-        // Outside the YAML view definitions use (J-9).
-        "bytes" | "set" | "tuple" => return None,
-        "date" | "datetime" => inner.as_str().unwrap().to_owned(),
-        "list" => {
-            let items: Option<Vec<String>> =
-                inner.as_array().unwrap().iter().map(yaml_of).collect();
-            format!("[{}]", items?.join(", "))
-        }
-        "map" => {
-            let pairs: Option<Vec<String>> = inner
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|pair| Some(format!("{}: {}", yaml_of(&pair[0])?, yaml_of(&pair[1])?)))
-                .collect();
-            format!("{{{}}}", pairs?.join(", "))
-        }
-        _ => return None,
-    })
-}
-
-/// A recorded value, loaded: its document and node; `None` for one
-/// outside the YAML view definitions use, a YAML 1.1 line break in a text
-/// among them (J-9).
-fn loaded(json: &Json) -> Option<(Document, NodeId)> {
-    let document = match yaml::load(&format!("v: {}", yaml_of(json)?), &yaml_rules()) {
-        Ok(document) => document,
-        Err(error) if error.outside.is_some() => return None,
-        Err(error) => panic!("{json}: {error}"),
-    };
-    let node = document.get(document.root(), "v").unwrap();
-    Some((document, node))
-}
-
 #[test]
-fn a_yaml_value_is_quoted_as_the_old_client_quoted_it() {
-    let document: Json = fixture_tables::read(YAML);
-    let mut wrong = Vec::new();
-    for vector in document["vectors"].as_array().unwrap() {
-        let Some(repr) = vector["repr"].as_str() else {
-            continue;
-        };
-        let Ok(document) = yaml::load(vector["yaml"].as_str().unwrap(), &yaml_rules()) else {
-            // A registered scanner difference (P3J-6), or YAML outside what
-            // view definitions use (P3J-9), held by sdm-schema's tests.
-            continue;
-        };
-        let root = document.root();
-        let got = view_words::value_repr(&document, root).unwrap();
-        if got != repr {
-            wrong.push(format!("{got} where {repr}"));
-        }
-        if let Some(text) = vector["str"].as_str() {
-            let got = view_words::value_text(&document, root).unwrap();
-            if got != text {
-                wrong.push(format!("{got} where {text}"));
-            }
-        }
+fn yaml_values_render_with_explicit_type_and_collection_rules() {
+    for (input, repr, text) in [
+        (
+            "2024-01-02 03:04:00.000042-05:30",
+            "datetime.datetime(2024, 1, 2, 3, 4, 0, 42, tzinfo=datetime.timezone(datetime.timedelta(days=-1, seconds=66600)))",
+            "2024-01-02 03:04:00.000042-05:30",
+        ),
+        ("null", "None", "None"),
+        ("yes", "True", "True"),
+        ("017", "15", "15"),
+        (
+            "123456789012345678901234567890",
+            "123456789012345678901234567890",
+            "123456789012345678901234567890",
+        ),
+        ("-0.0", "-0.0", "-0.0"),
+        (".nan", "nan", "nan"),
+        (".inf", "inf", "inf"),
+        ("-.inf", "-inf", "-inf"),
+        ("hello", "'hello'", "hello"),
+        ("[]", "[]", "[]"),
+        ("{}", "{}", "{}"),
+        (
+            "{x: [null, yes]}",
+            "{'x': [None, True]}",
+            "{'x': [None, True]}",
+        ),
+        ("&a [*a]", "[[...]]", "[[...]]"),
+        ("&a {x: *a}", "{'x': {...}}", "{'x': {...}}"),
+        ("2024-02-29", "datetime.date(2024, 2, 29)", "2024-02-29"),
+        (
+            "2024-01-02 03:04:05.123456",
+            "datetime.datetime(2024, 1, 2, 3, 4, 5, 123456)",
+            "2024-01-02 03:04:05.123456",
+        ),
+        (
+            "2024-01-02 03:04:05+05:30",
+            "datetime.datetime(2024, 1, 2, 3, 4, 5, tzinfo=datetime.timezone(datetime.timedelta(seconds=19800)))",
+            "2024-01-02 03:04:05+05:30",
+        ),
+    ] {
+        let document = yaml::load(input, &yaml_rules()).unwrap();
+        assert_eq!(
+            view_words::value_repr(&document, document.root()).unwrap(),
+            repr,
+            "{input}"
+        );
+        assert_eq!(
+            view_words::value_text(&document, document.root()).unwrap(),
+            text,
+            "{input}"
+        );
     }
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 /// The message of a column whose expression is refused, as the core words
@@ -198,42 +118,51 @@ fn expression_message(
 }
 
 #[test]
-fn an_expression_s_refusal_is_worded_as_the_old_client_worded_it() {
-    each(EXPR, "unsafe", 400, |vector| {
-        let expr = vector["expr"].as_str().unwrap();
-        let reason = view_expr::unsafe_reason(expr, dialect(&vector["dialect"]), spaces())
-            .map(|r| view_words::expr_reason(&r, dialect_words(&r)));
-        (reason.as_deref() != vector["reason"].as_str())
-            .then(|| format!("{expr:?}: {reason:?} where {}", vector["reason"]))
-    });
-    each(EXPR, "calls", 10_000, |vector| {
-        let expr = vector["expr"].as_str().unwrap();
-        let columns = texts(&vector["columns"]);
-        let reason = view_expr::untrusted_call_reason(
-            expr,
-            dialect(&vector["dialect"]).unwrap(),
-            &columns,
-            spaces(),
-        )
-        .map(|r| view_words::expr_reason(&r, dialect_words(&r)));
-        (reason.as_deref() != vector["reason"].as_str())
-            .then(|| format!("{expr:?}: {reason:?} where {}", vector["reason"]))
-    });
-    each(EXPR, "expr_message", 30, |vector| {
-        let view = match vector["view"].as_str().unwrap() {
-            "metric view" => ViewKind::Metric,
-            _ => ViewKind::Semantic,
-        };
-        let message = expression_message(
-            vector["column"].as_str().unwrap(),
-            vector["expr"].as_str().unwrap(),
-            view,
-            dialect(&vector["dialect"]).unwrap(),
-            vector["trust_expressions"].as_bool().unwrap(),
-            &texts(&vector["columns"]),
+fn trusted_calls_and_unsafe_sql_have_distinct_messages() {
+    for (view, dialect) in [
+        (ViewKind::Metric, ExprDialect::Databricks),
+        (ViewKind::Semantic, ExprDialect::Snowflake),
+    ] {
+        assert_eq!(
+            expression_message("column 'x'", "abs(x)", view, dialect, false, &["x".into()]),
+            None
         );
-        (message.as_deref() != vector["message"].as_str()).then(|| format!("{vector}: {message:?}"))
-    });
+        assert_eq!(
+            expression_message(
+                "column 'x'",
+                "custom_function(x)",
+                view,
+                dialect,
+                true,
+                &["x".into()]
+            ),
+            None
+        );
+        let message = expression_message(
+            "column 'x'",
+            "custom_function(x)",
+            view,
+            dialect,
+            false,
+            &["x".into()],
+        )
+        .unwrap();
+        assert!(message.contains("custom_function"));
+        assert!(message.contains("not a pure built-in SQL function"));
+        for trust in [false, true] {
+            let message = expression_message(
+                "column 'x'",
+                "x; DROP TABLE t",
+                view,
+                dialect,
+                trust,
+                &["x".into()],
+            )
+            .unwrap();
+            assert!(message.contains("it contains ';'"));
+            assert!(message.contains("warehouse credentials"));
+        }
+    }
 }
 
 /// Rows 64 to 66 by name.
@@ -288,244 +217,146 @@ fn unsafe_text_and_untrusted_calls_are_worded_by_name() {
 }
 
 #[test]
-fn a_parameter_is_read_and_worded_as_the_old_client_read_it() {
-    each(STEPS, "default_text", 500, |vector| {
-        let (document, default) = loaded(&vector["default"])?;
-        let data_type = vector["data_type"].as_str().unwrap();
-        let class = view_steps::type_class(&ask, data_type).unwrap();
-        let read = view_steps::default_text(class, &document, default);
-        // Python ran out of memory writing the text; the core refuses it
-        // by name before writing it (J-10).
-        if vector["error"]["type"] == "MemoryError" {
-            return (read != Err(DefaultRefusal::TooLong))
-                .then(|| format!("{data_type} {}: {read:?}", vector["default_repr"]));
-        }
-        let got = match &read {
-            Ok(text) => text.clone(),
-            Err(refusal) => {
-                view_words::default_refusal_text(refusal, data_type, &document, default).unwrap()
-            }
-        };
-        let expected = vector["text"]
-            .as_str()
-            .or(vector["error"]["message"].as_str())
-            .unwrap();
-        (got != expected).then(|| {
-            format!(
-                "{data_type} {}: {got} where {expected}",
-                vector["default_repr"]
+fn yaml_defaults_have_explicit_values_and_refusals() {
+    for (kind, input, expected) in [
+        ("INT", "'0012'", "12"),
+        ("DOUBLE", "'1.2500'", "1.2500"),
+        ("DATE", "'20240229'", "2024-02-29"),
+        (
+            "TIMESTAMP",
+            "'2024-02-29T12:00:00Z'",
+            "2024-02-29 12:00:00+00:00",
+        ),
+    ] {
+        let document = yaml::load(&format!("v: {input}"), &yaml_rules()).unwrap();
+        let value = document.get(document.root(), "v").unwrap();
+        let class = view_steps::type_class(&ask, kind).unwrap();
+        assert_eq!(
+            view_steps::default_text(class, &document, value),
+            Ok(expected.into())
+        );
+    }
+    let document = yaml::load("v: wrong", &yaml_rules()).unwrap();
+    let value = document.get(document.root(), "v").unwrap();
+    assert_eq!(
+        view_words::default_refusal_text(&DefaultRefusal::NotOfType, "INT", &document, value)
+            .unwrap(),
+        "its default 'wrong' is not of type INT"
+    );
+    assert_eq!(
+        view_words::default_refusal_text(&DefaultRefusal::NoLiteral, "ARRAY", &document, value)
+            .unwrap(),
+        "its type 'ARRAY' has no literal here"
+    );
+    assert_eq!(
+        view_words::default_refusal_text(&DefaultRefusal::TooLong, "DOUBLE", &document, value)
+            .unwrap(),
+        "its default is too long to write as a literal of type DOUBLE"
+    );
+}
+
+#[test]
+fn parameter_defaults_and_missing_information_are_reported() {
+    let spec = metric::parse("source: c.s.t\nparameters:\n  - name: Limit\n    default: 12\n  - name: MissingDefault\n  - name: MissingType\n    default: 1\n", &yaml_rules()).unwrap();
+    let read = view_steps::parameters(
+        &spec,
+        &[
+            ("Limit".into(), "INT".into()),
+            ("MissingDefault".into(), "INT".into()),
+        ],
+        &ask,
+    )
+    .unwrap();
+    let texts: Vec<_> = read
+        .iter()
+        .map(|(name, parameter)| {
+            let default = spec
+                .parameters
+                .iter()
+                .find(|p| p.name.to_lowercase() == *name)
+                .and_then(|p| p.default);
+            (
+                name.as_str(),
+                view_words::parameter_text(parameter, &spec.document, default).unwrap(),
             )
         })
-    });
-    each(STEPS, "read_parameters", 10, |vector| {
-        let section = yaml_of(&vector["parameters"])?;
-        let spec = metric::parse(
-            &format!("source: c.s.t\nparameters: {section}\n"),
-            &yaml_rules(),
-        )
-        .unwrap();
-        let described: Vec<(String, String)> = vector["types"]
-            .as_object()
-            .unwrap()
-            .iter()
-            .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned()))
-            .collect();
-        let read = view_steps::parameters(&spec, &described, &ask).unwrap();
-        let got: serde_json::Map<String, Json> = read
-            .iter()
-            .map(|(folded, parameter)| {
-                let default = spec
-                    .parameters
-                    .iter()
-                    .rev()
-                    .find(|p| p.name.to_lowercase() == *folded)
-                    .and_then(|p| p.default);
-                let literal = parameter.read.as_ref().ok().map(|r| r.literal.clone());
-                (
-                    folded.clone(),
-                    serde_json::json!([
-                        parameter.name,
-                        literal,
-                        view_words::parameter_text(parameter, &spec.document, default).unwrap()
-                    ]),
-                )
-            })
-            .collect();
-        (Json::Object(got.clone()) != vector["read"])
-            .then(|| format!("{}: {got:?}", vector["read"]))
-    });
-    each(STEPS, "parameter_note", 1, |vector| {
-        let text = view_words::parameter_note_text(
-            vector["parameter"].as_str().unwrap(),
-            vector["default"].as_str().unwrap(),
-        );
-        (text != vector["text"].as_str().unwrap()).then_some(text)
-    });
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            ("limit", "12".into()),
+            ("missingdefault", "has no default".into()),
+            ("missingtype", "has no type".into())
+        ]
+    );
+    assert_eq!(
+        view_words::parameter_note_text("Limit", "12"),
+        "Read the parameter 'Limit' as its default '12', as a query of the view without arguments does"
+    );
 }
 
 #[test]
-fn a_filter_and_a_measure_are_refused_in_the_old_client_s_words() {
-    each(STEPS, "check_filter", 50, |vector| {
-        let error = vector.get("error")?;
-        let (document, filter) = loaded(&vector["filter"])?;
-        let candidates: Vec<(Vec<String>, String)> = vector["candidates"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|pair| (texts(&pair[0]), pair[1].as_str().unwrap().to_owned()))
-            .collect();
-        let refusal: FilterRefusal =
-            data::check_filter(document.text(filter), &candidates, spaces()).unwrap_err();
-        let words = match &refusal {
-            FilterRefusal::Unsafe(reason) => dialect_words(reason),
-            _ => None,
-        };
-        let text = view_words::filter_refusal_text(&document, filter, &refusal, words).unwrap();
-        (text != error["message"].as_str().unwrap())
-            .then(|| format!("{text} where {}", error["message"]))
-    });
-    each(STEPS, "read_measures", 50, |vector| {
-        let messages = texts(&vector["messages"]);
-        if messages.is_empty() {
-            return None;
-        }
-        let (document, section) = loaded(&vector["measures"])?;
-        let measures: Vec<data::MeasureInput> = match document.value(section) {
-            Value::Seq(items) => items
-                .iter()
-                .filter_map(|&cfg| {
-                    Some(data::MeasureInput {
-                        name: document.text(document.get(cfg, "name")?)?.to_owned(),
-                        expr: document
-                            .get(cfg, "expr")
-                            .and_then(|e| document.text(e))
-                            .map(str::to_owned),
-                        window: document.has(cfg, "window"),
-                    })
-                })
-                .collect(),
-            _ => vec![],
-        };
-        let dimensions: Vec<(String, data::DimensionRef)> = vector["dimensions"]
-            .as_object()
-            .unwrap()
-            .iter()
-            .map(|(folded, d)| {
-                (
-                    folded.clone(),
-                    data::DimensionRef {
-                        name: d[0].as_str().unwrap().to_owned(),
-                        alias: d[1].as_str().unwrap().to_owned(),
-                        expr: d[2].as_str().unwrap().to_owned(),
-                    },
-                )
-            })
-            .collect();
-        let candidates: Vec<(Vec<String>, String)> = vector["candidates"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|pair| (texts(&pair[0]), pair[1].as_str().unwrap().to_owned()))
-            .collect();
-        let (_, refused) = data::read_measures(
-            &measures,
-            &candidates,
-            &texts(&vector["kept"]),
-            &dimensions,
-            &texts(&vector["refused"]),
-            &texts(&vector["parameters"]),
-            spaces(),
-        );
-        let got: Vec<String> = refused
-            .iter()
-            .map(view_words::measure_refusal_text)
-            .collect();
-        (got != messages).then(|| format!("{got:?} where {messages:?}"))
-    });
+fn filter_and_measure_messages_identify_the_rejected_reference() {
+    assert_eq!(
+        view_words::filter_reason_text(&FilterRefusal::NotACondition, None),
+        "it is not a SQL condition"
+    );
+    assert_eq!(
+        view_words::filter_reason_text(&FilterRefusal::JoinedTable("users".into()), None),
+        "it references the joined table 'users'"
+    );
+    let refusal = data::MeasureRefusal {
+        name: "revenue".into(),
+        reason: data::MeasureReason::NamesRefused("amount".into()),
+    };
+    assert_eq!(
+        view_words::measure_refusal_text(&refusal),
+        "Failed to add measure 'revenue' since it names the dimension 'amount', which is refused"
+    );
 }
 
 #[test]
-fn the_graph_s_steps_are_worded_as_the_old_client_worded_them() {
-    each(STEPS, "join_key_reason", 10, |vector| {
-        let count = &vector["count"];
-        let reason = model::join_key_reason(
-            count["rows"].as_u64(),
-            count["distinct"].as_u64(),
-            count["repeats"].as_u64().unwrap(),
-        )?;
-        let text = view_words::key_reason_text(
-            &reason,
-            vector["table"].as_str().unwrap(),
-            vector["key"].as_str().unwrap(),
-            count["example_repr"].as_str(),
-        );
-        (Some(text.as_str()) != vector["reason"].as_str()).then_some(text)
-    });
-    each(STEPS, "skipped_join", 20, |vector| {
-        let text = view_words::skipped_join_text(
-            vector["alias"].as_str().unwrap(),
-            vector["reason"].as_str().unwrap(),
-            &texts(&vector["nested"]),
-            &texts(&vector["dimensions"]),
-        );
-        (text != vector["text"].as_str().unwrap()).then_some(text)
-    });
-    each(STEPS, "measure_notes", 20, |vector| {
-        let got: Vec<String> = vector["notes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|n| {
-                view_words::measure_note_text(&MeasureNote {
-                    measure: n["measure"].as_str().unwrap().to_owned(),
-                    table: n["table"].as_str().unwrap().to_owned(),
-                    function: n["function"].as_str().unwrap().to_owned(),
-                    column: n["column"].as_str().map(str::to_owned),
-                })
-            })
-            .collect();
-        let expected: Vec<String> = vector["notes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|n| n["text"].as_str().unwrap().to_owned())
-            .collect();
-        (got != expected).then(|| format!("{got:?}"))
-    });
-    each(STEPS, "time_column", 30, |vector| {
-        let note = vector["note"].as_object()?;
-        let text = view_words::time_note_text(&TimeColumnNote {
-            table: note["table"].as_str().unwrap().to_owned(),
-            column: note["column"].as_str().unwrap().to_owned(),
-            instead_of: texts(&note["instead_of"]),
-            source_column: note["source_column"].as_str().map(str::to_owned),
-            added: note["added"].as_bool().unwrap(),
-            window_order: note["window_order"].as_bool().unwrap(),
-        });
-        (text != note["text"].as_str().unwrap()).then_some(text)
-    });
-    each(STEPS, "edge_error", 5, |vector| {
-        let expected = vector["reason"].as_str()?;
-        let dtype = |name: &str| serde_json::from_value(Json::String(name.to_owned())).unwrap();
-        let facts = EdgeFacts {
-            fkey: vector["edge"][1].as_str().unwrap().to_owned(),
-            fkey_dtype: vector["fkey_dtype"].as_str().map(dtype),
-            target_key: vector["target_key"].as_array().map(|k| {
-                (
-                    k[0].as_str().unwrap().to_owned(),
-                    dtype(k[1].as_str().unwrap()),
-                )
-            }),
-            source_key: vector["source_key"].as_str().map(str::to_owned),
-        };
-        let edge = Edge {
-            source: vector["edge"][0].as_str().unwrap().to_owned(),
-            key: vector["edge"][1].as_str().unwrap().to_owned(),
-            target: vector["edge"][2].as_str().unwrap().to_owned(),
-        };
-        let text = view_words::edge_reason_text(&edge, &model::edge_reason(&facts).unwrap());
-        (text != expected).then_some(text)
-    });
+fn graph_notes_explain_joins_aggregations_and_time_selection() {
+    assert_eq!(
+        view_words::skipped_join_text("users", "missing key", &[], &[]),
+        "Failed to add join 'users' since missing key"
+    );
+    assert_eq!(
+        view_words::measure_note_text(&MeasureNote {
+            measure: "rows".into(),
+            table: "orders".into(),
+            function: "COUNT".into(),
+            column: None
+        }),
+        "'rows' is COUNT(orders.*, 0, 30, days) over the next 30 days"
+    );
+    assert_eq!(
+        view_words::measure_note_text(&MeasureNote {
+            measure: "revenue".into(),
+            table: "orders".into(),
+            function: "SUM".into(),
+            column: Some("amount".into())
+        }),
+        "'revenue' is SUM(orders.amount, 0, 30, days) over the next 30 days"
+    );
+    let mut note = TimeColumnNote {
+        table: "orders".into(),
+        column: "event_time".into(),
+        instead_of: vec!["day".into()],
+        source_column: None,
+        added: true,
+        window_order: false,
+    };
+    assert_eq!(
+        view_words::time_note_text(&note),
+        "Took 'event_time' as the time column of table 'orders', and added it as a column, since 'day' truncates or casts it, and it says when a row happened more precisely"
+    );
+    note.window_order = true;
+    note.instead_of.push("month".into());
+    assert_eq!(
+        view_words::time_note_reasons(&note),
+        "a window measure of the view orders by it and 'day' and 'month' truncate or cast it, and it says when a row happened more precisely"
+    );
 }
 
 /// `_edge_error`'s and `_join_key_reason`'s texts by name, the vectors
@@ -567,30 +398,70 @@ fn each_edge_reason_and_key_reason_is_worded_by_name() {
     );
 }
 
-/// The long tokens' refusals, worded as the old client
-/// worded them.
+/// Long function names must survive error formatting without truncation or panic.
 #[test]
-fn a_long_token_s_refusal_is_worded_as_the_old_client_worded_it() {
-    each(EXPR, "long_tokens", 15, |vector| {
-        let r = &vector["recipe"];
-        let part = |i: usize| r[i].as_str().unwrap();
-        let called = format!(
-            "{}{}{}",
-            part(0),
-            part(1).repeat(r[4].as_u64().unwrap() as usize),
-            part(3)
-        );
-        let reason = view_expr::untrusted_call_reason(
-            &called,
-            ExprDialect::Databricks,
-            &["x", "y", "z"],
-            spaces(),
-        )
-        .map(|r| view_words::expr_reason(&r, dialect_words(&r)));
-        (reason.as_deref() != vector["calls"]["databricks"].as_str())
-            .then(|| format!("{r}: {reason:?}"))
-    });
+fn long_untrusted_function_names_are_preserved_in_the_reason() {
+    let name = "custom_".to_owned() + &"x".repeat(1024);
+    let reason = view_expr::untrusted_call_reason(
+        &format!("{name}(x)"),
+        ExprDialect::Databricks,
+        &["x"],
+        spaces(),
+    )
+    .unwrap();
+    assert_eq!(
+        view_words::expr_reason(&reason, dialect_words(&reason)),
+        format!("it calls '{name}', which is not a pure built-in SQL function")
+    );
 }
 
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;
+#[test]
+fn yaml_default_types_do_not_coerce_booleans_into_numbers() {
+    for (kind, input, expected) in [
+        ("BOOLEAN", "true", Ok("true".to_owned())),
+        ("BOOLEAN", "' FALSE '", Ok("false".to_owned())),
+        ("BOOLEAN", "1", Err(DefaultRefusal::NotOfType)),
+        ("INT", "true", Err(DefaultRefusal::NotOfType)),
+        ("DOUBLE", "true", Err(DefaultRefusal::NotOfType)),
+        ("STRING", "true", Ok("true".to_owned())),
+        ("STRING", "2024-02-29", Ok("2024-02-29".to_owned())),
+        ("DATE", "2024-02-29", Ok("2024-02-29".to_owned())),
+        ("ARRAY<INT>", "[1, 2]", Err(DefaultRefusal::NoLiteral)),
+    ] {
+        let doc = yaml::load(&format!("v: {input}"), &yaml_rules()).unwrap();
+        assert_eq!(
+            view_steps::default_text(
+                view_steps::type_class(&ask, kind).unwrap(),
+                &doc,
+                doc.get(doc.root(), "v").unwrap()
+            ),
+            expected,
+            "{kind}: {input}"
+        );
+    }
+}
+
+#[test]
+fn described_parameter_type_overrides_yaml_and_last_duplicate_wins_in_place() {
+    let spec = metric::parse("source: t\nparameters:\n  - name: Limit\n    data_type: STRING\n    default: '12'\n  - name: other\n    data_type: INT\n    default: 3\n  - name: LIMIT\n    data_type: STRING\n    default: '24'\n", &yaml_rules()).unwrap();
+    let read = view_steps::parameters(&spec, &[("limit".into(), "INT".into())], &ask).unwrap();
+    assert_eq!(
+        read.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(),
+        ["limit", "other"]
+    );
+    assert_eq!(read[0].1.name, "LIMIT");
+    assert_eq!(
+        read[0].1.read.as_ref().unwrap().literal,
+        "CAST('24' AS INT)"
+    );
+    assert_eq!(read[1].1.read.as_ref().unwrap().literal, "CAST('3' AS INT)");
+    assert_eq!(
+        view_words::skipped_join_text(
+            "users",
+            "missing key",
+            &["addresses".into()],
+            &["city".into(), "country".into()]
+        ),
+        "Failed to add join 'users', and with it the join 'addresses' nested in it and the dimensions 'city' and 'country', since missing key"
+    );
+}

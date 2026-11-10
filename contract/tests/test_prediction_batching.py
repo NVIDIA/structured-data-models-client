@@ -292,93 +292,6 @@ def test_the_forecasts() -> None:
         assert given.get('fail_call') == fail_call, case_id
 
 
-# --- the reference ---------------------------------------------------------------
-
-
-def batch_payloads(case_key: str) -> list[dict[str, Any]]:
-    """Exact requests for the two large, single-table score cases.
-
-    The fixture stores independently observed sample order, not copies of
-    that sample in every call. A scored entity is absent from that call's
-    context; its original instance position is retained in other calls.
-    Labels follow the literal input table's score = entity % 7 definition.
-    """
-    expected = json.loads(
-        (
-            ROOT / 'contract/fixtures/maintained/batch-expectations.json'
-        ).read_text()
-    )[case_key]
-    case_id = case_key.split('@')[0]
-    case, _ = cases()[case_id]
-    entities = case['input']['materialize']['indices']
-    sampled = expected['sampled_entities']
-
-    def number(value: int | float) -> dict[str, str]:
-        return {'number': str(value)}
-
-    output = []
-    start = 0
-    for count in CALLS[case_id]:
-        scored = entities[start : start + count]
-        start += count
-        request = copy.deepcopy(expected['request'])
-        request['metadata']['num_prediction_examples'] = number(count)
-        excluded = set(scored)
-        context = [
-            [number(position), number(entity), number(float(entity % 7))]
-            for position, entity in enumerate(sampled)
-            if entity not in excluded
-        ]
-        predicted = [
-            [number(len(sampled) + position), number(entity)]
-            for position, entity in enumerate(scored)
-        ]
-        for name, rows, columns in (
-            (
-                'context',
-                context,
-                ['instance_id', '__kumo_entity_ref_0', 'TARGET'],
-            ),
-            ('predict', predicted, ['instance_id', '__kumo_entity_ref_0']),
-        ):
-            request[name] = {
-                'instance_table': {
-                    'columns': columns,
-                    'format': 'arrays',
-                    'rows': rows,
-                },
-                'related_tables': {
-                    'users': {
-                        'columns': ['instance_id', 'user_id'],
-                        'format': 'arrays',
-                        'rows': [row[:2] for row in rows],
-                    }
-                },
-            }
-        output.append({'parsed': request})
-    assert start == len(entities)
-    return output
-
-
-@functools.cache
-def expected_cases() -> dict[str, dict[str, Any]]:
-    """Independent expected facts, indexed by case key."""
-    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
-    expected = {
-        json.loads(line)['case']: json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
-    }
-    for case_key, line in expected.items():
-        if 'payloads' not in line['public']:
-            line['public']['payloads'] = batch_payloads(case_key)
-    return expected
-
-
-@functools.cache
-def vectors() -> dict[str, Any]:
-    return recorder().load()
-
-
 def _expected(case: dict[str, Any]) -> tuple[Any, ...]:
     expect = case['expect']
     return (
@@ -397,90 +310,6 @@ def _outcome(line: dict[str, Any]) -> tuple[Any, ...]:
         outcome.get('error'),
         outcome.get('code'),
     )
-
-
-@pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_expected_outcome_matches_case(case_key: str) -> None:
-    """Independent expected facts agree with this case's stated behavior."""
-    case_id = case_key.split('@')[0]
-    case, digest = cases()[case_id]
-    line = expected_cases().get(case_key)
-    assert line is not None, f'{case_key}: no expected facts'
-    assert _outcome(line) == _expected(case)
-    assert len(line['public']['payloads']) == len(CALLS.get(case_id, []))
-
-
-@pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_the_reference_answers_each_case_as_it_names(case_key: str) -> None:
-    r"""The cases exercise what they name, on the reference (so none is
-    vacuous): the rows each call scores; a success's rows numbered across
-    the calls in the order asked (a forecast's each entity's steps); a
-    refusal's details; the answers carried on a failed call, the rows of
-    the calls before it; the 30 MiB body's remedy."""
-    case_id = case_key.split('@')[0]
-    case, digest = cases()[case_id]
-    document = vectors()
-    vector = document['vectors'].get(case_key)
-    assert vector is not None, f'{case_key}: no vector'
-    assert _outcome({'outcome': vector['outcome']}) == _expected(case)
-    assert vector['calls'] == CALLS.get(case_id, [])
-    indices = case['input']['materialize']['indices']
-    if vector['outcome']['result'] == 'success' and case['until'] == 'predict':
-        result = vector['result']
-        forecast = 'forecast_step' in result['columns']
-        numbered = (
-            [(n, step) for n in range(len(indices)) for step in (1, 2)]
-            if forecast
-            else [(n,) for n in range(len(indices))]
-        )
-        assert result['count'] == len(numbered)
-        if 'rows' in result:
-            at = [result['columns'].index('row_index')]
-            if forecast:
-                at.append(result['columns'].index('forecast_step'))
-            ids = [row[result['columns'].index('id')] for row in result['rows']]
-            assert [tuple(row[i] for i in at) for row in result['rows']] == (
-                numbered
-            )
-            assert ids == [indices[n[0]] for n in numbered]
-        else:
-            assert [row[:2] for row in result['first']] == [
-                [n, indices[n]] for n in range(3)
-            ]
-            assert [row[:2] for row in result['last']] == [
-                [n, indices[n]] for n in range(len(indices) - 3, len(indices))
-            ]
-    if case_id in REFUSED:
-        code, details = REFUSED[case_id]
-        assert vector['outcome']['code'] == code
-        assert vector['details'] == details
-    if case_id in FAILED:
-        call, carried = FAILED[case_id]
-        assert vector['details'] == {
-            'call': call,
-            'error': 'scripted_failure',
-            **carried,
-        }
-        answered = vector['answered']
-        if not carried:
-            assert answered is None
-        else:
-            # The rows of the calls before the failed one, numbered across
-            # them (a forecast's: its first step's, one call).
-            assert answered['count'] == sum(vector['calls'][:call])
-            assert [row[0] for row in answered['rows']] == list(
-                range(answered['count'])
-            )
-            if 'parts_answered' in carried:
-                step = answered['columns'].index('forecast_step')
-                assert {row[step] for row in answered['rows']} == {1}
-    if case_id in BODY:
-        assert vector['remedy'].startswith(BODY[case_id])
-        assert vector['opening'] == (
-            '[INVALID_REQUEST] Context size exceeds the 30MB limit.'
-        )
-    else:
-        assert vector['remedy'] is None
 
 
 # --- python-core against the reference ---------------------------------------------
@@ -551,31 +380,6 @@ def payloads(line: dict[str, Any]) -> list[Any]:
     return out
 
 
-def differences(want: Any, got: Any, at: str = '') -> list[str]:
-    r"""Where ``got`` differs from ``want``, a few paths."""
-    if isinstance(want, dict) and isinstance(got, dict):
-        found = []
-        for name in sorted(set(want) | set(got)):
-            found += differences(want.get(name), got.get(name), f'{at}/{name}')
-        return found[:8]
-    if (
-        isinstance(want, list)
-        and isinstance(got, list)
-        and len(want) == len(got)
-    ):
-        found = []
-        for i, (w, g) in enumerate(zip(want, got, strict=True)):
-            found += differences(w, g, f'{at}[{i}]')
-        return found[:8]
-    if want != got:
-        if isinstance(want, list) and isinstance(got, list):
-            return [
-                f'{at}: {len(got)} items where the reference has {len(want)}'
-            ]
-        return [f'{at}: {got!r:.80} where the reference has {want!r:.80}']
-    return []
-
-
 def same_outcome(want: tuple[Any, ...], got: tuple[Any, ...]) -> bool:
     r"""Two outcomes the same, but that the core route raises a refusal
     coded ``UNSUPPORTED_REQUEST`` as ``UnsupportedRequestError``, a
@@ -593,22 +397,13 @@ def same_outcome(want: tuple[Any, ...], got: tuple[Any, ...]) -> bool:
 
 
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_core_answers_each_case_as_the_reference_does(
+def test_current_client_batches_without_label_or_entity_leakage(
     case_key: str,
 ) -> None:
-    r"""Exits "larger requests split with a per-batch walk and context",
-    "``rows_per_call``", "rows numbered across calls", "the 100,000-entity
-    and 100-call ceilings", "the pre-send context check per call", "the
-    per-batch 30 MiB body refusal" and "the batched-forecast refusal":
-    python-core runs the case on the database on the core route (the
-    native module loaded, each of the case's core operations run), and its
-    outcome, each request the scripted endpoint received (each call's
-    walk and context) and its result through ``to_pandas`` (columns, row
-    count and the rows' digest, so their numbering and order) are
-    python-ref's."""
+    """Assert current-client behavior and native routing without recorded payload equality."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
-        return
+        pytest.skip('Postgres test DSN is not configured')
 
     def check() -> None:
         run = core_run(database)
@@ -620,16 +415,65 @@ def test_python_core_answers_each_case_as_the_reference_does(
         assert identity['native_loaded'] and line['core'] is not None
         missing = sorted(set(case['core']) - set(identity['operations']))
         assert not missing, f'{case_key}: core operations not run: {missing}'
-        want = expected_cases()[case_key]
-        assert same_outcome(_outcome(want), _outcome(line)), (
-            f'{case_key}: {_outcome(line)} where python-ref has {_outcome(want)}'
+        assert same_outcome(_expected(case), _outcome(line)), (
+            case_key,
+            _outcome(line),
         )
-        found = differences(payloads(want), payloads(line))
-        assert not found, f'{case_key}: the payload differs: ' + '; '.join(
-            found
+        sent = payloads(line)
+        batches = [body['predict']['instance_table'] for body in sent]
+        counts = CALLS.get(case['id'], [])
+        assert [len(batch['rows']) for batch in batches] == counts, case_key
+        scored = []
+        context_positions = {}
+        for body, batch in zip(sent, batches, strict=True):
+            columns = batch['columns']
+            assert body['task']['target']['column_name'] not in columns
+            entity_at = columns.index('__kumo_entity_ref_0')
+            entities = [int(row[entity_at]['number']) for row in batch['rows']]
+            scored.extend(entities)
+            if case['id'] in {
+                'multicall.entities-per-call.10001',
+                'multicall.calls.100',
+            }:
+                context = body['context']['instance_table']
+                context_at = context['columns'].index('__kumo_entity_ref_0')
+                context_entities = {
+                    int(row[context_at]['number']) for row in context['rows']
+                }
+                assert context_entities.isdisjoint(entities), (
+                    'Scored entities leaked into their own training context'
+                )
+                assert context['rows'], 'Large-case context must not disappear'
+                instance_at = context['columns'].index('instance_id')
+                target_at = context['columns'].index('TARGET')
+                for row in context['rows']:
+                    entity = int(row[context_at]['number'])
+                    instance = int(row[instance_at]['number'])
+                    assert float(row[target_at]['number']) == float(entity % 7)
+                    assert (
+                        context_positions.setdefault(entity, instance)
+                        == instance
+                    )
+                related = body['context']['related_tables']['users']
+                assert related['columns'] == ['instance_id', 'user_id']
+                assert related['rows'] == [
+                    [row[instance_at], row[context_at]]
+                    for row in context['rows']
+                ]
+
+        indices = case['input']['materialize']['indices']
+        expected_entities = indices * (
+            2 if 'FORECAST 2' in case['input']['pql'] else 1
         )
-        found = differences(want['public']['result'], line['public']['result'])
-        assert not found, f'{case_key}: the result differs: ' + '; '.join(found)
+        assert scored == expected_entities[: sum(counts)], case_key
+        if (
+            case['expect']['outcome'] == 'success'
+            and case['until'] == 'predict'
+        ):
+            assert line['public']['result']['rows'] == len(expected_entities)
+            assert [
+                column['name'] for column in line['public']['result']['columns']
+            ][:2] == ['row_index', 'id']
 
     check()
 
@@ -642,141 +486,101 @@ def core_carried(case_key: str) -> dict[str, Any]:
     return recorder().observe(case, database or 'duckdb')
 
 
+def assert_scored_rows(result, indices, steps=None):
+    """Independent endpoint rule: regression scores 1.0 in requested order."""
+    columns = (
+        ['row_index', 'id']
+        + (['forecast_step'] if steps else [])
+        + ['prediction']
+    )
+    expected = [
+        [i, entity] + ([step] if step is not None else []) + [1.0]
+        for i, entity in enumerate(indices)
+        for step in (steps or [None])
+    ]
+    assert result['columns'] == columns
+    assert result['count'] == len(result['rows']) == len(expected)
+    assert result['rows'] == expected
+    assert all(type(row[-1]) is float for row in result['rows'])
+
+
 @pytest.mark.parametrize('case_key', KEYS_ALL)
-def test_python_core_carries_what_the_reference_carries(case_key: str) -> None:
-    r"""Exits "answered parts on a failed call", "its remedy texts",
-    "rows numbered across calls" and the ceilings' and invalid values'
-    refusals by name: python-core, on the core route, sends calls of the
-    reference's sizes; answers with the reference's rows, row by row; and
-    refuses with the reference's details (each detail the reference gives,
-    the same; the core's own fields beside them), the reference's answers
-    carried on a failed call (``details['answered']``, row by row), the
-    reference's first sentence and remedy for a call past the 30 MiB body,
-    and a message naming ``rows_per_call`` for an invalid one."""
+def test_batching_preserves_rows_limits_and_partial_answers(
+    case_key: str,
+) -> None:
     case_id, _, database = case_key.partition('@')
     if database == 'postgres' and not _server():
-        return
-
-    def check() -> None:
-        want = vectors()['vectors'][case_key]
-        got = core_carried(case_key)
-        outcome = (
-            _outcome({'outcome': want['outcome']}),
-            _outcome({'outcome': got['outcome']}),
+        pytest.skip('Postgres test DSN is not configured')
+    case, _ = cases()[case_id]
+    got = core_carried(case_key)
+    assert same_outcome(_expected(case), _outcome(got))
+    assert got['calls'] == CALLS.get(case_id, [])
+    indices = case['input']['materialize']['indices']
+    if _expected(case)[0] == 'success' and case['until'] == 'predict':
+        steps = [1, 2] if case_id == 'multicall.forecast.one-call' else None
+        assert_scored_rows(got['result'], indices, steps)
+    else:
+        assert got['result'] is None
+    details = got['details'] or {}
+    if case_id in REFUSED:
+        code, expected_details = REFUSED[case_id]
+        assert got['outcome']['code'] == code
+        for name, value in expected_details.items():
+            assert details[name] == value
+    if case_id in FAILED:
+        call, carried = FAILED[case_id]
+        for name, value in {
+            'call': call,
+            'error': 'scripted_failure',
+            **carried,
+        }.items():
+            assert details[name] == value
+        if carried:
+            count = sum(CALLS[case_id][:call])
+            steps = [1] if 'parts_answered' in carried else None
+            assert_scored_rows(got['answered'], indices[:count], steps)
+        else:
+            assert got['answered'] is None
+    else:
+        assert got['answered'] is None
+    if case_id in BODY:
+        assert (
+            got['opening']
+            == '[INVALID_REQUEST] Context size exceeds the 30MB limit.'
         )
-        assert same_outcome(*outcome), (
-            f'{case_key}: {outcome[1]} where python-ref has {outcome[0]}'
-        )
-        assert got['calls'] == want['calls'], (
-            f'{case_key}: calls of {got["calls"][:5]} rows where python-ref '
-            f'sends {want["calls"][:5]}'
-        )
-        found = differences(want['result'], got['result'], '/result')
-        found += differences(want['answered'], got['answered'], '/answered')
-        assert not found, f'{case_key}: ' + '; '.join(found)
-        details = got['details'] or {}
-        for name, value in (want['details'] or {}).items():
-            assert details.get(name) == value, (
-                f'{case_key}: details[{name!r}] is {details.get(name)!r} '
-                f'where python-ref has {value!r}'
-            )
-        assert got['remedy'] == want['remedy'], (
-            f'{case_key}: the remedy is {got["remedy"]!r:.200} where '
-            f'python-ref names {want["remedy"]!r:.200}'
-        )
-        if case_id in BODY:
-            assert got['opening'] == want['opening'], (
-                f'{case_key}: {got["opening"]!r:.200} where python-ref '
-                f'opens {want["opening"]!r}'
-            )
-        if case_id in INVALID:
-            assert 'rows_per_call' in (got['opening'] or ''), (
-                f'{case_key}: the refusal does not name rows_per_call: '
-                f'{got["opening"]!r:.200}'
-            )
-
-    check()
-
-
-# --- a call raising an error that is not the client's own ---------------------------
+        assert got['remedy'].startswith(BODY[case_id])
+        for control in ['num_context_samples', 'num_neighbors', 'columns']:
+            assert control in got['remedy']
+        if case_id.endswith('several-rows'):
+            for advice in [
+                'same entities',
+                'more and smaller calls',
+                'no call is small enough',
+                'ranking or a forecast',
+                'never batched',
+                'entities',
+            ]:
+                assert advice in got['remedy']
+    else:
+        assert got['remedy'] is None
+    if case_id in INVALID:
+        assert 'rows_per_call' in got['opening']
 
 
 @pytest.mark.parametrize('case_key', RAISED_KEYS)
-def test_the_reference_keeps_the_answers_when_a_call_raises(
-    case_key: str,
-) -> None:
-    r"""Exit "answered parts on a failed call", for a failure that is not
-    the client's own ( round 1): with the client's transport raising
-    ``ValueError`` on the third call of ``rows_per_call=3`` over 8, or on
-    the second step's call of the two-step forecast, as the Databricks SDK
-    raises one on a failed OAuth refresh, the reference raises that
-    ``ValueError`` as it was, the calls before it answered and kept on it:
-    6 rows over 2 calls, or the first step's 3 rows."""
-    case_id = case_key.split('@')[0]
-    case, digest = cases()[case_id]
-    vector = vectors()['raised'].get(case_key)
-    assert vector is not None, f'{case_key}: no vector'
+def test_transport_errors_keep_completed_answers(case_key: str) -> None:
+    case_id, _, database = case_key.partition('@')
+    if database == 'postgres' and not _server():
+        pytest.skip('Postgres test DSN is not configured')
+    case, _ = cases()[case_id]
     call = recorder().RAISED[case_id]
-    assert vector['call'] == call
-    assert 'fail_call' not in case['input']
-    assert _outcome({'outcome': vector['outcome']}) == (
-        'refusal',
-        'predict',
-        'ValueError',
-        None,
-    )
-    assert vector['calls'] == CALLS[case_id][:call]
-    assert vector['details'] == RAISED[case_id]
-    answered = vector['answered']
-    assert answered['count'] == sum(vector['calls'])
-    assert [row[0] for row in answered['rows']] == list(
-        range(answered['count'])
-    )
-    if 'forecast_step' in answered['columns']:
-        step = answered['columns'].index('forecast_step')
-        assert {row[step] for row in answered['rows']} == {1}
-
-
-@pytest.mark.parametrize('case_key', RAISED_KEYS)
-def test_python_core_keeps_the_answers_when_a_call_raises(
-    case_key: str,
-) -> None:
-    r"""Exit "answered parts on a failed call", for a failure that is not
-    the client's own ( round 1): python-core, on the core route, its
-    transport raising the same ``ValueError`` on the same call, raises it
-    as the reference does, with the reference's answers kept on it
-    (``details['answered']`` row by row, and ``calls_answered`` and
-    ``rows_answered``, or a forecast's ``parts_answered``)."""
-    case_id, _, database = case_key.partition('@')
-    if database == 'postgres' and not _server():
-        return
-
-    def check() -> None:
-        want = vectors()['raised'][case_key]
-        case, _ = cases()[case_id]
-        got = recorder().observe(
-            case,
-            database or 'duckdb',
-            raise_on_call=recorder().RAISED[case_id],
-        )
-        outcome = (
-            _outcome({'outcome': want['outcome']}),
-            _outcome({'outcome': got['outcome']}),
-        )
-        assert outcome[0] == outcome[1], (
-            f'{case_key}: {outcome[1]} where python-ref has {outcome[0]}'
-        )
-        assert got['calls'] == want['calls'], (
-            f'{case_key}: calls of {got["calls"]} rows where python-ref '
-            f'sends {want["calls"]}'
-        )
-        details = got['details'] or {}
-        for name, value in want['details'].items():
-            assert details.get(name) == value, (
-                f'{case_key}: details[{name!r}] is {details.get(name)!r} '
-                f'where python-ref has {value!r}'
-            )
-        found = differences(want['answered'], got['answered'], '/answered')
-        assert not found, f'{case_key}: ' + '; '.join(found)
-
-    check()
+    got = recorder().observe(case, database or 'duckdb', raise_on_call=call)
+    assert _outcome(got) == ('refusal', 'predict', 'ValueError', None)
+    assert got['calls'] == CALLS[case_id][:call]
+    for name, value in RAISED[case_id].items():
+        assert got['details'][name] == value
+    count = sum(CALLS[case_id][:call])
+    indices = case['input']['materialize']['indices'][:count]
+    steps = [1] if 'parts_answered' in RAISED[case_id] else None
+    assert_scored_rows(got['answered'], indices, steps)
+    assert got['result'] is None

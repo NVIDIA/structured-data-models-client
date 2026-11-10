@@ -1,11 +1,9 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Warehouse payloads held to independently recorded frozen-client requests."""
+"""Warehouse payload labels, lag windows and relation joins."""
 
-import json
 import warnings
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -18,61 +16,159 @@ from sdm_client import PredictiveQuery, Request, Schema
 from sdm_client._rust.spec import held_schema
 from sdm_client.schema import _described_on_the_core
 
-RECORDINGS = json.loads(
-    (Path(__file__).parent / 'data/materialize-recordings.json').read_text()
-)['cases']
 
-
-def _numbers(value):
-    if isinstance(value, dict):
-        if set(value) == {'number'}:
-            return json.loads(value['number'])
-        return {key: _numbers(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_numbers(item) for item in value]
-    return value
-
-
-@pytest.mark.parametrize('recording', RECORDINGS, ids=lambda item: item['case'])
-def test_materialized_payload_matches_recorded_request(recording):
-    given = recording['input']
-    assert given['base'] == 'shop'
-    options = dict(given['materialize'])
-    options['anchor_time'] = pd.Timestamp(options['anchor_time'])
+@pytest.mark.parametrize(
+    ('query', 'anchor', 'lag', 'days', 'kind', 'context_count'),
+    [
+        (QUERY, '2024-03-01', 0, 30, 'regression', 112),
+        (
+            'PREDICT SUM(orders.price, 0, 7, days) FOR EACH users.user_id',
+            '2023-03-01',
+            2,
+            7,
+            'regression',
+            64,
+        ),
+        (
+            'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id',
+            '2023-03-01',
+            2,
+            30,
+            'classification',
+            8,
+        ),
+        (
+            'PREDICT users.age FOR EACH users.user_id',
+            '2023-03-01',
+            2,
+            0,
+            'regression',
+            6,
+        ),
+    ],
+    ids=['regression', 'regression-lags', 'binary-lags', 'static-lags-ignored'],
+)
+def test_materialized_payload_labels_lags_and_links(
+    query, anchor, lag, days, kind, context_count
+):
+    connection = _connection()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        schema = Schema.from_source(DuckDBSource(_connection()))
-        request = PredictiveQuery(given['pql'], schema).materialize(**options)
-    expected = _numbers(recording['payload'])
-    expected['metadata'].pop('request_id')  # Generated per transport call.
-    assert len(request._payloads) == 1
-    # The recording is after prediction's wire normalization. Materialization
-    # retains explicit default inference options until that boundary.
-    actual = json.loads(json.dumps(request._payloads[0]))
-    kind = (
-        'classification'
-        if recording['case'] == 'lag.binary-2'
-        else 'regression'
-    )
-    defaults = {
-        'kind': kind,
-        'num_estimators': 1,
-        'column_shuffle': False,
-        'category_shuffle': False,
-        'hop_shuffle': False,
-    }
-    if kind == 'classification':
-        defaults['class_shuffle'] = False
-    else:
-        defaults.update(target_transforms=['quantile'], output_type='median')
-        assert expected['output'].pop('prediction_statistic') == 'median'
-    assert actual['inference'].pop('inference_config') == defaults
-    assert actual.pop('client_generated_keys') == {'orders': '__node_id'}
-    # Column analysis reads the rows sent; no copy of withheld rows is kept.
-    assert 'client_analysis_delta' not in actual
-    assert actual == expected
+        schema = Schema.from_source(DuckDBSource(connection))
+        request = PredictiveQuery(query, schema).materialize(
+            indices=[0, 1], anchor_time=pd.Timestamp(anchor), lag_timesteps=lag
+        )
+    [payload] = request._payloads
     assert request.entity_table == 'users'
     assert request.indices == [0, 1]
+    assert payload['client_generated_keys'] == {'orders': '__node_id'}
+    assert 'client_analysis_delta' not in payload
+    config = payload['inference']['inference_config']
+    expected = dict(
+        kind=kind,
+        num_estimators=1,
+        column_shuffle=False,
+        category_shuffle=False,
+        hop_shuffle=False,
+    )
+    if kind == 'classification':
+        expected['class_shuffle'] = False
+    else:
+        expected.update(target_transforms=['quantile'], output_type='median')
+    assert config == expected
+
+    def value(entity, start):
+        if not days:
+            return connection.execute(
+                'SELECT age FROM users WHERE user_id = ?', [entity]
+            ).fetchone()[0]
+        aggregate = (
+            'COUNT(*) > 0'
+            if kind == 'classification'
+            else 'coalesce(sum(price), 0)'
+        )
+        result = connection.execute(
+            f'SELECT {aggregate} FROM orders WHERE user_id = ? AND ts > ? AND ts <= ?',
+            [
+                entity,
+                start.tz_localize(None),
+                (start + pd.Timedelta(days=days)).tz_localize(None),
+            ],
+        ).fetchone()[0]
+        return result if kind == 'classification' else float(np.float32(result))
+
+    for side in ['context', 'predict']:
+        table = payload[side]['instance_table']
+        lag_columns = [f'__kumo_arl{i}__' for i in range(lag)] if days else []
+        assert table['columns'] == [
+            'instance_id',
+            '__kumo_entity_ref_0',
+            '__kumo_anchor_time',
+            *(['TARGET'] if side == 'context' else []),
+            *lag_columns,
+        ]
+        assert len(table['rows']) == (context_count if side == 'context' else 2)
+        instances = {row[0]: row[1] for row in table['rows']}
+        anchors = {row[0]: pd.Timestamp(row[2]) for row in table['rows']}
+        assert len(instances) == len(table['rows'])
+        if side == 'predict':
+            assert list(instances.values()) == [0, 1]
+            assert set(anchors.values()) == {pd.Timestamp(anchor, tz='UTC')}
+        else:
+            assert set(instances.values()) == set(
+                range(8) if days else range(2, 8)
+            )
+        for row in table['rows']:
+            cells = dict(zip(table['columns'], row, strict=True))
+            start = pd.Timestamp(cells['__kumo_anchor_time'])
+            if side == 'context':
+                if days:
+                    assert start + pd.Timedelta(days=days) <= pd.Timestamp(
+                        anchor, tz='UTC'
+                    )
+                assert cells['TARGET'] == value(row[1], start)
+                if kind == 'classification':
+                    assert type(cells['TARGET']) is bool
+            for i, column in enumerate(lag_columns):
+                assert cells[column] == value(
+                    row[1], start - pd.Timedelta(days=days * (i + 1))
+                )
+                if kind == 'classification':
+                    assert type(cells[column]) is bool
+        related = payload[side]['related_tables']
+        assert set(related) == {'users', 'orders'}
+        users = related['users']
+        assert len(users['rows']) == len(instances)
+        assert {row[0] for row in users['rows']} == set(instances)
+        if not days:
+            assert 'age' not in users['columns']  # Withheld prediction target.
+        for row in users['rows']:
+            cells = dict(zip(users['columns'], row, strict=True))
+            assert cells['user_id'] == instances[cells['instance_id']]
+            expected_age, expected_country = connection.execute(
+                'SELECT age, country FROM users WHERE user_id = ?',
+                [cells['user_id']],
+            ).fetchone()
+            assert cells['country'] == expected_country
+            if days:
+                assert cells['age'] == expected_age
+        orders = related['orders']
+        assert orders['rows']
+        for row in orders['rows']:
+            cells = dict(zip(orders['columns'], row, strict=True))
+            assert cells['user_id'] == instances[cells['instance_id']]
+            assert pd.Timestamp(cells['ts']) <= anchors[cells['instance_id']]
+            assert (
+                connection.execute(
+                    'SELECT count(*) FROM orders WHERE user_id = ? AND price = ? AND ts = ?',
+                    [
+                        cells['user_id'],
+                        cells['price'],
+                        pd.Timestamp(cells['ts']).tz_localize(None),
+                    ],
+                ).fetchone()[0]
+                == 1
+            )
 
 
 def test_seed_controls_materialization_reproducibly():

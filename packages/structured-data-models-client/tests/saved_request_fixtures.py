@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-import hashlib
+import copy
 import importlib.util
 import json
 import re
@@ -39,11 +39,6 @@ def endpoint() -> Any:
     return sys.modules[name]
 
 
-def _digest(value: Any) -> str:
-    text = json.dumps(value, sort_keys=True, default=str)
-    return hashlib.sha256(text.encode()).hexdigest()
-
-
 def _plain(value: Any) -> Any:
     r"""``value`` as JSON holds it, a mapping's keys as text, in order."""
     return json.loads(json.dumps(value, default=str))
@@ -69,17 +64,25 @@ def _answer(result: Any) -> dict[str, Any]:
             list(getattr(result, 'unscored_candidates', None) or [])
         ),
         'metadata': _plain(metadata),
-        'frame': _digest(result.to_pandas().astype(str).values.tolist()),
+        'frame': {
+            'columns': list(result.to_pandas().columns),
+            'dtypes': [str(dtype) for dtype in result.to_pandas().dtypes],
+            'rows': _plain(result.to_pandas().values.tolist()),
+        },
     }
 
 
-def predicted(request: Any, outputs: list[str] | None) -> dict[str, Any]:
-    r"""What predicting ``request`` for ``outputs`` sends and answers,
-    against the scripted endpoint answering probabilities, explanations and
-    item metadata: each body by its digest (its request id left out), the
-    answer (:func:`_answer`) or the refusal's class and code, and the
-    notices given, each without the code a core route puts before it."""
+def predicted(
+    request: Any, outputs: list[str] | None, name: str
+) -> dict[str, Any]:
+    """Exercise saved payloads against scripted answers and verify wire continuity."""
     from sdm_client import KumoRelational, SDMClient
+
+    original_payloads = _plain(copy.deepcopy(list(request.payloads)))
+    saved = copy.deepcopy(original_payloads)
+    if name == 'ranking':
+        assert len(saved) == 4
+        saved = [saved[i] for i in [0, 1, 3]]  # Candidate 9 is unscorable.
 
     with (
         endpoint().serve(
@@ -107,8 +110,36 @@ def predicted(request: Any, outputs: list[str] | None) -> dict[str, Any]:
         bodies = []
         for _, _, body in received.requests:
             parsed = json.loads(body)
-            parsed.get('metadata', {}).pop('request_id', None)
-            bodies.append(_digest(parsed))
+            request_id = parsed.get('metadata', {}).pop('request_id', None)
+            assert isinstance(request_id, str) and request_id
+            bodies.append(parsed)
+        assert len(bodies) == len(saved)
+        for original, body in zip(saved, bodies, strict=True):
+            expected = copy.deepcopy(original)
+            expected.pop('client_generated_keys', None)
+            expected.pop('client_analysis_delta', None)
+            expected['model'] = 'kumo-relational'
+            fields = (
+                ['prediction', 'probabilities']
+                if name == 'ranking'
+                else outputs
+                if outputs is not None
+                else ['prediction', 'probabilities']
+                if name == 'binary'
+                else ['prediction']
+            )
+            output = {'fields': fields}
+            if original['task']['kind'] == 'regression':
+                output['prediction_statistic'] = (
+                    original.get('output', {}).get('prediction_statistic')
+                    or 'median'
+                )
+            expected['output'] = output
+            expected.setdefault('metadata', {}).pop('request_id', None)
+            # These authored requests set no caller inference options.
+            expected.get('inference', {}).pop('inference_config', None)
+            assert body == expected
+        assert _plain(list(request.payloads)) == original_payloads
         out['bodies'] = bodies
     out['notices'] = sorted(
         re.sub(r'^\[[A-Z_]+\] ', '', str(w.message))
@@ -120,7 +151,7 @@ def predicted(request: Any, outputs: list[str] | None) -> dict[str, Any]:
 
 def answers(request: Any, name: str) -> list[dict[str, Any]]:
     r"""``request``'s answer to each of :data:`ASKED`'s outputs."""
-    return [predicted(request, outputs) for outputs in ASKED[name]]
+    return [predicted(request, outputs, name) for outputs in ASKED[name]]
 
 
 SQL = (

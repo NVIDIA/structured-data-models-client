@@ -2,28 +2,13 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A Databricks metric view's conversion (M1 to M11) against what the
-//! old client read and answered on a SQL warehouse (`contract/view-captures.json`,
-//! retained as independent warehouse evidence):
-//! the core's `describe_source` over the view, each statement it plans
-//! answered by the warehouse's recorded rows, in the old client's order, every
-//! one asked, and the schema the old client gave.
-//!
-//! The statements are the old client's text, but for an expression's sample:
-//! the old client read `SELECT {expr} AS name FROM {the table's rows}`, and
-//! the core reads the expression inside the relation the data layer renders,
-//! `SELECT name FROM (SELECT ({expr}) AS name FROM t AS source...)`, the same
-//! rows (J-12); the test reads the core's as the old client's text
-//! to find its recorded rows.
+//! Metric-view description and refresh behavior over small authored warehouse replies.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::RecordBatch;
-use base64::Engine;
-use sdm_contract::data::{
-    DataRequest, ExpectedSchema, FetchPlan, ProviderChoice, ProviderError, SqlParam,
-};
+use sdm_contract::data::{DataRequest, ProviderChoice, ProviderError};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     DescribeSource, Given, NamedTable, Operation, OperationResult, SourceDescription, SourceSpec,
@@ -34,8 +19,6 @@ use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, UnknownZone, Zones, start,
 };
 use serde_json::{Value as Json, json};
-
-const CAPTURES: &str = include_str!("../../../../contract/view-captures.json");
 
 struct Utc;
 
@@ -65,206 +48,237 @@ fn facts() -> HostFacts {
     }
 }
 
-fn captures() -> Json {
-    let document: Json = fixture_tables::read(CAPTURES);
-    assert_eq!(document["format"], "sdm-view-captures/1");
-    document
+fn view_inputs() -> Json {
+    json!({"cases": [
+        {"case": "view.metric.from-source", "leg": "databricks-sql", "input": {"view": {"trust_expressions": false}}},
+        {"case": "view.metric.wildcards-nested-join", "leg": "databricks-sql", "input": {"view": {"trust_expressions": false}}}
+    ]})
 }
 
-fn rows(document: &Json, digest: &str) -> ArrowData {
-    let encoded = document["tables"][digest].as_str().unwrap();
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(encoded)
-        .unwrap();
-    let reader =
-        arrow_ipc::reader::StreamReader::try_new(std::io::Cursor::new(bytes), None).unwrap();
-    let schema = reader.schema();
-    let batches: Vec<RecordBatch> = reader.map(Result::unwrap).collect();
-    ArrowData::new(schema, batches)
-}
-
-/// Rows the recording read as Python values (`fetchall`), whose integers
-/// pyarrow types as 64-bit, in the type the request expects, as the
-/// driver's Arrow gives them (a position, 32-bit).
-fn as_expected(data: ArrowData, expect: &ExpectedSchema) -> ArrowData {
-    let ExpectedSchema::Schema { fields } = expect else {
-        return data;
+// Small authored warehouse inputs for the ordinary metric-view regression tests.
+// Types come from the simulated catalog, never from the core's expected schema.
+fn ordinary_rows(request: &DataRequest, edits: &Edits, nested: bool) -> ArrowData {
+    use arrow_array::{
+        ArrayRef, Float64Array, Int32Array, Int64Array, StringArray, TimestampMicrosecondArray,
     };
-    let schema = Arc::new(arrow_schema::Schema::new(
-        data.schema
-            .fields()
-            .iter()
-            .zip(fields)
-            .map(|(field, wanted)| {
-                if wanted.column_type == ColumnType::Int32
-                    && field.data_type() == &arrow_schema::DataType::Int64
-                {
-                    arrow_schema::Field::new(
-                        field.name(),
-                        arrow_schema::DataType::Int32,
-                        field.is_nullable(),
-                    )
-                } else {
-                    field.as_ref().clone()
-                }
+    use arrow_schema::{Field, Schema};
+    use sdm_contract::data::DescribePart;
+    let strings = |names: &[&str], rows: Vec<Vec<String>>| {
+        let arrays: Vec<ArrayRef> = (0..names.len())
+            .map(|i| {
+                Arc::new(StringArray::from(
+                    rows.iter().map(|r| r[i].as_str()).collect::<Vec<_>>(),
+                )) as ArrayRef
             })
-            .collect::<Vec<_>>(),
-    ));
-    let batches = data
-        .batches
-        .iter()
-        .map(|batch| {
-            let columns = batch
-                .columns()
+            .collect();
+        let fields = names
+            .iter()
+            .zip(&arrays)
+            .map(|(name, a)| Field::new(*name, a.data_type().clone(), true))
+            .collect::<Vec<_>>();
+        let schema = Arc::new(Schema::new(fields));
+        let batch = RecordBatch::try_new(schema.clone(), arrays).unwrap();
+        ArrowData::new(schema, vec![batch])
+    };
+    match request {
+        DataRequest::Describe {
+            part: DescribePart::ViewDefinition,
+            ..
+        } => {
+            let mut yaml = r#"version: 0.1
+source: ph_catalog.ph_schema.orders
+filter: source.price > 50
+joins:
+  - name: users
+    source: ph_catalog.ph_schema.users
+    on: source.user_id = users.user_id
+dimensions:
+  - name: order_id
+    expr: source.order_id
+  - name: user_id
+    expr: source.user_id
+  - name: ts
+    expr: source.ts
+  - name: PRICE
+    expr: source.price
+  - name: price_band
+    expr: CASE WHEN source.price > 100 THEN 'high' ELSE 'low' END
+  - name: country
+    expr: users.country
+  - name: age
+    expr: users.age
+measures:
+  - name: revenue
+    expr: SUM(source.price)
+"#
+            .to_owned();
+            if nested {
+                yaml = yaml.replace(
+                    "    on: source.user_id = users.user_id",
+                    "    on: source.user_id = users.user_id\n    joins:\n      - name: countries\n        source: ph_catalog.ph_schema.countries\n        on: users.country = countries.country",
+                ).replace("measures:", "  - name: region\n    expr: users.countries.region\nmeasures:");
+            }
+            if nested {
+                let start = yaml.find("dimensions:").unwrap();
+                let end = yaml.find("measures:").unwrap();
+                yaml.replace_range(start..end, "dimensions:\n  - expr: source.* EXCEPT (price)\n  - expr: users.* EXCEPT (age, user_id)\n  - name: region\n    expr: users.countries.region\n");
+            }
+            if let Some((from, to)) = edits.definition {
+                yaml = yaml.replace(from, to);
+            }
+            strings(
+                &["col_name", "data_type", "comment", "metadata"],
+                [
+                    ("# Detailed Table Information", ""),
+                    ("Catalog", "ph_catalog"),
+                    ("Database", "ph_schema"),
+                    ("Type", "METRIC_VIEW"),
+                    ("View Text", &yaml),
+                ]
+                .into_iter()
+                .map(|(a, b)| vec![a.into(), b.into(), String::new(), String::new()])
+                .collect(),
+            )
+        }
+        DataRequest::Describe {
+            tables,
+            part: DescribePart::Columns,
+        } => {
+            let mut rows = Vec::new();
+            for table in tables {
+                let name = table.source.last().unwrap().as_str();
+                let columns: &[(&str, &str)] = match name {
+                    "orders" => &[
+                        ("order_id", "bigint"),
+                        ("country", "string"),
+                        ("user_id", "bigint"),
+                        ("price", "double"),
+                        ("ts", "timestamp_ntz"),
+                    ],
+                    "countries" => &[("country", "string"), ("region", "string")],
+                    "users" => &[("user_id", "bigint"), ("age", "int"), ("country", "string")],
+                    _ => panic!("unexpected physical table {name}"),
+                };
+                for (column, dtype) in columns {
+                    rows.push(vec![
+                        (*column).into(),
+                        (*dtype).into(),
+                        "YES".into(),
+                        "ph_catalog".into(),
+                        "ph_schema".into(),
+                        name.into(),
+                        "MANAGED".into(),
+                    ]);
+                }
+            }
+            strings(
+                &[
+                    "column_name",
+                    "full_data_type",
+                    "is_nullable",
+                    "table_catalog",
+                    "table_schema",
+                    "table_name",
+                    "table_type",
+                ],
+                rows,
+            )
+        }
+        DataRequest::Describe {
+            part: DescribePart::Keys,
+            ..
+        } => strings(
+            &["constraint_type", "constraint_name", "column_name"],
+            vec![],
+        ),
+        DataRequest::Preview { table, columns, .. } => {
+            let physical = table.source.last().unwrap().as_str();
+            let arrays: Vec<ArrayRef> = columns
                 .iter()
-                .zip(schema.fields())
-                .map(|(column, field)| {
-                    if field.data_type() == &arrow_schema::DataType::Int32
-                        && column.data_type() == &arrow_schema::DataType::Int64
-                    {
-                        let wide = column
-                            .as_any()
-                            .downcast_ref::<arrow_array::Int64Array>()
-                            .unwrap();
-                        Arc::new(arrow_array::Int32Array::from_iter(
-                            wide.iter().map(|v| v.map(|v| i32::try_from(v).unwrap())),
-                        )) as arrow_array::ArrayRef
-                    } else {
-                        Arc::clone(column)
+                .map(|name| match (physical, name.as_str()) {
+                    ("orders", "order_id") => {
+                        Arc::new(Int64Array::from(vec![10, 11, 12])) as ArrayRef
                     }
+                    ("orders" | "users", "user_id") => Arc::new(Int64Array::from(vec![0, 1, 2])),
+                    ("orders", "PRICE" | "price") => {
+                        Arc::new(Float64Array::from(vec![60.0, 90.0, 120.0]))
+                    }
+                    ("orders", "ts")
+                        if edits
+                            .definition
+                            .is_some_and(|(_, to)| to.contains("DATE_TRUNC")) =>
+                    {
+                        Arc::new(TimestampMicrosecondArray::from(vec![
+                            1_698_796_800_000_000,
+                            1_698_796_800_000_000,
+                            1_701_388_800_000_000,
+                        ]))
+                    }
+                    ("orders", "ts" | "ts_raw") => Arc::new(TimestampMicrosecondArray::from(vec![
+                        1_700_000_000_000_000,
+                        1_701_000_000_000_000,
+                        1_702_000_000_000_000,
+                    ])),
+                    ("orders", "price_band") => {
+                        Arc::new(StringArray::from(vec!["low", "low", "high"]))
+                    }
+                    ("users", "age") => Arc::new(Int32Array::from(vec![20, 30, 40])),
+                    ("countries", "region") => {
+                        Arc::new(StringArray::from(vec!["north", "north", "south"]))
+                    }
+                    ("countries", "country") => Arc::new(StringArray::from(vec!["US", "CA", "MX"])),
+                    ("users" | "orders", "country") => {
+                        Arc::new(StringArray::from(vec!["US", "CA", "US"]))
+                    }
+                    _ => panic!("unexpected physical preview {physical}.{name}"),
                 })
                 .collect();
-            RecordBatch::try_new(Arc::clone(&schema), columns).unwrap()
-        })
-        .collect();
-    ArrowData::new(schema, batches)
-}
-
-/// `text` with each placeholder the recordings write for a private name
-/// (`{catalog}`, `{schema}`,...) as a plain name, which an unquoted part of
-/// a name may hold, as the warehouse's own names did.
-fn unplaced(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(open) = rest.find('{') {
-        let (before, after) = rest.split_at(open);
-        out.push_str(before);
-        match after[1..].find('}') {
-            Some(close)
-                if after[1..=close]
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c == '_') =>
-            {
-                out.push_str("ph_");
-                out.push_str(&after[1..=close]);
-                rest = &after[close + 2..];
-            }
-            _ => {
-                out.push('{');
-                rest = &after[1..];
-            }
+            let schema = Arc::new(Schema::new(
+                columns
+                    .iter()
+                    .zip(&arrays)
+                    .map(|(name, a)| Field::new(name, a.data_type().clone(), true))
+                    .collect::<Vec<_>>(),
+            ));
+            let batch = RecordBatch::try_new(schema.clone(), arrays).unwrap();
+            ArrowData::new(schema, vec![batch])
         }
+        DataRequest::KeyCounts { keys } => {
+            for key in keys {
+                let table = key.table.source.last().unwrap().as_str();
+                assert!(
+                    (table == "users" && key.columns == ["user_id"])
+                        || (table == "countries" && key.columns == ["country"])
+                        || (table == "orders" && key.columns == ["order_id"]),
+                    "unexpected authored key: {key:?}"
+                );
+            }
+            let arrays: Vec<ArrayRef> = vec![
+                Arc::new(Int32Array::from_iter_values(0..keys.len() as i32)),
+                Arc::new(Int64Array::from(vec![3; keys.len()])),
+                Arc::new(Int64Array::from(vec![3; keys.len()])),
+                Arc::new(Int64Array::from(vec![0; keys.len()])),
+            ];
+            let schema = Arc::new(Schema::new(
+                ["k", "n", "d", "z"]
+                    .iter()
+                    .zip(&arrays)
+                    .map(|(name, a)| Field::new(*name, a.data_type().clone(), false))
+                    .collect::<Vec<_>>(),
+            ));
+            let batch = RecordBatch::try_new(schema.clone(), arrays).unwrap();
+            ArrowData::new(schema, vec![batch])
+        }
+        _ => panic!("unhandled ordinary warehouse request: {request:?}"),
     }
-    out.push_str(rest);
-    out
 }
 
-/// `data` with each text cell's placeholders as plain names ([`unplaced`]).
-fn unplaced_rows(data: ArrowData) -> ArrowData {
-    let batches = data
-        .batches
-        .iter()
-        .map(|batch| {
-            let columns = batch
-                .columns()
-                .iter()
-                .map(
-                    |column| match column.as_any().downcast_ref::<arrow_array::StringArray>() {
-                        Some(text) => Arc::new(
-                            text.iter()
-                                .map(|v| v.map(unplaced))
-                                .collect::<arrow_array::StringArray>(),
-                        ) as arrow_array::ArrayRef,
-                        None => Arc::clone(column),
-                    },
-                )
-                .collect();
-            RecordBatch::try_new(batch.schema(), columns).unwrap()
-        })
-        .collect();
-    ArrowData::new(Arc::clone(&data.schema), batches)
+fn view_name(_case: &Json) -> String {
+    "ph_catalog.ph_schema.metric_view".into()
 }
 
-/// `text` with every run of white space one space, as exact replay reads it.
-fn normalised(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
-}
-
-/// A statement's parameters as the recordings write them.
-fn parameters(params: &[SqlParam]) -> Vec<Json> {
-    params
-        .iter()
-        .map(|param| match param {
-            SqlParam::Value {
-                value: Scalar::Utf8(text),
-            } => json!(text),
-            SqlParam::Value { value } => json!(format!("{value:?}")),
-            other => json!(format!("{other:?}")),
-        })
-        .collect()
-}
-
-/// The metric view the case reads, by the name its `DESCRIBE` names.
-fn view_name(case: &Json) -> String {
-    let first = unplaced(case["statements"][0]["text"].as_str().unwrap());
-    let name = first.strip_prefix("DESCRIBE TABLE EXTENDED ").unwrap();
-    name.split('.')
-        .map(|part| part.trim_matches('`').replace("``", "`"))
-        .collect::<Vec<_>>()
-        .join(".")
-}
-
-/// The old client's text of an expression's sample the core asks as a
-/// preview of a relation of expressions: the expressions over the rows the
-/// old client read of the table, `from` (its last preview's `FROM`).
-fn old_sample(request: &DataRequest, from: &str) -> Option<String> {
-    let DataRequest::Preview { table, limit, .. } = request else {
-        return None;
-    };
-    let renamed =
-        |c: &sdm_contract::data::RelationColumn| c.column.as_ref().is_some_and(|s| *s != c.name);
-    if table.columns.is_empty()
-        || table
-            .columns
-            .iter()
-            .any(|c| c.expression.is_none() && !renamed(c))
-    {
-        return None;
-    }
-    let projections: Vec<String> = table
-        .columns
-        .iter()
-        .map(|c| {
-            let read = match (&c.expression, &c.column) {
-                (Some(expr), _) => expr.clone(),
-                (None, Some(column)) => format!("`{}`", column.replace('`', "``")),
-                (None, None) => String::new(),
-            };
-            format!("{read} AS `{}`", c.name.replace('`', "``"))
-        })
-        .collect();
-    Some(format!(
-        "SELECT {} FROM {from} LIMIT {limit}",
-        projections.join(", ")
-    ))
-}
-
-/// What a run over a case did: each recorded statement asked, in order, the
-/// first statement it asked that the recording does not hold next, how it
-/// ended, every request it asked and every warning it gave.
-struct Replayed {
-    asked: usize,
-    stray: Option<String>,
+/// Observed description, requests and diagnostics.
+struct DescribedRun {
     ended: Result<SourceDescription, sdm_contract::CoreError>,
     requests: Vec<DataRequest>,
     warnings: Vec<sdm_contract::CoreWarning>,
@@ -274,9 +288,7 @@ struct Replayed {
 /// An answer of a test's own to the requests it names.
 type Answer = Box<dyn Fn(&DataRequest) -> Option<FetchResult>>;
 
-/// How a run departs from its recording: the view's definition rewritten
-/// (`from`, `to`), and answers of its own for the requests it names, which
-/// read no recorded statement.
+/// Per-test definition changes and explicit provider outcomes.
 #[derive(Default)]
 struct Edits {
     definition: Option<(&'static str, &'static str)>,
@@ -306,23 +318,18 @@ fn source_spec() -> SourceSpec {
     }
 }
 
-fn replay(document: &Json, case: &Json) -> Replayed {
-    replay_with(document, case, &Edits::default(), true)
+/// Describe the authored view through the real core operation.
+fn describe_with(document: &Json, case: &Json, edits: &Edits, strict: bool) -> DescribedRun {
+    describe_spec(document, case, edits, strict, source_spec())
 }
 
-/// The run of `case`, its statements answered by the recording: in order
-/// where `strict`, else wherever the recording holds each.
-fn replay_with(document: &Json, case: &Json, edits: &Edits, strict: bool) -> Replayed {
-    replay_spec(document, case, edits, strict, source_spec())
-}
-
-fn replay_spec(
-    document: &Json,
+fn describe_spec(
+    _document: &Json,
     case: &Json,
     edits: &Edits,
-    strict: bool,
+    _strict: bool,
     spec: SourceSpec,
-) -> Replayed {
+) -> DescribedRun {
     let trust = case["input"]["view"]["trust_expressions"]
         .as_bool()
         .unwrap_or(false);
@@ -352,14 +359,8 @@ fn replay_spec(
         Arc::new(Utc),
     )
     .unwrap();
-    let statements = case["statements"].as_array().unwrap();
-    let mut at = 0;
     let mut requests = Vec::new();
-    // The `FROM` of the last preview of each table's rows, by base table.
-    let mut froms: Vec<(Vec<String>, String)> = Vec::new();
-    let ended = |run: &mut sdm_core::Run, at, requests, stray, ended| Replayed {
-        asked: at,
-        stray,
+    let ended = |run: &mut sdm_core::Run, requests, ended| DescribedRun {
         ended,
         requests,
         warnings: run.take_warnings(),
@@ -368,7 +369,7 @@ fn replay_spec(
     loop {
         let step = match run.next() {
             Ok(step) => step,
-            Err(error) => return ended(&mut run, at, requests, None, Err(error)),
+            Err(error) => return ended(&mut run, requests, Err(error)),
         };
         match step {
             Step::Done { result } => {
@@ -380,9 +381,9 @@ fn replay_spec(
                     panic!("no description attached");
                 };
                 let description = serde_json::from_slice(&bytes).unwrap();
-                let mut replayed = ended(&mut run, at, requests, None, Ok(description));
-                replayed.notes = described.notes;
-                return replayed;
+                let mut described_run = ended(&mut run, requests, Ok(description));
+                described_run.notes = described.notes;
+                return described_run;
             }
             Step::Fetch {
                 requests: asked_now,
@@ -393,78 +394,11 @@ fn replay_spec(
                         run.submit_fetch(asked.id, answer).unwrap();
                         continue;
                     }
-                    let FetchPlan::Sql {
-                        statements: sql, ..
-                    } = &asked.plan
-                    else {
-                        panic!("not SQL");
-                    };
-                    let last = sql.last().unwrap();
-                    let mut text = normalised(&last.text);
-                    if let DataRequest::Preview { table, .. } = &asked.request {
-                        if let Some(from) = froms
-                            .iter()
-                            .rev()
-                            .find(|(source, _)| *source == table.source)
-                            .map(|(_, f)| f.clone())
-                            && let Some(old) = old_sample(&asked.request, &from)
-                        {
-                            text = normalised(&old);
-                        } else if old_sample(&asked.request, "").is_none() {
-                            let from = text
-                                .split_once(" FROM ")
-                                .and_then(|(_, rest)| rest.rsplit_once(" LIMIT "))
-                                .map(|(from, _)| from.to_owned())
-                                .unwrap();
-                            froms.push((table.source.clone(), from));
-                        }
-                    }
-                    let holds = |r: &Json| {
-                        normalised(&unplaced(r["text"].as_str().unwrap())) == text
-                            && r["parameters"]
-                                .as_array()
-                                .cloned()
-                                .unwrap_or_default()
-                                .iter()
-                                .map(|p| json!(unplaced(p.as_str().unwrap_or_default())))
-                                .collect::<Vec<_>>()
-                                == parameters(&last.params)
-                    };
-                    let recorded = if strict {
-                        statements.get(at).filter(|r| holds(r))
-                    } else {
-                        statements.iter().find(|r| holds(r))
-                    };
-                    let Some(recorded) = recorded else {
-                        let stray = format!(
-                            "{text} {:?}, where the old client asked {}",
-                            parameters(&last.params),
-                            statements
-                                .get(at)
-                                .map_or("nothing".to_owned(), |r| r.to_string())
-                        );
-                        let error =
-                            sdm_contract::CoreError::new(sdm_contract::Sentence::Internal, "stray");
-                        return ended(&mut run, at, requests, Some(stray), Err(error));
-                    };
-                    let answer = match recorded["result"].as_str() {
-                        Some(digest) => {
-                            let mut data = unplaced_rows(rows(document, digest));
-                            if let Some((from, to)) = edits.definition {
-                                data = edited_rows(data, from, to);
-                            }
-                            FetchResult::Data(as_expected(data, asked.plan.expect()))
-                        }
-                        None => FetchResult::Error(ProviderError {
-                            driver_message: None,
-                            kind: sdm_contract::ErrorKind::Internal,
-                            retryable: false,
-                            sqlstate: None,
-                            vendor_code: None,
-                            error_class: None,
-                        }),
-                    };
-                    at += 1;
+                    let answer = FetchResult::Data(ordinary_rows(
+                        &asked.request,
+                        edits,
+                        case["case"] == "view.metric.wildcards-nested-join",
+                    ));
                     run.submit_fetch(asked.id, answer).unwrap();
                 }
             }
@@ -473,33 +407,7 @@ fn replay_spec(
     }
 }
 
-/// `data` with `from` replaced by `to` in each text cell.
-fn edited_rows(data: ArrowData, from: &str, to: &str) -> ArrowData {
-    let batches = data
-        .batches
-        .iter()
-        .map(|batch| {
-            let columns = batch
-                .columns()
-                .iter()
-                .map(
-                    |column| match column.as_any().downcast_ref::<arrow_array::StringArray>() {
-                        Some(text) => Arc::new(
-                            text.iter()
-                                .map(|v| v.map(|v| v.replace(from, to)))
-                                .collect::<arrow_array::StringArray>(),
-                        ) as arrow_array::ArrayRef,
-                        None => Arc::clone(column),
-                    },
-                )
-                .collect();
-            RecordBatch::try_new(batch.schema(), columns).unwrap()
-        })
-        .collect();
-    ArrowData::new(Arc::clone(&data.schema), batches)
-}
-
-/// The recorded case `id`.
+/// Select an authored view variant.
 fn case<'d>(document: &'d Json, id: &str) -> &'d Json {
     document["cases"]
         .as_array()
@@ -526,7 +434,7 @@ fn samples(request: &DataRequest) -> bool {
 /// any joined table's columns are read (`RE/graph.py:1641-1646`).
 #[test]
 fn a_filter_is_refused_before_any_joined_table_is_read() {
-    let document = captures();
+    let document = view_inputs();
     let edits = Edits {
         definition: Some((
             "filter: source.price > 50",
@@ -534,13 +442,13 @@ fn a_filter_is_refused_before_any_joined_table_is_read() {
         )),
         answer: None,
     };
-    let replayed = replay_with(
+    let described_run = describe_with(
         &document,
         case(&document, "view.metric.from-source"),
         &edits,
         false,
     );
-    let Err(refused) = &replayed.ended else {
+    let Err(refused) = &described_run.ended else {
         panic!("a filter calling an untrusted function was applied");
     };
     assert_eq!(
@@ -549,22 +457,21 @@ fn a_filter_is_refused_before_any_joined_table_is_read() {
         "{refused:?}"
     );
     assert!(
-        replayed.requests.iter().any(|r| reads(r, "orders")),
+        described_run.requests.iter().any(|r| reads(r, "orders")),
         "the source table's columns were not read: {:?}",
-        replayed.requests
+        described_run.requests
     );
     assert!(
-        !replayed.requests.iter().any(|r| reads(r, "users")),
+        !described_run.requests.iter().any(|r| reads(r, "users")),
         "a joined table was read before the filter was refused: {:?}",
-        replayed.requests
+        described_run.requests
     );
 }
 
-/// S5's second sequence: a join dropped at its key's count drops the joins
-/// nested in it before anything of theirs is sampled (`:1819-1825`).
+/// Dropping a parent join also drops its descendants before expression sampling.
 #[test]
 fn a_join_dropped_takes_its_children_before_their_samples() {
-    let document = captures();
+    let document = view_inputs();
     let edits = Edits {
         definition: Some((
             "  - name: region\n    expr: users.countries.region",
@@ -608,27 +515,27 @@ fn a_join_dropped_takes_its_children_before_their_samples() {
             _ => None,
         })),
     };
-    let replayed = replay_with(
+    let described_run = describe_with(
         &document,
         case(&document, "view.metric.wildcards-nested-join"),
         &edits,
         false,
     );
-    assert!(replayed.stray.is_none(), "{:?}", replayed.stray);
-    let Ok(description) = &replayed.ended else {
-        panic!("{:?}", replayed.ended.err());
+
+    let Ok(description) = &described_run.ended else {
+        panic!("{:?}", described_run.ended.err());
     };
     let tables: Vec<&str> = description.tables.iter().map(|t| t.name.as_str()).collect();
     assert_eq!(tables, ["orders"]);
     assert!(
-        !replayed
+        !described_run
             .requests
             .iter()
             .any(|r| samples(r) && reads(r, "countries")),
         "a dropped join's child was sampled: {:?}",
-        replayed.requests
+        described_run.requests
     );
-    let said: Vec<&str> = replayed
+    let said: Vec<&str> = described_run
         .warnings
         .iter()
         .map(|w| w.message.as_str())
@@ -652,22 +559,22 @@ fn a_join_dropped_takes_its_children_before_their_samples() {
 /// retried alone first, as any class 22 or 42 refusal does (row 45).
 #[test]
 fn a_42501_on_an_expression_sample_leaves_that_column_out() {
-    let document = captures();
+    let document = view_inputs();
     let edits = Edits {
         definition: None,
         answer: Some(Box::new(|request: &DataRequest| {
             samples(request).then(|| refusal("42501"))
         })),
     };
-    let replayed = replay_with(
+    let described_run = describe_with(
         &document,
         case(&document, "view.metric.from-source"),
         &edits,
         false,
     );
-    assert!(replayed.stray.is_none(), "{:?}", replayed.stray);
-    let Ok(description) = &replayed.ended else {
-        panic!("{:?}", replayed.ended.err());
+
+    let Ok(description) = &described_run.ended else {
+        panic!("{:?}", described_run.ended.err());
     };
     let orders = description
         .tables
@@ -680,8 +587,11 @@ fn a_42501_on_an_expression_sample_leaves_that_column_out() {
         orders.columns
     );
     // Sampled with the batch, then alone.
-    assert_eq!(replayed.requests.iter().filter(|r| samples(r)).count(), 2);
-    let refused = replayed
+    assert_eq!(
+        described_run.requests.iter().filter(|r| samples(r)).count(),
+        2
+    );
+    let refused = described_run
         .warnings
         .iter()
         .find(|w| w.sentence == sdm_contract::Sentence::ViewColumnRefused)
@@ -692,105 +602,368 @@ fn a_42501_on_an_expression_sample_leaves_that_column_out() {
     );
 }
 
-/// The schema as the old client's observation writes it.
-fn schema_json(description: &SourceDescription) -> Json {
-    let tables: Vec<Json> = description
+#[test]
+fn metric_view_description_preserves_columns_sources_and_join_identity() {
+    let document = view_inputs();
+    let description = described(&document, "view.metric.from-source");
+    let orders = description
         .tables
         .iter()
-        .map(|table| {
-            json!({
-                "name": table.name,
-                "columns": table.columns.iter().map(|c| json!({
-                    "name": c.name,
-                    "dtype": c.dtype.wire_name(),
-                    "stype": serde_json::to_value(c.stype).unwrap(),
-                })).collect::<Vec<_>>(),
-                "primary_key": table.primary_key.first(),
-                "time_column": table.time_column,
-            })
-        })
-        .collect();
-    let links: Vec<Json> = description
-        .links
+        .find(|t| t.name == "orders")
+        .unwrap();
+    let users = description
+        .tables
         .iter()
-        .map(|link| json!([link[0].table, link[0].column, link[1].table, link[1].column]))
-        .collect();
-    json!({"tables": tables, "links": links})
-}
+        .find(|t| t.name == "users")
+        .unwrap();
+    assert_eq!(description.tables.len(), 2);
+    assert_eq!(orders.source.source, ["orders"]);
+    assert_eq!(users.source.source, ["users"]);
+    assert!(orders.primary_key.is_empty());
+    for (name, dtype, stype) in [
+        ("user_id", "int64", sdm_contract::ops::Stype::Id),
+        ("PRICE", "float64", sdm_contract::ops::Stype::Numerical),
+        (
+            "price_band",
+            "string",
+            sdm_contract::ops::Stype::Categorical,
+        ),
+        ("ts", "timestamp[us]", sdm_contract::ops::Stype::Timestamp),
+    ] {
+        let column = orders.columns.iter().find(|c| c.name == name).unwrap();
+        assert_eq!(column.dtype.wire_name(), dtype, "{name}");
+        assert_eq!(column.stype, stype, "{name}");
+    }
 
-/// The old schema with the fields the core's description holds.
-fn old_schema(schema: &Json) -> Json {
-    let tables: Vec<Json> = schema["tables"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|table| {
-            json!({
-                "name": table["name"],
-                "columns": table["columns"],
-                "primary_key": table["primary_key"],
-                "time_column": table["time_column"],
-            })
-        })
-        .collect();
-    json!({"tables": tables, "links": schema["links"]})
+    assert_eq!(
+        orders
+            .columns
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect::<Vec<_>>(),
+        ["order_id", "user_id", "ts", "PRICE", "price_band"]
+    );
+    assert_eq!(
+        users
+            .columns
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect::<Vec<_>>(),
+        ["country", "age", "user_id"]
+    );
+    assert_eq!(orders.time_column.as_deref(), Some("ts"));
+    assert_eq!(users.primary_key, ["user_id"]);
+    assert_eq!(description.links.len(), 1);
+    let link = &description.links[0];
+    assert_eq!(
+        (
+            &*link[0].table,
+            &*link[0].column,
+            &*link[1].table,
+            &*link[1].column
+        ),
+        ("orders", "user_id", "users", "user_id")
+    );
+    assert!(!orders.columns.iter().any(|c| c.name == "revenue"));
 }
 
 #[test]
-fn each_metric_view_converts_as_the_old_client_converted_it_on_a_sql_warehouse() {
-    let document = captures();
-    let mut wrong = Vec::new();
-    let mut converted = 0;
-    for case in document["cases"].as_array().unwrap() {
-        if case["leg"] != "databricks-sql" {
-            continue;
-        }
-        let id = case["case"].as_str().unwrap();
-        let replayed = replay(&document, case);
-        let recorded = case["statements"].as_array().unwrap().len();
-        if let Some(stray) = &replayed.stray {
-            wrong.push(format!(
-                "{id}: after {} statements, {stray}",
-                replayed.asked
-            ));
-            continue;
-        }
-        if replayed.asked != recorded {
-            wrong.push(format!(
-                "{id}: asked {} of the {recorded} statements the old client asked",
-                replayed.asked
-            ));
-        }
-        match (&replayed.ended, case["outcome"]["result"].as_str()) {
-            (Ok(description), Some("success")) => {
-                converted += 1;
-                let got = schema_json(description);
-                let want = old_schema(&case["schema"]);
-                if got != want {
-                    wrong.push(format!("{id}: {got}\n  where the old client gave {want}"));
-                }
-            }
-            (Err(error), Some("refusal")) => {
-                if error.code != ErrorCode::InvalidRequest {
-                    wrong.push(format!(
-                        "{id}: refused with {:?}: {}",
-                        error.code, error.message
-                    ));
-                }
-            }
-            (ended, outcome) => wrong.push(format!(
-                "{id}: ended {:?} where the old client's ended {outcome:?}",
-                ended.as_ref().map(|_| "described").map_err(|e| &e.message)
-            )),
-        }
+fn metric_query_sources_and_join_filters_have_named_refusals() {
+    let document = view_inputs();
+    for (from, to, sentence) in [
+        (
+            "source: ph_catalog.ph_schema.orders",
+            "source: SELECT * FROM ph_catalog.ph_schema.orders",
+            sdm_contract::Sentence::ViewSourceUnsupported,
+        ),
+        (
+            "filter: source.price > 50",
+            "filter: users.country = 'US'",
+            sdm_contract::Sentence::ViewFilterRefused,
+        ),
+    ] {
+        let edits = Edits {
+            definition: Some((from, to)),
+            answer: None,
+        };
+        let run = describe_with(
+            &document,
+            case(&document, "view.metric.from-source"),
+            &edits,
+            false,
+        );
+        let error = run.ended.unwrap_err();
+        assert_eq!(error.code, ErrorCode::InvalidRequest);
+        assert_eq!(error.sentence, sentence);
+        assert!(!run.requests.iter().any(samples));
     }
-    assert!(
-        wrong.is_empty(),
-        "{} differences:\n{}",
-        wrong.len(),
-        wrong.join("\n")
+}
+
+#[test]
+fn unsupported_join_condition_omits_only_its_table() {
+    let document = view_inputs();
+    let edits = Edits {
+        definition: Some((
+            "on: source.user_id = users.user_id",
+            "on: source.user_id = users.user_id AND users.age > 20",
+        )),
+        answer: None,
+    };
+    let run = describe_with(
+        &document,
+        case(&document, "view.metric.from-source"),
+        &edits,
+        false,
     );
-    assert!(converted >= 14, "{converted} views converted");
+    let description = run.ended.unwrap();
+    assert_eq!(
+        description
+            .tables
+            .iter()
+            .map(|t| t.name.as_str())
+            .collect::<Vec<_>>(),
+        ["orders"]
+    );
+    assert!(description.links.is_empty());
+    assert!(
+        run.warnings
+            .iter()
+            .any(|w| w.message.contains("users") && w.message.contains("join"))
+    );
+}
+
+#[test]
+fn nested_metric_join_preserves_both_relationships() {
+    let document = view_inputs();
+    let run = describe_with(
+        &document,
+        case(&document, "view.metric.wildcards-nested-join"),
+        &Edits::default(),
+        false,
+    );
+    let description = run.ended.unwrap();
+    assert_eq!(
+        description
+            .tables
+            .iter()
+            .map(|t| t.name.as_str())
+            .collect::<Vec<_>>(),
+        ["orders", "users", "countries"]
+    );
+    let countries = description
+        .tables
+        .iter()
+        .find(|t| t.name == "countries")
+        .unwrap();
+    assert_eq!(countries.primary_key, ["country"]);
+    let users = description
+        .tables
+        .iter()
+        .find(|t| t.name == "users")
+        .unwrap();
+    assert!(!users.columns.iter().any(|c| c.name == "age"));
+    assert!(users.columns.iter().any(|c| c.name == "user_id"));
+    let orders = description
+        .tables
+        .iter()
+        .find(|t| t.name == "orders")
+        .unwrap();
+    assert!(orders.columns.iter().any(|c| c.name == "price")); // Revenue depends on it.
+
+    assert!(countries.columns.iter().any(|c| c.name == "region"));
+    let mut links = description
+        .links
+        .iter()
+        .map(|link| {
+            (
+                link[0].table.as_str(),
+                link[0].column.as_str(),
+                link[1].table.as_str(),
+                link[1].column.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    links.sort();
+    assert_eq!(
+        links,
+        [
+            ("orders", "user_id", "users", "user_id"),
+            ("users", "country", "countries", "country")
+        ]
+    );
+}
+
+#[test]
+fn parameter_defaults_are_substituted_before_view_reads() {
+    let document = view_inputs();
+    let edits = Edits {
+        definition: Some((
+            "filter: source.price > 50",
+            "parameters:\n  - name: min_price\n    data_type: DOUBLE\n    default: 50\nfilter: source.price >= min_price",
+        )),
+        answer: None,
+    };
+    let run = describe_with(
+        &document,
+        case(&document, "view.metric.from-source"),
+        &edits,
+        false,
+    );
+    assert!(run.ended.is_ok(), "{:?}", run.ended);
+    let filters = run
+        .requests
+        .iter()
+        .flat_map(|r| r.relations())
+        .filter_map(|(_, r)| r.filter.as_deref())
+        .collect::<Vec<_>>();
+    assert!(!filters.is_empty());
+    assert!(
+        filters
+            .iter()
+            .all(|f| *f == "source.price >= CAST('50' AS DOUBLE)"),
+        "{filters:?}"
+    );
+}
+
+#[test]
+fn derived_month_keeps_raw_timestamp_as_sampling_time() {
+    let document = view_inputs();
+    let edits = Edits {
+        definition: Some(("expr: source.ts", "expr: DATE_TRUNC('MONTH', source.ts)")),
+        answer: None,
+    };
+    let run = describe_with(
+        &document,
+        case(&document, "view.metric.from-source"),
+        &edits,
+        false,
+    );
+    let description = run.ended.unwrap();
+    let orders = description
+        .tables
+        .iter()
+        .find(|t| t.name == "orders")
+        .unwrap();
+    assert_eq!(orders.time_column.as_deref(), Some("ts_raw"));
+    let projections = run
+        .requests
+        .iter()
+        .flat_map(|r| r.relations())
+        .flat_map(|(_, r)| r.columns.iter())
+        .collect::<Vec<_>>();
+    assert!(
+        projections
+            .iter()
+            .any(|c| c.name == "ts" && c.expression.as_deref() == Some("DATE_TRUNC('MONTH', ts)")),
+        "{projections:?}"
+    );
+    assert!(
+        projections.iter().any(|c| c.name == "ts_raw"
+            && c.column.as_deref() == Some("ts")
+            && c.expression.is_none()),
+        "{projections:?}"
+    );
+
+    for name in ["ts", "ts_raw"] {
+        let column = orders.columns.iter().find(|c| c.name == name).unwrap();
+        assert_eq!(column.dtype.wire_name(), "timestamp[us]");
+        assert_eq!(
+            column.received,
+            ColumnType::Timestamp {
+                unit: Unit::Us,
+                zone: None
+            }
+        );
+    }
+}
+
+#[test]
+fn untrusted_dimension_is_omitted_without_losing_other_columns() {
+    let document = view_inputs();
+    for (expression, trust) in [
+        ("bitmap_bucket_number(source.order_id)", false),
+        ("trim(FROM source.price)", true),
+    ] {
+        let mut input = case(&document, "view.metric.from-source").clone();
+        input["input"]["view"]["trust_expressions"] = json!(trust);
+        let edits = Edits {
+            definition: Some((
+                "CASE WHEN source.price > 100 THEN 'high' ELSE 'low' END",
+                expression,
+            )),
+            answer: None,
+        };
+        let run = describe_with(&document, &input, &edits, false);
+        let description = run.ended.unwrap();
+        let orders = description
+            .tables
+            .iter()
+            .find(|t| t.name == "orders")
+            .unwrap();
+        assert_eq!(
+            orders
+                .columns
+                .iter()
+                .map(|c| c.name.as_str())
+                .collect::<Vec<_>>(),
+            ["order_id", "user_id", "ts", "PRICE"]
+        );
+        assert!(
+            run.warnings
+                .iter()
+                .any(|w| w.message.contains("price_band"))
+        );
+        assert!(!run.requests.iter().any(|r| matches!(r, DataRequest::Preview { columns, .. } if columns.iter().any(|c| c == "price_band"))));
+    }
+}
+
+#[test]
+fn sibling_joins_keep_distinct_keys_and_column_ownership() {
+    let document = view_inputs();
+    let edits = Edits {
+        definition: Some((
+            "dimensions:",
+            "  - name: countries\n    source: ph_catalog.ph_schema.countries\n    on: source.country = countries.country\ndimensions:\n  - name: region\n    expr: countries.region",
+        )),
+        answer: None,
+    };
+    let run = describe_with(
+        &document,
+        case(&document, "view.metric.from-source"),
+        &edits,
+        false,
+    );
+    let description = run.ended.unwrap();
+    assert_eq!(description.tables.len(), 3);
+    for (table, key, attribute, absent) in [
+        ("users", "user_id", "age", "region"),
+        ("countries", "country", "region", "age"),
+    ] {
+        let child = description.tables.iter().find(|t| t.name == table).unwrap();
+        assert_eq!(child.primary_key, [key]);
+        assert!(child.columns.iter().any(|c| c.name == attribute));
+        assert!(!child.columns.iter().any(|c| c.name == absent));
+    }
+    let mut links = description
+        .links
+        .iter()
+        .map(|link| {
+            (
+                link[0].table.as_str(),
+                link[0].column.as_str(),
+                link[1].table.as_str(),
+                link[1].column.as_str(),
+            )
+        })
+        .collect::<Vec<_>>();
+    links.sort();
+    assert_eq!(
+        links,
+        [
+            ("orders", "country", "countries", "country"),
+            ("orders", "user_id", "users", "user_id")
+        ]
+    );
 }
 
 /// The schema a host holds of `description`, each column with the facts
@@ -863,7 +1036,7 @@ fn materialize_over(
 }
 
 fn materialize_query(
-    document: &Json,
+    _document: &Json,
     case: &Json,
     held: &sdm_contract::ops::HeldSchema,
     edits: &Edits,
@@ -932,7 +1105,6 @@ fn materialize_query(
         Arc::new(Utc),
     )
     .unwrap();
-    let statements = case["statements"].as_array().unwrap();
     loop {
         let step = match run.next() {
             Ok(step) => step,
@@ -949,43 +1121,13 @@ fn materialize_query(
                 run.submit_fetch(asked.id, answer).unwrap();
                 continue;
             }
-            let FetchPlan::Sql {
-                statements: sql, ..
-            } = &asked.plan
-            else {
-                panic!("not SQL");
-            };
-            let last = sql.last().unwrap();
-            let text = normalised(&last.text);
-            let recorded = statements
-                .iter()
-                .find(|r| {
-                    normalised(&unplaced(r["text"].as_str().unwrap())) == text
-                        && r["parameters"]
-                            .as_array()
-                            .cloned()
-                            .unwrap_or_default()
-                            .iter()
-                            .map(|p| json!(unplaced(p.as_str().unwrap_or_default())))
-                            .collect::<Vec<_>>()
-                            == parameters(&last.params)
-                })
-                .or_else(|| {
-                    // An expression's sample: its rows are the recorded sample's.
-                    statements.iter().find(|r| {
-                        samples(&asked.request)
-                            && r["text"].as_str().unwrap().contains(" AS `price_band` ")
-                    })
-                })
-                .unwrap_or_else(|| panic!("no recorded statement {text}"));
-            let digest = recorded["result"].as_str().unwrap();
-            let mut data = unplaced_rows(rows(document, digest));
-            if let Some((from, to)) = edits.definition {
-                data = edited_rows(data, from, to);
-            }
             run.submit_fetch(
                 asked.id,
-                FetchResult::Data(as_expected(data, asked.plan.expect())),
+                FetchResult::Data(ordinary_rows(
+                    &asked.request,
+                    edits,
+                    case["case"] == "view.metric.wildcards-nested-join",
+                )),
             )
             .unwrap();
         }
@@ -994,8 +1136,13 @@ fn materialize_query(
 
 /// The schema `describe_source` gives of the view of `case`.
 fn described(document: &Json, id: &str) -> SourceDescription {
-    let replayed = replay(document, case(document, id));
-    replayed.ended.unwrap()
+    let described_run = describe_with(
+        document,
+        case(document, id),
+        &Edits::default(),
+        id != "view.metric.from-source",
+    );
+    described_run.ended.unwrap()
 }
 
 /// Plan B: each `materialize` reads the view again, every probe included,
@@ -1003,7 +1150,7 @@ fn described(document: &Json, id: &str) -> SourceDescription {
 /// source table's rows under the view's filter, with its expressions.
 #[test]
 fn materialize_reads_each_table_as_the_view_gives_it_now() {
-    let document = captures();
+    let document = view_inputs();
     let id = "view.metric.from-source";
     let schema = held(&described(&document, id));
     let Located::Past(request) =
@@ -1031,7 +1178,7 @@ fn materialize_reads_each_table_as_the_view_gives_it_now() {
 /// refused by name, with why.
 #[test]
 fn a_join_the_view_no_longer_gives_is_refused_by_name() {
-    let document = captures();
+    let document = view_inputs();
     let id = "view.metric.from-source";
     let schema = held(&described(&document, id));
     // The join's key now repeats, so the view drops it at this run.
@@ -1083,7 +1230,7 @@ fn a_join_the_view_no_longer_gives_is_refused_by_name() {
 /// reads.
 #[test]
 fn a_dimension_removed_is_refused_and_one_changed_read_as_it_now_reads() {
-    let document = captures();
+    let document = view_inputs();
     let id = "view.metric.from-source";
     let schema = held(&described(&document, id));
     let removed = Edits {
@@ -1135,7 +1282,7 @@ fn a_dimension_removed_is_refused_and_one_changed_read_as_it_now_reads() {
 
 #[test]
 fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
-    let document = captures();
+    let document = view_inputs();
     let recorded = case(&document, "view.metric.from-source");
     for (buyers, transactions) in [("buyers", "transactions"), ("orders", "users")] {
         let spec = SourceSpec {
@@ -1153,19 +1300,19 @@ fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
             ],
             ..source_spec()
         };
-        let replayed = replay_spec(&document, recorded, &Edits::default(), true, spec);
+        let described_run = describe_spec(&document, recorded, &Edits::default(), false, spec);
         assert!(
-            replayed
+            described_run
                 .notes
                 .iter()
                 .any(|note| note.table.as_deref() == Some(transactions))
         );
-        assert!(replayed.notes.iter().all(|note| {
+        assert!(described_run.notes.iter().all(|note| {
             note.table
                 .as_deref()
                 .is_none_or(|table| table == buyers || table == transactions)
         }));
-        let description = replayed.ended.unwrap();
+        let description = described_run.ended.unwrap();
         assert_eq!(
             description
                 .tables
@@ -1214,7 +1361,7 @@ fn logical_table_aliases_and_swapped_names_survive_describe_and_materialize() {
 
 #[test]
 fn a_views_caller_overrides_use_common_key_time_and_relationship_rules() {
-    let document = captures();
+    let document = view_inputs();
     let recorded = case(&document, "view.metric.from-source");
     let spec = SourceSpec {
         primary_keys: BTreeMap::from([(
@@ -1225,7 +1372,7 @@ fn a_views_caller_overrides_use_common_key_time_and_relationship_rules() {
         relationships: Some(Vec::new()),
         ..source_spec()
     };
-    let description = replay_spec(&document, recorded, &Edits::default(), true, spec)
+    let description = describe_spec(&document, recorded, &Edits::default(), false, spec)
         .ended
         .unwrap();
     let orders = description
@@ -1281,7 +1428,7 @@ fn a_views_caller_overrides_use_common_key_time_and_relationship_rules() {
             ..source_spec()
         },
     ] {
-        let error = replay_spec(&document, recorded, &Edits::default(), true, spec)
+        let error = describe_spec(&document, recorded, &Edits::default(), false, spec)
             .ended
             .unwrap_err();
         assert_eq!(error.code, ErrorCode::InvalidRequest, "{error:?}");
@@ -1290,7 +1437,7 @@ fn a_views_caller_overrides_use_common_key_time_and_relationship_rules() {
 
 #[test]
 fn view_refresh_checks_held_types_and_accepts_compatible_numeric_widths() {
-    let document = captures();
+    let document = view_inputs();
     let recorded = case(&document, "view.metric.from-source");
     let original = held(&described(&document, "view.metric.from-source"));
     for dtype in ["string", "int32", "float32"] {
@@ -1323,51 +1470,9 @@ fn view_refresh_checks_held_types_and_accepts_compatible_numeric_widths() {
         }
     }
     // The same logical dimension becomes numeric when the view's expression changes.
-    let definition_rows = unplaced_rows(rows(
-        &document,
-        recorded["statements"][0]["result"].as_str().unwrap(),
-    ));
     let edits = Edits {
         definition: Some(("THEN 'high' ELSE 'low' END", "THEN 1 ELSE 0 END")),
         answer: Some(Box::new(move |request| match request {
-            DataRequest::Describe {
-                part: sdm_contract::data::DescribePart::ViewDefinition,
-                ..
-            } => {
-                let mut data = definition_rows.clone();
-                data.batches = data
-                    .batches
-                    .iter()
-                    .map(|batch| {
-                        let names = batch
-                            .column(0)
-                            .as_any()
-                            .downcast_ref::<arrow_array::StringArray>()
-                            .unwrap();
-                        let types = batch
-                            .column(1)
-                            .as_any()
-                            .downcast_ref::<arrow_array::StringArray>()
-                            .unwrap();
-                        let mut columns = batch.columns().to_vec();
-                        columns[1] = Arc::new(arrow_array::StringArray::from_iter(
-                            (0..batch.num_rows()).map(|row| {
-                                if names.value(row) == "price_band" {
-                                    Some("bigint")
-                                } else {
-                                    types.iter().nth(row).unwrap()
-                                }
-                            }),
-                        ));
-                        RecordBatch::try_new(batch.schema(), columns).unwrap()
-                    })
-                    .collect();
-                Some(FetchResult::Data(edited_rows(
-                    data,
-                    "THEN 'high' ELSE 'low' END",
-                    "THEN 1 ELSE 0 END",
-                )))
-            }
             DataRequest::Preview { columns, .. }
                 if columns.len() == 1 && columns[0] == "price_band" =>
             {
@@ -1398,7 +1503,7 @@ fn view_refresh_checks_held_types_and_accepts_compatible_numeric_widths() {
 /// failures. Only safe classification and the caller's logical names may escape.
 #[test]
 fn refused_expression_diagnostics_keep_context_and_never_echo_driver_text() {
-    let document = captures();
+    let document = view_inputs();
     let recorded = case(&document, "view.metric.from-source");
     let schema = held(&described(&document, "view.metric.from-source"));
     const ROW_SECRET: &str = "customer-cell-canary-93841";
@@ -1431,9 +1536,9 @@ fn refused_expression_diagnostics_keep_context_and_never_echo_driver_text() {
                     })
                 })),
             };
-        let replayed = replay_with(&document, recorded, &edits, false);
-        assert!(replayed.ended.is_ok(), "{:?}", replayed.ended);
-        let warning = replayed
+        let described_run = describe_with(&document, recorded, &edits, false);
+        assert!(described_run.ended.is_ok(), "{:?}", described_run.ended);
+        let warning = described_run
             .warnings
             .iter()
             .find(|w| w.sentence == sdm_contract::Sentence::ViewColumnRefused)
@@ -1482,7 +1587,7 @@ fn refused_expression_diagnostics_keep_context_and_never_echo_driver_text() {
 
 #[test]
 fn a_failed_duplicate_example_keeps_joins_unchecked() {
-    let document = captures();
+    let document = view_inputs();
     let edits = Edits {
         definition: None,
         answer: Some(Box::new(|request| match request {
@@ -1525,15 +1630,15 @@ fn a_failed_duplicate_example_keeps_joins_unchecked() {
             _ => None,
         })),
     };
-    let replayed = replay_with(
+    let described_run = describe_with(
         &document,
         case(&document, "view.metric.from-source"),
         &edits,
         false,
     );
-    let description = replayed.ended.unwrap();
+    let description = described_run.ended.unwrap();
     assert_eq!(description.links.len(), 1);
-    let warnings = serde_json::to_string(&replayed.warnings).unwrap();
+    let warnings = serde_json::to_string(&described_run.warnings).unwrap();
     assert!(
         warnings.contains("counting the join keys")
             && warnings.contains("42501")
@@ -1545,7 +1650,7 @@ fn a_failed_duplicate_example_keeps_joins_unchecked() {
         "{warnings}"
     );
     assert!(
-        replayed
+        described_run
             .warnings
             .iter()
             .any(|w| w.sentence == sdm_contract::Sentence::ViewJoinUnchecked)
@@ -1554,7 +1659,7 @@ fn a_failed_duplicate_example_keeps_joins_unchecked() {
 
 #[test]
 fn metric_view_physical_time_columns_keep_their_declared_window_kind() {
-    let document = captures();
+    let document = view_inputs();
     let description = described(&document, "view.metric.from-source");
     let orders = description
         .tables
@@ -1587,5 +1692,29 @@ fn metric_view_physical_time_columns_keep_their_declared_window_kind() {
     assert_eq!(window.source_type.as_deref(), Some("timestamp_ntz"));
 }
 
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;
+#[test]
+fn physical_source_column_shadows_same_named_metric_parameter() {
+    let document = view_inputs();
+    let edits = Edits {
+        definition: Some((
+            "filter: source.price > 50",
+            "parameters:\n  - name: PRICE\n    data_type: DOUBLE\n    default: 999\nfilter: price > 50",
+        )),
+        answer: None,
+    };
+    let run = describe_with(
+        &document,
+        case(&document, "view.metric.from-source"),
+        &edits,
+        false,
+    );
+    assert!(run.ended.is_ok(), "{:?}", run.ended);
+    let filters: Vec<_> = run
+        .requests
+        .iter()
+        .flat_map(|r| r.relations())
+        .filter_map(|(_, r)| r.filter.as_deref())
+        .collect();
+    assert!(!filters.is_empty());
+    assert!(filters.iter().all(|filter| *filter == "price > 50"));
+}

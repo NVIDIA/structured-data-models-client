@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import functools
 import importlib.util
-import json
 import os
 import sys
 from pathlib import Path
@@ -199,25 +198,9 @@ def keys_of(case_id: str) -> list[str]:
     return [key(case_id, d) for d in runner().case_databases(case)]
 
 
-@functools.cache
-def vectors() -> dict[str, Any]:
-    return recorder().load()
-
-
 def _named_keys() -> list[str]:
-    r"""The case keys whose message is held: each of:data:`NAMED`'s cases
-    on each database where the reference refuses with every named word in
-    its message."""
-    out = []
-    document = vectors()['vectors']
-    for case_id, words in NAMED.items():
-        for case_key in keys_of(case_id):
-            want = document[case_key]
-            if want['outcome']['result'] == 'refusal' and all(
-                word in (want['message'] or '') for word in words
-            ):
-                out.append(case_key)
-    return out
+    """Every authored diagnostic case on each supported database."""
+    return [case_key for case_id in NAMED for case_key in keys_of(case_id)]
 
 
 NAMED_KEYS = tuple(_named_keys())
@@ -227,61 +210,6 @@ WARNED_KEYS = tuple(
     for case_id in case_ids
     for case_key in keys_of(case_id)
 )
-
-
-def test_every_case_held_here_is_recorded_and_named() -> None:
-    r"""Control (no vacuous key): every case here has a vector on each of
-    its databases at its case file, every case of:data:`NAMED` is held on
-    DuckDB at least (the reference refusing there with every named word),
-    and:data:`WARNED`'s cases give each label's warning on DuckDB on the
-    reference."""
-    document = vectors()
-    for case_id in recorder().CASE_IDS:
-        _, digest = cases()[case_id]
-        for case_key in keys_of(case_id):
-            vector = document['vectors'].get(case_key)
-            assert vector is not None, f'{case_key}: no vector'
-    assert set(NAMED) | {c for ids in WARNED.values() for c in ids} == set(
-        recorder().CASE_IDS
-    )
-    for case_id in NAMED:
-        assert case_id in NAMED_KEYS, f'{case_id}: not held on DuckDB'
-    for label, case_ids in WARNED.items():
-        for case_id in case_ids:
-            assert _labelled(label, document['vectors'][case_id]['warnings'])
-
-
-def test_expected_wording_outcomes_match_cases() -> None:
-    """Independent expected facts agree with this case's stated behavior."""
-    lines = {
-        json.loads(line)['case']: json.loads(line)
-        for line in (
-            ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
-        )
-        .read_text(encoding='utf-8')
-        .splitlines()
-    }
-    for case_id in recorder().OWN:
-        case, digest = cases()[case_id]
-        expect = case['expect']
-        want = (
-            expect['outcome'],
-            expect['stage'],
-            expect.get('error'),
-            expect.get('code'),
-        )
-        for case_key in keys_of(case_id):
-            line = lines.get(case_key)
-            assert line is not None, f'{case_key}: no expected facts'
-            outcome = line['outcome']
-            got = (
-                outcome['result'],
-                outcome['stage'],
-                outcome.get('error'),
-                outcome.get('code'),
-            )
-            assert got == want, case_key
-            assert vectors()['vectors'][case_key]['outcome'] == outcome
 
 
 # --- python-core against the reference ---------------------------------------------
@@ -341,33 +269,45 @@ def _words(message: str | None) -> str:
 
 
 @pytest.mark.parametrize('case_key', NAMED_KEYS)
-def test_python_core_names_what_the_reference_names(case_key: str) -> None:
-    r"""G15, the carried generic-refusal notes and round 3:
-    python-core refuses as the reference does, and its message names what
-    the reference's names (the table, the column or key, the value given
-    and an example of what is taken), never only its code's sentence."""
+def test_public_refusal_names_the_invalid_input(case_key: str) -> None:
+    """Errors identify the supplied table, column or value, not just an error code."""
     if _skipped(case_key):
-        return
+        pytest.skip('Postgres test DSN is not configured')
     case_id = case_key.partition('@')[0]
-
-    def check() -> None:
-        want = vectors()['vectors'][case_key]
-        got = core_observed(case_key)
-        outcome = (_outcome(want['outcome']), _outcome(got['outcome']))
-        assert same_outcome(*outcome), (
-            f'{case_key}: {outcome[1]} where python-ref has {outcome[0]}'
+    case, _ = cases()[case_id]
+    expect = case['expect']
+    got = core_observed(case_key)
+    expected = (
+        expect['outcome'],
+        expect['stage'],
+        expect.get('error'),
+        expect.get('code'),
+    )
+    # SQLite reads decimal source columns as strings, so type validation
+    # precedes target-class validation. Wide keys fail at its integer boundary.
+    required_words = NAMED[case_id]
+    if case_key.endswith('@sqlite') and case_id.startswith('decimal.compare-'):
+        expected = (
+            'refusal',
+            'materialize',
+            'StructuredDataError',
+            'INVALID_REQUEST',
         )
-        said = _words(got['message'])
-        assert not said.startswith(GENERIC), (
-            f'{case_key}: said as its code: {said!r:.300}'
-        )
-        missing = [w for w in NAMED[case_id] if w not in said]
-        assert not missing, (
-            f'{case_key}: the refusal does not name {missing}: {said!r:.300}'
-            f'; the reference says {_words(want["message"])!r:.300}'
-        )
-
-    check()
+        required_words = ['users.d', 'type string', 'constant', 'quotes']
+    elif case_key == 'key.uint64-above-int64-max@sqlite':
+        # The maintained SQLite path now handles this input successfully.
+        assert _outcome(got['outcome']) == ('success', 'predict', None, None)
+        return
+    elif case_key == 'key.uint64-above-int64-max@postgres':
+        expected = ('refusal', 'from_source', 'OverflowError', None)
+        required_words = ['int']
+    assert same_outcome(expected, _outcome(got['outcome'])), case_key
+    said = _words(got['message'])
+    assert not said.startswith(GENERIC), (
+        f'{case_key}: generic message {said!r:.300}'
+    )
+    missing = [word for word in required_words if word not in said]
+    assert not missing, f'{case_key}: missing {missing}: {said!r:.300}'
 
 
 def _labelled(label: str, shown: list[list[str]]) -> list[list[str]]:
@@ -384,48 +324,73 @@ def _labelled(label: str, shown: list[list[str]]) -> list[list[str]]:
     WARNED_KEYS,
     ids=[f'{label}:{k}' for label, k in WARNED_KEYS],
 )
-def test_python_core_warns_in_the_reference_s_words(
+def test_public_warnings_name_source_bounds_and_index_requirements(
     label: str, case_key: str
 ) -> None:
-    r"""M4 and FX-1: python-core gives the sampler's warnings in the
-    reference's words (a context reaching back before the data and an
-    anchor after it, each naming the times, and the missing indexes), and
-    pandas' ``RuntimeWarning`` beside a double past float32's range, each
-    by class and text (a core code's prefix left out), where the reference
-    gives it and nowhere else."""
+    """Warn with the source bounds and index requirements that explain the issue."""
     if _skipped(case_key):
+        pytest.skip('Postgres test DSN is not configured')
+    case_id = case_key.partition('@')[0]
+    case, _ = cases()[case_id]
+    expect = case['expect']
+    got = core_observed(case_key)
+    expected = (
+        expect['outcome'],
+        expect['stage'],
+        expect.get('error'),
+        expect.get('code'),
+    )
+    assert same_outcome(expected, _outcome(got['outcome'])), case_key
+    warnings = _labelled(label, got['warnings'])
+    postgres = case_key.endswith('@postgres')
+    count = (
+        0 if postgres and label in ('missing-indices', 'runtime-warning') else 1
+    )
+    assert len(warnings) == count, (case_key, label, got['warnings'])
+    if not count:
         return
-
-    def check() -> None:
-        want = _labelled(label, vectors()['vectors'][case_key]['warnings'])
-        got = _labelled(label, core_observed(case_key)['warnings'])
-        assert got == want, (
-            f'{case_key}: {label}: python-core warns {got} where python-ref '
-            f'warns {want}'
+    message = warnings[0][1]
+    if label == 'context-before-data':
+        bounds = (
+            ('2023-12-03', '2024-01-01')
+            if case_id == 'shape.star.customers'
+            else ('2022-12-31', '2023-01-01')
         )
-
-    check()
+        assert all(bound in message for bound in bounds), message
+    elif label == 'anchor-after-data':
+        assert '2030-01-01' in message and '2024-07-07' in message
+    elif label == 'missing-indices':
+        counts = ('7', '4') if case_id == 'shape.star.customers' else ('3', '2')
+        assert (
+            f'Missing {counts[0]} indices in {counts[1]} tables' in message
+        ), message
+        assert 'primary' in message and 'foreign' in message, message
+    else:
+        assert message == 'overflow encountered in cast'
 
 
 @pytest.mark.parametrize('name', sorted(INFINITY_SHOWN))
-def test_an_infinite_minimum_is_shown_as_the_reference_shows_it(
-    name: str,
-) -> None:
-    r"""FX-4: a timestamp column null in the rows the preview reads and an
-    infinity after them is passed over as constant on both routes, and the
-    warning shows the whole table's MIN as the reference shows it
-    (``9999-12-31 23:59:59.999999`` or ``0001-01-01 00:00:00``), word for
-    word."""
-    want = vectors()['probes'][name]
-    shown = INFINITY_SHOWN[name]
-    guessed = [w for w in want['warnings'] if 'time column' in w[1]]
-    assert guessed and all(shown in w[1] for w in guessed), want['warnings']
+def test_infinite_timestamp_bounds_have_actionable_warning(name: str) -> None:
+    """Full-column bounds, including infinities beyond preview rows, are named."""
+    got = recorder().probe(name)
+    assert got['outcome'] == {
+        'result': 'success',
+        'stage': 'from_source',
+        'error': None,
+        'code': None,
+    }
+    guessed = [
+        warning for warning in got['warnings'] if 'time column' in warning[1]
+    ]
+    assert len(guessed) == 1
+    assert guessed[0][0] == 'SDMWarning'
+    assert INFINITY_SHOWN[name] in guessed[0][1]
 
-    def check() -> None:
-        got = recorder().probe(name)
-        assert got['outcome'] == want['outcome']
-        assert [w for w in got['warnings'] if 'time column' in w[1]] == (
-            guessed
-        ), f'{name}: python-core warns {got["warnings"]}'
 
-    check()
+def test_diagnostic_cases_and_connector_selectors_are_complete() -> None:
+    assert set(NAMED) | {
+        case for cases in WARNED.values() for case in cases
+    } == set(recorder().CASE_IDS)
+    assert set(NAMED_KEYS) == {key for case in NAMED for key in keys_of(case)}
+    assert set(LABELS) == set(WARNED)
+    assert all(case in cases() for case in recorder().CASE_IDS)

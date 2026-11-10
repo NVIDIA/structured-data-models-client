@@ -148,7 +148,7 @@ def _vector_zone_problems(where: str, statements: list[str]) -> list[str]:
     GLOBAL``: every cursor then takes the global zone, and the session
     statement only sets the setup's own connection, as a vector may do on
     purpose to show that the source does not read in it
-    (host2-zone-vectors.json's session.* and verbatim.* vectors). Any
+    (session and verbatim timestamp scenarios). Any
     other form (RESET, LOCAL, set_config, a compound statement) is still a
     problem, global zone or not."""
     pinned = any(_GLOBAL_ZONE.match(each) for each in statements)
@@ -182,13 +182,8 @@ def _vector_setups(node: Any, where: str) -> list[tuple[str, list[str]]]:
 
 
 def test_a_vector_sets_its_time_zone_for_every_cursor() -> None:
-    # C16: a vector's setup runs on one connection and the source
-    # reads through cursors, which take the process's local zone unless the
-    # database's is set, so a per-connection SET TimeZone made the recorded
-    # reference answer depend on the recorder's TZ (empty-null-vectors.json
-    # null.time-timestamptz: 361 order rows under UTC or Los Angeles, 359
-    # under Asia/Kolkata). Every vector file's setups name the zone only as
-    # SET GLOBAL TimeZone, as the cases do.
+    # Setup and source reads use separate cursors. Set the database-wide
+    # timezone so results do not depend on each cursor's process-local zone.
     problems = set()
     named = 0
     for path in sorted((ROOT / 'contract').glob('*-vectors.json')):

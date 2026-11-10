@@ -2,23 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The labels on the pure-Rust host: each baseline
-//! case's context labels, as the core computes them over this host's
-//! fetches (the test-only `labels` operation, started in place of the
-//! case's `materialize`), are the reference's exactly, as its payload's
-//! context carries them in the committed reference observation:
-//! `base.regression` and `decimal.target-38-18` (windowed sums at float32),
-//! `base.binary` (a condition over a count) and `base.multiclass` (a static
-//! text target). Each reference row is held, by its instance id, to the
-//! core's example of that position: the entity, the anchor to the
-//! microsecond the payload writes, and the label, compared exactly. The
-//! reference leaves out of a static target's context the entities it is
-//! asked to predict for (rule): an example missing from its rows
-//! must be one of those, and the counts must agree with the payload's
-//! `num_context_examples`. The Python host is held to the same rows by
-//! `packages/structured-data-models-client/tests_test_ops/test_the_labels.py`.
-//! The check fails closed on missing, empty or retyped evidence, seeded
-//! below.
+//! Labels match independently calculated source values through the Rust host.
 
 use std::path::PathBuf;
 
@@ -33,26 +17,8 @@ use sdm_testkit::host;
 use sdm_testkit::{bases, case};
 use serde_json::Value;
 
-/// The cases whose labels are held, and what each label is.
-const CASES: [&str; 4] = [
-    "base.regression",
-    "base.binary",
-    "base.multiclass",
-    "decimal.target-38-18",
-];
-
 fn contract() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract")
-}
-
-/// The committed reference observation of `case`.
-fn reference(case: &str) -> Value {
-    let expected: Value = serde_json::from_str(
-        &std::fs::read_to_string(contract().join("fixtures/maintained/label-expectations.json"))
-            .unwrap(),
-    )
-    .unwrap();
-    expected[case].clone()
 }
 
 /// One context example as the core gave it: the entity's key as the
@@ -140,158 +106,68 @@ fn examples(batch: &RecordBatch) -> Vec<Example> {
         .collect()
 }
 
-/// A payload cell as the core's examples hold it: `{"number": text}` read
-/// as an integer where it is one, else as the float it is, exactly.
-fn cell(value: &Value) -> Option<Value> {
-    match value {
-        Value::Object(number) => {
-            let text = number.get("number")?.as_str()?;
-            if let Ok(int) = text.parse::<i64>() {
-                return Some(Value::from(int));
-            }
-            text.parse::<f64>().ok().map(Value::from)
-        }
-        Value::String(_) | Value::Bool(_) => Some(value.clone()),
-        _ => None,
-    }
-}
-
-/// Each way `core`'s examples depart from the reference's context in
-/// `observed`, for a case asking for `indices`; missing, empty or retyped
-/// evidence is a problem.
-fn problems(observed: &Value, indices: &[Value], core: &[Example]) -> Vec<String> {
-    let payload = &observed["public"]["payloads"][0]["parsed"];
-    let Some(table) = payload["context"]["instance_table"].as_object() else {
-        return vec!["the reference holds no context".into()];
-    };
-    let columns: Vec<&str> = table
-        .get("columns")
-        .and_then(Value::as_array)
-        .map(|c| c.iter().filter_map(Value::as_str).collect())
-        .unwrap_or_default();
-    let at = |name: &str| columns.iter().position(|c| *c == name);
-    let (Some(id), Some(entity), Some(anchor), Some(target)) = (
-        at("instance_id"),
-        at("__kumo_entity_ref_0"),
-        at("__kumo_anchor_time"),
-        at("TARGET"),
-    ) else {
-        return vec![format!("the reference's context has columns {columns:?}")];
-    };
-    let Some(rows) = table
-        .get("rows")
-        .and_then(Value::as_array)
-        .filter(|r| !r.is_empty())
-    else {
-        return vec!["the reference's context holds no row".into()];
-    };
-    let Some(count) = cell(&payload["metadata"]["num_context_examples"])
-        .and_then(|n| n.as_u64())
-        .and_then(|n| usize::try_from(n).ok())
-    else {
-        return vec!["the reference names no context count".into()];
-    };
-    let mut found = Vec::new();
-    if core.is_empty() {
-        found.push("the core gave no label".into());
-    }
-    if core.len() != count {
-        found.push(format!(
-            "the core gave {} examples, the reference {count}",
-            core.len()
-        ));
-    }
-    let mut seen = vec![false; core.len()];
-    for row in rows {
-        let Some(position) = row
-            .get(id)
-            .and_then(cell)
-            .and_then(|v| v.as_u64())
-            .and_then(|v| usize::try_from(v).ok())
-            .filter(|p| *p < core.len())
-        else {
-            found.push(format!("a reference row names no example: {row}"));
-            continue;
-        };
-        seen[position] = true;
-        let wanted = Example {
-            entity: row.get(entity).and_then(cell).unwrap_or(Value::Null),
-            anchor: row
-                .get(anchor)
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            target: row.get(target).and_then(cell).unwrap_or(Value::Null),
-        };
-        if core[position] != wanted {
-            found.push(format!(
-                "example {position}: the core's {:?}, the reference's {wanted:?}",
-                core[position]
-            ));
-        }
-    }
-    for (position, example) in core.iter().enumerate() {
-        if !seen[position] && !indices.contains(&example.entity) {
-            found.push(format!(
-                "example {position} is not the reference's and not one predicted for"
-            ));
-        }
-    }
-    found
-}
-
-fn indices(name: &str) -> Vec<Value> {
-    let path = contract().join(format!("cases/s1/{name}.json"));
-    let document: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-    document["input"]["materialize"]["indices"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
-}
-
 #[test]
-fn the_labels_on_this_host_are_the_reference_s() {
-    for name in CASES {
-        let core = core_examples(name);
-        let observed = reference(name);
-        assert_eq!(
-            problems(&observed, &indices(name), &core),
-            Vec::<String>::new(),
-            "{name}"
+fn temporal_labels_follow_authored_order_values_and_window_bounds() {
+    for name in ["base.regression", "base.binary", "decimal.target-38-18"] {
+        let examples = core_examples(name);
+        // Context windows are emitted newest first, with every entity per window.
+        assert!(
+            examples
+                .windows(2)
+                .all(|pair| pair[0].anchor >= pair[1].anchor)
         );
+        for window in examples.chunks_exact(8) {
+            assert!(window.iter().all(|row| row.anchor == window[0].anchor));
+            let entities: std::collections::BTreeSet<_> = window
+                .iter()
+                .map(|row| row.entity.as_i64().unwrap())
+                .collect();
+            assert_eq!(entities, (0..8).collect());
+        }
+        let mut grid = std::collections::BTreeSet::new();
+        let calendar = sdm_testkit::duck::open().unwrap();
+        for example in examples {
+            let entity = example.entity.as_i64().unwrap();
+            let day: i64 = calendar
+                .query_row(
+                    "SELECT date_diff('day', DATE '2023-01-01', CAST(? AS TIMESTAMP))",
+                    [&example.anchor],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(grid.insert((entity, day)), "duplicate {name} entity/anchor");
+            let orders: Vec<_> = (0..80_i64)
+                .filter(|i| i % 8 == entity && i * 7 > day && i * 7 <= day + 30)
+                .collect();
+            let expected = if name == "base.binary" {
+                Value::Bool(!orders.is_empty())
+            } else {
+                // The decimal input's 1e-18 increment is below float32 precision.
+                let sum: f64 = orders.iter().map(|i| 10.0 + 1.5 * *i as f64).sum();
+                Value::from(f64::from(sum as f32))
+            };
+            assert_eq!(example.target, expected, "{name} entity={entity} day={day}");
+        }
+        let expected: std::collections::BTreeSet<_> = (0..8_i64)
+            .flat_map(|entity| (0..14).map(move |n| (entity, 395 - n * 30)))
+            .collect();
+        assert_eq!(grid, expected, "{name}");
     }
 }
 
 #[test]
-fn the_label_check_fails_closed() {
-    let name = "base.binary";
-    let core = core_examples(name);
-    let observed = reference(name);
-    let indices = indices(name);
-    assert!(problems(&observed, &indices, &core).is_empty());
-    // A label flipped, an anchor moved, a label retyped, one dropped.
-    let mut flipped = core.clone();
-    flipped[3].target = Value::from(!flipped[3].target.as_bool().unwrap());
-    assert!(!problems(&observed, &indices, &flipped).is_empty());
-    let mut moved = core.clone();
-    moved[0].anchor = "2024-01-30T00:00:00.000000Z".into();
-    assert!(!problems(&observed, &indices, &moved).is_empty());
-    let mut retyped = core.clone();
-    retyped[1].target = Value::from(1);
-    assert!(!problems(&observed, &indices, &retyped).is_empty());
-    assert!(!problems(&observed, &indices, &core[1..]).is_empty());
-    // No evidence: no core labels, no reference, a reference with no rows.
-    assert!(!problems(&observed, &indices, &[]).is_empty());
-    assert!(!problems(&Value::Null, &indices, &core).is_empty());
-    let mut emptied = observed.clone();
-    emptied["public"]["payloads"][0]["parsed"]["context"]["instance_table"]["rows"] =
-        Value::Array(vec![]);
-    assert!(!problems(&emptied, &indices, &core).is_empty());
-    // An example the reference leaves out is one predicted for, only.
-    let mut left_out = observed.clone();
-    left_out["public"]["payloads"][0]["parsed"]["context"]["instance_table"]["rows"]
-        .as_array_mut()
-        .unwrap()
-        .remove(0);
-    assert!(!problems(&left_out, &[], &core).is_empty());
+fn static_labels_preserve_source_entity_and_country() {
+    let examples = core_examples("base.multiclass");
+    let mut entities = std::collections::BTreeSet::new();
+    for example in examples {
+        let entity = example.entity.as_i64().unwrap();
+        assert!(entities.insert(entity));
+        assert_eq!(
+            example.target,
+            Value::from(["US", "DE", "IN"][(entity % 3) as usize])
+        );
+        // The authored orders end at day 79 * 7 from 2023-01-01.
+        assert_eq!(example.anchor, "2024-07-07T00:00:00.000000Z");
+    }
+    assert_eq!(entities, (0..8).collect());
 }

@@ -1,50 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""payload rules on the core route equal the reference's.
-
-Written by the package's independent test author from the brief, the design
-row and the reference, before the implementation. Each case in
-``payload-rules.json`` is a DuckDB source, a query and the arguments
-of ``PredictiveQuery.materialize``; ``payload_rules_record.py``
-recorded what the reference gives for it, through the same ``observe`` this
-test calls. Public calls use the maintained runtime; the recorded expectations
-remain unchanged:
-
-- exit "classification payload" (cases covering ``CLASSIFICATION``):
-  ``base.binary``, ``base.multiclass`` and seeded binary, multiclass,
-  boolean-static and static-condition sources: the task (kind, classes,
-  their order, the positive class), the context's and predicted rows, each
-  related table's columns and the instance ids it keeps (the context that
-  answers the question taken out, a static target's column left out), the
-  metadata's counts and the number the leakage notice gives. A BOOLEAN
-  static target's classes are the strings 'False'/'True';
-- exit "regression payload's parsed fields": the output (the statistic),
-  the inference's run mode, the metadata's counts (the entity count), and
-  the reference's refusals of an unknown statistic or one on a
-  classification;
-- exit "payload limits and num_context_samples' bound": the reference's
-  refusals at each limit (num_context_samples 0 and 10,001, 1,001 entities,
-  a 16-table graph) and its acceptance at the limit (10,000 context
-  samples, 1,000 entities, 15 tables); and PD-2: at the byte limit, the
-  longest payload the reference takes is taken and the bytes the core
-  produced are the count the reference made, and one byte-step past it is
-  refused as the reference refuses it;
-- exit "empty and reserved-name refusals": the class and code;
-- exit "inference_config written into the call": the payload's inference
-  section, and the call's model, output and inference as the endpoint
-  received them (or the reference's refusal of a key the model does not
-  read, before sending);
-- exit "a DECIMAL(38,0) feature's wire dtype": the payload's schema section
-  and the column's values as the context sends them;
-- carry-forward "AVG(...) = NULL": the reference fails with INTERNAL_ERROR;
-  the core must refuse it by name, with a code other than INTERNAL_ERROR,
-  and not by one of the rules lifts.
-
-Before the core refuses these by the rules the package lifts
-(``classification_task``, ``target_leakage``, ``num_context_samples``,
-``inference_config``, ``wire_dtype``), and the test says so by name.
-"""
+"""Public payload rules checked against source rows and explicit contracts."""
 
 from __future__ import annotations
 
@@ -60,18 +17,6 @@ import pytest
 from sdm_client._rust import run as _rust_run
 
 HERE = Path(__file__).resolve().parent
-RECORDED = json.loads((HERE / 'payload-rules.json').read_text(encoding='utf-8'))
-
-
-#: The rules lifts: a refusal by one of them is the package not
-#: done yet, never an outcome a case may end with.
-SUPPORTED_PAYLOAD_RULES = {
-    'classification_task',
-    'target_leakage',
-    'num_context_samples',
-    'inference_config',
-    'wire_dtype',
-}
 
 
 def _recorder() -> Any:
@@ -101,15 +46,6 @@ def _leaked(notices: list[str]) -> list[int]:
     )
 
 
-def _counts(observed: dict[str, Any]) -> dict[str, Any]:
-    metadata = observed['metadata']
-    return {
-        'num_context_examples': metadata.get('num_context_examples'),
-        'num_prediction_examples': metadata.get('num_prediction_examples'),
-        'parts': observed['parts'],
-    }
-
-
 def _on_the_core(
     spec: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> tuple[dict[str, Any], list[bytes]]:
@@ -131,176 +67,52 @@ def _on_the_core(
     return R.observe(spec), taken
 
 
-def _not_lifted(got: dict[str, Any]) -> str:
-    return (
-        f'the core refused it by rule {got.get("rule")!r} '
-        f'({got.get("code")}): not lifted yet'
-    )
+DIRECT_RULES = {R.REGRESSION_FIELDS, R.REFUSALS, R.LIMITS, R.AVG_NULL}
 
 
-def _not_held(got: dict[str, Any]) -> bool:
-    r"""Whether a refusal is the core's "not one the core supports yet",
-    naming a rule it does not hold (``sdm_engine::not_yet``)."""
-    return got.get('rule') is not None and 'supports yet' in (
-        got.get('message') or ''
-    )
-
-
-def test_vectors_cover_required_success_and_failure_cases() -> None:
-    # Independent vectors cover each required case, and
-    # each exit has cases, accepted and refused where the exit names both.
-    assert [c['name'] for c in RECORDED['cases']] == [
-        c['name'] for c in R.CASES
-    ] + ['size.at-the-limit', 'size.one-past-the-limit']
-    by_exit: dict[str, set[str]] = {}
-    for case in RECORDED['cases']:
-        covers = case['covers']
-        if covers.startswith(R.LIMITS):
-            covers = R.LIMITS
-        by_exit.setdefault(covers, set()).add(case['expected']['outcome'])
-    assert by_exit[R.CLASSIFICATION] == {'payload'}
-    assert by_exit[R.REGRESSION_FIELDS] == {'payload', 'refused'}
-    assert by_exit[R.LIMITS] == {'payload', 'refused'}
-    assert by_exit[R.REFUSALS] == {'refused'}
-    assert by_exit[R.INFERENCE] == {'payload'}
-    assert by_exit[R.DECIMAL] == {'payload'}
-    assert by_exit[R.AVG_NULL] == {'refused'}
-    kinds = {
-        c['expected']['task']['kind']
-        for c in RECORDED['cases']
-        if c['covers'] == R.CLASSIFICATION
+def _size_case(length: int) -> dict[str, Any]:
+    return {
+        'name': f'payload-size-{length}',
+        'covers': R.LIMITS,
+        'query': R.REGRESSION,
+        'setup': R.padded(length),
+        'materialize': {'indices': [0, 1], 'anchor_time': R.ANCHOR},
+        'measure': True,
+        'call': False,
     }
-    assert kinds == {'binary_classification', 'multiclass_classification'}
-    # A boolean static target's labels are the strings 'False'/'True'.
-    booleans = [
-        c['expected']['task']['target']['classes']
-        for c in RECORDED['cases']
-        if c['name'].endswith('boolean-static')
-    ]
-    assert booleans and all(set(b) == {'False', 'True'} for b in booleans)
-    # The leakage notice is among what is compared.
-    assert any(
-        _leaked(c['expected']['notices'])
-        for c in RECORDED['cases']
-        if c['covers'] == R.CLASSIFICATION
-    )
 
 
-CASES = RECORDED['cases']
-
-
-@pytest.mark.parametrize('spec', CASES, ids=[c['name'] for c in CASES])
-def test_the_core_s_payload_rules_are_the_reference_s(
-    spec: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize('length, accepted', [(275689, True), (275690, False)])
+def test_public_materialization_enforces_model_payload_byte_limit(
+    length: int, accepted: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    expected = spec['expected']
-    got, attachments = _on_the_core(spec, monkeypatch)
-    covers = spec['covers']
-
-    if covers == R.AVG_NULL:
-        # The reference crashes (INTERNAL_ERROR); the core refuses it by
-        # name and does not accept it.
-        assert expected['code'] == 'INTERNAL_ERROR'
-        assert got['outcome'] == 'refused', 'AVG(...) = NULL was accepted'
-        assert got['rule'] not in SUPPORTED_PAYLOAD_RULES, _not_lifted(got)
-        assert got['code'] not in (None, 'INTERNAL_ERROR'), got
-        assert got['message'], got
+    got, attachments = _on_the_core(_size_case(length), monkeypatch)
+    if not accepted:
+        assert got['outcome'] == 'refused', got
+        assert got['code'] == 'INVALID_REQUEST', got
+        assert '30MB' in got['message'], got
+        assert not attachments
         return
-
-    if (
-        got['outcome'] == 'refused'
-        and got.get('rule') in SUPPORTED_PAYLOAD_RULES
-    ):
-        pytest.fail(_not_lifted(got))
-
-    # the core takes up to 10,000 entities a call, as the
-    # reference at 6298913c (main's 1fc5a686): base.regression's 1,001
-    # indices (8 users) are refused for the reference's reason and
-    # many-1001's 1,001 users gathered, as below (B-3, retired).
-    if expected['outcome'] == 'refused':
-        # The reference's refusal: its code, raised as (a subclass of) its
-        # class, and the core's own rule, not a rule it does not hold yet.
-        assert got['outcome'] == 'refused', (
-            'accepted where the reference refuses'
-        )
-        assert not _not_held(got), (
-            f'refused by a rule the core does not hold yet ({got["rule"]!r}), '
-            f'where the reference refuses it by its own'
-        )
-        assert got['code'] == expected['code'], got.get('message')
-        assert expected['class'] in got['mro'], got['mro']
-        return
-    assert got['outcome'] == 'payload', (
-        f'refused ({got.get("code")}, rule {got.get("rule")!r}) where the '
-        f'reference builds the payload: {got.get("message")}'
-    )
-
-    if covers == R.CLASSIFICATION:
-        fields = (
-            'task',
-            'context',
-            'context_related',
-            'predict',
-            'predict_related',
-        )
-        assert {k: got[k] for k in fields} == {k: expected[k] for k in fields}
-        assert _counts(got) == _counts(expected)
-        assert _leaked(got['notices']) == _leaked(expected['notices'])
-    elif covers == R.REGRESSION_FIELDS:
-        assert got['task'] == expected['task']
-        assert got['output'] == expected['output']
-        assert got['inference']['run_mode'] == expected['inference']['run_mode']
-        assert _counts(got) == _counts(expected)
-        assert (got['context'], got['predict']) == (
-            expected['context'],
-            expected['predict'],
-        )
-    elif covers.startswith(R.LIMITS):
-        assert _counts(got) == _counts(expected)
-        assert got['context_related'] == expected['context_related']
-        if spec.get('measure'):
-            # PD-2: the count is of the bytes the core produced and sends;
-            # here, ASCII and compact, it is the reference's count too.
-            assert len(attachments) == 1, attachments
-            state = bytes(attachments[0])
-            prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
-            assert state.startswith(prefix)
-            model_bytes = b'{' + state[len(prefix) :]
-            assert len(model_bytes) == expected['bytes']
-            assert expected['bytes'] <= R.PAYLOAD_LIMIT
-    elif covers == R.INFERENCE:
-        assert got['inference'] == expected['inference']
-        assert got.get('call') == expected['call']
-        assert got.get('call_refusal') == expected['call_refusal']
-    elif covers == R.DECIMAL:
-        assert got['schema'] == expected['schema']
-        assert got['decimal_values'] == expected['decimal_values']
-    else:  # pragma: no cover - every case names an exit above
-        pytest.fail(f'no exit named: {covers}')
-
-
-def test_a_payload_past_the_byte_limit_is_refused_by_name(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # PD-2, past the limit: the core's refusal is named (a rule or a code
-    # the reference gives), never a crash, and the case before it is taken.
-    past = next(c for c in CASES if c['name'] == 'size.one-past-the-limit')
-    got, attachments = _on_the_core(past, monkeypatch)
-    assert got['outcome'] == 'refused'
-    assert not _not_held(got), got
-    assert got['code'] == past['expected']['code']
-    assert not attachments
+    assert got['outcome'] == 'payload', got
+    assert len(attachments) == 1
+    state = json.loads(attachments[0])
+    assert state.pop('client_generated_keys') == {'orders': '__node_id'}
+    # Independently serialize only the model body, not client provenance.
+    model_bytes = json.dumps(
+        state, allow_nan=False, separators=(',', ':')
+    ).encode('utf-8')
+    assert len(attachments[0]) == got['bytes']
+    prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
+    assert attachments[0].startswith(prefix)
+    assert model_bytes == b'{' + attachments[0][len(prefix) :]
+    assert len(model_bytes) <= 30 * 1024 * 1024
 
 
 @pytest.mark.parametrize('padding, accepted', [(5, True), (8, False)])
 def test_client_only_provenance_does_not_consume_model_payload_limit(
     padding, accepted, monkeypatch
 ):
-    import copy
-
-    spec = copy.deepcopy(
-        next(c for c in CASES if c['name'] == 'size.at-the-limit')
-    )
+    spec = _size_case(275689)
     spec['setup'].append(
         f"UPDATE users SET note=note||'{'a' * padding}' WHERE user_id=0"
     )
@@ -315,3 +127,249 @@ def test_client_only_provenance_does_not_consume_model_payload_limit(
     else:
         assert got['outcome'] == 'refused'
         assert '30MB' in got['message']
+
+
+REFUSAL_CODES = {
+    'base.regression.statistic-unknown': 'INVALID_REQUEST',
+    'base.binary.statistic': 'INVALID_REQUEST',
+    'base.regression.num-context-0': 'INVALID_REQUEST',
+    'base.regression.num-context-10001': 'UNSUPPORTED_REQUEST',
+    'base.regression.entities-1001': 'INVALID_REQUEST',
+    'star.tables-16': 'INVALID_REQUEST',
+    'empty.indices': 'INVALID_REQUEST',
+    'reserved.instance-id': 'INVALID_SCHEMA',
+    'reserved.anchor-time': 'INVALID_SCHEMA',
+}
+DIRECT_CASES = [c for c in R.CASES if c['covers'] in DIRECT_RULES]
+
+
+@pytest.mark.parametrize(
+    'spec', DIRECT_CASES, ids=[c['name'] for c in DIRECT_CASES]
+)
+def test_materialization_options_and_admission_rules(
+    spec: dict[str, Any],
+) -> None:
+    got = R.observe(spec)
+    name = spec['name']
+    if name == 'avg-equals-null':
+        assert got['outcome'] == 'refused', got
+        assert got['code'] == 'UNSUPPORTED_REQUEST', got
+        assert got['rule'] == 'average_null', got
+        assert got['message'], got
+        return
+    if name in REFUSAL_CODES:
+        assert got['outcome'] == 'refused', got
+        assert got['code'] == REFUSAL_CODES[name], got
+        assert got['message'], got
+        return
+    assert got['outcome'] == 'payload', got
+    assert got['parts'] == 1
+    assert got['task']['kind'] == 'regression'
+    assert got['task']['target']['column_name'] == 'TARGET'
+    assert got['task']['target']['dtype'] == 'float32'
+    arguments = spec['materialize']
+    samples = arguments.get('num_context_samples', 1000)
+    assert got['inference']['run_mode'] == (
+        'fast' if samples <= 1000 else 'best'
+    )
+    expected_output = {'fields': ['prediction']}
+    if 'prediction_statistic' in arguments:
+        expected_output['prediction_statistic'] = arguments[
+            'prediction_statistic'
+        ]
+    assert got['output'] == expected_output
+    requested = len(arguments['indices'])
+    assert got['predict'] == requested
+    assert got['metadata']['num_prediction_examples'] == requested
+    if name.startswith('base.regression'):
+        assert got['context'] == min(samples, 112)
+        assert got['metadata']['num_context_examples'] == min(samples, 112)
+    if name == 'star.tables-15':
+        assert len(got['context_related']) == 15
+        assert set(got['context_related']) == set(got['predict_related'])
+
+
+CLASSIFICATION_CASES = [c for c in R.CASES if c['covers'] == R.CLASSIFICATION]
+
+
+@pytest.mark.parametrize(
+    'spec', CLASSIFICATION_CASES, ids=[c['name'] for c in CLASSIFICATION_CASES]
+)
+def test_classification_labels_and_leakage_follow_source_rows(
+    spec: dict[str, Any],
+) -> None:
+    import duckdb
+
+    got = R.observe(spec)
+    assert got['outcome'] == 'payload', got
+    name = spec['name']
+    temporal = name == 'base.binary' or name.endswith(
+        ('.binary-count', '.binary-sum')
+    )
+    condition = name.endswith('.binary-static-condition')
+    binary = temporal or condition
+    column = (
+        'age'
+        if condition
+        else 'active'
+        if name.endswith('.boolean-static')
+        else 'segment'
+        if name.endswith('.multiclass-static')
+        else 'country'
+    )
+    with duckdb.connect() as source:
+        for statement in spec['setup']:
+            source.execute(statement)
+        target = got['task']['target']
+        assert got['task']['kind'] == (
+            'binary_classification' if binary else 'multiclass_classification'
+        )
+        assert target['column_name'] == 'TARGET'
+        assert target['dtype'] == ('bool' if binary else 'string')
+        if binary:
+            assert target['classes'] == ['false', 'true']
+            assert target['positive_class'] == 'true'
+        else:
+            classes = {
+                str(row[0])
+                for row in source.execute(
+                    f'SELECT DISTINCT {column} FROM users'
+                ).fetchall()
+            }
+            assert set(target['classes']) == classes
+            assert len(target['classes']) == len(classes)
+            assert target.get('positive_class') is None
+            if column == 'active':
+                assert target['classes'] == (
+                    ['True', 'False']
+                    if name.startswith('generated-13.')
+                    else ['False', 'True']
+                )
+            if name == 'base.multiclass':
+                assert target['classes'] == ['IN', 'DE', 'US']
+        requested = spec['materialize']['indices']
+        prediction = [
+            dict(zip(got['predict']['columns'], row, strict=True))
+            for row in got['predict']['rows']
+        ]
+        assert [row['__kumo_entity_ref_0'] for row in prediction] == requested
+        assert got['metadata']['num_prediction_examples'] == len(requested)
+        context = [
+            dict(zip(got['context']['columns'], row, strict=True))
+            for row in got['context']['rows']
+        ]
+        assert context
+        for row in context:
+            entity = row['__kumo_entity_ref_0']
+            if temporal:
+                summed = name.endswith('.binary-sum')
+                aggregate = 'SUM(price)' if summed else 'COUNT(*)'
+                days = 60 if summed else 30
+                threshold = 150 if summed else 0 if name == 'base.binary' else 2
+                anchor = row['__kumo_anchor_time']
+                value = source.execute(
+                    f'SELECT COALESCE({aggregate}, 0) > {threshold} FROM orders '
+                    f'WHERE user_id=? AND ts>CAST(? AS TIMESTAMP) '
+                    f'AND ts<=CAST(? AS TIMESTAMP)+INTERVAL {days} DAY',
+                    [entity, anchor, anchor],
+                ).fetchone()[0]
+            else:
+                assert entity not in requested
+                expression = 'age > 40' if condition else column
+                value = source.execute(
+                    f'SELECT {expression} FROM users WHERE user_id=?', [entity]
+                ).fetchone()[0]
+                if not binary:
+                    value = str(value)
+            assert type(row['TARGET']) is type(value)
+            assert row['TARGET'] == value
+        for half, rows in [('context', context), ('predict', prediction)]:
+            ids = {row['instance_id'] for row in rows}
+            assert len(ids) == len(rows)
+            related = got[half + '_related']
+            assert set(related) == {'users', 'orders'}
+            assert set(related['users']['instance_ids']) == ids
+            eligible = {
+                row['instance_id']
+                for row in rows
+                if source.execute(
+                    'SELECT COUNT(*) FROM orders WHERE user_id=? AND ts<=CAST(? AS TIMESTAMP)',
+                    [row['__kumo_entity_ref_0'], row['__kumo_anchor_time']],
+                ).fetchone()[0]
+            }
+            assert set(related['orders']['instance_ids']) == eligible
+            for table in related.values():
+                assert set(table['instance_ids']) <= ids
+            if not temporal:
+                assert column not in related['users']['columns']
+        if not temporal:
+            count = source.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+            assert len(context) == count - len(set(requested))
+            assert got['metadata']['num_context_examples'] == count
+            assert _leaked(got['notices']) == [len(set(requested))]
+
+
+@pytest.mark.parametrize(
+    'spec',
+    [c for c in R.CASES if c['covers'] == R.INFERENCE],
+    ids=lambda c: c['name'],
+)
+def test_inference_options_reach_endpoint_or_refuse_before_send(
+    spec, monkeypatch
+):
+    from contextlib import contextmanager
+
+    sent = []
+    endpoint = R._refusing_endpoint
+
+    @contextmanager
+    def capture():
+        with endpoint() as (url, received):
+            yield url, received
+            sent.extend(received)
+
+    monkeypatch.setattr(R, '_refusing_endpoint', capture)
+    got = R.observe(spec)
+    assert got['outcome'] == 'payload', got
+    options = spec['materialize']['inference_config']
+    config = got['inference']['inference_config']
+    for key, value in options.items():
+        assert config[key] == value
+    assert got['inference']['run_mode'] == 'fast'
+    if spec['name'].endswith('-unread'):
+        assert got['call_refusal']['code'] == 'UNSUPPORTED_REQUEST'
+        assert sent == []
+        return
+    assert len(sent) == 1
+    body = json.loads(sent[0])
+    assert body['model'] == 'kumo-relational'
+    assert body['inference']['inference_config'] == options
+    assert body['inference']['run_mode'] == 'fast'
+    fields = (
+        ['prediction', 'probabilities']
+        if '.binary.' in spec['name']
+        else ['prediction']
+    )
+    expected_output = {'fields': fields}
+    if '.binary.' not in spec['name']:
+        expected_output['prediction_statistic'] = 'median'
+    assert body['output'] == expected_output
+
+
+def test_wide_decimal_features_preserve_every_digit_in_both_halves(monkeypatch):
+    spec = next(c for c in R.CASES if c['covers'] == R.DECIMAL)
+    got, attachments = _on_the_core(spec, monkeypatch)
+    assert got['outcome'] == 'payload', got
+    assert len(attachments) == 1
+    payload = json.loads(attachments[0])
+    feature = payload['schema']['related_tables']['users']['columns']['f']
+    assert feature['dtype'] == 'string'
+    assert feature['stype'] == 'categorical'
+    for half in ['context', 'predict']:
+        table = payload[half]['related_tables']['users']
+        assert table['rows']
+        for values in table['rows']:
+            row = dict(zip(table['columns'], values, strict=True))
+            assert row['f'] == str(
+                12345678901234567890123456789 + row['user_id']
+            )

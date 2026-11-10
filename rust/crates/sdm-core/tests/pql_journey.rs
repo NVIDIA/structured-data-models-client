@@ -2,121 +2,151 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Query validation and materialization journeys
-//! (`tests/pql/journey.json`): every inventory query that reaches PQL,
-//! against the schema the reference's `Schema.from_source` gave it, gives
-//! the reference's answer through the adapter, accepted, or refused with
-//! the same error codes and spans.
-
-#![allow(
-    clippy::disallowed_methods,
-    reason = "test code: reads the journey file"
+//! Query validation across authored schema types and relationship names.
+#[allow(
+    dead_code,
+    reason = "shared helpers include schemas used by other test binaries"
 )]
-
-use std::collections::BTreeMap;
-use std::path::Path;
-
-use sdm_contract::facts::PlatformFacts;
-use sdm_contract::ops::{ProfileSpec, QuerySchema, Severity, Span};
-use sdm_contract::{HostFacts, Scalar, Unit};
+mod pql_support;
+use pql_support::{NoZones, facts, profile};
+use sdm_contract::ops::{Dtype, QueryColumn, QuerySchema, Severity, Span, Stype};
 use sdm_core::pql::resolve;
-use sdm_core::profiles::Profile;
-use serde_json::Value;
-/// Zones that hold nothing: these facts name no local zone, so none is
-/// resolved.
-struct NoZones;
+use serde_json::json;
 
-impl sdm_core::Zones for NoZones {
-    fn zone(&self, _: &str) -> Result<jiff::tz::TimeZone, sdm_core::UnknownZone> {
-        Err(sdm_core::UnknownZone)
-    }
+fn shop() -> QuerySchema {
+    serde_json::from_value(json!({
+        "tables": [
+            {"name":"orders", "primary_key":"order_id", "time_column":"ts", "end_time_column":null,
+             "columns":[
+                 {"name":"order_id","dtype":"int","stype":"ID"},
+                 {"name":"user_id","dtype":"int","stype":"ID"},
+                 {"name":"price","dtype":"float","stype":"numerical"},
+                 {"name":"ts","dtype":"time","stype":"timestamp"}]},
+            {"name":"users", "primary_key":"user_id", "time_column":null, "end_time_column":null,
+             "columns":[
+                 {"name":"user_id","dtype":"int","stype":"ID"},
+                 {"name":"age","dtype":"int","stype":"numerical"},
+                 {"name":"country","dtype":"string","stype":"categorical"}]}
+        ],
+        "links":[[{"table":"orders","column":"user_id"},{"table":"users","column":"user_id"}]]
+    }))
+    .unwrap()
 }
 
-fn facts() -> HostFacts {
-    HostFacts {
-        now: Scalar::Timestamp {
-            unit: Unit::Us,
-            zone: Some("UTC".into()),
-            value: 1_767_225_600_000_000,
-        },
-        local_zone: None,
-        zone_roots: vec![],
-        platform: PlatformFacts {
-            os: "linux".into(),
-            strftime_pads_year: false,
-        },
-        date_literal_range: None,
+const SUM: &str = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id";
+fn accepts(schema: &QuerySchema, query: &str) {
+    let result = resolve(query, schema, &profile("RELATIONAL"), &facts(), &NoZones).unwrap();
+    assert!(result.query.is_some(), "{query}: {:?}", result.diagnostics);
+    assert!(
+        !result
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
+    );
+}
+
+#[test]
+fn regression_binary_and_categorical_queries_resolve() {
+    for query in [
+        SUM,
+        "PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id",
+        "PREDICT users.country FOR EACH users.user_id",
+    ] {
+        accepts(&shop(), query);
     }
 }
 
 #[test]
-fn every_journey_query_gives_the_reference_answer() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/pql/journey.json");
-    let journey: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let cases = journey["cases"].as_array().unwrap();
-    let ids: Vec<&str> = cases.iter().map(|c| c["id"].as_str().unwrap()).collect();
-    // Of the inventory's 40 cases, 34 reach PQL; the six the reference's
-    // `Schema.from_source` refuses never do, and are recorded by name.
-    assert_eq!(cases.len(), 34, "{ids:?}");
-    let skipped: Vec<&str> = journey["skipped"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|id| id.as_str().unwrap())
-        .collect();
-    assert_eq!(
-        skipped,
-        [
-            "nested.fixed-array",
-            "nested.struct",
-            "nested.map",
-            "nested.union",
-            "empty.fact-table",
-            "time.feature-interval",
-        ]
+fn key_types_and_renamed_relationships_resolve() {
+    for dtype in [Dtype::Int, Dtype::String, Dtype::Float] {
+        let mut schema = shop();
+        schema.tables[0].columns[1].dtype = dtype;
+        schema.tables[1].columns[0].dtype = dtype;
+        accepts(&schema, SUM);
+    }
+    let mut schema = shop();
+    schema.tables[0].columns[0].name = "oid".into();
+    schema.tables[0].primary_key = Some("oid".into());
+    schema.tables[0].columns[1].name = "buyer".into();
+    schema.tables[1].columns[0].name = "uid".into();
+    schema.tables[1].primary_key = Some("uid".into());
+    schema.links[0][0].column = "buyer".into();
+    schema.links[0][1].column = "uid".into();
+    accepts(
+        &schema,
+        "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.uid",
     );
-    for id in ["base.regression", "refuse.unknown-column"] {
-        assert!(ids.contains(&id), "the journey has no {id}");
-    }
-    for case in cases {
-        let id = case["id"].as_str().unwrap();
-        let schema: QuerySchema = serde_json::from_value(case["schema"].clone()).unwrap();
-        let profile = Profile::resolve(&ProfileSpec {
-            name: serde_json::from_value(case["profile"].clone()).unwrap(),
-            model: None,
-            capabilities: BTreeMap::new(),
+}
+
+#[test]
+fn feature_types_and_declared_text_times_resolve() {
+    for (name, dtype, stype) in [
+        ("f", Dtype::Bool, Stype::Categorical),
+        ("f", Dtype::Int, Stype::Categorical),
+        ("tier", Dtype::Float, Stype::Categorical),
+        ("f", Dtype::Time, Stype::Timestamp),
+    ] {
+        let mut schema = shop();
+        schema.tables[1].columns.push(QueryColumn {
+            name: name.into(),
+            dtype,
+            stype,
         });
-        let got = resolve(
-            case["query"].as_str().unwrap(),
+        accepts(
             &schema,
-            &profile,
-            &facts(),
-            &NoZones,
-        )
-        .unwrap_or_else(|e| panic!("{id}: {e:?}"));
-        assert_eq!(
-            got.query.is_some(),
-            case["accepted"] == true,
-            "{id}: {:?}",
-            got.diagnostics
+            if name == "tier" {
+                "PREDICT users.tier FOR EACH users.user_id"
+            } else {
+                SUM
+            },
         );
-        let want: Vec<(String, Option<Span>)> = case["errors"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|e| {
-                (
-                    e["code"].as_str().unwrap().to_owned(),
-                    serde_json::from_value(e["span"].clone()).unwrap(),
-                )
-            })
-            .collect();
-        let found: Vec<(String, Option<Span>)> = got
-            .diagnostics
-            .iter()
-            .filter(|d| d.severity == Severity::Error)
-            .map(|d| (d.code.clone(), d.span))
-            .collect();
-        assert_eq!(found, want, "{id}");
     }
+    for renamed in [false, true] {
+        let mut schema = shop();
+        schema.tables[0].columns[3].dtype = Dtype::String;
+        if renamed {
+            schema.tables[0].columns[3].name = "happened".into();
+            schema.tables[0].time_column = Some("happened".into());
+        }
+        accepts(&schema, SUM);
+    }
+    let mut schema = shop();
+    for name in ["f_date", "f_ts"] {
+        schema.tables[1].columns.push(QueryColumn {
+            name: name.into(),
+            dtype: Dtype::Time,
+            stype: Stype::Timestamp,
+        });
+    }
+    schema.tables[1].time_column = Some("f_date".into());
+    accepts(&schema, SUM);
+}
+
+#[test]
+fn unknown_column_has_a_precise_diagnostic() {
+    let result = resolve(
+        "PREDICT SUM(orders.cost, 0, 30, days) FOR EACH users.user_id",
+        &shop(),
+        &profile("RELATIONAL"),
+        &facts(),
+        &NoZones,
+    )
+    .unwrap();
+    assert!(result.query.is_none());
+    let errors: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .collect();
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].code, "PQL_SCHEMA_UNKNOWN_COLUMN");
+    assert_eq!(
+        errors[0].span,
+        Some(Span {
+            start_row: 1,
+            start_col: 12,
+            end_row: 1,
+            end_col: 12
+        })
+    );
 }

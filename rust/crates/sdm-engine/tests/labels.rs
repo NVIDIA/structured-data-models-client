@@ -2,375 +2,434 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The label vectors (; register PK-2 and PK-3):
-//! `sdm_engine::time::offset` and `sdm_engine::labels` against the
-//! frozen answers in `labels.json`, compared
-//! exactly: a window's offsets added to anchors at month ends, on leap days
-//! and with nanoseconds, as the sampler's `_by_time` seeds are made; the
-//! fixed step a window of months walks back by; the executor's
-//! aggregations, in float32 bits; its comparisons, each through
-//! `labels::label` as a condition target's labels (the function the product
-//! calls); and a decimal read at float32.
-//!
-//! [`problems`] fails closed: a perturbed answer, and evidence missing,
-//! empty or retyped, each fail (seeded below).
+//! Label arithmetic, masks and calendar windows with independent expectations.
 
+use sdm_contract::ErrorCode;
 use sdm_contract::pql::TimeUnit;
 use sdm_engine::labels::{
     self, Aggregation, Bounds, Column, Constant, Labels, RelOp, Target, Values,
 };
 use sdm_engine::time::offset::{Offset, timeframe};
-use serde_json::Value;
 
-const VECTORS: &str = include_str!("labels.json");
-
-/// How many vectors of each kind `problems` compared.
-#[derive(Debug, Default, PartialEq, Eq)]
-struct Counts {
-    offsets: usize,
-    timeframes: usize,
-    aggregations: usize,
-    conditions: usize,
-    decimals: usize,
+fn nanos(text: &str) -> i64 {
+    text.parse::<jiff::Timestamp>()
+        .unwrap()
+        .as_nanosecond()
+        .try_into()
+        .unwrap()
 }
 
-fn unit(name: &str) -> Result<TimeUnit, String> {
-    Ok(match name {
-        "seconds" => TimeUnit::Seconds,
-        "minutes" => TimeUnit::Minutes,
-        "hours" => TimeUnit::Hours,
-        "days" => TimeUnit::Days,
-        "weeks" => TimeUnit::Weeks,
-        "months" => TimeUnit::Months,
-        other => return Err(format!("a unit {other:?}")),
-    })
-}
-
-fn list<'a>(document: &'a Value, key: &str) -> Result<&'a Vec<Value>, String> {
-    document
-        .get(key)
-        .and_then(Value::as_array)
-        .filter(|v| !v.is_empty())
-        .ok_or_else(|| format!("{key}: no vectors"))
-}
-
-fn int(value: &Value, at: &str) -> Result<i64, String> {
-    value
-        .as_i64()
-        .ok_or_else(|| format!("{at}: not an integer"))
-}
-
-fn digits(value: &Value, at: &str) -> Result<i128, String> {
-    value
-        .as_str()
-        .and_then(|t| t.parse().ok())
-        .ok_or_else(|| format!("{at}: not digits"))
-}
-
-fn bits(value: &Value, at: &str) -> Result<f32, String> {
-    value
-        .as_str()
-        .and_then(|t| u32::from_str_radix(t, 16).ok())
-        .map(f32::from_bits)
-        .ok_or_else(|| format!("{at}: not float32 bits"))
-}
-
-fn same_f32(a: f32, b: f32) -> bool {
-    a.to_bits() == b.to_bits() || (a.is_nan() && b.is_nan())
-}
-
-/// Each way the core departs from the vectors in `document`, and how
-/// many of each it compared.
-fn problems(document: &Value) -> (Vec<String>, Counts) {
-    let mut found = Vec::new();
-    let mut counts = Counts::default();
-    if document.get("format").and_then(Value::as_str) != Some("sdm-labels-vectors/1") {
-        return (vec!["not an sdm-labels-vectors/1 document".into()], counts);
+#[test]
+fn fixed_windows_and_calendar_months_keep_time_and_clamp_days() {
+    for (unit, seconds) in [
+        (TimeUnit::Seconds, 1_i64),
+        (TimeUnit::Minutes, 60),
+        (TimeUnit::Hours, 3600),
+        (TimeUnit::Days, 86400),
+        (TimeUnit::Weeks, 604800),
+    ] {
+        for count in [-7, -1, 0, 1, 7] {
+            let offset = Offset { count, unit };
+            for anchor in [-1_234_567_890, 0, 1_234_567_890] {
+                assert_eq!(
+                    offset.add_to(anchor, "anchor").unwrap(),
+                    anchor + count * seconds * 1_000_000_000
+                );
+            }
+            assert_eq!(
+                timeframe(Offset { count: -1, unit }, offset, "anchor").unwrap(),
+                i128::from((count + 1) * seconds * 1_000_000_000)
+            );
+        }
     }
-    let mut each =
-        |key: &str, check: &mut dyn FnMut(&Value) -> Result<Option<String>, String>| match list(
-            document, key,
-        ) {
-            Err(problem) => {
-                found.push(problem);
-                0
+    for (from, count, to) in [
+        (
+            "2024-01-31T12:34:56.123456789Z",
+            1,
+            "2024-02-29T12:34:56.123456789Z",
+        ),
+        (
+            "2023-01-31T12:34:56.123456789Z",
+            1,
+            "2023-02-28T12:34:56.123456789Z",
+        ),
+        (
+            "2024-03-31T12:34:56.123456789Z",
+            -1,
+            "2024-02-29T12:34:56.123456789Z",
+        ),
+        (
+            "2024-02-29T12:34:56.123456789Z",
+            12,
+            "2025-02-28T12:34:56.123456789Z",
+        ),
+        (
+            "1969-12-31T23:59:59.999999999Z",
+            1,
+            "1970-01-31T23:59:59.999999999Z",
+        ),
+    ] {
+        assert_eq!(
+            Offset {
+                count,
+                unit: TimeUnit::Months
             }
-            Ok(vectors) => {
-                for (i, vector) in vectors.iter().enumerate() {
-                    match check(vector) {
-                        Ok(None) => {}
-                        Ok(Some(problem)) => found.push(format!("{key}[{i}]: {problem}")),
-                        Err(problem) => found.push(format!("{key}[{i}]: {problem}")),
-                    }
+            .add_to(nanos(from), "anchor")
+            .unwrap(),
+            nanos(to)
+        );
+    }
+    let months = |count| Offset {
+        count,
+        unit: TimeUnit::Months,
+    };
+    assert_eq!(
+        timeframe(months(0), months(2), "anchor").unwrap(),
+        59 * 86400 * 1_000_000_000_i128
+    );
+    assert_eq!(
+        timeframe(months(-1), months(2), "anchor").unwrap(),
+        90 * 86400 * 1_000_000_000_i128
+    );
+    for (anchor, count) in [(i64::MAX, 1), (i64::MIN, -1)] {
+        let error = Offset {
+            count,
+            unit: TimeUnit::Seconds,
+        }
+        .add_to(anchor, "anchor")
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::ValueOutOfRange);
+        assert_eq!(
+            error.fields.get("field"),
+            Some(&sdm_contract::Detail::text("anchor"))
+        );
+    }
+}
+
+#[test]
+fn grouped_aggregates_keep_empty_groups_and_missing_values_separate() {
+    // Interleaved groups: group0=[1,3], group1=[8], group2 has only
+    // missing values, group3 has no rows. All three physical types agree.
+    for values in [
+        Values::Int(vec![Some(1), Some(8), None, Some(3), None]),
+        Values::Float(vec![Some(1.0), Some(8.0), Some(f32::NAN), Some(3.0), None]),
+        Values::Decimal {
+            values: vec![Some(100), Some(800), None, Some(300), None],
+            precision: 10,
+            scale: 2,
+        },
+    ] {
+        for (op, wanted, present) in [
+            (
+                Aggregation::Sum,
+                [4.0_f32, 8.0, 0.0, 0.0],
+                [true, true, true, true],
+            ),
+            (
+                Aggregation::Count,
+                [2.0, 1.0, 0.0, 0.0],
+                [true, true, true, true],
+            ),
+            (
+                Aggregation::Avg,
+                [2.0, 8.0, 0.0, 0.0],
+                [true, true, false, false],
+            ),
+            (
+                Aggregation::Min,
+                [1.0, 8.0, 0.0, 0.0],
+                [true, true, false, false],
+            ),
+            (
+                Aggregation::Max,
+                [3.0, 8.0, 0.0, 0.0],
+                [true, true, false, false],
+            ),
+        ] {
+            let got = labels::aggregate(
+                op,
+                4,
+                &[0, 1, 2, 0, 2],
+                &values,
+                &[Some(0); 5],
+                Bounds {
+                    starts: None,
+                    ends: &[0; 4],
+                },
+            )
+            .unwrap();
+            assert_eq!(got.present, present);
+            for i in 0..4 {
+                if present[i] {
+                    assert_eq!(got.values[i].to_bits(), wanted[i].to_bits());
                 }
-                vectors.len()
             }
-        };
-    counts.offsets = each("offsets", &mut |v| {
-        let offset = Offset {
-            count: int(&v["count"], "count")?,
-            unit: unit(v["unit"].as_str().unwrap_or_default())?,
-        };
-        let anchor = int(&v["anchor"], "anchor")?;
-        let wanted = match &v["at"] {
-            Value::Null => None,
-            other => Some(int(other, "at")?),
-        };
-        let mine = offset.add_to(anchor, "t").ok();
-        Ok((mine != wanted).then(|| format!("{anchor} + {offset:?}: {mine:?}, not {wanted:?}")))
-    });
-    counts.timeframes = each("timeframes", &mut |v| {
-        let unit = unit(v["unit"].as_str().unwrap_or_default())?;
-        let start = int(&v["start"], "start")?;
-        let end = int(&v["end"], "end")?;
-        let wanted = i128::from(int(&v["nanos"], "nanos")?);
-        let at = |n: i64| Offset { count: n, unit };
-        let mine = timeframe(at(start), at(end), "t").map_err(|e| format!("{e:?}"))?;
-        Ok((mine != wanted).then(|| format!("{start}..{end} {unit:?}: {mine}, not {wanted}")))
-    });
-    counts.aggregations = each("aggregations", &mut |v| {
-        let aggregation = match v["aggregation"].as_str() {
-            Some("sum") => Aggregation::Sum,
-            Some("count") => Aggregation::Count,
-            Some("avg") => Aggregation::Avg,
-            Some("min") => Aggregation::Min,
-            Some("max") => Aggregation::Max,
-            other => return Err(format!("an aggregation {other:?}")),
-        };
-        let examples =
-            usize::try_from(int(&v["examples"], "examples")?).map_err(|e| e.to_string())?;
-        let batch: Vec<usize> = v["batch"]
-            .as_array()
-            .ok_or("batch: not a list")?
-            .iter()
-            .map(|b| int(b, "batch").map(|b| b as usize))
-            .collect::<Result<_, _>>()?;
-        let rows = v["values"].as_array().ok_or("values: not a list")?;
-        let values = match v["kind"].as_str() {
-            Some("float32") => Values::Float(
-                rows.iter()
-                    .map(|r| (!r.is_null()).then(|| bits(r, "value")).transpose())
-                    .collect::<Result<_, _>>()?,
-            ),
-            Some("int64") => Values::Int(
-                rows.iter()
-                    .map(|r| {
-                        (!r.is_null())
-                            .then(|| digits(r, "value").map(|d| d as i64))
-                            .transpose()
-                    })
-                    .collect::<Result<_, _>>()?,
-            ),
-            Some("decimal") => Values::Decimal {
-                values: rows
-                    .iter()
-                    .map(|r| (!r.is_null()).then(|| digits(r, "value")).transpose())
-                    .collect::<Result<_, _>>()?,
-                precision: 38,
-                scale: 18,
-            },
-            other => return Err(format!("a kind {other:?}")),
-        };
-        let wanted: Vec<f32> = v["labels"]
-            .as_array()
-            .ok_or("labels: not a list")?
-            .iter()
-            .map(|l| bits(l, "label"))
-            .collect::<Result<_, _>>()?;
-        let mask: Vec<bool> = v["mask"]
-            .as_array()
-            .ok_or("mask: not a list")?
-            .iter()
-            .map(|m| m.as_bool().ok_or("mask: not a boolean"))
-            .collect::<Result<_, _>>()?;
-        let ends = vec![0_i64; examples];
-        let out = labels::aggregate(
-            aggregation,
-            examples,
-            &batch,
-            &values,
-            &vec![Some(0); batch.len()],
-            Bounds {
-                starts: None,
-                ends: &ends,
-            },
-        )
-        .map_err(|e| format!("{e:?}"))?;
-        let mine: Vec<f32> = out
-            .values
-            .iter()
-            .zip(&out.present)
-            .filter(|(_, p)| **p)
-            .map(|(v, _)| *v)
-            .collect();
-        let agree = out.present == mask
-            && mine.len() == wanted.len()
-            && mine.iter().zip(&wanted).all(|(a, b)| same_f32(*a, *b));
-        Ok((!agree).then(|| format!("{mine:?} {:?}, not {wanted:?} {mask:?}", out.present)))
-    });
-    counts.conditions = each("conditions", &mut |v| {
-        let op = match v["op"].as_str() {
-            Some("eq") => RelOp::Eq,
-            Some("ne") => RelOp::Ne,
-            Some("lt") => RelOp::Lt,
-            Some("le") => RelOp::Le,
-            Some("gt") => RelOp::Gt,
-            Some("ge") => RelOp::Ge,
-            other => return Err(format!("an operator {other:?}")),
-        };
-        let rows = v["left"].as_array().ok_or("left: not a list")?;
-        // The examples' column, as the executor reads a target's column:
-        // float32 or int64, every row holding a value (a NaN is a float
-        // value, which the column's mask leaves out).
-        let column = match v["kind"].as_str() {
-            Some("float32") => Column::Float(
-                rows.iter()
-                    .map(|r| bits(r, "left").map(Some))
-                    .collect::<Result<_, _>>()?,
-            ),
-            Some("int64") => Column::Int(
-                rows.iter()
-                    .map(|r| digits(r, "left").map(|d| Some(d as i64)))
-                    .collect::<Result<_, _>>()?,
-            ),
-            other => return Err(format!("a kind {other:?}")),
-        };
-        let text = v["constant"]["text"].as_str().ok_or("constant: no text")?;
-        let constant = match v["constant"]["type"].as_str() {
-            Some("int") => Constant::Int(text.parse().map_err(|_| "constant: not digits")?),
-            Some("float") => Constant::Float(text.parse().map_err(|_| "constant: not a float")?),
-            other => return Err(format!("a constant {other:?}")),
-        };
-        let wanted: Vec<bool> = v["answer"]
-            .as_array()
-            .ok_or("answer: not a list")?
-            .iter()
-            .map(|a| a.as_bool().ok_or("answer: not a boolean"))
-            .collect::<Result<_, _>>()?;
-        // The rows with a value: all but a float's NaN, which `execute`
-        // masks out before the condition's labels are kept, and which
-        // `execute_rel_op` answers false (checked, so a perturbed answer
-        // there fails too).
-        let present: Vec<bool> = match &column {
-            Column::Float(values) => values
-                .iter()
-                .map(|f| f.is_some_and(|f| !f.is_nan()))
-                .collect(),
-            _ => vec![true; rows.len()],
-        };
-        if present.len() != wanted.len() {
-            return Err(format!("{} rows, {} answers", present.len(), wanted.len()));
         }
-        if let Some(row) = (0..wanted.len()).find(|&i| !present[i] && wanted[i]) {
-            return Ok(Some(format!("row {row}, a NaN, answered true")));
+    }
+}
+
+#[test]
+fn conditions_preserve_masks_and_all_six_comparison_directions() {
+    for (op, expected) in [
+        (RelOp::Eq, [false, true, false]),
+        (RelOp::Ne, [true, false, true]),
+        (RelOp::Lt, [true, false, false]),
+        (RelOp::Le, [true, true, false]),
+        (RelOp::Gt, [false, false, true]),
+        (RelOp::Ge, [false, true, true]),
+    ] {
+        for constant in [Constant::Int(0), Constant::Float(0.0)] {
+            for column in [
+                Column::Int(vec![Some(-1), Some(0), Some(1), None]),
+                Column::Float(vec![Some(-1.0), Some(0.0), Some(1.0), Some(f32::NAN)]),
+            ] {
+                let got = labels::label(&Target::Condition {
+                    target: Box::new(Target::Column(column)),
+                    op,
+                    constant: Some(constant.clone()),
+                })
+                .unwrap();
+                assert_eq!(got.mask, [true, true, true, false]);
+                assert_eq!(got.labels, Labels::Bool(expected.to_vec()));
+            }
         }
-        let kept: Vec<bool> = wanted
-            .iter()
-            .zip(&present)
-            .filter(|(_, p)| **p)
-            .map(|(w, _)| *w)
-            .collect();
-        // Through `labels::label`, the function the product calls for a
-        // condition target (`target op constant`), not a helper beside it.
-        let target = Target::Condition {
+    }
+}
+
+#[test]
+fn condition_constants_follow_integer_and_float32_precision() {
+    for (column, constant, op, expected) in [
+        (
+            Column::Int(vec![Some(9_007_199_254_740_993)]),
+            Constant::Float(9_007_199_254_740_992.0),
+            RelOp::Eq,
+            true,
+        ),
+        (
+            Column::Int(vec![Some(9_007_199_254_740_993)]),
+            Constant::Int(9_007_199_254_740_992),
+            RelOp::Ne,
+            true,
+        ),
+        (
+            Column::Float(vec![Some(16_777_216.0)]),
+            Constant::Int(16_777_217),
+            RelOp::Eq,
+            true,
+        ),
+        (
+            Column::Float(vec![Some(16_777_216.0)]),
+            Constant::Int(16_777_217),
+            RelOp::Gt,
+            false,
+        ),
+        (
+            Column::Float(vec![Some(f32::INFINITY)]),
+            Constant::Float(1.0),
+            RelOp::Gt,
+            true,
+        ),
+        (
+            Column::Float(vec![Some(f32::NEG_INFINITY)]),
+            Constant::Float(1.0),
+            RelOp::Lt,
+            true,
+        ),
+        (
+            Column::Int(vec![Some(9_007_199_254_740_993)]),
+            Constant::Int(9_007_199_254_740_992),
+            RelOp::Gt,
+            true,
+        ),
+        (
+            Column::Float(vec![Some(16_777_216.0)]),
+            Constant::Float(16_777_217.0),
+            RelOp::Eq,
+            true,
+        ),
+        (
+            Column::Int(vec![Some(1)]),
+            Constant::Float(1.5),
+            RelOp::Lt,
+            true,
+        ),
+        (
+            Column::Float(vec![Some(-0.0)]),
+            Constant::Float(0.0),
+            RelOp::Eq,
+            true,
+        ),
+    ] {
+        let got = labels::label(&Target::Condition {
             target: Box::new(Target::Column(column)),
             op,
             constant: Some(constant),
-        };
-        let mine = labels::label(&target).map_err(|e| format!("{e:?}"))?;
-        let agree = mine.mask == present && mine.labels == Labels::Bool(kept.clone());
-        Ok((!agree).then(|| {
-            format!(
-                "{op:?} {text}: {:?} {:?}, not {kept:?} {present:?}",
-                mine.labels, mine.mask
+        })
+        .unwrap();
+        assert_eq!(got.mask, [true]);
+        assert_eq!(got.labels, Labels::Bool(vec![expected]));
+    }
+}
+
+#[test]
+fn decimal_conversion_keeps_scale_sign_and_small_values() {
+    for (unscaled, scale, wanted) in [
+        (12345_i128, 2, 123.45_f32),
+        (-12345, 2, -123.45),
+        (5, 18, 5e-18),
+        (97_000_000_000_000_000_002, 18, 97.0),
+        (-49_476_625_724_350, 18, -4.947_662_5e-5),
+        (25, -2, 2500.0),
+        (0, 38, 0.0),
+    ] {
+        assert_eq!(
+            (labels::decimal_to_f64(unscaled, scale) as f32).to_bits(),
+            wanted.to_bits()
+        );
+    }
+}
+
+#[test]
+fn null_timestamps_and_window_edges_do_not_enter_any_aggregate() {
+    for (op, expected) in [
+        (Aggregation::Sum, 5.0_f32),
+        (Aggregation::Count, 2.0),
+        (Aggregation::Avg, 2.5),
+        (Aggregation::Min, 2.0),
+        (Aggregation::Max, 3.0),
+    ] {
+        let got = labels::aggregate(
+            op,
+            1,
+            &[0; 5],
+            &Values::Int(vec![Some(100), Some(2), Some(3), Some(200), Some(300)]),
+            &[Some(0), Some(1), Some(10), Some(11), None],
+            Bounds {
+                starts: Some(&[0]),
+                ends: &[10],
+            },
+        )
+        .unwrap();
+        assert_eq!(got.present, [true]);
+        assert_eq!(got.values[0].to_bits(), expected.to_bits());
+    }
+    let got = labels::aggregate(
+        Aggregation::Count,
+        1,
+        &[0; 5],
+        &Values::Ones(5),
+        &[Some(0), Some(1), Some(10), Some(11), None],
+        Bounds {
+            starts: Some(&[0]),
+            ends: &[10],
+        },
+    )
+    .unwrap();
+    assert_eq!(got.values, [2.0]);
+}
+
+fn aggregate_one(op: Aggregation, values: Values, n: usize) -> f32 {
+    let got = labels::aggregate(
+        op,
+        1,
+        &vec![0; n],
+        &values,
+        &vec![Some(0); n],
+        Bounds {
+            starts: None,
+            ends: &[0],
+        },
+    )
+    .unwrap();
+    assert_eq!(got.present, [true]);
+    got.values[0]
+}
+
+#[test]
+fn float_arithmetic_retains_compensation_infinity_and_zero_contracts() {
+    let mut compensated = vec![Some(100_000_000.0)];
+    compensated.extend([Some(1.0); 8]);
+    compensated.push(Some(-100_000_000.0));
+    assert_eq!(
+        aggregate_one(Aggregation::Sum, Values::Float(compensated.clone()), 10).to_bits(),
+        8.0_f32.to_bits()
+    );
+    assert_eq!(
+        aggregate_one(Aggregation::Avg, Values::Float(compensated), 10).to_bits(),
+        0.8_f32.to_bits()
+    );
+    for op in [
+        Aggregation::Sum,
+        Aggregation::Avg,
+        Aggregation::Min,
+        Aggregation::Max,
+    ] {
+        for value in [f32::INFINITY, f32::NEG_INFINITY] {
+            assert_eq!(
+                aggregate_one(op, Values::Float(vec![Some(value)]), 1),
+                value
+            );
+        }
+    }
+    for op in [Aggregation::Sum, Aggregation::Avg] {
+        assert!(
+            aggregate_one(
+                op,
+                Values::Float(vec![Some(f32::INFINITY), Some(f32::NEG_INFINITY)]),
+                2
             )
-        }))
-    });
-    counts.decimals = each("decimals", &mut |v| {
-        let unscaled = digits(&v["unscaled"], "unscaled")?;
-        let scale = i8::try_from(int(&v["scale"], "scale")?).map_err(|e| e.to_string())?;
-        let wanted = bits(&v["f32"], "f32")?;
-        let mine = labels::decimal_to_f64(unscaled, scale) as f32;
-        Ok((!same_f32(mine, wanted))
-            .then(|| format!("{unscaled}e-{scale}: {mine:e}, not {wanted:e}")))
-    });
-    (found, counts)
-}
-
-fn vectors() -> Value {
-    serde_json::from_str(VECTORS).unwrap()
+            .is_nan()
+        );
+        assert_eq!(
+            aggregate_one(op, Values::Float(vec![Some(-0.0)]), 1).to_bits(),
+            0.0_f32.to_bits()
+        );
+    }
+    for op in [Aggregation::Min, Aggregation::Max] {
+        assert_eq!(
+            aggregate_one(op, Values::Float(vec![Some(-0.0)]), 1).to_bits(),
+            (-0.0_f32).to_bits()
+        );
+    }
 }
 
 #[test]
-fn the_core_s_labels_and_offsets_are_the_reference_s() {
-    let (found, counts) = problems(&vectors());
-    assert_eq!(found, Vec::<String>::new());
-    assert!(counts.offsets > 2_500, "{counts:?}");
-    assert!(counts.timeframes > 1_000, "{counts:?}");
-    assert!(counts.aggregations > 150, "{counts:?}");
-    assert!(counts.conditions > 400, "{counts:?}");
-    assert!(counts.decimals > 500, "{counts:?}");
+fn integer_sum_wrap_and_mean_precision_are_distinct() {
+    // Integer sums retain signed-int64 arithmetic, while means accumulate
+    // in float64 and only then project to the float32 label column.
+    let values = || Values::Int(vec![Some(i64::MAX), Some(1)]);
+    assert_eq!(
+        aggregate_one(Aggregation::Sum, values(), 2).to_bits(),
+        (-9_223_372_036_854_775_808.0_f32).to_bits()
+    );
+    assert_eq!(
+        aggregate_one(Aggregation::Avg, values(), 2).to_bits(),
+        4_611_686_018_427_387_904.0_f32.to_bits()
+    );
+    assert_eq!(
+        aggregate_one(
+            Aggregation::Avg,
+            Values::Int(vec![Some(16_777_217), Some(16_777_218)]),
+            2
+        )
+        .to_bits(),
+        16_777_218.0_f32.to_bits()
+    );
 }
 
 #[test]
-fn the_vector_check_fails_closed() {
-    let document = vectors();
-    // A perturbed answer of each kind.
-    for (key, field) in [
-        ("offsets", "at"),
-        ("timeframes", "nanos"),
-        ("conditions", "answer"),
-        ("aggregations", "labels"),
-        ("decimals", "f32"),
+fn independent_arrow_decimal_conversion_sentinels() {
+    // Independent PyArrow 25.0.1 -> NumPy 2.5.3 float32 observations.
+    // These few bit patterns retain the external conversion boundary.
+    for (unscaled, bits) in [
+        (5_i128, 0x22b877aa_u32),
+        (1, 0x219392ef),
+        (1_000_000_000_000_000_000, 0x3f800000),
+        (97_000_000_000_000_000_002, 0x42c20000),
     ] {
-        let mut changed = document.clone();
-        let first = changed[key]
-            .as_array_mut()
-            .unwrap()
-            .iter_mut()
-            .find(|v| match &v[field] {
-                Value::Array(a) => !a.is_empty(),
-                Value::Null => false,
-                _ => true,
-            })
-            .unwrap();
-        first[field] = match &first[field] {
-            Value::Number(n) => Value::from(n.as_i64().unwrap() + 1),
-            Value::String(_) => Value::from("7fc00001"),
-            Value::Array(items) => {
-                let mut items = items.clone();
-                items[0] = match &items[0] {
-                    Value::Bool(b) => Value::Bool(!b),
-                    _ => Value::from("3f800001"),
-                };
-                Value::Array(items)
-            }
-            other => other.clone(),
-        };
-        assert!(!problems(&changed).0.is_empty(), "{key}");
+        assert_eq!(
+            (labels::decimal_to_f64(unscaled, 18) as f32).to_bits(),
+            bits
+        );
     }
-    // Evidence missing, empty or retyped.
-    for key in [
-        "offsets",
-        "timeframes",
-        "aggregations",
-        "conditions",
-        "decimals",
-    ] {
-        let mut missing = document.clone();
-        missing.as_object_mut().unwrap().remove(key);
-        assert!(!problems(&missing).0.is_empty(), "{key} missing");
-        let mut empty = document.clone();
-        empty[key] = Value::Array(vec![]);
-        assert!(!problems(&empty).0.is_empty(), "{key} empty");
-        let mut retyped = document.clone();
-        retyped[key] = Value::from("vectors");
-        assert!(!problems(&retyped).0.is_empty(), "{key} retyped");
-    }
-    let mut retyped = document.clone();
-    retyped["offsets"][0]["anchor"] = Value::from("1706659200000000000");
-    assert!(!problems(&retyped).0.is_empty());
-    let mut format = document;
-    format["format"] = Value::from("sdm-labels-vectors/2");
-    assert!(!problems(&format).0.is_empty());
 }

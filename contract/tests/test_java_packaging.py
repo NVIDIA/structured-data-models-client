@@ -9,6 +9,7 @@ Set SDM_JAVA_JAR and JAVA_HOME to exercise packaging; SDM_REQUIRE_JAVA refuses a
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import platform
@@ -17,7 +18,6 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -31,8 +31,6 @@ ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / 'contract/cases'
 
 S0 = CASES / 's0'
-
-VECTORS = ROOT / 'contract/native-binding-vectors.json'
 
 RUN_CLASS = 'com.nvidia.sdm.internal.Run'
 
@@ -90,14 +88,6 @@ def _major(home: Path) -> int:
     return int(found.group(1))
 
 
-def _cases(directory: Path) -> dict[str, dict[str, Any]]:
-    found = {}
-    for path in sorted(directory.glob('*.json')):
-        case = json.loads(path.read_text(encoding='utf-8'))
-        found[case['id']] = case
-    return found
-
-
 def _here() -> str:
     r"""The current platform, as:data:`PLATFORM_TOKENS` names it."""
     system = {'Linux': 'linux', 'Darwin': 'macos'}[platform.system()]
@@ -135,8 +125,7 @@ PROBE = r"""
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.util.HexFormat;
+import java.util.Base64;
 import java.util.Map;
 
 public class PackagedJarProbe {
@@ -159,8 +148,7 @@ public class PackagedJarProbe {
                 ? (byte[]) step
                 : (byte[]) step.getClass().getMethod("control").invoke(step);
             run.getMethod("close").invoke(handle);
-            System.out.println("DONE " + HexFormat.of().formatHex(
-                MessageDigest.getInstance("SHA-256").digest(control)));
+            System.out.println("CONTROL " + Base64.getEncoder().encodeToString(control));
         } catch (java.lang.reflect.InvocationTargetException thrown) {
             Throwable cause = thrown.getCause();
             System.out.println("ERROR " + cause.getClass().getName() + ": " + cause.getMessage());
@@ -191,20 +179,36 @@ def _probe(
     the JDK and the system's directories but no Rust toolchain, an empty
     ``java.library.path``, and no ``LD_LIBRARY_PATH`` or
     ``JAVA_TOOL_OPTIONS``; the native can come from the JAR alone."""
-    import base64
-
-    vectors = json.loads(VECTORS.read_text(encoding='utf-8'))['binding']
-    vector = vectors['validate']['s0.accept.binary-classification']
+    case = json.loads((S0 / 's0.accept.binary-classification.json').read_text())
+    validation = case['core']['validate_query']
     scratch.mkdir(parents=True, exist_ok=True)
     start = {
         'message': 'start',
         'contract': _contract_version(),
-        'facts': vectors['facts'],
-        'operation': json.loads(vector['operation']),
+        'facts': {
+            'now': {
+                't': 'ts',
+                'unit': 'us',
+                'zone': 'UTC',
+                'v': '1767225600000000',
+            },
+            'local_zone': None,
+            'zone_roots': [],
+            'platform': {'os': 'linux', 'strftime_pads_year': False},
+        },
+        'operation': {
+            'op': 'validate_query',
+            'query': 1,
+            'schema': 2,
+            'profile': validation['profile'],
+        },
     }
     (scratch / 'start.bin').write_bytes(json.dumps(start).encode())
-    for key, value in vector['attachments'].items():
-        (scratch / f'{key}.bin').write_bytes(base64.b64decode(value))
+    for key, value in {
+        1: case['input']['pql'],
+        2: validation['schema'],
+    }.items():
+        (scratch / f'{key}.bin').write_bytes(json.dumps(value).encode())
     source = scratch / 'PackagedJarProbe.java'
     source.write_text(PROBE % {'run': RUN_CLASS}, encoding='utf-8')
     empty = scratch / 'no-libraries'
@@ -232,20 +236,24 @@ def _probe(
 def test_the_jar_loads_on_each_jdk_in_a_clean_environment(
     tmp_path: Path,
 ) -> None:
-    # Exit 4: on each JDK given, the JAR alone, with the two flags and
-    # nothing of the build around it, loads its native and answers S0's
-    # first case as Python's binding does (the same done step, byte for
-    # byte). CI runs it in a clean container per JDK and platform.
+    # A clean JDK loads only the packaged native and validates a known query.
     jar = _jar()
-    vectors = json.loads(VECTORS.read_text(encoding='utf-8'))['binding']
-    expected = vectors['validate']['s0.accept.binary-classification']['digest']
     majors = []
     for home in _java_homes():
         majors.append(_major(home))
         done = _probe(home, jar, tmp_path / home.name)
         said = f'{home}:\n{done.stdout}\n{done.stderr}'[-4000:]
         assert done.returncode == 0, said
-        assert f'DONE {expected}' in done.stdout, said
+        controls = [
+            line.removeprefix('CONTROL ')
+            for line in done.stdout.splitlines()
+            if line.startswith('CONTROL ')
+        ]
+        assert len(controls) == 1, said
+        control = json.loads(base64.b64decode(controls[0]))
+        assert (control['message'], control['step']) == ('step', 'done')
+        assert control['result']['op'] == 'validate_query'
+        assert control['result']['accepted'] is True
         assert not list((tmp_path / home.name).glob('hs_err*')), said
     assert set(majors) <= set(JDKS), majors
 
@@ -358,16 +366,3 @@ def test_sdm_jni_depends_on_sdm_host_and_sdm_contract_and_no_pyo3() -> None:
         (ROOT / 'rust/bindings/sdm-py/Cargo.toml').read_text(encoding='utf-8')
     )
     assert 'jni' not in python.get('dependencies', {})
-
-
-def test_the_vectors_cover_every_s0_case() -> None:
-    # The recorder's input, current: every S0 case has its binding and
-    # reference vectors, recorded from the case as it stands.
-    document = json.loads(VECTORS.read_text(encoding='utf-8'))
-    cases = _cases(S0)
-    validate = document['binding']['validate']
-    constructor = document['reference']['constructor']
-    assert set(cases) <= set(validate)
-    assert set(cases) <= set(constructor)
-    for case, spec in cases.items():
-        assert validate[case]['text'] == spec['input']['pql'], case

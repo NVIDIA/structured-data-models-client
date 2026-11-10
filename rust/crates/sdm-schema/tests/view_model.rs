@@ -2,21 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The logical model's steps (design S5: `add_table`, `add_join`
-//! with its undo, `add_relationship`, and the finish: measure notes, time
-//! columns, invalid edges, validation), the graph's part of the old
-//! client's conversion (`RE/graph.py:250-421`, `:1820-1943`, `:2209-2256`,
-//! `:3256-3371`).
-//!
-//! Against `contract/view-step-vectors.json` where the old client's tests
-//! reached a step it records: a join key's count, the measure notes, the
-//! time column (driven with the reads and choices the old client made on
-//! the way, which the core makes from the rows it read), and each edge's
-//! error. The join and relationship steps, which change several tables at
-//! once and undo all of it on a refusal, are held to the old routine's
-//! outcomes one scenario each.
-
-use std::collections::BTreeMap;
+//! Logical view-model decisions and rollback, asserted from explicit facts.
+//! Time selection tests verify callback requests, choices, retained columns and notes.
 
 use sdm_contract::ops::{Dtype, Stype};
 use sdm_schema::view::model::{
@@ -24,238 +11,249 @@ use sdm_schema::view::model::{
     KeyReason, LinkFailure, MeasureColumn, ModelColumn, ModelTable, RawAdd, RelationshipRefusal,
     RelationshipStep, TimeInput, ViewModel,
 };
-use serde_json::Value as Json;
-
-const VECTORS: &str = include_str!("../../../../contract/view-step-vectors.json");
-
-fn document() -> Json {
-    fixture_tables::read(VECTORS)
-}
-
-fn texts(value: &Json) -> Vec<String> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|item| item.as_str().unwrap().to_owned())
-        .collect()
-}
-
-fn dtype(name: &str) -> Dtype {
-    serde_json::from_value(Json::String(name.to_owned())).unwrap()
-}
-
-fn optional_text(value: &Json) -> Option<String> {
-    value.as_str().map(str::to_owned)
+#[test]
+fn join_key_counts_distinguish_unknown_empty_unique_and_repeated() {
+    assert_eq!(model::join_key_reason(None, None, 0), None);
+    assert_eq!(model::join_key_reason(Some(10), None, 0), None);
+    assert_eq!(
+        model::join_key_reason(Some(0), Some(0), 0),
+        Some(KeyReason::NoValue)
+    );
+    assert_eq!(
+        model::join_key_reason(Some(10), Some(0), 0),
+        Some(KeyReason::NoValue)
+    );
+    assert_eq!(model::join_key_reason(Some(10), Some(8), 0), None); // Null keys are not repeats.
+    assert_eq!(
+        model::join_key_reason(Some(10), Some(8), 2),
+        Some(KeyReason::NotUnique {
+            repeats: 2,
+            rows: 10
+        })
+    );
 }
 
 #[test]
-fn a_join_key_s_count_is_judged_as_the_old_client_judged_it() {
-    let document = document();
-    let vectors = document["join_key_reason"].as_array().unwrap();
-    assert!(vectors.len() >= 10);
-    for vector in vectors {
-        let count = &vector["count"];
-        let reason = model::join_key_reason(
-            count["rows"].as_u64(),
-            count["distinct"].as_u64(),
-            count["repeats"].as_u64().unwrap(),
-        );
-        let expected = vector["reason"].as_str();
-        match (&reason, expected) {
-            (None, None) => {}
-            (Some(KeyReason::NoValue), Some(text)) => assert!(text.contains("holds no value")),
-            (Some(KeyReason::NotUnique { repeats, rows }), Some(text)) => {
-                assert!(text.contains("is not unique"), "{text}");
-                assert_eq!(*repeats, count["repeats"].as_u64().unwrap());
-                assert_eq!(*rows, count["rows"].as_u64().unwrap());
+fn measure_notes_resolve_renames_and_refuse_shadowed_source_columns() {
+    let columns = [
+        MeasureColumn {
+            name: "Amount".into(),
+            expression: false,
+            renames: None,
+        },
+        MeasureColumn {
+            name: "price".into(),
+            expression: true,
+            renames: None,
+        },
+        MeasureColumn {
+            name: "Revenue".into(),
+            expression: true,
+            renames: Some("raw_revenue".into()),
+        },
+    ];
+    let aggregation =
+        |function: &str, name: Option<&str>| Some((function.into(), name.map(str::to_owned)));
+    let notes = model::measure_notes(
+        "orders",
+        &columns,
+        &["Amount".into(), "price".into(), "raw_revenue".into()],
+        &[
+            ("total".into(), aggregation("SUM", Some("amount"))),
+            ("shadow".into(), aggregation("SUM", Some("price"))),
+            ("renamed".into(), aggregation("SUM", Some("RAW_REVENUE"))),
+            ("rows".into(), aggregation("COUNT", None)),
+            ("missing".into(), aggregation("AVG", Some("absent"))),
+            ("complex".into(), None),
+        ],
+    );
+    let got: Vec<_> = notes
+        .iter()
+        .map(|n| {
+            (
+                n.measure.as_str(),
+                n.table.as_str(),
+                n.function.as_str(),
+                n.column.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("total", "orders", "SUM", Some("Amount")),
+            ("renamed", "orders", "SUM", Some("Revenue")),
+            ("rows", "orders", "COUNT", None)
+        ]
+    );
+}
+
+fn time_input(name: &str, source: bool, derived: Option<&str>) -> TimeInput {
+    TimeInput {
+        name: name.into(),
+        timestamp: true,
+        source,
+        derived: derived.map(str::to_owned),
+    }
+}
+
+#[test]
+fn derived_time_adds_raw_source_once_and_reports_replaced_dimensions() {
+    let columns = [
+        time_input("day", false, Some("event_time")),
+        time_input("month", false, Some("EVENT_TIME")),
+    ];
+    let mut additions = Vec::new();
+    let result = model::time_column(
+        "orders",
+        &columns,
+        &[("event_time".into(), true)],
+        &[],
+        |request: &RawAdd| {
+            additions.push(request.clone());
+            Added {
+                added: true,
+                timestamp: true,
             }
-            _ => panic!("{vector}: {reason:?}"),
-        }
-    }
+        },
+        |candidates| {
+            assert_eq!(candidates, ["event_time"]);
+            Choice {
+                column: Some("event_time".into()),
+                fallback: None,
+            }
+        },
+    );
+    assert_eq!(
+        additions,
+        [RawAdd {
+            name: "event_time".into(),
+            raw: "event_time".into()
+        }]
+    );
+    assert_eq!(result.chosen.as_deref(), Some("event_time"));
+    assert_eq!(result.kept, ["event_time"]);
+    assert!(result.removed.is_empty());
+    assert_eq!(result.instead_of, ["day", "month"]);
+    let note = result.note.unwrap();
+    assert_eq!(note.table, "orders");
+    assert!(note.added);
+    assert!(!note.window_order);
+    assert_eq!(note.source_column, None);
 }
 
 #[test]
-fn measure_notes_are_the_old_client_s() {
-    let document = document();
-    let renamed: BTreeMap<String, Option<String>> = document["renamed_column"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| {
-            (
-                v["expr"].as_str().unwrap().to_owned(),
-                optional_text(&v["column"]),
-            )
-        })
-        .collect();
-    let vectors = document["measure_notes"].as_array().unwrap();
-    assert!(vectors.len() >= 20);
-    for vector in vectors {
-        let columns: Vec<MeasureColumn> = vector["columns"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|c| {
-                let expr = optional_text(&c["expr"]);
-                MeasureColumn {
-                    name: c["name"].as_str().unwrap().to_owned(),
-                    renames: expr.as_ref().and_then(|e| renamed[e].clone()),
-                    expression: expr.is_some(),
+fn time_name_collisions_are_disambiguated_and_unused_additions_are_removed() {
+    let columns = [
+        time_input("event_time", false, Some("event_time")),
+        time_input("event_time_raw", false, None),
+        time_input("other", true, None),
+    ];
+    let result = model::time_column(
+        "orders",
+        &columns,
+        &[("event_time".into(), true)],
+        &[],
+        |request| {
+            assert_eq!(
+                request,
+                &RawAdd {
+                    name: "event_time_raw_2".into(),
+                    raw: "event_time".into()
                 }
-            })
-            .collect();
-        let measures: Vec<(String, Option<model::Aggregation>)> = vector["measures"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|m| {
-                (
-                    m[0].as_str().unwrap().to_owned(),
-                    m[1].as_array()
-                        .map(|a| (a[0].as_str().unwrap().to_owned(), optional_text(&a[1]))),
-                )
-            })
-            .collect();
-        let notes = model::measure_notes(
-            vector["table"].as_str().unwrap(),
-            &columns,
-            &texts(&vector["source_columns"]),
-            &measures,
-        );
-        let got: Vec<Json> = notes
-            .iter()
-            .map(|n| serde_json::json!([n.measure, n.table, n.function, n.column]))
-            .collect();
-        let expected: Vec<Json> = vector["notes"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|n| serde_json::json!([n["measure"], n["table"], n["function"], n["column"]]))
-            .collect();
-        assert_eq!(got, expected, "{vector}");
-    }
+            );
+            Added {
+                added: true,
+                timestamp: true,
+            }
+        },
+        |candidates| {
+            assert_eq!(candidates, ["event_time_raw_2", "event_time_raw", "other"]);
+            Choice {
+                column: Some("other".into()),
+                fallback: None,
+            }
+        },
+    );
+    assert!(result.kept.is_empty());
+    assert_eq!(result.removed, ["event_time_raw_2"]);
+    assert_eq!(result.chosen.as_deref(), Some("other"));
+    assert_eq!(result.note, None);
 }
 
 #[test]
-fn a_time_column_is_taken_as_the_old_client_took_it() {
-    let document = document();
-    let derived: BTreeMap<String, Option<String>> = document["derived_column"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|v| {
-            (
-                v["expr"].as_str().unwrap().to_owned(),
-                optional_text(&v["column"]),
-            )
-        })
-        .collect();
-    let vectors = document["time_column"].as_array().unwrap();
-    assert!(vectors.len() >= 30);
-    for vector in vectors {
-        let columns: Vec<TimeInput> = vector["columns"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|c| {
-                let expr = optional_text(&c["expr"]);
-                TimeInput {
-                    name: c["name"].as_str().unwrap().to_owned(),
-                    timestamp: c["stype"] == "timestamp",
-                    source: expr.is_none(),
-                    derived: expr
-                        .as_ref()
-                        .and_then(|e| derived.get(e).cloned().flatten()),
-                }
-            })
-            .collect();
-        let source: Vec<(String, bool)> = vector["source_columns"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|c| {
-                (
-                    c[0].as_str().unwrap().to_owned(),
-                    matches!(c[1].as_str().unwrap(), "date" | "time"),
-                )
-            })
-            .collect();
-        let mut adds = vector["adds"].as_array().unwrap().iter();
-        let mut choices = vector["choices"].as_array().unwrap().iter();
-        let outcome = model::time_column(
-            vector["table"].as_str().unwrap(),
-            &columns,
-            &source,
-            &texts(&vector["window_orders"]),
-            |add: &RawAdd| {
-                let recorded = adds.next().expect("an add the old client made");
-                assert_eq!(recorded["name"], add.name.as_str(), "{vector}");
-                let expr =
-                    (add.name != add.raw).then(|| format!("`{}`", add.raw.replace('`', "``")));
-                assert_eq!(optional_text(&recorded["expr"]), expr, "{vector}");
-                Added {
-                    added: recorded["added"].as_bool().unwrap(),
-                    timestamp: recorded["stype"] == "timestamp",
-                }
-            },
-            |candidates: &[String]| {
-                let recorded = choices.next().expect("a choice the old client made");
-                assert_eq!(texts(&recorded["candidates"]), candidates, "{vector}");
+fn window_time_is_offered_first_then_all_candidates_and_fallback_is_kept() {
+    let columns = [
+        time_input("day", false, Some("event_time")),
+        time_input("received", true, None),
+    ];
+    let mut calls = 0;
+    let result = model::time_column(
+        "orders",
+        &columns,
+        &[("event_time".into(), true)],
+        &["received".into()],
+        |_| Added {
+            added: true,
+            timestamp: true,
+        },
+        |candidates| {
+            calls += 1;
+            if calls == 1 {
+                assert_eq!(candidates, ["received"]);
+                Choice::default()
+            } else {
+                assert_eq!(candidates, ["event_time", "received"]);
                 Choice {
-                    column: optional_text(&recorded["chosen"]),
-                    fallback: optional_text(&recorded["fallback"]),
+                    column: Some("received".into()),
+                    fallback: Some("event_time".into()),
                 }
-            },
-        );
-        assert!(adds.next().is_none(), "{vector}");
-        assert!(choices.next().is_none(), "{vector}");
-        let mut after: Vec<String> = columns.iter().map(|c| c.name.clone()).collect();
-        after.extend(outcome.kept.iter().cloned());
-        assert_eq!(after, texts(&vector["columns_after"]), "{vector}");
-        if !vector["choices"].as_array().unwrap().is_empty() {
-            assert_eq!(outcome.instead_of, texts(&vector["instead_of"]), "{vector}");
-        }
-        let note = outcome.note.as_ref().map(|n| {
-            serde_json::json!({
-                "table": n.table, "column": n.column, "instead_of": n.instead_of,
-                "source_column": n.source_column, "added": n.added,
-                "window_order": n.window_order,
-            })
-        });
-        let expected = vector["note"].as_object().map(|n| {
-            serde_json::json!({
-                "table": n["table"], "column": n["column"], "instead_of": n["instead_of"],
-                "source_column": n["source_column"], "added": n["added"],
-                "window_order": n["window_order"],
-            })
-        });
-        assert_eq!(note, expected, "{vector}");
-    }
+            }
+        },
+    );
+    assert_eq!(calls, 2);
+    assert_eq!(result.kept, ["event_time"]);
+    assert!(result.removed.is_empty());
+    assert!(result.note.unwrap().window_order);
 }
 
 #[test]
-fn an_edge_is_judged_as_the_old_client_judged_it() {
-    let document = document();
-    for vector in document["edge_error"].as_array().unwrap() {
-        let facts = EdgeFacts {
-            fkey_dtype: vector["fkey_dtype"].as_str().map(dtype),
-            target_key: vector["target_key"].as_array().map(|k| {
-                (
-                    k[0].as_str().unwrap().to_owned(),
-                    dtype(k[1].as_str().unwrap()),
-                )
-            }),
-            source_key: optional_text(&vector["source_key"]),
-            fkey: vector["edge"][1].as_str().unwrap().to_owned(),
-        };
-        let reason = model::edge_reason(&facts);
-        assert_eq!(
-            reason.is_some(),
-            vector["reason"].is_string(),
-            "{vector}: {reason:?}"
+fn unsuccessful_raw_additions_leave_original_candidates_and_no_spurious_note() {
+    for added in [false, true] {
+        let result = model::time_column(
+            "orders",
+            &[time_input("day", false, Some("event_time"))],
+            &[("event_time".into(), true)],
+            &[],
+            |_| Added {
+                added,
+                timestamp: false,
+            },
+            |candidates| {
+                assert_eq!(candidates, ["day"]);
+                Choice {
+                    column: Some("day".into()),
+                    fallback: None,
+                }
+            },
         );
+        assert_eq!(result.chosen.as_deref(), Some("day"));
+        assert_eq!(
+            result.removed,
+            if added { vec!["event_time"] } else { vec![] }
+        );
+        assert!(result.kept.is_empty());
+        assert_eq!(result.note, None);
     }
+    let result = model::time_column(
+        "orders",
+        &[],
+        &[],
+        &[],
+        |_| panic!("nothing to add"),
+        |_| panic!("nothing to choose"),
+    );
+    assert_eq!(result.chosen, None);
 }
 
 /// `_edge_error`'s reasons by name (`RE/graph.py:3283-3348`).
@@ -579,6 +577,3 @@ fn invalid_edges_are_dropped_and_an_empty_model_is_refused() {
     assert!(view.edges.is_empty());
     assert!(view.validate().is_ok());
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

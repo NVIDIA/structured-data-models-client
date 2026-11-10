@@ -1,123 +1,120 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""exit 3, held from outside the implementation (the package's
-independent test author): the producer's bytes are the reference's.
-
-For each generated DuckDB source ``payload_bytes_record.py`` recorded
-from the reference (``payload-bytes.json``: statements, indices, seed
-and the reference's payload as its compact JSON), python-core materializes
-the same regression, and the payload bytes the core attached to the request
-state (``RequestState.payload``, the typed ``sdm-wire`` payload serialized)
-are the reference's, byte for byte: members in the reference's order, each
-number the reference's token, each text as the reference writes it. A
-sample the reference refused is held refused on the core too.
-"""
+"""Native payload attachments preserve typed source values as valid JSON."""
 
 from __future__ import annotations
 
 import json
 import warnings
-from pathlib import Path
-from typing import Any
 
 import duckdb
+import numpy as np
 import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
 from sdm_client import PredictiveQuery, Schema
 from sdm_client._rust import run as _rust_run
-from sdm_client.errors import UnsupportedRequestError
-
-VECTORS = json.loads(
-    Path(__file__).with_name('payload-bytes.json').read_text(encoding='utf-8')
-)
-
-
-def _core_bytes(
-    sample: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> bytes:
-    r"""The payload attachment's bytes, as the core's run gave them."""
-    taken: list[Any] = []
-    take = _rust_run.Finished.take
-
-    def recording(self: Any, attachment: int) -> Any:
-        got = take(self, attachment)
-        state = self.result.get('state')
-        if isinstance(state, dict) and attachment == state.get('payload'):
-            taken.append(got)
-        return got
-
-    monkeypatch.setattr(_rust_run.Finished, 'take', recording)
-    connection = duckdb.connect()
-    for statement in sample['statements']:
-        connection.execute(statement)
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_source(DuckDBSource(connection))
-        PredictiveQuery(VECTORS['query'], schema).materialize(
-            indices=sample['indices'],
-            anchor_time=pd.Timestamp(VECTORS['anchor_time']),
-            random_seed=sample['seed'],
-        )
-    assert len(taken) == 1, taken
-    state = bytes(taken[0])
-    # State carries explicit client-only provenance; preserve every model-facing
-    # byte, including numeric tokens, while checking that metadata separately.
-    prefix = b'{"client_generated_keys":{"orders":"__node_id"},'
-    assert state.startswith(prefix)
-    return b'{' + state[len(prefix) :]
-
-
-def _decimal_target(sample: dict[str, Any]) -> bool:
-    return any(
-        s.startswith('CREATE TABLE orders') and 'price DECIMAL' in s
-        for s in sample['statements']
-    )
-
-
-def test_the_vectors_were_recorded_and_say_something() -> None:
-    samples = VECTORS['samples']
-    assert len(samples) >= 20
-    assert sum('payload' in s for s in samples) >= 20
-    # Most of them reach a payload on the core, not a skip.
-    assert sum(not _decimal_target(s) for s in samples) >= 20
 
 
 @pytest.mark.parametrize(
-    'sample', VECTORS['samples'], ids=[s['id'] for s in VECTORS['samples']]
+    'text_keys', [False, True], ids=['integer-key', 'text-key']
 )
-def test_the_core_s_payload_bytes_are_the_reference_s(
-    sample: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    if 'refused' in sample:
-        with pytest.raises(Exception):  # noqa: B017 - any refusal
-            _core_bytes(sample, monkeypatch)
-        return
-    try:
-        got = _core_bytes(sample, monkeypatch)
-    except UnsupportedRequestError as refused:
-        # A sum over a DECIMAL column is ``target_type``, refused by
-        # name on the core until it lands: not a payload this package
-        # writes, so the refusal is held instead. Any other sample the
-        # core does not take fails; once takes it, its bytes are
-        # compared below.
-        assert _decimal_target(sample), refused
-        assert refused.code == 'UNSUPPORTED_REQUEST'
-        return
-    want = sample['payload'].encode('utf-8')
-    if got != want:
-        at = next(
-            (
-                i
-                for i, (a, b) in enumerate(zip(got, want, strict=False))
-                if a != b
-            ),
-            min(len(got), len(want)),
+@pytest.mark.parametrize(
+    'price_type',
+    ['SMALLINT', 'INTEGER', 'BIGINT', 'FLOAT', 'DOUBLE', 'DECIMAL(10,2)'],
+)
+def test_payload_bytes_preserve_source_types_and_labels(
+    text_keys, price_type, monkeypatch
+):
+    taken = []
+    take = _rust_run.Finished.take
+
+    def capture(self, attachment):
+        result = take(self, attachment)
+        state = self.result.get('state')
+        if isinstance(state, dict) and attachment == state.get('payload'):
+            taken.append(bytes(result))
+        return result
+
+    monkeypatch.setattr(_rust_run.Finished, 'take', capture)
+    connection = duckdb.connect()
+    key_type = 'VARCHAR' if text_keys else 'BIGINT'
+    key = "'u' || i::VARCHAR" if text_keys else 'i'
+    connection.execute(f"""CREATE TABLE users (
+        user_id {key_type} PRIMARY KEY, age INTEGER, flag BOOLEAN,
+        small SMALLINT, large BIGINT, single FLOAT, double_value DOUBLE,
+        text_value VARCHAR, day DATE, moment TIMESTAMP, missing DOUBLE)""")
+    connection.execute(f"""INSERT INTO users SELECT {key}, 20+i, i%2=0,
+        i::SMALLINT, (1000+i)::BIGINT, 0.1::FLOAT, 0.125::DOUBLE,
+        'café "quoted" ' || i::VARCHAR, DATE '2023-01-02',
+        TIMESTAMP '2023-01-02 03:04:05.123456', NULL FROM range(8) t(i)""")
+    connection.execute(f"""CREATE TABLE orders (
+        order_id BIGINT PRIMARY KEY, user_id {key_type} REFERENCES users(user_id),
+        price {price_type}, created_at TIMESTAMP)""")
+    order_key = "'u' || (i%8)::VARCHAR" if text_keys else 'i%8'
+    connection.execute(f"""INSERT INTO orders SELECT i, {order_key}, (i%5)+0.25,
+        TIMESTAMP '2023-01-01' + (i//8)*INTERVAL '15 days' FROM range(96) t(i)""")
+    indices = ['u0', 'u1'] if text_keys else [0, 1]
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(connection))
+        query = PredictiveQuery(
+            'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id',
+            schema,
         )
-        pytest.fail(
-            f'{sample["id"]}: the bytes differ at {at}: core '
-            f'{got[max(0, at - 60) : at + 60]!r} reference '
-            f'{want[max(0, at - 60) : at + 60]!r}'
+        request = query.materialize(
+            indices=indices,
+            anchor_time=pd.Timestamp('2023-07-01'),
+            random_seed=42,
         )
+    assert len(taken) == 1
+
+    # Reject non-JSON numeric constants rather than accepting Python's extension.
+    def invalid_constant(value):
+        raise AssertionError(f'non-JSON number: {value}')
+
+    payload = json.loads(taken[0], parse_constant=invalid_constant)
+    assert payload == request._payloads[0]
+    assert payload['client_generated_keys'] == {'orders': '__node_id'}
+    predicted = payload['predict']['instance_table']
+    assert [row[1] for row in predicted['rows']] == indices
+    context = payload['context']['instance_table']
+    assert context['rows']
+    for row in context['rows']:
+        cells = dict(zip(context['columns'], row, strict=True))
+        start = pd.Timestamp(cells['__kumo_anchor_time']).tz_localize(None)
+        expected = connection.execute(
+            'SELECT coalesce(sum(price), 0) FROM orders WHERE user_id = ? AND created_at > ? AND created_at <= ?',
+            [
+                cells['__kumo_entity_ref_0'],
+                start,
+                start + pd.Timedelta(days=30),
+            ],
+        ).fetchone()[0]
+        assert cells['TARGET'] == float(np.float32(expected))
+    for side in ['context', 'predict']:
+        users = payload[side]['related_tables']['users']
+        assert users['rows']
+        for row in users['rows']:
+            cells = dict(zip(users['columns'], row, strict=True))
+            identity = cells['user_id']
+            number = int(identity[1:]) if text_keys else identity
+            assert type(identity) is (str if text_keys else int)
+            for name in ['age', 'small', 'large']:
+                assert type(cells[name]) is int
+            for name in ['single', 'double_value']:
+                assert type(cells[name]) is float
+            assert cells['age'] == 20 + number
+            assert cells['flag'] is (number % 2 == 0)
+            assert cells['small'] == number
+            assert cells['large'] == 1000 + number
+            assert cells['single'] == float(np.float32(0.1))
+            assert cells['double_value'] == 0.125
+            assert cells['text_value'] == f'café "quoted" {number}'
+            assert cells['day'] == '2023-01-02T00:00:00.000000Z'
+            assert pd.Timestamp(cells['moment']).tz_localize(
+                None
+            ) == pd.Timestamp('2023-01-02 03:04:05.123456')
+            assert cells['missing'] is None

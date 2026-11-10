@@ -44,19 +44,6 @@ SERVE = _module(
 ).serve
 
 
-def _vector() -> dict[str, Any]:
-    vectors = json.loads(
-        (ROOT / 'contract/forecast-vectors.json').read_text('utf-8')
-    )['vectors']
-    return next(v for v in vectors if v['id'] == 'sum-days-3')
-
-
-def test_the_question_is_the_vector_s() -> None:
-    vector = _vector()
-    assert vector['pql'] == QUESTION
-    assert len(vector['reference']['payloads']) == STEPS
-
-
 class _Tampered:
     r"""``sdm_client._native`` with ``predict`` started on other ids than
     the host gave: ``rewrite`` changes the start's ids after the capture

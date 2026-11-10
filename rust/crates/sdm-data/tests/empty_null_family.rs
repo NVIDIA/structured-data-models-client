@@ -2,16 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The empty, null and refuse family's DuckDB statements (
-//! folded in), pinned as text beside `duckdb_catalog.rs`'s: each data
-//! request the `empty.*`, `null.*` and `refuse.*` cases make through
-//! `from_source` and `materialize` on the pure-Rust host that no other file
-//! here pins already, as `sdm-testkit` recorded it, with the one statement
-//! this layer renders for it. A statement that changes without its pin
-//! changing here fails this test. The family's nulls and empty tables
-//! change no statement's text, only what it reads: the one statement of its
-//! own is the lookup of `null.feature-all-null`'s users, which reads the
-//! all-null column `f` with the rest.
+//! Focused SQL rendering expectations for this data-type family.
+//! Companion sdm-testkit tests execute the family cases through DuckDB
+//! and check outcomes, result encoding and query-log consistency.
 
 use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
 use sdm_data::Data;

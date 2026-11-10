@@ -23,8 +23,6 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
-OUT = Path(__file__).with_name('predict-result.json')
-VECTORS = ROOT / 'tests/fixtures/response-vectors.json'
 
 ANCHOR = '2024-03-01'
 REGRESSION = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
@@ -1105,11 +1103,9 @@ def observe(spec: dict[str, Any]) -> dict[str, Any]:
             out = {'stage': 'predict', **_refusal(error)}
         except Exception as error:  # noqa: BLE001 - the outcome is compared
             out = {'stage': 'predict', **_refusal(error)}
-            if spec.get('core_outcome'):
-                # What a policy names of the refusal: its field and reason.
-                details = getattr(error, 'details', None)
-                details = details if isinstance(details, dict) else {}
-                out['fields'] = {k: details.get(k) for k in ('field', 'reason')}
+            details = getattr(error, 'details', None)
+            details = details if isinstance(details, dict) else {}
+            out['fields'] = {k: details.get(k) for k in ('field', 'reason')}
         else:
             out = {
                 'stage': 'predict',
