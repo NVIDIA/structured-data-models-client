@@ -209,13 +209,24 @@ def assert_behavior(cases):
     people = [
         [i, 20.0 + i, 'north' if i % 3 else 'south', i % 2] for i in range(12)
     ]
+    sections = {
+        'model',
+        'task',
+        'context',
+        'predict',
+        'schema',
+        'output',
+        'metadata',
+    }
     for name, calls in cases.items():
         assert len(calls) == 1, name
         body = calls[0]
-        assert body['metadata']['request_id'] == _FIXED_REQUEST_ID
         if name.startswith('relational/'):
+            assert set(body) == sections | {'inference'}, name
             _assert_relational(body, people)
             continue
+        assert set(body) == sections, name
+        assert body['metadata'] == {'request_id': _FIXED_REQUEST_ID}
         target, kind, dtype = targets[
             name.removeprefix('tabular/').split('#')[0]
         ]
@@ -224,11 +235,13 @@ def assert_behavior(cases):
             'kind': kind,
             'target': {'column_name': target, 'dtype': dtype},
         }
-        assert body['output']['fields'] == (
-            ['prediction', 'probabilities']
-            if '#default-outputs' in name
-            else ['prediction']
-        )
+        assert body['output'] == {
+            'fields': (
+                ['prediction', 'probabilities']
+                if '#default-outputs' in name
+                else ['prediction']
+            )
+        }
         start = 3 if '/pql-' in name else 0
         assert (
             _rows(body['context']['instance_table'], columns) == people[start:]
@@ -274,12 +287,14 @@ def _assert_relational(body, people):
         'run_mode': 'fast',
         'use_prediction_time': False,
     }
-    assert body['metadata']['num_context_examples'] == 84
-    assert body['metadata']['num_prediction_examples'] == 3
-    assert (
-        body['metadata']['source_query']
-        == 'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH people.user_id'
-    )
+    assert body['metadata'] == {
+        'source_query': (
+            'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH people.user_id'
+        ),
+        'num_context_examples': 84,
+        'num_prediction_examples': 3,
+        'request_id': _FIXED_REQUEST_ID,
+    }
     start = pd.Timestamp('2026-01-01', tz='UTC')
     seen = set()
     for half in ('context', 'predict'):

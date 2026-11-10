@@ -829,6 +829,10 @@ def _current_wire_payloads():
         'history',
         'relationship',
         'schema_type',
+        'client_key',
+        'tabular_inference',
+        'metadata_key',
+        'output_statistic',
     ],
 )
 def test_wire_assertions_reject_behavior_changes(damage):
@@ -859,6 +863,14 @@ def test_wire_assertions_reject_behavior_changes(damage):
         relational['schema']['related_tables']['orders']['columns']['price'][
             'dtype'
         ] = 'int64'
+    elif damage == 'client_key':
+        relational['client_generated_keys'] = {'orders': '__node_id'}
+    elif damage == 'tabular_inference':
+        direct['inference'] = {'run_mode': 'fast'}
+    elif damage == 'metadata_key':
+        relational['metadata']['client_rows'] = 3
+    elif damage == 'output_statistic':
+        direct['output']['prediction_statistic'] = 'median'
     with pytest.raises(AssertionError):
         _loaded('check_wire_behavior').assert_behavior(cases)
 
