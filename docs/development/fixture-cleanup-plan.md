@@ -150,3 +150,8 @@ The hosted run remains in progress; these corrections do not yet constitute gree
 
 The Rust CI job also found an unused JSON loader in the explanation test; removed it and passed `cargo clippy -p sdm-testkit --all-targets --locked -- -D warnings` locally (`/tmp/fixture-step4-testkit-clippy.log`).
 The actual compatibility gate passes against both the PR target and manual-CI baseline: 250 Python and 567 Java declarations (`/tmp/fixture-step4-ledger-{target,manual}.log`).
+
+Python CI also found that the fixture identity helper assumed every factory generated materialization indices.
+The helper now restores the query placeholder for the query factory while still comparing every other field; all 403 case-validation tests pass locally.
+The Python 3.10, 3.12 and 3.14 jobs each passed 6,579 tests and failed only this helper and the corrected checksum.
+GitHub confirms the PR is mergeable against `release-2-0-gaps`; final CI is still required.
