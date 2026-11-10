@@ -21,6 +21,7 @@ mod pql_support;
 use std::time::{Duration, Instant};
 
 use pql_support::{NoZones, facts, profile, schema};
+use sdm_contract::{Detail, ErrorCode, Sentence};
 use sdm_core::pql::validate;
 
 /// The seed and the number of inputs of each kind.
@@ -230,6 +231,29 @@ fn the_parser_answers_every_fuzzed_input_without_a_panic() {
             accepted
         );
     }
+    // A run of five digits is a packed date (D8), refused by name as a
+    // structured error rather than read or given a diagnostic.
+    let (packed, schema_name, profile_name) = seeds[7];
+    let error = validate(
+        packed,
+        &schema(schema_name),
+        &profile(profile_name),
+        &facts(),
+        &NoZones,
+    )
+    .expect_err(packed);
+    assert_eq!(
+        (error.code, error.sentence),
+        (ErrorCode::InvalidRequest, Sentence::DateLiteralPacked)
+    );
+    assert_eq!(
+        error.fields.get("rule"),
+        Some(&Detail::text("date_literal_packed"))
+    );
+    assert_eq!(
+        error.fields.get("literal"),
+        Some(&Detail::text("12345-1-1"))
+    );
     let mut rng = Rng(SEED);
     // Each input with the schema and profile it is validated with: a
     // mutated case keeps its own; the rest take the first schema, which
