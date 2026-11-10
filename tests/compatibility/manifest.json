@@ -8294,7 +8294,7 @@
       "reason": "Fixture cleanup removes unused historical observation/provenance fields. All 110 vector IDs and every retained type, witness, admission and inference fact remain unchanged; update the whole-file checksum and reference the renamed test that checks actual runtime refusals instead of recorded expectations."
     },
     {
-      "base_commit": "0d2db95834b4793da003f9b75ce57e7b4fb440f7",
+      "base_commit": "868363fd938dd37b46fac62578d13922f83f91a8",
       "record": "api_contracts/gradient-explanations",
       "reason": "The client no longer enforces the endpoint's payload size limit, so the test that client-only provenance does not count toward that limit was removed with it; the remaining gradient tests are unchanged."
     }
