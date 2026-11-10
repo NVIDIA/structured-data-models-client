@@ -575,3 +575,14 @@ Step 2 remains in progress; this checkpoint preserves completed replacements, re
 The result-conversion recording remains present because `test_postgres_values.py` still reads its PostgreSQL section.
 Independent review approved the presentation replacement; remaining PostgreSQL reader must be detached before full retirement.
 Integrated cross-language validation remains step 4; focused test evidence is recorded per group.
+
+### Conversion recording section cleanup
+
+Independent review approved all twelve pandas presentation dtype expectations and retained actual driver checks.
+Removed unused presentation/driver/provenance sections from `result-conversion-vectors.json`; its PostgreSQL value section is unchanged because `test_postgres_values.py` still reads it.
+Local presentation validation: seven passed, four explicitly skipped for absent PostgreSQL DSN.
+Recorded the separate completed retention review for all 40 Snowflake Arrow files and eight historical pickle inputs; no orphan inputs were found.
+Evidence: `/tmp/fixture-result-conversion-review.md`, `/tmp/fixture-other-input-retention-review.md`.
+
+PostgreSQL value tests now report explicit skips when the DSN is absent instead of silently returning as passes.
+Combined result/value validation: `/tmp/fixture-conversion-pruned.log`; no new live PostgreSQL execution claimed.

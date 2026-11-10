@@ -250,7 +250,7 @@ def test_each_value_the_core_takes_is_the_reference_s(
     leaves the column out); the rule now in the provider holds wherever it
     moves."""
     if database is None:
-        return
+        pytest.skip('PostgreSQL value checks require a test DSN')
     vector = VECTORS['columns'][column]
 
     def check() -> None:
@@ -293,7 +293,7 @@ def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
     ``Timestamp.isoformat`` writes it (whole seconds, microseconds,
     nanoseconds, before 1970)."""
     if database is None:
-        return
+        pytest.skip('PostgreSQL value checks require a test DSN')
     from sdm_client._rust import codec
     from sdm_client._rust.run import run
 
@@ -426,7 +426,7 @@ def test_the_provider_hands_the_core_the_driver_s_values(
     not Python's text of a JSON scalar, not a double of a numeric the
     driver read exactly."""
     if database is None:
-        return
+        pytest.skip('PostgreSQL value checks require a test DSN')
     driver = VECTORS['columns'][column]['driver']
 
     def check() -> None:
