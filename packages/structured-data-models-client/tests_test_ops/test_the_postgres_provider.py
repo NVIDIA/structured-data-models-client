@@ -15,17 +15,10 @@ echoed back by the test-only fetch. The data is the DuckDB-built tables the
 vectors name, loaded into a database of their own by the contract loader
 (``contract/runners/databases.py``), as the cases' are.
 
-- L4 executed on Postgres: every request kind but ``describe`` (whose
-  answer is each dialect's own catalog shape, read into the contract's by
-  ``sdm-data``; the S1 cases judge it through ``Schema.from_source``), on
-  every base of ``contract/request-kinds.json``, is the Arrow schema and
-  rows that file records for DuckDB, except a seeded sample, whose rows
-  are the engine's own draw: as many distinct keys as asked, each a key
-  the table holds; and a key lookup, which Postgres answers as the
-  reference's own lookup statement does (``REFERENCE_LOOKUP``, read from
-  the reference's committed ``@postgres`` lines): the batch, the row's
-  columns, then ``__kumo_row__`` (1, the first row of its batch) and
-  ``__kumo_matches__``, the same rows as DuckDB's.
+- Every non-catalog request kind runs on all three authored bases.
+  Expected rows and schemas come from raw source tables, independently of
+  SDM planning or admission; PostgreSQL keeps its own lookup column layout
+  and seeded sampling is checked for count, distinctness and membership.
 - Key sets bound as the dialect binds them (``P1 d:131``): keys that
   collide as float64 (an unsigned key past int64, 38-digit and scale-18
   decimals, stored as Postgres ``numeric``) each find their own row, which
@@ -66,6 +59,7 @@ from typing import Any
 import duckdb
 import pyarrow as pa
 import pytest
+from request_kind_assertions import assert_source_answer, source_answer
 
 from sdm_client._rust import codec
 from sdm_client._rust.run import run
@@ -531,7 +525,7 @@ def test_a_key_set_past_the_control_cap_travels_as_an_attachment(
 
 
 def _cell(value: Any) -> Any:
-    r"""A cell as ``contract/request-kinds.json`` writes one."""
+    r"""A lossless scalar representation for comparing admitted and source rows."""
     if value is None or isinstance(value, (bool, str)):
         return value
     if isinstance(value, int):
@@ -610,32 +604,6 @@ def test_lookup_preserves_seed_batches_and_reports_duplicate_matches(
         connection.close()
 
 
-def _as_the_reference_looks_up(fetch: dict[str, Any]) -> dict[str, Any]:
-    r"""A lookup fetch of ``contract/request-kinds.json`` with its schema
-    and rows in:data:`REFERENCE_LOOKUP`'s layout: the batch, the row's
-    columns, ``__kumo_row__`` (1) and ``__kumo_matches__``."""
-    before, after = REFERENCE_LOOKUP
-    names = [name for name, _ in fetch['schema']]
-    typed = dict(fetch['schema'])
-    own = [name for name in names if not name.startswith('__kumo_')]
-    order = before + own + after
-    rows = []
-    for row in fetch['rows']:
-        cells = dict(zip(names, row, strict=True))
-        cells['__kumo_row__'] = '1'
-        rows.append([cells[name] for name in order])
-    return {
-        **fetch,
-        'schema': [[name, typed.get(name, 'int64')] for name in order],
-        'rows': sorted(
-            rows,
-            key=lambda row: json.dumps(
-                row, separators=(',', ':'), ensure_ascii=False
-            ),
-        ),
-    }
-
-
 def _base(name: str) -> list[str]:
     r"""The statements of base ``name`` of ``contract/bases.yaml``: the
     plain list items under its name, comments between them skipped."""
@@ -652,15 +620,13 @@ def _base(name: str) -> list[str]:
     return out
 
 
-def test_every_request_kind_runs_on_postgres_as_on_duckdb(
+def test_every_request_kind_returns_source_data_on_postgres(
     server: Server | None,
 ) -> None:
     if server is None:
         return
-    # L4 executed on Postgres: every request kind the core plans, but the
-    # catalog's, on every base, answered by Postgres and admitted, is the
-    # schema and rows contract/request-kinds.json records on DuckDB, a
-    # lookup's in the reference's Postgres layout.
+    # Independent raw DuckDB source rows describe the same input loaded
+    # into Postgres. Neither expected schema nor rows use SDM admission.
     fetches = [
         f for f in KINDS['fetches'] if f['request']['request'] != 'describe'
     ]
@@ -681,13 +647,15 @@ def test_every_request_kind_runs_on_postgres_as_on_duckdb(
         for base in ('shop', 'declared', 'adventureworks')
     }
     connections: dict[str, Any] = {}
-    problems = []
+    sources = {}
     for fetch in fetches:
-        if fetch['request']['request'] == 'lookup':
-            fetch = _as_the_reference_looks_up(fetch)
         base = fetch['base']
         if base not in connections:
-            connections[base] = server.database(_base(base))
+            statements = _base(base)
+            connections[base] = server.database(statements)
+            sources[base] = duckdb.connect()
+            for statement in statements:
+                sources[base].execute(statement)
         connection = connections[base]
         if 'keys' in fetch:
             seeds = pa.table(
@@ -699,37 +667,13 @@ def test_every_request_kind_runs_on_postgres_as_on_duckdb(
             data, _ = _keyed(connection, fetch['request'], seeds)
         else:
             data = _admitted(connection, fetch['request'])
-        where = f'{base}: {fetch["name"]}'
-        schema = [[f.name, str(f.type)] for f in data.schema]
-        if schema != fetch['schema']:
-            problems.append(f'{where}: schema {schema}, not {fetch["schema"]}')
-            continue
-        rows = _canonical(data)
-        if fetch['request']['request'] == 'sample_entities':
-            # The engine's own seeded draw: as many distinct keys as asked,
-            # each one the table holds.
-            whole = _canonical(
-                _admitted(
-                    connection,
-                    {
-                        'request': 'scan',
-                        'table': fetch['request']['table'],
-                        'columns': fetch['request']['columns'],
-                        'filters': fetch['request']['filters'],
-                        'limit': None,
-                    },
-                )
-            )
-            wanted = min(fetch['request']['n'], len(whole))
-            if not (
-                len(rows) == wanted
-                and len({json.dumps(r) for r in rows}) == wanted
-                and all(row in whole for row in rows)
-            ):
-                problems.append(f'{where}: {rows} is no sample of {whole}')
-        elif rows != fetch['rows']:
-            problems.append(f'{where}: rows {rows}, not {fetch["rows"]}')
-    assert not problems, '\n'.join(problems)
+        expected = source_answer(sources[base], fetch, postgres=True)
+        assert_source_answer(
+            data, expected, fetch['request'], _canonical, postgres=True
+        )
+    assert len(fetches) == 30
+    for connection in [*connections.values(), *sources.values()]:
+        connection.close()
 
 
 def test_each_relation_form_postgres_takes_reads_the_table_it_names(
