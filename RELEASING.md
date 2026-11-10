@@ -222,10 +222,12 @@ Check the three projects on pypi.org and confirm each shows NVIDIA organization
 ownership. Portal reporting that a release completed is not the same as the
 package being installable, so install it the way a user would.
 
-The `kitmaker` job marks a final release Latest once the publish has worked,
-and leaves an alpha, beta or release candidate unmarked. The release is created
-unmarked on purpose, because until the publish has worked it would advertise a
-version the index does not have. One exception is worth knowing: when there is no earlier
+For a final release, then mark the GitHub Release Latest, unless a higher
+final release is already on PyPI; leave an alpha, beta or release candidate
+unmarked. The workflow leaves every release unmarked on purpose: until the
+publish has worked it would advertise a version the index does not have, and
+which release should hold Latest depends on every other release's publish,
+which runs for different tags cannot see in order. One exception is worth knowing: when there is no earlier
 release to hold the position, GitHub reports the newest non-draft release as
 the latest one regardless, so the first release reads as Latest from the
 moment it is created.

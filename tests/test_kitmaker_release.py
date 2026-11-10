@@ -21,8 +21,6 @@ import json
 import os
 import pathlib
 import re
-import shutil
-import subprocess
 import sys
 
 import pytest
@@ -689,31 +687,19 @@ def test_kitmaker_is_given_a_url_that_serves_the_file(kitmaker_job):
     assert '\\(.url)' not in commands
 
 
-def test_the_release_is_not_latest_until_it_has_published(
-    release_job, kitmaker_job
-):
-    """Kitmaker needs public asset URLs, so the release cannot be a draft and
-    has to exist before the dry runs. A dry run that then failed would leave it
-    standing as the current release for a version with nothing on PyPI."""
-    create = next(
-        s['run']
-        for s in release_job['steps']
-        if 'gh release create' in s.get('run', '')
-    )
+def test_no_job_marks_a_release_latest(workflow):
+    """Latest is marked by hand. The release is created unmarked, because until
+    the publish has worked it would advertise a version the index does not
+    have, and which release should hold Latest depends on runs for other tags
+    that nothing in Actions orders against this one."""
+    runs = [
+        step.get('run', '')
+        for job in workflow['jobs'].values()
+        for step in job['steps']
+    ]
+    create = next(run for run in runs if 'gh release create' in run)
     assert '--latest=false' in create
-    steps = kitmaker_job['steps']
-    promote = next(
-        i
-        for i, s in enumerate(steps)
-        if '--latest' in s.get('run', '')
-        and 'gh release edit' in s.get('run', '')
-    )
-    publish = next(
-        i
-        for i, s in enumerate(steps)
-        if s.get('run', '').rstrip().endswith('kitmaker_release.py')
-    )
-    assert publish < promote, 'Latest must be set after publishing'
+    assert not [run for run in runs if 'gh release edit' in run]
 
 
 def test_only_a_tag_publishes_and_main_only_checks(kitmaker_job):
@@ -833,68 +819,3 @@ def test_the_check_refuses_a_project_unfit_to_publish_to(
     else:
         with pytest.raises(SystemExit, match=re.escape(refused)):
             kitmaker.check()
-
-
-@pytest.mark.parametrize(
-    ('releases', 'published', 'latest'),
-    [
-        (['v2.0.0', 'v1.0.0'], {'2.0.0', '1.0.0'}, 'v2.0.0'),
-        (['v2.0.0', 'v1.0.1'], {'1.0.1'}, 'v1.0.1'),
-        (['v2.0.10', 'v2.0.9'], {'2.0.10', '2.0.9'}, 'v2.0.10'),
-        (['v2.1.0rc1', 'v2.0.0'], {'2.1.0rc1', '2.0.0'}, 'v2.0.0'),
-        (['v2.0.0'], set(), None),
-    ],
-)
-def test_latest_goes_to_the_highest_release_on_pypi(
-    kitmaker, monkeypatch, releases, published, latest
-):
-    """An older release must not take Latest from a newer one on PyPI, and a
-    newer one only on GitHub, waiting on its approval or failed in it, must not
-    hold Latest back from one that published."""
-    monkeypatch.setattr(
-        kitmaker,
-        'on_pypi',
-        lambda name, version: {} if version in published else None,
-    )
-    assert kitmaker.latest_release(releases) == latest
-
-
-@pytest.mark.skipif(shutil.which('bash') is None, reason='the step is bash')
-@pytest.mark.parametrize(
-    ('tag', 'answers', 'edits'),
-    [
-        ('v2.0.0', ['v2.0.0', 'v2.0.0'], ['v2.0.0']),
-        # An older run marked itself, and by its second look a newer release
-        # had reached PyPI: it puts Latest back.
-        ('v1.0.1', ['v1.0.1', 'v2.0.0'], ['v1.0.1', 'v2.0.0']),
-        ('v1.0.1', ['', ''], []),
-        ('v2.1.0rc1', ['v2.0.0', 'v2.0.0'], []),
-    ],
-)
-def test_the_latest_step_marks_what_pypi_holds_and_looks_again(
-    kitmaker_job, tmp_path, tag, answers, edits
-):
-    step = next(
-        s
-        for s in kitmaker_job['steps']
-        if s.get('name') == 'Mark the highest published release Latest'
-    )
-    (tmp_path / 'answers.txt').write_text('\n'.join(answers) + '\n')
-    for name, body in {
-        'gh': 'if [ "$2" = edit ]; then echo "$3" >> edited.txt; fi\n',
-        'python3': 'head -n 1 answers.txt; sed -i.bak 1d answers.txt\n',
-    }.items():
-        (tmp_path / name).write_text(f'#!/bin/sh\n{body}')
-        (tmp_path / name).chmod(0o755)
-    subprocess.run(
-        ['bash', '-c', step['run']],
-        cwd=tmp_path,
-        check=True,
-        env={
-            'PATH': f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
-            'GITHUB_REF_NAME': tag,
-            'GITHUB_REPOSITORY': 'NVIDIA/structured-data-models-client',
-        },
-    )
-    edited = tmp_path / 'edited.txt'
-    assert (edited.read_text().split() if edited.exists() else []) == edits

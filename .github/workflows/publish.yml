@@ -35,9 +35,9 @@
 # is what produces the distributions, and `assemble` can
 # too, for the same reason; it holds `contents: read` alone. `release` holds
 # `contents: write` to create the Release and attach to it, behind the `pypi`
-# environment. `kitmaker` holds the Portal token, `id-token: write` for
-# Charon, and `contents: write` to mark the release Latest once it is
-# published, behind the `kitmaker` environment.
+# environment. `kitmaker` holds the Portal token and `id-token: write` for
+# Charon, and nothing that can change the repository, behind the `kitmaker`
+# environment.
 name: publish
 
 on:
@@ -349,8 +349,8 @@ jobs:
             # Not Latest yet. Kitmaker needs public asset URLs, so the
             # release cannot be a draft and has to exist before anything is
             # published from it. Marking it Latest here would advertise a
-            # version that is not on the index, so `kitmaker` does that once
-            # the publish has worked. This only withholds the
+            # version that is not on the index, so that is done by hand once
+            # the Kitmaker publish has worked. This only withholds the
             # promotion: with no earlier release to stay Latest, GitHub still
             # reports the newest non-draft release as the latest one.
             prerelease=()
@@ -411,8 +411,8 @@ jobs:
   # sent with every request, hence `id-token: write`.
   #
   # From a tag, after `release` has attached the distributions, this publishes
-  # them: every project is dry-run before any is uploaded, and the release is
-  # marked Latest only once the index holds what was built. Dispatched from
+  # them: every project is dry-run before any is uploaded, and the job fails
+  # unless the index holds what was built. Dispatched from
   # `main`, it only asks Portal for each project and publishes nothing, which
   # is how a change to this route is proved before a release depends on it.
   kitmaker:
@@ -423,7 +423,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: kitmaker      # required reviewers; admits `main` and `v*` tags
     permissions:
-      contents: write
+      contents: read
       id-token: write
     env:
       KITMAKER_API_TOKEN: ${{ secrets.KITMAKER_API_TOKEN }}
@@ -475,36 +475,25 @@ jobs:
           test -s assets.tsv
           python3 .github/workflows/kitmaker_release.py
 
-      # Only now, because until this point a failure could have left a
-      # release marked Latest for a version that never reached PyPI. Latest
-      # goes to the highest final release on PyPI, which need not be this one;
-      # `kitmaker_release.py latest` says why PyPI decides. Two runs can
-      # overlap, and an older one can mark what it found just after a newer
-      # one marked itself, so it asks again after its edit: whichever run
-      # edits last leaves Latest on the right release.
-      - name: Mark the highest published release Latest
-        if: github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ github.token }}
+      # Latest is marked by hand. Which release should hold it depends on every
+      # other release's publish, and runs for different tags can overlap with
+      # nothing in Actions to order them, so a run that marked itself could
+      # take Latest from a newer release or hand it to a half-published one.
+      - name: Say what is left to do
+        if: success() && github.ref_type == 'tag'
         run: |
-          set -euo pipefail
-          if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
-            echo "a pre-release stays unmarked"
-            exit 0
-          fi
-          marked=
-          for _ in 1 2; do
-            gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts \
-              --exclude-pre-releases --limit 1000 --json tagName \
-              --jq '.[].tagName' > releases.txt
-            target=$(python3 .github/workflows/kitmaker_release.py latest < releases.txt)
-            if [ -z "$target" ] || [ "$target" = "$marked" ]; then
-              break
+          {
+            echo "### Published"
+            echo
+            echo "Every distribution of \`$GITHUB_REF_NAME\` is on PyPI with the"
+            echo "bytes that were built."
+            echo
+            if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
+              echo "This is a pre-release: leave it unmarked."
+            else
+              echo "If no higher final release is on PyPI, mark this release Latest."
             fi
-            gh release edit "$target" --repo "$GITHUB_REPOSITORY" --latest
-            echo "marked $target Latest"
-            marked=$target
-          done
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Into the job log, so a failed release says where it got to without
       # anyone opening an artifact. The GitHub Release body is the changelog
