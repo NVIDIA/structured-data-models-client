@@ -1,43 +1,11 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""exits (the Postgres value rules, MID2 P2-3, riding along in
-landing), by test author, before the implementation.
+"""PostgreSQL values remain exact through provider transport and core admission.
 
-    SDM_POSTGRES_TEST_DSN=... python -m pytest \
-        packages/structured-data-models-client/tests_test_ops/test_postgres_values.py
-
-Run on the test-ops build (the test-only fetch), as CI's
-``native-test-ops`` job runs ``tests_test_ops`` beside its pinned Postgres.
-The design: the Postgres value rules move from the Python provider
-(``_rust/providers/postgres.py``) into ``sdm-data``'s Postgres dialect and
-``sdm-core``; the provider only moves the driver's rows into Arrow. The
-expectations are ``contract/result-conversion-vectors.json``'s ``postgres_values``,
-recorded by ``contract/support/postgres_value_scenarios.py``: the reference's
-driver's reading and the reference's own reading of each value (python-ref
-at ``contract/reference-env.txt``'s commit), the Arrow type the core admits
-each column as, and the text the reference binds each seed's key and time
-as.
-
-- What the core takes is the reference's (a guard: the move changes no
-  answer): each column's admitted Arrow type is the recorded one, and its
-  values are the reference's reading of them; a JSON scalar as Python's
-  text of it (``true`` as ``True``), a fractional ``numeric`` past 76
-  digits as its double, one with no precision as its exact text (read as
-  the reference's double where it is not a key), a whole one past ``int64``
-  as its exact digits (where the reference overflows), and an interval
-  refused by name as the reference leaves it out.
-- Each seed's key and time are bound as the reference writes them (a
-  guard): a seed time as pandas' ``Timestamp.isoformat``, nanoseconds and a
-  time before 1970 included.
-- The provider only moves the driver's rows into Arrow: what it hands the
-  core for each column is, value by value, the driver's reading, read as
-  the comparator reads a statement's result (a JSON column's text as the
-  JSON value it holds, an interval as the ``timedelta`` the driver gave);
-  it loses nothing and adds no spelling of its own.
-- Each rule of the provider is declared ``moved`` naming in the
-  bridge freeze's declarations (``scripts/rust_core/bridge_changes.json``).
-
+Authored SQL inputs define expected JSON text, numeric precision and interval behavior.
+Seed bindings preserve subsecond and pre-epoch timestamps.
+Run against SDM_POSTGRES_TEST_DSN with the native test-ops build.
 """
 
 from __future__ import annotations
@@ -46,7 +14,6 @@ import datetime as dt
 import importlib.util
 import json
 import os
-import struct
 import sys
 from collections.abc import Iterator
 from decimal import Decimal
@@ -58,11 +25,6 @@ import pyarrow as pa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
-VECTORS = json.loads(
-    (ROOT / 'contract/result-conversion-vectors.json').read_text(
-        encoding='utf-8'
-    )
-)['postgres_values']
 PROVIDER_FILE = (
     'packages/structured-data-models-client/src/sdm_client/_rust/providers/'
     'postgres.py'
@@ -77,19 +39,31 @@ RULES = (
     'key_set_json',
     '_isoformat',
 )
-#: How the core's admitted value of each column is read against the
-#: reference's: as the text it is (a JSON column, the reference's text of
-#: the value), as the value it is (a double), as an exact text read as the
-#: reference's double (a numeric with no precision, not a key), as exact
-#: digits held to the driver's value where the reference overflows.
-READ = {
-    'js': 'text',
-    'jn': 'text',
-    'nf': 'value',
-    'nx': 'exact text, a double',
-    'nw': 'exact digits',
+# Independently authored values of the SQL inputs, plus the inserted null row.
+DRIVER = {
+    'iv': [
+        dt.timedelta(days=32, seconds=3),
+        dt.timedelta(days=-365),
+        dt.timedelta(0),
+        None,
+    ],
+    'js': [True, False, 3, 'x', {'a': 1}, None, None],
+    'jn': [True, 2.5, [1, 'b'], None],
+    'nw': [Decimal(2**63), Decimal(1), Decimal(-(2**63) - 1), None],
+    'nf': [
+        Decimal('1.500'),
+        Decimal('-2.250'),
+        Decimal('12345678901234567.125'),
+        None,
+    ],
+    'nx': [
+        Decimal('12345678901234567890.123'),
+        Decimal(1),
+        Decimal('0.1'),
+        None,
+    ],
 }
-COLUMNS = tuple(sorted(VECTORS['columns']))
+COLUMNS = tuple(sorted(DRIVER))
 PREFIX = 'pg-values:'
 KEYS = (
     *(f'{PREFIX}core:{c}' for c in COLUMNS),
@@ -116,26 +90,10 @@ def recorder() -> ModuleType:
     )
 
 
-def test_postgres_vectors_cover_the_inputs_and_value_rules() -> None:
-    r"""Control: the vectors are the recorder's, for its tables and seeds,
-    recorded by the reference at ``contract/reference-env.txt``'s commit,
-    every column with the reference's two readings and the core's type."""
-    made = recorder()
-    assert VECTORS['setup'] == made.SETUP
-    assert VECTORS['seed_times']['seeds'] == made.SEEDS
-    assert sorted(VECTORS['columns']) == sorted(made.COLUMNS)
-    for name, column in VECTORS['columns'].items():
-        assert {'driver', 'reference', 'arrow'} <= set(column), name
-        assert len(column['driver']) == len(made.COLUMNS[name]['values']) + 1
-    # The rules each column exercises are there: JSON true read as True,
-    # an interval of a month read as 30 days, a whole number past int64.
-    assert ['s', 'True'] in VECTORS['columns']['js']['reference']
-    assert VECTORS['columns']['iv']['driver'][0] == [
-        'dur',
-        str((32 * 86_400 + 3) * 10**9),
-    ]
-    assert VECTORS['columns']['nw']['reference'] == {'raised': 'OverflowError'}
-    assert set(READ) | {'iv'} == set(COLUMNS)
+def test_source_cases_cover_each_value_rule() -> None:
+    assert set(COLUMNS) == set(recorder().COLUMNS)
+    for name in COLUMNS:
+        assert len(DRIVER[name]) == len(recorder().COLUMNS[name]['values']) + 1
 
 
 # --- the database --------------------------------------------------------------
@@ -223,81 +181,62 @@ def _read(database: Any, column: str) -> tuple[Any, _Answers]:
         return recorder().admitted(answers, column), answers
 
 
-def _cells(values: list[Any]) -> list[Any]:
-    return recorder().cells(values)
-
-
-def _double(cell: Any) -> float:
-    return struct.unpack('>d', bytes.fromhex(cell[1]))[0]
-
-
-def _decimal(cell: Any) -> Decimal:
-    r"""A canonical decimal cell's value."""
-    assert cell[0] == 'd', cell
-    return Decimal(cell[1]).scaleb(-cell[2])
-
-
-# --- what the core takes is the reference's ----------------------------------
-
-
 @pytest.mark.parametrize('column', COLUMNS)
-def test_each_value_the_core_takes_is_the_reference_s(
+def test_admitted_values_preserve_declared_conversion_rules(
     database: Any, column: str
 ) -> None:
-    r"""exit "every Postgres case's answers unchanged": each
-    column reaches the core as the recorded Arrow type, its values the
-    reference's reading of them (or refused by name where the reference
-    leaves the column out); the rule now in the provider holds wherever it
-    moves."""
     if database is None:
         pytest.skip('PostgreSQL value checks require a test DSN')
-    vector = VECTORS['columns'][column]
-
-    def check() -> None:
-        admitted, _ = _read(database, column)
-        if isinstance(admitted, str):
-            assert admitted == vector['arrow'], admitted
-            assert vector['reference'] == 'unsupported', column
-            return
-        field = admitted.schema.field('v')
-        assert recorder()._arrow_type(field) == vector['arrow']
-        assert admitted.column('id').to_pylist() == list(
-            range(1, len(vector['driver']) + 1)
-        )
-        values = admitted.column('v').to_pylist()
-        how = READ[column]
-        if how in ('text', 'value'):
-            assert _cells(values) == vector['reference'], values
-        elif how == 'exact text, a double':
-            assert all(v is None or isinstance(v, str) for v in values)
-            assert [None if v is None else Decimal(v) for v in values] == [
-                None if c is None else _decimal(c) for c in vector['driver']
+    admitted, _ = _read(database, column)
+    if column == 'iv':
+        assert admitted == 'refused UNSUPPORTED_TYPE'
+        return
+    assert not isinstance(admitted, str)
+    expected_type = (
+        'double'
+        if column == 'nf'
+        else 'string arrow.json'
+        if column in ('js', 'jn')
+        else 'string'
+    )
+    assert recorder()._arrow_type(admitted.schema.field('v')) == expected_type
+    assert admitted.column('id').to_pylist() == list(
+        range(1, len(DRIVER[column]) + 1)
+    )
+    values = admitted.column('v').to_pylist()
+    if column in ('js', 'jn'):
+        expected = {
+            'js': ['True', 'False', '3', 'x', '{"a":1}', None, None],
+            'jn': ['True', '2.5', '[1,"b"]', None],
+        }[column]
+        assert values == expected
+        assert all(v is None or type(v) is str for v in values)
+    elif column == 'nf':
+        assert all(v is None or type(v) is float for v in values)
+        assert values == [
+            None if v is None else float(v) for v in DRIVER[column]
+        ]
+    else:
+        assert all(v is None or type(v) is str for v in values)
+        assert [None if v is None else Decimal(v) for v in values] == DRIVER[
+            column
+        ]
+        if column == 'nx':
+            assert [None if v is None else float(v) for v in values] == [
+                None if v is None else float(v) for v in DRIVER[column]
             ]
-            assert (
-                _cells([None if v is None else float(v) for v in values])
-                == (vector['reference'])
-            )
-        else:
-            assert vector['reference'] == {'raised': 'OverflowError'}
-            assert [None if v is None else Decimal(str(v)) for v in values] == [
-                None if c is None else _decimal(c) for c in vector['driver']
-            ]
-
-    check()
 
 
-def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
-    r"""key-set encoding and seed times: a keyed read of
-    ``events`` within each seed's window binds each seed's key and its end
-    time as the text the reference binds them as, a time as pandas'
-    ``Timestamp.isoformat`` writes it (whole seconds, microseconds,
-    nanoseconds, before 1970)."""
+def test_seed_bindings_preserve_exact_key_and_timestamp_text(
+    database: Any,
+) -> None:
+    """Seed timestamp text preserves whole seconds, microseconds and nanoseconds."""
     if database is None:
         pytest.skip('PostgreSQL value checks require a test DSN')
     from sdm_client._rust import codec
     from sdm_client._rust.run import run
 
-    seeds = VECTORS['seed_times']['seeds']
+    seeds = recorder().SEEDS
     table = pa.table(
         {
             'key': pa.array([key for key, _ in seeds], pa.int64()),
@@ -369,10 +308,14 @@ def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
             if isinstance(value, str)
         ]
         assert len(texts) == 1, answers.bound
-        # Each seed as the old client writes it: its key as a
-        # number and its end time as ``e``.
+        # Bound JSON retains exact key values and timestamp precision.
         assert [[str(row['id']), row['e']] for row in texts[0]] == (
-            VECTORS['seed_times']['reference']
+            [
+                ['1', '2024-01-02T03:04:05'],
+                ['1', '2024-01-02T03:04:05.500000'],
+                ['2', '2024-01-03T00:00:00.000000001'],
+                ['2', '1969-12-31T00:00:00.000001'],
+            ]
         )
 
     check()
@@ -381,53 +324,42 @@ def test_each_seed_is_bound_as_the_reference_writes_it(database: Any) -> None:
 # --- the provider only moves the driver's rows -------------------------------
 
 
-def _faithful(field: pa.Field, value: Any, driver: Any) -> bool:
-    r"""Whether ``value``, a cell of a provider's answer in ``field``, is
-    the driver's value whose canonical cell is ``driver``, read as the
-    comparator reads a statement's result: a JSON column's text as the
-    value it holds, an interval as the ``timedelta`` it is (no months: the
-    driver's holds none), a number by its value whatever its Arrow type."""
-    if value is None or driver is None:
-        return value is None and driver is None
-    kind = field.type
-    if isinstance(kind, pa.BaseExtensionType):
-        kind = kind.storage_type
-    json_field = recorder()._arrow_type(field).endswith(' arrow.json')
-    if json_field:
-        try:
-            held_value = json.loads(value)
-        except (TypeError, ValueError):
-            return False
-        return _cells([held_value]) == [driver]
+def _faithful(field: pa.Field, value: Any, expected: Any) -> bool:
+    """Check provider values directly against authored SQL-input values."""
+    if value is None or expected is None:
+        return value is None and expected is None
+    kind = (
+        field.type.storage_type
+        if isinstance(field.type, pa.BaseExtensionType)
+        else field.type
+    )
+    if recorder()._arrow_type(field).endswith(' arrow.json'):
+        decoded = json.loads(value)
+        return type(decoded) is type(expected) and decoded == expected
     if pa.types.is_interval(kind):
-        if value.months:
-            return False
-        nanos = value.days * 86_400 * 10**9 + value.nanoseconds
-        return ['dur', str(nanos)] == driver
-    if isinstance(value, dt.timedelta) or isinstance(driver, bool):
-        return _cells([value]) == [driver]
-    if driver[0] == 'd':
-        if isinstance(value, float):
-            return Decimal(value) == _decimal(driver)
-        try:
-            return Decimal(str(value)) == _decimal(driver)
-        except ArithmeticError:
-            return False
-    return _cells([value]) == [driver]
+        return (
+            value.months == 0
+            and dt.timedelta(
+                days=value.days, microseconds=value.nanoseconds // 1000
+            )
+            == expected
+            and value.nanoseconds % 1000 == 0
+        )
+    if isinstance(expected, Decimal):
+        return (
+            Decimal(value) if isinstance(value, float) else Decimal(str(value))
+        ) == expected
+    return type(value) is type(expected) and value == expected
 
 
 @pytest.mark.parametrize('column', COLUMNS)
 def test_the_provider_hands_the_core_the_driver_s_values(
     database: Any, column: str
 ) -> None:
-    r"""exit "the provider holds no value rule": what the Postgres
-    provider hands the core for each column is the driver's reading, value
-    by value (the vectors' ``driver``), with no rule of its own applied:
-    not Python's text of a JSON scalar, not a double of a numeric the
-    driver read exactly."""
+    """Raw provider Arrow cells preserve the independently authored SQL values."""
     if database is None:
         pytest.skip('PostgreSQL value checks require a test DSN')
-    driver = VECTORS['columns'][column]['driver']
+    driver = DRIVER[column]
 
     def check() -> None:
         _, answers = _read(database, column)

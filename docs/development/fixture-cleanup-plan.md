@@ -626,3 +626,7 @@ Exact-key validation uses temporary local PostgreSQL17 container `sdm-fixture-cl
 
 Exact-key output recording (12,223 bytes) removed after independent review and nine passing tests against temporary local PostgreSQL17.
 Authored inputs stay in exact_key_scenarios.py; direct assertions cover complete key/anchor sets, source-derived labels and histories, schema/wire types, relationship ownership and catalog-versus-supplied/edited equivalence.
+
+The remaining 6,648-byte PostgreSQL result-conversion recording is removed after independent review and fourteen tests against local PostgreSQL17.
+Direct assertions preserve authored driver values, admitted JSON/numeric/interval behavior, nulls and exact seed-time bindings.
+This closes the partially converted fixture; shared source helpers remain.
