@@ -1194,6 +1194,10 @@ fn assert_bound_payload(sent: &[(String, String, Vec<String>)], payload: &str) -
     let sql = sent[0].0.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(sql.contains("f.index as __KUMO_BATCH__"));
     assert!(sql.contains("FLATTEN(INPUT => PARSE_JSON(?))"));
+    assert!(
+        sql.contains("FROM TMP JOIN \"{catalog}\".\"{schema}\"."),
+        "{sql}"
+    );
     assert!(sql.contains("ON \"user_id\" = TMP.__KUMO_ID__"));
     sql
 }
@@ -1313,6 +1317,15 @@ fn lookup_preserves_seed_identity_and_duplicate_policy() {
             sql.contains("COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS \"__kumo_matches__\""),
             count
         );
+        if !qualify && !count {
+            assert_eq!(
+                sql,
+                "WITH TMP as ( SELECT f.index as __KUMO_BATCH__, f.value::NUMBER as __KUMO_ID__ \
+                 FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f ) \
+                 SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"user_id\", \"age\", \"country\" \
+                 FROM TMP JOIN \"{catalog}\".\"{schema}\".\"users\" ON \"user_id\" = TMP.__KUMO_ID__"
+            );
+        }
     }
 }
 
