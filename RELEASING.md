@@ -97,7 +97,7 @@ Expired or missing CI artifacts require rerunning CI; publication does not subst
 
 All three distributions must be present at the tagged version.
 The workflow also generates an SBOM from the exact wheels, reads the version's changelog entry and attaches distributions, build identities and the SBOM to the GitHub Release.
-**A green workflow means the artifacts are built and public, not that anything is on PyPI.**
+**A green tag run means every distribution is on PyPI with the bytes that were built.** The `kitmaker` job verifies that before it finishes, so a run waiting on the `kitmaker` approval, or one that failed in it, has attached the distributions to the GitHub Release and may have published none of them.
 
 **Publishing goes through Kitmaker, not straight to PyPI.** Kitmaker owns
 NVIDIA's PyPI organization and this project's OSRB record commits to releasing
@@ -199,10 +199,9 @@ finishes what did not land.
 `actions/download-artifact`, since an expired artifact cannot be downloaded.
 "Re-run all jobs" builds fresh, non-reproducible files, finds the earlier
 assets still attached, leaves them alone and reports each as already attached.
-That run goes green with the release holding one set of bytes and `dist/`
-another, so the workflow is not what catches this. The publish is, because it
-compares every attached asset's digest against the artifact before it submits
-anything. This happens once the artifact's retention runs out, and after any
+The `release` job goes green with the release holding one set of bytes and
+`dist/` another, and the `kitmaker` job then fails, because it compares every
+attached asset's digest against the artifact before it submits anything. This happens once the artifact's retention runs out, and after any
 change to the workflow that needs a fresh build.
 
 Recovery depends on the index: if nothing for this version is on PyPI, delete

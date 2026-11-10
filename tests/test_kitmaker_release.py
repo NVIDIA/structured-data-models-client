@@ -21,6 +21,8 @@ import json
 import os
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -831,3 +833,46 @@ def test_the_check_refuses_a_project_unfit_to_publish_to(
     else:
         with pytest.raises(SystemExit, match=re.escape(refused)):
             kitmaker.check()
+
+
+@pytest.mark.skipif(shutil.which('bash') is None, reason='the step is bash')
+@pytest.mark.parametrize(
+    ('tag', 'finals', 'marked'),
+    [
+        ('v2.0.0', ['v1.0.0', 'v2.0.0'], True),
+        ('v1.0.1', ['v2.0.0', 'v1.0.1', 'v1.0.0'], False),
+        ('v2.0.10', ['v2.0.9', 'v2.0.10'], True),
+        ('v2.1.0rc1', ['v2.0.0'], False),
+    ],
+)
+def test_only_the_highest_final_release_is_marked_latest(
+    kitmaker_job, tmp_path, tag, finals, marked
+):
+    """An older release finishing after a newer one, on a late approval or a
+    re-run, must not take Latest back from it."""
+    step = next(
+        s
+        for s in kitmaker_job['steps']
+        if s.get('name') == 'Mark the release Latest, now that it is published'
+    )
+    (tmp_path / 'gh').write_text(
+        '#!/bin/sh\n'
+        'if [ "$2" = list ]; then printf "%s\\n" $FINALS; '
+        'else echo "$@" >> edited.txt; fi\n'
+    )
+    (tmp_path / 'gh').chmod(0o755)
+    subprocess.run(
+        ['bash', '-c', step['run']],
+        cwd=tmp_path,
+        check=True,
+        env={
+            'PATH': f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
+            'GITHUB_REF_NAME': tag,
+            'GITHUB_REPOSITORY': 'NVIDIA/structured-data-models-client',
+            'FINALS': ' '.join(finals),
+        },
+    )
+    edited = (tmp_path / 'edited.txt').exists()
+    assert edited is marked
+    if marked:
+        assert '--latest' in (tmp_path / 'edited.txt').read_text()
