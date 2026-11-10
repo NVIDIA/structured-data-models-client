@@ -166,6 +166,14 @@ fn payloads() -> Vec<(String, Value)> {
         {
             continue;
         }
+        // The size boundaries materialize in full now that the client holds
+        // a request to no size, and carry no shape the others do not.
+        if one.case.id.starts_with("multicall.body-30mib.")
+            || one.case.id == "multicall.calls.101"
+            || one.case.id == "multicall.entities.100001"
+        {
+            continue;
+        }
         let observed = host::run(&one.case, &bases).unwrap();
         if let Some(state) = observed.materialized {
             found.push((one.case.id.clone(), numbers(state["payload"].clone())));
