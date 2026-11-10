@@ -127,12 +127,30 @@ fn qualified_identifiers_preserve_each_part_and_escape_backticks() {
 
 #[test]
 fn keyed_reads_unpack_the_bound_json_parameter_by_position() {
-    for kind in ["lookup", "neighbors"] {
+    let cte = |columns: &str, element: &str| {
+        format!(
+            "WITH TMP AS (\n  SELECT CAST(pos AS BIGINT) AS `batch`, {columns}\n  FROM posexplode(from_json(?, 'array<{element}>'))\n)\n"
+        )
+    };
+    let cases = [
+        ("lookup", "int64", cte("col AS `key`", "bigint")),
+        ("lookup", "float64", cte("col AS `key`", "double")),
+        ("lookup", "utf8", cte("col AS `key`", "string")),
+        (
+            "neighbors",
+            "int64",
+            cte(
+                "col.id AS `key`, col.e AS `end`",
+                "struct<id:bigint,e:string>",
+            ),
+        ),
+    ];
+    for (kind, key_type, expected) in cases {
         let mut input = serde_json::json!({
             "request":kind,"table":{"source":["main","shop","users"]},
             "key":["id"],"columns":["id","at"],
             "seeds":{"attachment":7,"columns":[
-                {"name":"key","nullable":false,"type":{"type":"int64"}},
+                {"name":"key","nullable":false,"type":{"type":key_type}},
                 {"name":"batch","nullable":false,"type":{"type":"int64"}}
             ]}
         });
@@ -157,11 +175,10 @@ fn keyed_reads_unpack_the_bound_json_parameter_by_position() {
         assert_eq!(bound.len(), 1);
         let statement = bound[0];
         assert!(
-            statement.text.contains("posexplode(from_json(?, 'array<"),
-            "{}",
+            statement.text.starts_with(&expected),
+            "{kind} {key_type}: {}",
             statement.text
         );
-        assert!(statement.text.contains("key") && statement.text.contains("batch"));
         let SqlParam::KeySet { keys, .. } = &statement.params[0] else {
             panic!("key parameter")
         };
