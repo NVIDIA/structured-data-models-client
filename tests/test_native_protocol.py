@@ -240,10 +240,10 @@ def test_python_schema_validates_supported_shapes_and_rejects_malformed_ones() -
 # --- the public route ------------------------------------------------------------
 
 
-def _recorder() -> ModuleType:
-    path = ROOT / 'scripts/record_sql_statements.py'
+def _source_scenarios() -> ModuleType:
+    path = ROOT / 'tests/support/sql_source_scenarios.py'
     spec = importlib.util.spec_from_file_location(
-        'test_native_protocol_record', path
+        'test_native_protocol_source_scenarios', path
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -256,7 +256,7 @@ def test_a_dotted_source_name_still_reads_as_one_table() -> None:
     # A dotted source name still reads as one table: `orders` held in a
     # table named `a.b` materializes the plain base's payload, though a
     # schema `a` holds a table `b` whose prices differ.
-    record = _recorder()
+    record = _source_scenarios()
     plain, _ = record.run('orders', ())
     dotted, statements = record.run('a.b', record.DOTTED)
     assert dotted == plain
@@ -280,7 +280,7 @@ def test_a_dotted_source_name_still_reads_as_one_table() -> None:
 def test_the_dotted_statements_are_the_plain_ones_on_another_name() -> None:
     # Compare executed plans after a physical table rename, including the
     # catalog lookup needed when a single identifier contains a dot.
-    record = _recorder()
+    record = _source_scenarios()
     _, plain = record.run('orders', ())
     _, dotted = record.run('a.b', record.DOTTED)
     assert len(plain) == len(dotted)
@@ -301,7 +301,7 @@ def test_the_dotted_statements_are_the_plain_ones_on_another_name() -> None:
 def test_executed_sql_preserves_labels_history_and_prediction_order() -> None:
     import pandas as pd
 
-    record = _recorder()
+    record = _source_scenarios()
     payload, _ = record.run('orders', ())
     origin = pd.Timestamp('2023-01-01', tz='UTC')
     anchor = pd.Timestamp(record.ANCHOR, tz='UTC')
@@ -421,7 +421,7 @@ def test_a_relation_duckdb_cannot_read_is_refused_by_name() -> None:
     import duckdb
     from sdm_client import StructuredDataError
 
-    record = _recorder()
+    record = _source_scenarios()
     connection = duckdb.connect()
     for statement in [*record.shop(), *record.DOTTED]:
         connection.execute(statement)

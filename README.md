@@ -161,7 +161,7 @@ The compatibility ledger in `tests/compatibility/manifest.json` records supporte
 - `rust/crates/<crate>/tests/` and `rust/bindings/sdm-py/tests/`: the Rust and binding tests.
 - `rust/testdata/`: shared Rust test data, including a vendored time zone database.
 - `tests/golden/public_api.json`: the public API inventory.
-- `scripts/snapshot_wire_payloads.py`: canonical wire journeys checked with independent behavioral assertions.
+- `scripts/check_wire_behavior.py`: canonical wire journeys checked with independent behavioral assertions.
 - `tests/test_release_contract.py`, `tests/test_skills.py`, `tests/test_native_wheel.py`, `tests/test_wheel_smoke.py`, `tests/test_rust_binding_edges.py`, `tests/test_rust_contract.py`: release, skills, native build and installed-wheel checks.
 - `qa/`: manual probes against live endpoints and warehouses.
 

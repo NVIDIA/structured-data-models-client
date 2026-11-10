@@ -10,7 +10,7 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 ANCHOR = '2024-03-01'

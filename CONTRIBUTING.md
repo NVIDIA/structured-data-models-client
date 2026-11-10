@@ -69,9 +69,9 @@ The Java library targets Java 17; the local validation environment uses JDK 21.
 The fixture checks use `JAVA_HOME/bin/javac` and `JAVA_HOME/bin/javap`, falling back to PATH when unset.
 
 `tests/` at the root is the cross-package suite: that the three distributions
-agree on a version and a licence, that the recorded public surface and wire
-payloads still match, and that the claims the configuration files make about
-themselves are true.
+agree on a version and a licence, that the public API remains compatible and wire
+behavior satisfies independent assertions, and that repository configuration
+claims are true.
 
 Lint and format with `ruff`. Type-check with `mypy`. Both are blocking in CI,
 over all maintained packages:
@@ -96,7 +96,7 @@ Changes to wire behavior require updating the independent behavioral assertions 
 
 ```bash
 .venv/bin/python scripts/snapshot_public_api.py --write
-.venv/bin/python scripts/snapshot_wire_payloads.py
+.venv/bin/python scripts/check_wire_behavior.py
 ```
 
 ## Native memory checks

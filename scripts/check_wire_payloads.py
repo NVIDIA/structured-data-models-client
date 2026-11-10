@@ -167,7 +167,7 @@ def main() -> int:
 
     try:
         if args.payloads is None:
-            from snapshot_wire_payloads import assert_behavior, collect
+            from check_wire_behavior import assert_behavior, collect
 
             current = collect()
             assert_behavior(current)

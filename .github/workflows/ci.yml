@@ -889,7 +889,7 @@ jobs:
             --native-sha256 "$(python -I -c 'import hashlib, pathlib, sdm_client._native as n; print(hashlib.sha256(pathlib.Path(n.__file__).read_bytes()).hexdigest())')" \
             gate-observations/python-core.jsonl || status=$?
           exit $status
-      # Preserve observations for SQL golden checks.
+      # Preserve case observations for failure diagnosis.
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -975,7 +975,7 @@ jobs:
       - *contract-gate
 
   # Run the native client on each database and supported dependency stack.
-  # The provider's executed SQL observations also feed the golden checks.
+  # Execute the same case contracts against SQLite's provider.
   contract-python-pandas3-sqlite:
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     name: contract-python (pandas3, sqlite)

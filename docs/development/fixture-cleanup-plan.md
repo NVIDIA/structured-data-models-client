@@ -6,6 +6,7 @@
 
 Base: PR #75, `b450c957f`; branch: `rust-fixture-cleanup`.
 Step 2 is complete, including final independent coverage review and reconciliation of all file/group totals.
+Step 3 is active: simplify obsolete test plumbing while retaining useful correctness and compatibility gates.
 Do not merge this branch without instruction.
 
 ## Result so far
@@ -88,10 +89,18 @@ No claim is made here of exhaustive live warehouse/model coverage or a fresh int
 | --- | --- |
 | 1. Map and prioritize | Complete: inventory, consumer mapping and independent audit. |
 | 2. Replace and delete | Complete: replacements, focused validation, reconciled tracking and final independent review. |
-| 3. Simplify plumbing | Next: unused loaders/recorders, obsolete CI comparison steps, manifests/generators and contributor rules. Keep useful API/protocol enforcement. |
+| 3. Simplify plumbing | In progress: unused loaders/recorders, obsolete CI comparison steps, manifests/generators and contributor rules. Keep useful API/protocol enforcement. |
 | 4. Review and validate | Then run integrated Rust/Python/Java suites, connector checks, lint/type checks and schema/capability gates. Run live checks where changed behavior or maintained requirements require them. |
 
 Step 2 completion requires actual file totals, no unresolved deleted-input consumers, independent review of coverage decisions and honest affected-test evidence.
 It does not mean every recorded artifact should be deleted or that steps 3/4 have already passed.
 Report fixture savings separately from replacement test-code growth; do not count minification or moving data as savings.
 Keep connector/model/language coverage and PR #75 fixes throughout the remaining work.
+
+### Step 3 decisions
+
+Keep API snapshot enforcement: it detects accidental exported-name/signature changes.
+Keep current wire assertions and pinned-schema validation, but rename the former snapshot script to `scripts/check_wire_behavior.py`.
+Move the former SQL recorder to `tests/support/sql_source_scenarios.py`: it only supplies current source scenarios to correctness tests.
+Retain case-observation uploads for failure diagnosis; their old SQL-golden comments no longer apply.
+No execution job is removed based only on a stale name or comment.

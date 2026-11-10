@@ -755,7 +755,7 @@ class TestPublicSurface:
         assert '_leak_probe.fine' not in found, found
 
     def test_canonical_wire_journeys_preserve_behavior(self):
-        result = _run('snapshot_wire_payloads.py')
+        result = _run('check_wire_behavior.py')
         assert result.returncode == 0, (
             f'A canonical wire behavior failed.\n{result.stdout}{result.stderr}'
         )
@@ -808,7 +808,7 @@ def _loaded(script: str):
 
 @functools.lru_cache(maxsize=1)
 def _captured_wire_payloads():
-    return _loaded('snapshot_wire_payloads').collect()
+    return _loaded('check_wire_behavior').collect()
 
 
 def _current_wire_payloads():
@@ -860,7 +860,7 @@ def test_wire_assertions_reject_behavior_changes(damage):
             'dtype'
         ] = 'int64'
     with pytest.raises(AssertionError):
-        _loaded('snapshot_wire_payloads').assert_behavior(cases)
+        _loaded('check_wire_behavior').assert_behavior(cases)
 
 
 def _doctored(tmp_path: pathlib.Path, mutate) -> pathlib.Path:
