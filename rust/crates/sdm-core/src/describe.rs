@@ -985,8 +985,11 @@ async fn read_as_it_stands(
 /// otherwise or holds no declaration, where the table projects its source,
 /// and where the source's columns hold affinities rather than types
 /// (SQLite's), whose values decide a column's type: the whole read then
-/// says what changed. A catalog that cannot be read is refused as the
-/// whole read refuses it.
+/// says what changed. So too where a fact rests on the table's keys, which
+/// its catalog's columns do not list: a column of exact numbers, read as
+/// text or as a number by whether a key declares it, and one kept free of
+/// nulls by a key rather than by `NOT NULL`. A catalog that cannot be read
+/// is refused as the whole read refuses it.
 async fn unchanged(
     asker: &Asker,
     relation: &Relation,
@@ -1001,8 +1004,8 @@ async fn unchanged(
     let mut kept = Vec::new();
     for table in tables {
         for column in &table.columns {
-            let Some(facts) =
-                sdm_schema::held::facts_held(table, column).filter(|facts| facts.catalog.is_some())
+            let Some(facts) = sdm_schema::held::facts_held(table, column)
+                .filter(|facts| facts.catalog.is_some() && facts.exact_number.is_none())
             else {
                 return Ok(None);
             };
@@ -1012,7 +1015,9 @@ async fn unchanged(
     let declared = crate::discover::catalog(asker, relation).await?;
     let same = kept.iter().all(|((_, name), facts)| {
         declared.iter().any(|c| {
-            c.name == *name && facts.catalog.as_ref() == Some(&CatalogDeclaration::from(c))
+            c.name == *name
+                && facts.catalog.as_ref() == Some(&CatalogDeclaration::from(c))
+                && (facts.nullable || c.not_null)
         })
     });
     Ok(same.then_some(kept))
