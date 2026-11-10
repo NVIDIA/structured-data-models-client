@@ -173,8 +173,10 @@ pub fn capabilities() -> Vec<Capabilities> {
         .collect()
 }
 
-/// `KUMO_RELATIONAL`: every shape (the relational profile), its six task
-/// kinds and seven outputs, each list sorted.
+/// `KUMO_RELATIONAL`: every shape (the relational profile), its five task
+/// kinds and seven outputs, each list sorted. Candidate-free temporal link
+/// prediction is left out: no released model serves it
+/// ([`temporal_link_unserved`]).
 const KUMO_RELATIONAL: Spec = Spec {
     id: RELATIONAL,
     shapes: &SHAPES,
@@ -184,7 +186,6 @@ const KUMO_RELATIONAL: Spec = Spec {
         "forecasting",
         "multiclass_classification",
         "regression",
-        "temporal_link_prediction",
     ],
     outputs: &[
         "embeddings",
@@ -218,6 +219,22 @@ pub fn not_yet(rule: &'static str) -> CoreError {
     )
     .with_field("operation", Detail::text("predict"))
     .with_field("rule", Detail::text(rule))
+}
+
+/// The task kind of a candidate-free temporal link prediction.
+pub const TEMPORAL_LINK_PREDICTION: &str = "temporal_link_prediction";
+
+/// The refusal of a candidate-free temporal link prediction, which no
+/// released Kumo Relational model serves: given before anything is read or
+/// sent, by `materialize`, by `materialize_examples` and at prediction
+/// admission, naming the ranking with candidates that is served instead.
+pub fn temporal_link_unserved() -> CoreError {
+    CoreError::new(
+        Sentence::TemporalLinkUnserved,
+        "no released model serves candidate-free temporal link prediction",
+    )
+    .with_field("model", Detail::text(RELATIONAL))
+    .with_field("task", Detail::text(TEMPORAL_LINK_PREDICTION))
 }
 
 /// The model cannot answer the request, as the client refuses it before
@@ -2302,6 +2319,9 @@ fn check_task_outputs(
     outputs: &[String],
     deduplicate: bool,
 ) -> Result<(), CoreError> {
+    if kind == TEMPORAL_LINK_PREDICTION {
+        return Err(temporal_link_unserved());
+    }
     if !spec.tasks.contains(&kind) {
         return Err(unsupported(
             Sentence::ModelLacksTask,
@@ -2443,6 +2463,29 @@ mod tests {
     use sdm_contract::ErrorCode;
 
     #[test]
+    fn a_temporal_link_prediction_is_refused_before_it_is_sent() {
+        let payload =
+            sdm_wire::json::read(br#"{"task":{"kind":"temporal_link_prediction"}}"#).unwrap();
+        let prepared = prepare(&[payload], RELATIONAL, &[], true).unwrap_err();
+        let bound = bind_direct(sdm_contract::direct::DirectCallFacts {
+            query: None,
+            model: RELATIONAL.to_owned(),
+            outputs: None,
+            kind: TEMPORAL_LINK_PREDICTION.to_owned(),
+            anchored: true,
+            relationships: true,
+            tables: 2,
+            context_rows: 1,
+        })
+        .unwrap_err();
+        for error in [prepared, bound] {
+            assert_eq!(error.sentence, Sentence::TemporalLinkUnserved);
+            assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+            assert_eq!(error.fields["rule"], Detail::text(TEMPORAL_LINK_PREDICTION));
+        }
+    }
+
+    #[test]
     fn every_model_is_described_as_the_client_describes_it() {
         let all = capabilities();
         let models: Vec<_> = all.iter().map(|c| c.model).collect();
@@ -2456,7 +2499,6 @@ mod tests {
                 "forecasting",
                 "multiclass_classification",
                 "regression",
-                "temporal_link_prediction",
             ]
         );
         assert!(relational.single_table && relational.multiple_tables && relational.relationships);

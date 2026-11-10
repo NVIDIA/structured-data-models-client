@@ -2266,9 +2266,6 @@ LIMIT_ROWS = {
     'context rows, by default': 'context_rows_fast',
     'context rows, with `num_context_samples`': 'context_rows_max',
     'rows scored at once': 'predict_rows_max',
-    'rows scored for a link prediction': (
-        'predict_rows_temporal_link_prediction'
-    ),
     'tables in the gathered graph': 'tables_max',
     'hops gathered': 'hops_max',
     'classes': 'classes_max',

@@ -64,7 +64,6 @@ def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
     assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
     assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
     assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['predict_rows_temporal_link_prediction'] == 200
     assert RELATIONAL_LIMITS['hops_max'] == 6
     assert RELATIONAL_LIMITS['tables_max'] == 15
 
@@ -154,9 +153,14 @@ def test_the_default_outputs_follow_the_relational_task_kind():
 
 
 def test_the_relational_model_declares_the_deployment_it_was_read_from():
-    """A second build of the same id serves less; this is the shipping one."""
+    """A second build of the same id serves less; this is the shipping one.
+
+    No released build serves candidate-free temporal link prediction, so it
+    is not declared.
+    """
     runtime = KUMO_RELATIONAL.runtime
-    assert {'forecasting', 'temporal_link_prediction'} <= runtime.tasks
+    assert 'forecasting' in runtime.tasks
+    assert 'temporal_link_prediction' not in runtime.tasks
     assert 'explanation' in runtime.outputs
     # Only these inference options reach the wire; the engine defaults to more.
     assert 'output_type' not in runtime.inference_options

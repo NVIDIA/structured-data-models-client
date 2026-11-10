@@ -194,11 +194,10 @@ class PredictiveQuery:
                 regression's prediction reports of its predicted distribution,
                 ``'median'`` (the default) or ``'mean'``; and
                 ``rows_per_call``: how many entities one call scores, which
-                defaults to what the endpoint takes, 10,000 or 200 for a
-                temporal link prediction, and may only be lowered. Lower it
-                for a graph wide enough that a full batch outruns the 30 MiB
-                body, or for a deployment holding to less than this client
-                knows of.
+                defaults to what the endpoint takes, 10,000, and may only be
+                lowered. Lower it for a graph wide enough that a full batch
+                outruns the 30 MiB body, or for a deployment holding to less
+                than this client knows of.
 
         Returns:
             A:class:`~sdm_client.Request` carrying the data.
@@ -209,6 +208,11 @@ class PredictiveQuery:
             StructuredDataError: If neither ``indices`` nor ``predict`` is
                 given, if both are, if an option is not one this accepts, or if
                 ``model`` cannot answer a schema of this shape.
+            UnsupportedRequestError: If the query is a temporal link
+                prediction asked without candidates, a ``LIST_DISTINCT``
+                with no ``RANK TOP k``, which no released Kumo Relational
+                model serves. It is refused before any source is read; rank
+                with ``RANK TOP k`` and ``candidates=`` instead.
         """
         spec = spec_for(model) if model is not None else None
         in_place = self.schema.source is not None

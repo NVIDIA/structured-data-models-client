@@ -2785,7 +2785,7 @@ pub(crate) enum Gathered {
 }
 
 pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult, CoreError> {
-    let (steps, ranked, facts) = resolved(&inputs);
+    let (steps, ranked, facts, links) = resolved(&inputs);
     // A ranking, asked as one binary question per candidate.
     if let Some(plan) = ranked {
         if crate::pql::explained_query(&inputs.query).is_some() {
@@ -2807,6 +2807,11 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     // does not resolve is refused as itself, below.
     if inputs.candidates.is_some() && facts.is_some() {
         return Err(crate::ranking::candidates_on_no_ranking());
+    }
+    // A link target asked without candidates, refused before anything is
+    // read, since no released model serves the request it would build.
+    if links {
+        return Err(sdm_request::predict::temporal_link_unserved());
     }
     let Some(steps) = steps else {
         return match one(&asker, inputs).await? {
@@ -3006,11 +3011,12 @@ pub(crate) fn attach_request(
 
 /// A forecast's plan ([`crate::pql::resolve`]'s `steps`), when the query
 /// resolves to one, none otherwise, the query then gathered as itself,
-/// which refuses it where it does not resolve as before; and the facts of
-/// the query a host reads ([`QueryFacts`]), when it resolves.
+/// which refuses it where it does not resolve as before; the facts of
+/// the query a host reads ([`QueryFacts`]), when it resolves; and whether
+/// its target is a link target ([`Shape::Links`]).
 #[allow(
     clippy::type_complexity,
-    reason = "three plain parts, named where they are taken"
+    reason = "four plain parts, named where they are taken"
 )]
 fn resolved(
     inputs: &Inputs,
@@ -3018,10 +3024,11 @@ fn resolved(
     Option<crate::pql::ForecastPlan>,
     Option<crate::pql::RankingPlan>,
     Option<QueryFacts>,
+    bool,
 ) {
     let mut description = inputs.description.clone();
     if consistent(&mut description, &inputs.types).is_err() {
-        return (None, None, None);
+        return (None, None, None, false);
     }
     let profile = Profile::resolve(&ProfileSpec {
         name: ProfileName::Relational,
@@ -3038,9 +3045,16 @@ fn resolved(
     ) {
         Ok(validation) => {
             let facts = validation.facts(&schema);
-            (validation.steps, validation.ranking, facts)
+            let links = match (&validation.query, &facts) {
+                (Some(query), Some(facts)) => matches!(
+                    target_shape(&query.target, &facts.entity_table),
+                    Ok(Shape::Links(_))
+                ),
+                _ => false,
+            };
+            (validation.steps, validation.ranking, facts, links)
         }
-        Err(_) => (None, None, None),
+        Err(_) => (None, None, None, false),
     }
 }
 

@@ -15,7 +15,7 @@ Do not update expectations just to make a run pass; establish whether the public
 | `s0.boundary.date-packed`, `date-long-field` | Reject at materialize with `INVALID_REQUEST` | Rust `sdm-testkit/tests/s0_cases.rs` explicitly rejects packed date literals |
 | `s0.boundary.depth-999` | Accept at materialize | Native parser accepts depth 999; the deleted Python shadow parser caused the old recursion failure |
 | `s0.boundary.escape-lone-surrogate`, `escape-surrogate-pair` | Accept at materialize | Native parser replaces lone surrogates and joins pairs; existing PQL-1 decision and Rust S0 checks |
-| `target.aggregation.list-distinct` | Reach predict, then receive `NimRequestError` | The client supports temporal link materialization; this case's scripted endpoint deliberately has no link prediction response |
+| `target.aggregation.list-distinct` | Reject at materialize with `UNSUPPORTED_REQUEST` before the source is read | No released Kumo Relational model serves candidate-free temporal link prediction, so the client refuses it up front, naming `RANK TOP k` with `candidates=` |
 
 All 315 DuckDB cases were exercised through the clean installed native client during effort 2.
 This is local scripted-endpoint coverage, not new live-model or performance acceptance.

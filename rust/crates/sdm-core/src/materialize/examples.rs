@@ -113,6 +113,11 @@ async fn run(
     facts: HostFacts,
 ) -> Result<OperationResult, CoreError> {
     let call: ExampleCall = crate::attached::take_json(&mut attachments, request.input)?;
+    // Refused before anything is read, as `materialize` refuses a link
+    // target asked without candidates.
+    if call.task.kind == ExampleKind::TemporalLinkPrediction {
+        return Err(sdm_request::predict::temporal_link_unserved());
+    }
     if call.rows_per_call == Some(0) {
         return Err(refuse("rows_per_call must be positive"));
     }

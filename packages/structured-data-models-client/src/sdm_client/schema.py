@@ -984,6 +984,9 @@ class Schema:
         Use RelationalTask for task meaning and DataFrame/Arrow example tables.
         Context has ENTITY, TARGET and optional ANCHOR_TIMESTAMP; predictions
         omit TARGET. Rust validates and snapshots every input before returning.
+        A ``temporal_link_prediction`` task is refused with
+        ``UnsupportedRequestError`` before any work, since no released Kumo
+        Relational model serves it.
         """
         from sdm_client._rust.examples import materialize
 

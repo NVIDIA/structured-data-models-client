@@ -141,43 +141,20 @@ def test_an_entity_that_is_not_in_the_table_is_a_structured_data_error():
         query().materialize(indices=[-1, -2], num_context_samples=20)
 
 
-def linked() -> Schema:
-    items = pd.DataFrame(
-        {'item_id': range(5), 'price': [1.0, 2.0, 3.0, 4.0, 5.0]}
-    )
-    bought = orders().assign(item_id=[index % 5 for index in range(80)])
-    return Schema.from_data(
-        {'users': users(), 'items': items, 'orders': bought}
-    )
-
-
-@pytest.mark.parametrize(
-    ('text', 'data', 'sizes'),
-    [
-        ('PREDICT users.age FOR EACH users.user_id', schema, [2, 2, 1]),
-        (
-            'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) '
-            'FOR EACH users.user_id',
-            linked,
-            [1, 1, 1, 1, 1],
-        ),
-    ],
-    ids=['regression', 'link_prediction'],
-)
-def test_more_entities_than_one_call_scores_are_gathered_in_batches(
-    monkeypatch, text, data, sizes
-):
+def test_more_entities_than_one_call_scores_are_gathered_in_batches():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        request = PredictiveQuery(text, data()).materialize(
+        request = PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', schema()
+        ).materialize(
             indices=[5, 6, 7, 8, 9],
             num_context_samples=20,
-            rows_per_call=sizes[0],
+            rows_per_call=2,
         )
     assert [
         len(payload['predict']['instance_table']['rows'])
         for payload in request.payloads
-    ] == sizes
+    ] == [2, 2, 1]
 
 
 class Echo:

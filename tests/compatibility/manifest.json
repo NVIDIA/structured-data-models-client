@@ -861,7 +861,10 @@
         "random_seed": 7
       },
       "expected": {
-        "status": "supported"
+        "status": "refused",
+        "stage": "materialize",
+        "code": "UNSUPPORTED_REQUEST",
+        "rule": "temporal_link_prediction"
       },
       "tolerance": {
         "absolute": 0,
@@ -3796,9 +3799,7 @@
           "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_materializer_snapshot_does_not_alias_input_buffers",
           "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_temporal_frame_materialization",
           "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_frame_materialization",
-          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_composite_neighbor_identity_is_materialized",
-          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_float_link_identifiers_keep_source_precision",
-          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_link_prediction_preserves_rankings_and_row_identity"
+          "packages/structured-data-models-client/tests/test_frame_materialize_core.py::test_composite_neighbor_identity_is_materialized"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#candidateNumbersKeepTheirExactValuesAcrossTheBoundary",
@@ -4568,7 +4569,7 @@
         ]
       },
       "gate": "local",
-      "note": "Exact-context reuse, bounded expiry recovery, unsupported-session fallback, centralized retries and primary-error/partial-result preservation; controlled HTTP tests plus separate live stateless comparison. PQL and supplied temporal-link batches share the 200-row model cap, with ordered entity identities on memory, DuckDB and SQLite routes.",
+      "note": "Exact-context reuse, bounded expiry recovery, unsupported-session fallback, centralized retries and primary-error/partial-result preservation; controlled HTTP tests plus separate live stateless comparison. PQL and supplied candidate-free temporal link prediction is refused before any source read on memory, DuckDB and SQLite routes, since no released model serves it.",
       "ownership": {
         "paths": [
           "rust/crates/sdm-core/src/batch_session.rs"
@@ -8265,8 +8266,28 @@
     {
       "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
       "record": "live_api_tests",
-      "reason": "No released Kumo Relational NIM serves temporal link prediction: 1.2.0 refuses it with UNSUPPORTED_TASK. The two live link-batching tests could never pass, so they are removed; the offline batching tests keep the 200-row call cap and entity order covered.",
-      "retained_test": "packages/structured-data-models-client/tests/test_temporal_link_batching.py::test_pql_link_batches_preserve_every_entity"
+      "reason": "No released Kumo Relational NIM serves temporal link prediction: 1.2.0 refuses it with UNSUPPORTED_TASK. The two live link-batching tests could never pass, so they are removed; the client now refuses the task before any source read, which the offline refusal tests cover.",
+      "retained_test": "packages/structured-data-models-client/tests/test_temporal_link_batching.py::test_candidate_free_link_prediction_is_refused_before_any_read"
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "scenarios/relational.temporal-link",
+      "reason": "No released Kumo Relational model serves candidate-free temporal link prediction (the NIM's 1.2.0 answers 422 UNSUPPORTED_TASK, and in-process mode does not serve it), so materialize() now refuses it with UNSUPPORTED_REQUEST, rule temporal_link_prediction, before any source is read, where 1.0.0 built the request and the endpoint refused it. The scenario expects that refusal at materialize."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "capabilities/prediction.temporal-link",
+      "reason": "No released Kumo Relational model serves candidate-free temporal link prediction (the NIM's 1.2.0 answers 422 UNSUPPORTED_TASK, and in-process mode does not serve it), so materialize() now refuses it with UNSUPPORTED_REQUEST, rule temporal_link_prediction, before any source is read, where 1.0.0 built the request and the endpoint refused it. The capability's requirement mirrors the scenario's refusal."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_contracts/relational-materialization",
+      "reason": "Candidate-free temporal link prediction is refused before materializing, so the two frame tests that built and predicted its payload are removed; test_link_prediction_frame_materialization keeps the refusal and the ranked path with candidates."
+    },
+    {
+      "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
+      "record": "api_contracts/automatic-batch-sessions",
+      "reason": "Candidate-free temporal link prediction is refused before any source read, so its 200-row batches are never built; the note describes the refusal the linked batching tests now cover."
     }
   ],
   "capabilities": [
@@ -9235,7 +9256,10 @@
             "snowflake-semantic"
           ],
           "expected": {
-            "status": "supported"
+            "status": "refused",
+            "stage": "materialize",
+            "code": "UNSUPPORTED_REQUEST",
+            "rule": "temporal_link_prediction"
           },
           "expected_by_model": {},
           "expected_by_language": {},

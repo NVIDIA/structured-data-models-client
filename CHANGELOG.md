@@ -137,6 +137,16 @@ The public API snapshot records this version update; publication remains pending
 - Gradient explanations have no separate one-row or 1,000-context-row client restriction.
   Endpoint capabilities and ordinary request limits still apply.
   The singular raw `result.explanation` view remains supported.
+- A temporal link prediction asked without candidates, such as
+  `PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id`,
+  raises `UnsupportedRequestError` with code `UNSUPPORTED_REQUEST` and
+  `details['rule']` `temporal_link_prediction`. `materialize()` and
+  `materialize_examples()` refuse it before any source is read, and
+  `predict()` refuses a request that names the task before anything is sent.
+  No released Kumo Relational model serves it, so `kumo-relational` no longer
+  lists it among its tasks. Rank an explicit candidate set with `RANK TOP k`
+  and `candidates=` instead. 1.0.0 built the request, and the endpoint
+  refused it.
 
 ### Fixed
 

@@ -34,7 +34,7 @@ from sdm_client import (
     Relationship,
     Schema,
 )
-from sdm_client.errors import StructuredDataError
+from sdm_client.errors import StructuredDataError, UnsupportedRequestError
 
 RNG = np.random.default_rng(4)
 
@@ -200,22 +200,20 @@ def test_a_foreign_key_list_distinct_still_works(query):
     """Both forms resolve to link prediction, and the multilabel refusal must
     not widen onto them.
 
-    A ranking has no task on the endpoint, so the ranked form is asked as one
-    question per candidate and needs them named. That it refuses for the want
-    of candidates is the refusal working: before, it built a request the
-    endpoint answered with `422 UNSUPPORTED_TASK`.
+    Neither has a task on the endpoint. The ranked form is asked as one
+    question per candidate and needs them named; the plain form is refused
+    before anything is read, and names the ranked form. Either refusal is the
+    refusal working: before, each built a request the endpoint answered with
+    `422 UNSUPPORTED_TASK`.
     """
-
+    with pytest.raises(StructuredDataError) as refused:
+        answer(query, graph(timed=True), KumoRelational())
+    assert 'multilabel' not in str(refused.value)
     if 'RANK' in query:
-        with pytest.raises(StructuredDataError) as refused:
-            answer(query, graph(timed=True), KumoRelational())
         assert 'candidates' in str(refused.value)
-        assert 'multilabel' not in str(refused.value)
-        return
-
-    assert answer(query, graph(timed=True), KumoRelational()) == (
-        'temporal_link_prediction'
-    )
+    else:
+        assert isinstance(refused.value, UnsupportedRequestError)
+        assert 'RANK TOP k with candidates=' in str(refused.value)
 
 
 # --- advice on a graph with no time column ---------------------------------

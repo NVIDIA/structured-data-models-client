@@ -179,3 +179,35 @@ def hand_built_result() -> Callable[..., Any]:
         )
 
     return build
+
+
+@pytest.fixture
+def source_reads(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Each fetch a core run asks of its source's provider, in order.
+
+    Counted where the run loop hands a fetch to the provider, so every route
+    over a source is seen, and a run over frames, which has no provider,
+    records none.
+    """
+    from sdm_client._rust import run as run_module
+
+    reads: list[dict[str, Any]] = []
+    steps = run_module._steps
+
+    class Counted:
+        def __init__(self, provider: Any) -> None:
+            self._provider = provider
+
+        def __call__(self, request: dict[str, Any], keys: Any) -> Any:
+            reads.append(request)
+            return self._provider(request, keys)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._provider, name)
+
+    def counted(core: Any, handle: Any, provider: Any, *rest: Any) -> Any:
+        wrapped = None if provider is None else Counted(provider)
+        return steps(core, handle, wrapped, *rest)
+
+    monkeypatch.setattr(run_module, '_steps', counted)
+    return reads

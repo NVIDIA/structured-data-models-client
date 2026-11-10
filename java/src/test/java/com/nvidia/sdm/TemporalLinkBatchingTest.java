@@ -14,7 +14,7 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.table.Table;
 import org.junit.jupiter.api.Test;
 
-/** Public Java/JNI PQL paths must share the model's temporal-link batch limit. */
+/** Public Java/JNI paths refuse candidate-free temporal link prediction before reading a source. */
 class TemporalLinkBatchingTest {
   static final String QUERY = "PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) FOR EACH users.user_id";
 
@@ -78,43 +78,32 @@ class TemporalLinkBatchingTest {
     return result;
   }
 
-  @Test void allPublicInputRoutesUseOneLimitAndKeepEveryEntity() throws Exception {
+  @Test void everyPublicInputRouteRefusesCandidateFreeLinksUpFront() throws Exception {
     for (String kind : List.of("memory", "duckdb", "sqlite")) {
       try (Connection connection = kind.equals("memory") ? null : DriverManager.getConnection(kind.equals("duckdb") ? "jdbc:duckdb:" : "jdbc:sqlite::memory:")) {
         Schema schema = schema(kind, connection);
-        for (int count : List.of(199, 200, 201)) {
-          Request request = materialize(schema, QUERY, count, null);
-          assertEquals(count <= 200 ? List.of(count) : List.of(200, 1), sizes(request), kind);
-          List<Integer> ids = new ArrayList<>();
-          for (String text : request.payloads()) {
-            var payload = object(Json.read(text.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-            assertEquals("temporal_link_prediction", object(payload.get("task")).get("kind"));
-            var table = object(object(payload.get("predict")).get("instance_table"));
-            int column = ((List<?>) table.get("columns")).indexOf("__kumo_entity_ref_0");
-            for (var row : rows(table)) ids.add(Integer.parseInt(row.get(column).toString()));
-          }
-          assertEquals(java.util.stream.IntStream.rangeClosed(1, count).boxed().toList(), ids);
-        }
-        assertEquals(List.of(100, 100, 1), sizes(materialize(schema, QUERY, 201, 100)));
-        assertEquals(List.of(200, 1), sizes(materialize(schema, QUERY, 201, 1000)));
+        StructuredDataException refused = assertThrows(StructuredDataException.class,
+            () -> materialize(schema, QUERY, 201, null), kind);
+        assertEquals("UNSUPPORTED_REQUEST", refused.code(), kind);
+        assertEquals("temporal_link_prediction", refused.details().get("rule"), kind);
+        assertTrue(refused.getMessage().contains("RANK TOP k with candidates="), refused::getMessage);
         assertEquals(List.of(201), sizes(materialize(schema,
             "PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id", 201, null)));
       }
     }
   }
 
-  @Test void suppliedExamplesKeepTheSameCap() throws Exception {
+  @Test void suppliedLinkExamplesAreRefusedUpFront() throws Exception {
     var fixture = fixture();
     var test = cases(fixture).stream().filter(c -> c.get("id").equals("temporal_link_prediction")).findFirst().orElseThrow();
-    var predicted = new LinkedHashMap<>(object(test.get("predict")));
-    predicted.put("rows", Collections.nCopies(201, rows(predicted).get(0)));
+    Schema schema = memory(fixture, false);
     try (RootAllocator allocator = new RootAllocator();
         Table context = arrow(allocator, object(test.get("context")), "temporal_link_prediction");
-        Table predict = arrow(allocator, predicted, "temporal_link_prediction")) {
-      Request request = memory(fixture, false).materializeExamples(task(test), context, predict,
-          ExamplesOptions.builder().rowsPerCall(1000).build());
-      assertEquals(List.of(200, 1), sizes(request));
+        Table predict = arrow(allocator, object(test.get("predict")), "temporal_link_prediction")) {
+      StructuredDataException refused = assertThrows(StructuredDataException.class,
+          () -> schema.materializeExamples(task(test), context, predict));
+      assertEquals("UNSUPPORTED_REQUEST", refused.code());
+      assertEquals("temporal_link_prediction", refused.details().get("rule"));
     }
   }
-
 }

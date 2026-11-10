@@ -164,15 +164,15 @@ The second line of that refusal is a rule of its own: **aggregate a number, not
 a category.** The one way to ask about a category is `LIST_DISTINCT` over a
 foreign key.
 
-**Give that one `RANK TOP k`.** Without the clause it is a link prediction,
-which the client builds natively and the deployment has no task for:
+**Give that one `RANK TOP k`.** Without the clause it is a temporal link
+prediction, which no released model serves, so the client refuses it before
+reading anything:
 
 ```
 PREDICT LIST_DISTINCT(orders.item, 0, 30, days) FOR EACH users.user_id
-→ [422 UNSUPPORTED_TASK] task 'temporal_link_prediction' not supported by
-  model 'kumo-relational'; supported: ['classification',
-  'binary_classification',
-  'multiclass_classification', 'regression'].
+→ candidate-free temporal link prediction ('temporal_link_prediction') is not
+  served by any released Kumo Relational model. Use RANK TOP k with
+  candidates= to rank an explicit candidate set.
 ```
 
 That is what `RANK` is for: it asks the same question as one classification

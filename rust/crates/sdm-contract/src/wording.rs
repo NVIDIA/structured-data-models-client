@@ -882,6 +882,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::ModelLacksTask => {
             said(r#"{model} does not serve the task kind {task!r}; it serves {supported!r}"#)
         }
+        S::TemporalLinkUnserved => said(
+            r#"candidate-free temporal link prediction ('temporal_link_prediction') is not served by any released Kumo Relational model. Use RANK TOP k with candidates= to rank an explicit candidate set."#,
+        ),
         S::ModelLacksOutputs => said(
             r#"{model} does not produce {unsupported_outputs!r}; it produces {supported_outputs!r}"#,
         ),

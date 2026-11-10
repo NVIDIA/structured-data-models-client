@@ -994,6 +994,7 @@ sentences! {
     MetadataNotAMapping = "metadata_not_a_mapping", E::InvalidResponse;
     ModelLacksShape = "model_lacks_shape", E::UnsupportedRequest;
     ModelLacksTask = "model_lacks_task", E::UnsupportedRequest;
+    TemporalLinkUnserved = "temporal_link_unserved", E::UnsupportedRequest, rule "temporal_link_prediction";
     ModelLacksOutputs = "model_lacks_outputs", E::UnsupportedRequest;
     ContextPastModel = "context_past_model", E::UnsupportedRequest;
     NoContextRows = "no_context_rows", E::UnsupportedRequest;

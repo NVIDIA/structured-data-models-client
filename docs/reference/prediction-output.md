@@ -19,7 +19,7 @@ The shape depends on the **task**, not the model.
 | classification | one per entity |
 | multiclass classification | one per entity, with a probability per class **as columns** |
 | regression | one per entity |
-| ranking / temporal link prediction | one per entity, the `k` candidates **in a list** |
+| ranking | one per entity, the `k` candidates **in a list** |
 | forecasting | one per entity per step |
 
 Ranking is the exception to the row-per-answer rule: expanding the candidates
