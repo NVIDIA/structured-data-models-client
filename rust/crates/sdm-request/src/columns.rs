@@ -977,7 +977,7 @@ pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
     let mut seen = BTreeSet::new();
     let mut next_id = 0i64;
     let mut instances = Vec::new();
-    let mut related: Vec<(String, Value)> = Vec::new();
+    let mut related = Vec::new();
     let mut schema = field(first, "schema")?.clone();
     for payload in payloads {
         let context = field(payload, "context")?;
@@ -1011,49 +1011,15 @@ pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
             for (name, rows) in members(tables)? {
                 let read = Table::read(rows)?;
                 let at = read.at("instance_id")?;
-                let held = match related.iter_mut().find(|(n, _)| n == name) {
-                    Some((_, held)) => held,
-                    None => {
-                        let mut empty = rows.clone();
-                        empty.set("rows", Value::Array(vec![]));
-                        related.push((name.clone(), empty));
-                        &mut related.last_mut().expect("just pushed").1
-                    }
-                };
-                // A call may send a column another did not, such as a key
-                // to a table only it reached: rows take every column, a
-                // cell their call did not send left null.
-                let mut names = array(field(held, "columns")?)?.to_vec();
-                for column in array(field(rows, "columns")?)? {
-                    if !names.contains(column) {
-                        names.push(column.clone());
-                    }
-                }
-                let widen = |row: &[Value], from: &[Value]| {
-                    names
-                        .iter()
-                        .map(|name| {
-                            from.iter()
-                                .position(|f| f == name)
-                                .map_or(Value::Null, |i| row[i].clone())
-                        })
-                        .collect::<Vec<_>>()
-                };
-                let before = array(field(held, "columns")?)?.to_vec();
-                let mut all = array(field(held, "rows")?)?
-                    .iter()
-                    .map(|row| Ok(Value::Array(widen(array(row)?, &before))))
-                    .collect::<Result<Vec<_>, CoreError>>()?;
-                let from = array(field(rows, "columns")?)?;
+                let mut renamed = Vec::new();
                 for row in &read.rows {
                     if let Some(&new) = kept.get(&key(&row[at])?) {
                         let mut row = row.to_vec();
                         row[at] = Value::int(new);
-                        all.push(Value::Array(widen(&row, from)));
+                        renamed.push(row);
                     }
                 }
-                held.set("columns", Value::Array(names.clone()));
-                held.set("rows", Value::Array(all));
+                gather(&mut related, name, rows, renamed)?;
             }
         }
         let step = field(payload, "schema")?;
@@ -1102,7 +1068,7 @@ pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
         p.get("context")
             .is_some_and(|c| c.get("related_tables").is_some())
     }) {
-        context.set("related_tables", Value::Object(related));
+        context.set("related_tables", gathered(related));
     }
     let mut out = first.clone();
     out.set("schema", schema);
@@ -1110,13 +1076,96 @@ pub fn sent(payloads: &[Value]) -> Result<Value, CoreError> {
     Ok(out)
 }
 
-/// Union forecast evidence before cohort selection. Steps namespace instance identity.
+/// A related table's rows as several calls or forecast steps send them.
+/// One may send a column another did not, such as a key to a table only it
+/// reached: rows take every column, a cell their call did not send left
+/// null.
+struct Held {
+    name: String,
+    table: Value,
+    columns: Vec<Value>,
+    rows: Vec<Vec<Value>>,
+}
+
+/// Adds the rows a call sent of `table`, under its own columns. Held rows
+/// are widened only when the call adds a column; otherwise its rows are
+/// appended.
+fn gather(
+    held: &mut Vec<Held>,
+    name: &str,
+    table: &Value,
+    rows: Vec<Vec<Value>>,
+) -> Result<(), CoreError> {
+    let from = array(field(table, "columns")?)?;
+    let at = match held.iter().position(|h| h.name == name) {
+        Some(at) => at,
+        None => {
+            let mut empty = table.clone();
+            empty.set("rows", Value::Array(vec![]));
+            held.push(Held {
+                name: name.into(),
+                table: empty,
+                columns: from.to_vec(),
+                rows: vec![],
+            });
+            held.len() - 1
+        }
+    };
+    let held = &mut held[at];
+    let width = held.columns.len();
+    for column in from {
+        if !held.columns.contains(column) {
+            held.columns.push(column.clone());
+        }
+    }
+    if held.columns.len() > width {
+        for row in &mut held.rows {
+            row.resize(held.columns.len(), Value::Null);
+        }
+    }
+    let cells = held
+        .columns
+        .iter()
+        .map(|c| from.iter().position(|f| f == c))
+        .collect::<Vec<_>>();
+    held.rows.extend(rows.into_iter().map(|mut row| {
+        cells
+            .iter()
+            .map(|i| i.map_or(Value::Null, |i| std::mem::replace(&mut row[i], Value::Null)))
+            .collect()
+    }));
+    Ok(())
+}
+
+/// The related tables held, in the order first sent, each under every
+/// column sent.
+fn gathered(held: Vec<Held>) -> Value {
+    Value::Object(
+        held.into_iter()
+            .map(|mut h| {
+                h.table.set("columns", Value::Array(h.columns));
+                h.table.set(
+                    "rows",
+                    Value::Array(h.rows.into_iter().map(Value::Array).collect()),
+                );
+                (h.name, h.table)
+            })
+            .collect(),
+    )
+}
+
+/// Union forecast evidence before cohort selection. Steps namespace instance
+/// identity, and a related table takes every column any step sent, as the
+/// calls of one request do in [`sent`]: a step may reach a table another
+/// did not, and so send a key to it.
 pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
     let Some(first) = payloads.first() else {
         return Err(invalid("empty analysis request"));
     };
     let mut out = first.clone();
-    let mut contexts = Vec::new();
+    let mut context = field(first, "context")?.clone();
+    let mut instances = Vec::new();
+    let mut related = Vec::new();
     let mut next_id = 0i64;
     let mut schema = field(first, "schema")?.clone();
     for payload in payloads {
@@ -1125,10 +1174,16 @@ pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
         {
             return Err(invalid("forecast tasks differ"));
         }
-        let mut context = field(payload, "context")?.clone();
-        let instance = Table::read(field(&context, "instance_table")?)?;
+        let step = field(payload, "context")?;
+        if field(field(step, "instance_table")?, "columns")?
+            != field(field(&context, "instance_table")?, "columns")?
+        {
+            return Err(invalid("forecast columns differ"));
+        }
+        let instance = Table::read(field(step, "instance_table")?)?;
+        let mut ids = None;
         if let Ok(id) = instance.at("instance_id") {
-            let mut ids = BTreeMap::new();
+            let ids = ids.insert(BTreeMap::new());
             for row in &instance.rows {
                 let k = key(&row[id])?;
                 if ids.insert(k, next_id).is_some() {
@@ -1138,37 +1193,29 @@ pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
                     .checked_add(1)
                     .ok_or_else(|| invalid("forecast too large"))?;
             }
-            fn rename(table: &mut Value, ids: &BTreeMap<String, i64>) -> Result<(), CoreError> {
-                let read = Table::read(table)?;
-                let id = read.at("instance_id")?;
-                let rows = read
-                    .rows
-                    .iter()
-                    .map(|r| {
-                        let mut row = r.to_vec();
-                        row[id] = Value::int(
-                            *ids.get(&key(&r[id])?)
-                                .ok_or_else(|| invalid("unknown forecast instance"))?,
-                        );
-                        Ok(Value::Array(row))
-                    })
-                    .collect::<Result<Vec<_>, CoreError>>()?;
-                table.set("rows", Value::Array(rows));
-                Ok(())
-            }
-            let mut table = field(&context, "instance_table")?.clone();
-            rename(&mut table, &ids)?;
-            context.set("instance_table", table);
-            if let Some(related) = context.get("related_tables") {
-                let tables = members(related)?
-                    .iter()
-                    .map(|(name, t)| {
-                        let mut t = t.clone();
-                        rename(&mut t, &ids)?;
-                        Ok((name.clone(), t))
-                    })
-                    .collect::<Result<_, CoreError>>()?;
-                context.set("related_tables", Value::Object(tables));
+        }
+        let rename = |table: &Table<'_>| -> Result<Vec<Vec<Value>>, CoreError> {
+            let Some(ids) = &ids else {
+                return Ok(table.rows.iter().map(|r| r.to_vec()).collect());
+            };
+            let id = table.at("instance_id")?;
+            table
+                .rows
+                .iter()
+                .map(|r| {
+                    let mut row = r.to_vec();
+                    row[id] = Value::int(
+                        *ids.get(&key(&r[id])?)
+                            .ok_or_else(|| invalid("unknown forecast instance"))?,
+                    );
+                    Ok(row)
+                })
+                .collect()
+        };
+        instances.extend(rename(&instance)?);
+        if let Some(tables) = step.get("related_tables") {
+            for (name, table) in members(tables)? {
+                gather(&mut related, name, table, rename(&Table::read(table)?)?)?;
             }
         }
         let step_schema = field(payload, "schema")?;
@@ -1178,20 +1225,39 @@ pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
         {
             return Err(invalid("forecast instance schema or anchor differs"));
         }
-        for name in ["related_tables"] {
-            if let Some(value) = step_schema.get(name) {
-                let mut combined = schema.get(name).cloned().unwrap_or(Value::Object(vec![]));
-                for (table, desc) in members(value)? {
-                    if let Some(existing) = combined.get(table) {
-                        if existing != desc {
+        if let Some(value) = step_schema.get("related_tables") {
+            let mut combined = schema
+                .get("related_tables")
+                .cloned()
+                .unwrap_or(Value::Object(vec![]));
+            fn rest(described: &Value) -> Result<Vec<&(String, Value)>, CoreError> {
+                Ok(members(described)?
+                    .iter()
+                    .filter(|(name, _)| name != "columns")
+                    .collect())
+            }
+            for (table, desc) in members(value)? {
+                let Some(mut held) = combined.get(table).cloned() else {
+                    combined.set(table, desc.clone());
+                    continue;
+                };
+                if rest(&held)? != rest(desc)? {
+                    return Err(invalid("forecast table schemas differ"));
+                }
+                let mut columns = field(&held, "columns")?.clone();
+                for (column, spec) in members(field(desc, "columns")?)? {
+                    match columns.get(column) {
+                        None => columns.set(column, spec.clone()),
+                        Some(other) if other != spec => {
                             return Err(invalid("forecast table schemas differ"));
                         }
-                    } else {
-                        combined.set(table, desc.clone());
+                        Some(_) => {}
                     }
                 }
-                schema.set(name, combined);
+                held.set("columns", columns);
+                combined.set(table, held);
             }
+            schema.set("related_tables", combined);
         }
         if let Some(value) = step_schema.get("relationships") {
             let mut links = schema
@@ -1207,40 +1273,20 @@ pub fn forecast(payloads: &[Value]) -> Result<Value, CoreError> {
             }
             schema.set("relationships", Value::Array(links));
         }
-        contexts.push(context);
     }
-    fn append(target: &mut Value, source: &Value) -> Result<(), CoreError> {
-        if field(target, "columns")? != field(source, "columns")? {
-            return Err(invalid("forecast columns differ"));
-        }
-        let mut rows = array(field(target, "rows")?)?.to_vec();
-        rows.extend_from_slice(array(field(source, "rows")?)?);
-        target.set("rows", Value::Array(rows));
-        Ok(())
+    let mut instance_table = field(&context, "instance_table")?.clone();
+    instance_table.set(
+        "rows",
+        Value::Array(instances.into_iter().map(Value::Array).collect()),
+    );
+    context.set("instance_table", instance_table);
+    if payloads.iter().any(|p| {
+        p.get("context")
+            .is_some_and(|c| c.get("related_tables").is_some())
+    }) {
+        context.set("related_tables", gathered(related));
     }
-    let mut combined = contexts.remove(0);
-    for context in contexts {
-        let mut table = field(&combined, "instance_table")?.clone();
-        append(&mut table, field(&context, "instance_table")?)?;
-        combined.set("instance_table", table);
-        if let Some(related) = context.get("related_tables") {
-            let mut tables = combined
-                .get("related_tables")
-                .cloned()
-                .unwrap_or(Value::Object(vec![]));
-            for (name, table) in members(related)? {
-                let mut target = tables.get(name).cloned().unwrap_or_else(|| {
-                    let mut t = table.clone();
-                    t.set("rows", Value::Array(vec![]));
-                    t
-                });
-                append(&mut target, table)?;
-                tables.set(name, target);
-            }
-            combined.set("related_tables", tables);
-        }
-    }
-    out.set("context", combined);
+    out.set("context", context);
     out.set("schema", schema);
     Ok(out)
 }
@@ -1370,7 +1416,7 @@ mod lifecycle_tests {
     }
 
     #[test]
-    fn calls_that_reached_different_tables_are_analysed_together() {
+    fn calls_or_forecast_steps_that_reached_different_tables_are_analysed_together() {
         let users = r#""users":{"primary_key":["instance_id","uid"],"columns":{"instance_id":{"stype":"ID"},"uid":{"stype":"ID"},"age":{"stype":"numerical"}}}"#;
         let orders = |key: &str| {
             format!(
@@ -1410,10 +1456,18 @@ mod lifecycle_tests {
         };
         let first = call("[0,1,0],[1,2,1]", "[0,1,30],[1,2,40]", false);
         let second = call("[0,1,0],[1,2,1]", "[0,1,30],[1,2,40]", true);
-        assert!(matches!(
-            analyze(&sent(&[first, second]).unwrap()).unwrap(),
-            ColumnAnalysis::Ready { .. }
-        ));
+        for combine in [sent, forecast] {
+            let combined = combine(&[first.clone(), second.clone()]).unwrap();
+            let context = field(&combined, "context").unwrap();
+            let orders = field(field(context, "related_tables").unwrap(), "orders").unwrap();
+            let orders = Table::read(orders).unwrap();
+            assert_eq!(orders.names, ["instance_id", "oid", "uid", "pid"]);
+            assert_eq!(orders.rows[0][3], Value::Null);
+            assert!(matches!(
+                analyze(&combined).unwrap(),
+                ColumnAnalysis::Ready { .. }
+            ));
+        }
     }
 
     #[test]
