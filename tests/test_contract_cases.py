@@ -11,6 +11,7 @@ import copy
 import importlib.util
 import json
 import re
+import sys
 from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
@@ -133,6 +134,23 @@ def test_a_case_sets_its_time_zone_for_every_cursor() -> None:
 _VECTOR_SETUP_KEYS = ('setup', 'witness')
 
 
+#: Zone statements a vector holds beside its setup, which its readers run
+#: on the setup's database: provider-vectors.json's global zone and the
+#: session zone it shows the source does not read in.
+_VECTOR_ZONE_KEYS = ('zone', 'session_zone')
+
+
+#: The DuckDB scenario setups held in Python, by module and the name it
+#: holds them under; ranking's are those naming no other database.
+_SCENARIO_SETUPS = (
+    ('decimal_vectors', 'VECTORS'),
+    ('duckdb_value_scenarios', 'SOURCES'),
+    ('empty_null_vectors', 'VECTORS'),
+    ('error_wording_scenarios', 'PROBES'),
+    ('ranking_scenarios', 'VECTORS'),
+)
+
+
 _VECTOR_ZONE_PENDING: set[str] = set()
 
 
@@ -168,11 +186,22 @@ def _vector_setups(node: Any, where: str) -> list[tuple[str, list[str]]]:
     found: list[tuple[str, list[str]]] = []
     if isinstance(node, dict):
         where = str(node.get('id', where))
+        zones = [
+            node[key]
+            for key in _VECTOR_ZONE_KEYS
+            if isinstance(node.get(key), str)
+        ]
         for key, value in node.items():
             if key in _VECTOR_SETUP_KEYS and isinstance(value, (str, list)):
                 statements = [value] if isinstance(value, str) else value
                 found.append(
-                    (where, [s for s in statements if isinstance(s, str)])
+                    (
+                        where,
+                        [
+                            *zones,
+                            *(s for s in statements if isinstance(s, str)),
+                        ],
+                    )
                 )
             found += _vector_setups(value, where)
     elif isinstance(node, list):
@@ -181,20 +210,78 @@ def _vector_setups(node: Any, where: str) -> list[tuple[str, list[str]]]:
     return found
 
 
+def _support(stem: str) -> ModuleType:
+    if stem not in sys.modules:
+        path = ROOT / 'contract/support' / f'{stem}.py'
+        spec = importlib.util.spec_from_file_location(stem, path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[stem] = module
+        spec.loader.exec_module(module)
+    return sys.modules[stem]
+
+
+def _scenario_setups() -> list[tuple[str, list[str]]]:
+    r"""Each DuckDB scenario setup held in Python (:data:`_SCENARIO_SETUPS`
+    and the giant-value sources), named by module and scenario."""
+    found: list[tuple[str, list[str]]] = []
+    for stem, name in _SCENARIO_SETUPS:
+        held = getattr(_support(stem), name)
+        entries = held.items() if isinstance(held, dict) else enumerate(held)
+        for key, entry in entries:
+            if isinstance(entry, list):
+                found.append((f'{stem} {key}', entry))
+            elif entry.get('database', 'duckdb') == 'duckdb':
+                where = str(entry.get('name', key))
+                found += [
+                    (f'{stem} {each}', setup)
+                    for each, setup in _vector_setups(entry, where)
+                ]
+    values = _support('duckdb_value_scenarios')
+    found += [
+        (
+            f'duckdb_value_scenarios big.{kind}.{mode}',
+            values.big_setup(kind, mode),
+        )
+        for kind in values.BIG_KINDS
+        for mode in values.BIG_MODES
+    ]
+    return found
+
+
 def test_a_vector_sets_its_time_zone_for_every_cursor() -> None:
     # Setup and source reads use separate cursors. Set the database-wide
     # timezone so results do not depend on each cursor's process-local zone.
+    # The vector files and the DuckDB scenarios held in Python both name it
+    # only in the allowed forms, and a setup holding zoned timestamps pins
+    # it globally.
+    setups = [
+        (f'{path.name} {vector}', setup)
+        for path in sorted((ROOT / 'contract').glob('*-vectors.json'))
+        for vector, setup in _vector_setups(
+            json.loads(path.read_text(encoding='utf-8')), '?'
+        )
+    ]
+    scenarios = _scenario_setups()
     problems = set()
     named = 0
-    for path in sorted((ROOT / 'contract').glob('*-vectors.json')):
-        document = json.loads(path.read_text(encoding='utf-8'))
-        for vector, setup in _vector_setups(document, '?'):
-            named += sum(bool(_ZONE.search(each)) for each in setup)
-            problems.update(
-                _vector_zone_problems(f'{path.name} {vector}', setup)
-            )
+    for where, setup in [*setups, *scenarios]:
+        named += sum(bool(_ZONE.search(each)) for each in setup)
+        problems.update(_vector_zone_problems(where, setup))
+        problems.update(_unzoned(where, setup))
     assert problems == _VECTOR_ZONE_PENDING
     assert named > len(_VECTOR_ZONE_PENDING), 'no vector sets its zone'
+    # Not vacuous: the probes and the zoned empty-null scenarios are read.
+    zoned = {
+        where
+        for where, setup in scenarios
+        if any(_ZONED.search(each) for each in setup)
+    }
+    assert {
+        'error_wording_scenarios infinity.timestamptz.positive',
+        'empty_null_vectors null.time-timestamptz',
+    } <= zoned, sorted(zoned)
+    assert len(scenarios) > 300, len(scenarios)
     # Seeded: a session SET passes only beside a global one, in the same
     # setup; nothing else does.
     pinned = "SET GLOBAL TimeZone = 'UTC'"
@@ -214,6 +301,12 @@ def test_a_vector_sets_its_time_zone_for_every_cursor() -> None:
         [pinned],
     ):
         assert not _vector_zone_problems('seed', setup), setup
+    # Seeded: zoned timestamps need the global pin; a session one alone,
+    # or none, fails.
+    zoned_table = "CREATE TABLE t AS SELECT TIMESTAMPTZ '2024-01-01' AS ts"
+    assert _unzoned('seed', [zoned_table])
+    assert _unzoned('seed', ["SET TimeZone = 'UTC'", zoned_table])
+    assert not _unzoned('seed', [pinned, zoned_table])
 
 
 def test_every_committed_case_validates_with_a_unique_id() -> None:
