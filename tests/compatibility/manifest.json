@@ -8288,6 +8288,11 @@
       "base_commit": "622a4f4b3bc8ef3ddc356805eb2cb868011a48c6",
       "record": "api_contracts/automatic-batch-sessions",
       "reason": "Candidate-free temporal link prediction is refused before any source read, so its 200-row batches are never built; the note describes the refusal the linked batching tests now cover."
+    },
+    {
+      "base_commit": "39e79068e556a0c40a1097262954f3f0b2879308",
+      "record": "type_contracts/arrow-admission-and-inference",
+      "reason": "Fixture cleanup removes unused historical observation/provenance fields. All 110 vector IDs and every retained type, witness, admission and inference fact remain unchanged; update the whole-file checksum."
     }
   ],
   "capabilities": [
@@ -9830,7 +9835,7 @@
         ]
       },
       "evidence_level": "local-boundary",
-      "vectors_sha256": "b1ae6bd5fd9eebe14020b88ce02326696f70757a7a6535cd79da5e491995adef"
+      "vectors_sha256": "98cd6e5638af8bad60583b0bdc537bd8d47ca363608350d96c5555b2b2e3b515"
     },
     {
       "id": "semantic-types",

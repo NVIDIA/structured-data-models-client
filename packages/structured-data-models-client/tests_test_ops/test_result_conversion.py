@@ -402,7 +402,9 @@ def test_each_type_reaches_the_core_as_the_conversion_table_says_without_loss(
     source: Source | None,
 ) -> None:
     if source is None:
-        pytest.skip('PostgreSQL-dependent conversion matrix requires a test DSN')
+        pytest.skip(
+            'PostgreSQL-dependent conversion matrix requires a test DSN'
+        )
     problems = _problems(_read(source.providers()), source.own_read)
     assert not problems, '\n'.join(problems)
 
@@ -470,7 +472,9 @@ def test_a_unit_or_scale_change_in_one_driver_s_path_fails(
     source: Source | None, column: str, to: pa.DataType
 ) -> None:
     if source is None:
-        pytest.skip('PostgreSQL-dependent conversion matrix requires a test DSN')
+        pytest.skip(
+            'PostgreSQL-dependent conversion matrix requires a test DSN'
+        )
     providers = source.providers()
     providers['postgres'] = _Seeded(providers['postgres'], column, to)
     read = {column: {d: _admitted(providers[d], d, column) for d in DATABASES}}

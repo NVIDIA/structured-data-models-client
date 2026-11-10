@@ -90,7 +90,7 @@ No claim is made here of exhaustive live warehouse/model coverage or a fresh int
 | 1. Map and prioritize | Complete: inventory, consumer mapping and independent audit. |
 | 2. Replace and delete | Complete: replacements, focused validation, reconciled tracking and final independent review. |
 | 3. Simplify plumbing | Complete: dead compression/recording code removed; active correctness/API/protocol checks and developer guidance reconciled. |
-| 4. Review and validate | Then run integrated Rust/Python/Java suites, connector checks, lint/type checks and schema/capability gates. Run live checks where changed behavior or maintained requirements require them. |
+| 4. Review and validate | In progress via PR #96 CI. Run integrated Rust/Python/Java suites, connector checks, lint/type checks and schema/capability gates. Run live checks where changed behavior or maintained requirements require them. |
 
 Step 2 completion requires actual file totals, no unresolved deleted-input consumers, independent review of coverage decisions and honest affected-test evidence.
 It does not mean every recorded artifact should be deleted or that steps 3/4 have already passed.
@@ -133,3 +133,17 @@ Ruff, the generated-sort check, repository-size gate and repository hygiene all 
 Logs: `/tmp/fixture-step3-first-batch.log`, `/tmp/fixture-step3-compression-removal.log`, `/tmp/fixture-step3-runner-cleanup-final.log`, `/tmp/fixture-step3-gates.log`, `/tmp/fixture-step3-size-gate.log` and `/tmp/fixture-step3-hygiene.log`.
 No live warehouse/model run or integrated Rust/Java suite is claimed for this tooling-only step.
 Step 4 remains the integrated validation milestone.
+
+### Step 4 integration
+
+PR #96 targets `release-2-0-gaps`; validation includes its eight commits after the cleanup baseline, through `39e79068e`.
+Preserve those catalog-reuse, forecast-analysis and temporal-link refusal changes while keeping the snapshot removals.
+The DuckDB conflict is resolved with direct catalog metadata and unchanged-catalog fetch assertions; the obsolete SQL snapshot remains deleted.
+Use PR CI for integrated checks and low-frequency run watchers; inspect failed jobs before retrying.
+Do not merge the PR until validation is complete and the user requests the merge.
+
+First integrated run: https://github.com/NVIDIA/structured-data-models-client/actions/runs/42857649680 (commit `67bf5ca4b`).
+CI exposed a Python formatting issue, a stale type-vector checksum in the capability manifest, and a lexer test importing the parser from the engine crate.
+Local corrections preserve all 110 type-vector IDs/retained fields, document the manifest change against the PR base, and move the unchanged token test into the parser crate.
+The compatibility test selection passes all 91 tests; dependency and architecture policies pass after the move.
+The hosted run remains in progress; these corrections do not yet constitute green final CI.
