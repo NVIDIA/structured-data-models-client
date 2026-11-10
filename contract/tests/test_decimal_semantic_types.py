@@ -51,15 +51,6 @@ def case() -> tuple[dict[str, Any], str]:
     return loaded, digest
 
 
-def column_d(line: dict[str, Any]) -> dict[str, Any]:
-    r"""``orders.d`` in a line's public schema."""
-    [orders] = [
-        t for t in line['public']['schema']['tables'] if t['name'] == 'orders'
-    ]
-    [d] = [c for c in orders['columns'] if c['name'] == 'd']
-    return d
-
-
 def test_the_case_is_a_scaled_decimal_past_float64() -> None:
     r"""The case is what it names: one setup statement adding ``orders.d``,
     a ``DECIMAL(38, 18)`` stepping by 1e-18 over the shop base's 80 orders,
@@ -129,10 +120,43 @@ def test_decimal_column_has_connector_specific_semantic_type(
     assert 'describe_source' in line['identity']['operations']
     assert line['outcome']['result'] == 'success'
     assert line['outcome']['stage'] == 'from_source'
-    expected = (
-        {'dtype': 'string', 'stype': 'text'}
-        if database == 'sqlite'
-        else {'dtype': 'float64', 'stype': 'categorical'}
-    )
-    column = column_d(line)
-    assert {name: column[name] for name in expected} == expected
+    sqlite = database == 'sqlite'
+
+    def column(name: str, dtype: str, stype: str) -> dict[str, str]:
+        return {'dtype': dtype, 'name': name, 'stype': stype}
+
+    assert line['public']['schema'] == {
+        'links': [['orders', 'user_id', 'users', 'user_id']],
+        'tables': [
+            {
+                'columns': [
+                    column('order_id', 'int64', 'ID'),
+                    column('user_id', 'int64', 'ID'),
+                    column('price', 'float64', 'numerical'),
+                    column(
+                        'ts',
+                        'string' if sqlite else 'timestamp[us]',
+                        'timestamp',
+                    ),
+                    column('d', 'string', 'text')
+                    if sqlite
+                    else column('d', 'float64', 'categorical'),
+                ],
+                'duplicate_keys': 0,
+                'name': 'orders',
+                'primary_key': 'order_id',
+                'time_column': 'ts',
+            },
+            {
+                'columns': [
+                    column('user_id', 'int64', 'ID'),
+                    column('age', 'int64', 'numerical'),
+                    column('country', 'string', 'categorical'),
+                ],
+                'duplicate_keys': 0,
+                'name': 'users',
+                'primary_key': 'user_id',
+                'time_column': None,
+            },
+        ],
+    }
