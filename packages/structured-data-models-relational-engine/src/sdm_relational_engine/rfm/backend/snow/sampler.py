@@ -84,10 +84,23 @@ class SnowSampler(SQLSampler):
         random_seed: int | None = None,
         entity_ids: list | None = None,
     ) -> pd.DataFrame:
-        # NOTE Snowflake does support `SEED` only as part of `SYSTEM` sampling,
-        # which samples blocks rather than a fixed number of rows.
-        if entity_ids is None:
-            self._warn_random_seed_unsupported(random_seed)
+        """Sample rows of an entity table from Snowflake.
+
+        With ``entity_ids``, exactly those entities are fetched. With a
+        ``random_seed`` (and no ``entity_ids``), the draw is deterministic
+        and spends its limit on distinct entities: rows are first reduced
+        to one representative row per primary key (the earliest-time row,
+        chosen deterministically and independently of the seed), then
+        ordered by a hash of the key and the seed, and the first
+        ``num_rows`` are taken. Without a seed, the draw uses Snowflake's
+        unseeded ``SAMPLE ROW``.
+        """
+        # NOTE Snowflake supports `SEED` only as part of `SYSTEM` sampling,
+        # which samples blocks rather than a fixed number of rows. A seeded
+        # draw therefore orders by a hash of the primary key and the seed
+        # and takes the first `num_rows` rows instead: deterministic across
+        # calls, unlike `SAMPLE ROW`, which ignores the seed entirely.
+        seeded = entity_ids is None and random_seed is not None
 
         num_rows = min(num_rows, 1_000_000)  # Snowflake's upper limit.
 
@@ -120,7 +133,7 @@ class SnowSampler(SQLSampler):
             self.table_column_proj_dict[table_name][column]
             for column in self._ordered_columns(table_name, columns)
         ]
-        if entity_ids is not None:
+        if entity_ids is not None or seeded:
             sql = (
                 f'SELECT {", ".join(projections)}\n'
                 f'FROM {self.source_name_dict[table_name]}'
@@ -133,6 +146,32 @@ class SnowSampler(SQLSampler):
             )
         if len(filters) > 0:
             sql += f'\nWHERE{" AND".join(filters)}'
+        if seeded:
+            key_ref = self.table_column_ref_dict[table_name][key]
+            # The caller drops duplicate keys, keeping the first row per
+            # key, so the limit must count distinct keys rather than
+            # rows: first reduce to one representative row per key. The
+            # representative is the row the caller would have kept —
+            # earliest time first under the hash ordering — with the
+            # remaining columns as tie-breakers, so the choice is
+            # deterministic and does not depend on the seed.
+            window_order: list[str] = []
+            if column is not None:
+                window_order.append(
+                    self.table_column_ref_dict[table_name][column]
+                )
+            window_order.extend(
+                self.table_column_ref_dict[table_name][name]
+                for name in self._ordered_columns(table_name, columns)
+                if name != key and name != column
+            )
+            partition_order = ', '.join(window_order) or key_ref
+            sql += (
+                f'\nQUALIFY ROW_NUMBER() OVER ('
+                f'PARTITION BY {key_ref} ORDER BY {partition_order}) = 1'
+            )
+            sql += f'\nORDER BY HASH({key_ref}, {random_seed})'
+            sql += f'\nLIMIT {num_rows}'
 
         with paramstyle(self._connection), self._connection.cursor() as cursor:
             # NOTE This may return duplicate primary keys. This is okay.
