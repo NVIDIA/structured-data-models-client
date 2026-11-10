@@ -84,6 +84,15 @@ class SnowSampler(SQLSampler):
         random_seed: int | None = None,
         entity_ids: list | None = None,
     ) -> pd.DataFrame:
+        """Sample rows of an entity table from Snowflake.
+
+        With ``entity_ids``, exactly those entities are fetched. With a
+        ``random_seed`` (and no ``entity_ids``), the draw is deterministic:
+        rows are ordered by a hash of the primary key and the seed, with
+        ties broken by the time column (when the table has one) and then
+        by the key itself, and the first ``num_rows`` rows are taken.
+        Without a seed, the draw uses Snowflake's unseeded ``SAMPLE ROW``.
+        """
         # NOTE Snowflake supports `SEED` only as part of `SYSTEM` sampling,
         # which samples blocks rather than a fixed number of rows. A seeded
         # draw therefore orders by a hash of the primary key and the seed
@@ -137,7 +146,15 @@ class SnowSampler(SQLSampler):
             sql += f'\nWHERE{" AND".join(filters)}'
         if seeded:
             key_ref = self.table_column_ref_dict[table_name][key]
-            sql += f'\nORDER BY HASH({key_ref}, {random_seed})'
+            # Break hash ties deterministically (duplicate keys share a
+            # hash): by the time column when the table has one, then by
+            # the key itself, so a given seed always selects the same rows.
+            ordering = [f'HASH({key_ref}, {random_seed})']
+            if column is not None:
+                ordering.append(self.table_column_ref_dict[table_name][column])
+            ordering.append(key_ref)
+            order_by = ', '.join(ordering)
+            sql += f'\nORDER BY {order_by}'
             sql += f'\nLIMIT {num_rows}'
 
         with paramstyle(self._connection), self._connection.cursor() as cursor:

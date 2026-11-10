@@ -327,7 +327,7 @@ def test_snow_seeded_sample_orders_by_key_hash(snow_sampler: Any) -> None:
 
     sql, parameters, _ = snow_sampler._connection.calls[-1]
     assert 'SAMPLE ROW' not in sql
-    assert 'ORDER BY HASH("user_id", 42)' in sql
+    assert 'ORDER BY HASH("user_id", 42), "ts", "user_id"' in sql
     assert 'LIMIT 10' in sql
     assert parameters is None
 
@@ -339,7 +339,7 @@ def test_snow_seeded_sample_orders_by_key_hash(snow_sampler: Any) -> None:
         random_seed=7,
     )
     sql, _, _ = snow_sampler._connection.calls[-1]
-    assert 'ORDER BY HASH("user_id", 7)' in sql
+    assert 'ORDER BY HASH("user_id", 7), "ts", "user_id"' in sql
 
 
 def test_snow_min_max_probe_keeps_table_names_out_of_the_sql(
