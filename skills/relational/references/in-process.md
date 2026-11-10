@@ -25,11 +25,12 @@ RUSTUP_TOOLCHAIN=1.97.0 pip install \
     -e './packages/structured-data-models-client[in-process]'
 ```
 
-Once a release carries it, that build goes away and the extra is the whole
-install:
+Once a release carries it, that build goes away, but the connectors package
+does not: gathering imports it whatever the client was installed from.
 
 ```
-pip install 'structured-data-models-client[in-process]'
+pip install 'structured-data-models-client[in-process]' \
+    structured-data-models-connectors
 ```
 
 A pip warning that the client `does not provide the extra 'in-process'`, or

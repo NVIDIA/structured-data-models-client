@@ -372,18 +372,27 @@ IN_PROCESS_REFERENCES = (
     'skills/relational/references/in-process.md',
 )
 
-# While the client's version is a prerelease, no index carries `in_process()`
-# and the references have to build from a checkout. Once it is a release they
-# must not, and the extra needs a floor instead. The two states are exact
-# opposites, so each one is asserted rather than only the one in force.
+# The release that first carries `in_process()`. Until the index has it the
+# references have to build from a checkout; from that release on they must not,
+# and the extra needs a floor no older than this. It is the feature's release
+# rather than "any prerelease", so that 2.1.0rc1 does not read as a client
+# without the feature and ask for the checkout back.
+FIRST_IN_PROCESS_RELEASE = (2, 0, 0)
 CHECKOUT_INSTALL = 'git clone -b v2-candidate'
-PRERELEASE_VERSION = re.compile(r'(?:a|b|rc|\.dev)\d+$')
+PRERELEASE_SUFFIX = re.compile(r'(?:a|b|rc|\.post|\.dev)\d+$')
 IN_PROCESS_FLOOR = re.compile(
-    r'structured-data-models-client\[in-process\]>=\d'
+    r'structured-data-models-client\[in-process\]>=(\d+(?:\.\d+)*)'
 )
 CLIENT_VERSION_FILE = (
     'packages/structured-data-models-client/src/sdm_client/_version.py'
 )
+
+
+def _release(version: str) -> tuple[tuple[int, ...], bool]:
+    """The version's release numbers, and whether a prerelease follows them."""
+    prerelease = PRERELEASE_SUFFIX.search(version)
+    base = version[: prerelease.start()] if prerelease else version
+    return tuple(int(part) for part in base.split('.')), prerelease is not None
 
 
 def check_in_process_install() -> int:
@@ -396,27 +405,39 @@ def check_in_process_install() -> int:
         print(f'no __version__ in {CLIENT_VERSION_FILE}', file=sys.stderr)
         return 1
     version = found.group(1)
-    prerelease = PRERELEASE_VERSION.search(version) is not None
+    release, prerelease = _release(version)
+    unpublished = release < FIRST_IN_PROCESS_RELEASE or (
+        release == FIRST_IN_PROCESS_RELEASE and prerelease
+    )
+    first = '.'.join(str(part) for part in FIRST_IN_PROCESS_RELEASE)
 
     findings = []
     for relative in IN_PROCESS_REFERENCES:
         body = (REPO_ROOT / relative).read_text(encoding='utf-8')
         checkout = CHECKOUT_INSTALL in body
-        if prerelease and not checkout:
+        if unpublished and not checkout:
             findings.append(
-                f'{relative}: installs from the index, but {version} is not '
-                'a release and carries no in_process()'
+                f'{relative}: installs from the index, but {version} is '
+                f'before {first}, the release that first carries in_process()'
             )
-        if not prerelease and checkout:
+        if not unpublished and checkout:
             findings.append(
-                f'{relative}: still builds from a checkout, but {version} '
-                'is a release'
+                f'{relative}: still builds from a checkout, but {version} is '
+                f'{first} or later'
             )
-        if not prerelease and not IN_PROCESS_FLOOR.search(body):
-            findings.append(
-                f'{relative}: the extra names no version floor, so an older '
-                'client satisfies it'
-            )
+        if not unpublished:
+            floor = IN_PROCESS_FLOOR.search(body)
+            if floor is None:
+                findings.append(
+                    f'{relative}: the extra names no version floor, so an '
+                    'older client satisfies it'
+                )
+            elif _release(floor.group(1))[0] < FIRST_IN_PROCESS_RELEASE:
+                findings.append(
+                    f'{relative}: the extra floors at {floor.group(1)}, which '
+                    f'a client without in_process() satisfies; {first} is the '
+                    'first that carries it'
+                )
 
     for finding in findings:
         print(f'in-process install: {finding}', file=sys.stderr)
