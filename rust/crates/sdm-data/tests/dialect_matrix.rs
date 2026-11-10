@@ -1336,6 +1336,26 @@ fn neighbor_windows_and_per_seed_order_keep_endpoint_semantics() {
                 .map(|s| s.text.as_str())
                 .collect::<Vec<_>>()
                 .join("\n");
+            if dialect == "databricks" {
+                for (inclusive, seed, json_field, strict, closed) in [
+                    (lower, "start", "s", ">", ">="),
+                    (upper, "end", "e", "<", "<="),
+                ] {
+                    let alias = format!("col.{json_field} AS `{seed}`");
+                    if let Some(inclusive) = inclusive {
+                        let operator = if inclusive { closed } else { strict };
+                        let predicate = format!("AND t.`at` {operator} s.`{seed}`");
+                        assert!(text.contains(&alias), "missing {alias}: {text}");
+                        assert!(
+                            text.lines().any(|line| line.trim() == predicate),
+                            "missing {predicate}: {text}"
+                        );
+                    } else {
+                        assert!(!text.contains(&alias), "unexpected {alias}: {text}");
+                        assert!(!text.contains(&format!("s.`{seed}`")), "{text}");
+                    }
+                }
+            }
             // These operators occur only in the window predicates; the row bound is <= 3.
             for (inclusive, strict, closed) in [(lower, " > ", " >= "), (upper, " < ", " <= ")] {
                 if let Some(inclusive) = inclusive {

@@ -153,22 +153,32 @@ def test_materialized_payload_labels_lags_and_links(
             if days:
                 assert cells['age'] == expected_age
         orders = related['orders']
-        assert orders['rows']
+        # Compare the complete ordered history, so omissions, duplicates and
+        # permutations cannot pass merely by containing valid source rows.
+        expected_orders = []
+        for instance, entity in instances.items():
+            source_rows = connection.execute(
+                'SELECT user_id, price, ts FROM orders '
+                'WHERE user_id = ? AND ts <= ? '
+                'ORDER BY ts DESC, order_id ASC',
+                [entity, anchors[instance].tz_localize(None)],
+            ).fetchall()
+            expected_orders.extend(
+                (instance, user_id, price, pd.Timestamp(ts, tz='UTC'))
+                for user_id, price, ts in source_rows
+            )
+        actual_orders = []
         for row in orders['rows']:
             cells = dict(zip(orders['columns'], row, strict=True))
-            assert cells['user_id'] == instances[cells['instance_id']]
-            assert pd.Timestamp(cells['ts']) <= anchors[cells['instance_id']]
-            assert (
-                connection.execute(
-                    'SELECT count(*) FROM orders WHERE user_id = ? AND price = ? AND ts = ?',
-                    [
-                        cells['user_id'],
-                        cells['price'],
-                        pd.Timestamp(cells['ts']).tz_localize(None),
-                    ],
-                ).fetchone()[0]
-                == 1
+            actual_orders.append(
+                (
+                    cells['instance_id'],
+                    cells['user_id'],
+                    cells['price'],
+                    pd.Timestamp(cells['ts']),
+                )
             )
+        assert actual_orders == expected_orders
 
 
 def test_seed_controls_materialization_reproducibly():

@@ -259,6 +259,9 @@ def test_public_prediction_obeys_scripted_values_and_input_contract(
             if script.startswith('probabilities:') and index == 0:
                 expected = dict.fromkeys(probability_classes, 0.5)
             assert actual == expected
+            for label, probability in expected.items():
+                at = got['columns'].index(f'probability_{label}')
+                assert rows[index][at] == probability
     if spec['covers'] == R.INTEGERS:
         tokens = [json.loads(t) for t in script.partition(':')[2].split(',')]
         dtype = 'float64' if any(type(t) is float for t in tokens) else 'int64'

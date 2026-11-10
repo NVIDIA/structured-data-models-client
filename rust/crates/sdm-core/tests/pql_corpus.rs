@@ -563,5 +563,42 @@ fn accepted_queries_resolve_columns_windows_and_model_options() {
         "schema-1",
         "RELATIONAL",
     );
-    assert!(nodes(&filtered.target).iter().any(|n| matches!(n, NodeKind::Constant { literal: PqlLiteral::String { value } } if value == "shipped")));
+    let NodeKind::Join { target, .. } = &filtered.target.kind else {
+        panic!("filtered count must be joined to the entity");
+    };
+    let NodeKind::Aggregation {
+        aggregation: Aggregation::Count,
+        target,
+        window: Some(window),
+        ..
+    } = &target.kind
+    else {
+        panic!("joined target must be a windowed count");
+    };
+    assert_eq!(window.start, Some(0));
+    assert_eq!(window.end, 30);
+    assert_eq!(window.unit, TimeUnit::Days);
+    let NodeKind::Filter { target, condition } = &target.kind else {
+        panic!("filter must apply to the count's input");
+    };
+    assert!(
+        matches!(&target.kind, NodeKind::Column { column } if column.table == "orders" && column.column == "*")
+    );
+    let NodeKind::Condition {
+        target,
+        op,
+        value,
+        from_like,
+    } = &condition.kind
+    else {
+        panic!("count's filter must be a comparison");
+    };
+    assert_eq!(*op, sdm_contract::pql::ConditionOp::Eq);
+    assert!(!from_like);
+    assert!(
+        matches!(&target.kind, NodeKind::Column { column } if column.table == "orders" && column.column == "status")
+    );
+    assert!(
+        matches!(&value.kind, NodeKind::Constant { literal: PqlLiteral::String { value } } if value == "shipped")
+    );
 }

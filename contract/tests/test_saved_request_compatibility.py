@@ -66,6 +66,55 @@ def test_saved_pickle_formats_and_cases_are_covered() -> None:
     )
 
 
+def _assert_historical_values(payload, *, ranking, part_index):
+    # Independently authored source arithmetic from _frames() and objects() in
+    # 1f2c81701:contract/fixtures/request-pickles/write.py (reference 43e55f4f).
+    # That reference uses (start, end] windows in pandas_executor.py.
+    # Do not derive these expectations from deserialized labels or features.
+    origin = pd.Timestamp('2024-01-01', tz='UTC')
+    for half in ('context', 'predict'):
+        table = payload[half]['instance_table']
+        instances = [
+            dict(zip(table['columns'], row, strict=True))
+            for row in table['rows']
+        ]
+        if half == 'context':
+            for row in instances:
+                entity = row['__kumo_entity_ref_0']
+                day = (pd.Timestamp(row['__kumo_anchor_time']) - origin).days
+                if ranking:
+                    expected = any(
+                        day < event <= day + 30
+                        and event % 8 == entity
+                        and (event * 3) % 4 == 2 - part_index
+                        for event in range(90)
+                    )
+                else:
+                    expected = sum(
+                        10 + event * 1.5
+                        for event in range(60)
+                        if event % 8 == entity
+                        and day + 7 * part_index
+                        < event
+                        <= day + 7 * (part_index + 1)
+                    )
+                assert row['TARGET'] == expected
+        related = payload[half]['related_tables']
+        users = related['users']
+        assert users['rows']
+        for values in users['rows']:
+            row = dict(zip(users['columns'], values, strict=True))
+            assert row['age'] == 20 + row['user_id']
+        orders = related['orders']
+        assert orders['rows']
+        for values in orders['rows']:
+            row = dict(zip(orders['columns'], values, strict=True))
+            event = (pd.Timestamp(row['ts']) - origin).days
+            assert 0 <= event < 60
+            assert row['user_id'] == event % 8
+            assert row['price'] == 10 + event * 1.5
+
+
 def _assert_request(request, name):
     from sdm_client import Request
 
@@ -139,6 +188,9 @@ def _assert_request(request, name):
             if ranking
             else f'PREDICT SUM(orders.price, {7 * i}, {7 * (i + 1)}, days) FOR EACH users.user_id'
         )
+        _assert_historical_values(
+            part.payloads[0], ranking=ranking, part_index=i
+        )
         assert part.query == query
         if forecast or ranking:
             assert decomposition.parts[i][0] == (
@@ -204,6 +256,8 @@ def test_historical_pickle_loads_and_round_trips_without_warnings(name):
 )
 def test_saved_request_sends_saved_data_and_assembles_scripted_answers(name):
     loaded, _ = _load(name)
+    _assert_request(loaded, name)
+    _assert_wire_views(loaded)
     saved = copy.deepcopy(list(loaded.payloads))
     observed = writer().predicted(loaded)
     calls = {
