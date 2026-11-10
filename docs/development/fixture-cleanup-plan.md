@@ -104,3 +104,10 @@ Keep current wire assertions and pinned-schema validation, but rename the former
 Move the former SQL recorder to `tests/support/sql_source_scenarios.py`: it only supplies current source scenarios to correctness tests.
 Retain case-observation uploads for failure diagnosis; their old SQL-golden comments no longer apply.
 No execution job is removed based only on a stale name or comment.
+
+Removed the unused shared-fixture compression format and its two format-only tests.
+No current JSON uses that format; Snowflake inputs now load directly, while repository size, schema-lock and named-consumer checks remain.
+Removed the uncalled reference-client guard, warehouse `capture_line` exporter and Arrow IPC reader.
+The exporter was the only non-test consumer of its driver-version helper, so that helper and its six isolated recorder-metadata tests were removed together.
+Active current-client observation, capture conservation and Rust replay paths remain; their data/transport checks are separate from the retired exporter.
+Compression cleanup: 43 tests passed and the repository-size gate passed (`/tmp/fixture-step3-compression-removal.log`, `/tmp/fixture-step3-size-gate.log`).

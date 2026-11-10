@@ -23,7 +23,6 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
-from scripts.rust_core.fixture_tables import unpack
 from sdm_connectors import SnowflakeSource
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.errors import (
@@ -56,7 +55,7 @@ ROWS_OF_THE_LISTING = (
 def _captured(case: str) -> dict[str, Any]:
     """Read only independently extracted facts; the archive is not a test dependency."""
     name = 'snowflake.json'
-    cases = unpack(json.loads((FIXTURES / name).read_text(encoding='utf-8')))
+    cases = json.loads((FIXTURES / name).read_text(encoding='utf-8'))
     assert case in cases, f'no retained Snowflake case {case}'
     return cases[case]
 

@@ -14,7 +14,6 @@ import sys
 from pathlib import Path
 
 from contract_lock import unlocked_schemas
-from fixture_tables import FORMAT, unpack
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = Path('contract/fixtures/maintained/consumers.json')
@@ -100,17 +99,6 @@ def check(
         for consumer in record['consumers']:
             if not (root / consumer).is_file():
                 failures.append(f'{name}: missing consumer {consumer}')
-    for path in paths:
-        if path.suffix != '.json' or not fixture(path):
-            continue
-        # Only generated shared tables need decoding. Other JSON contracts
-        # retain their existing schema validators and parity hashes.
-        body = (root / path).read_text(encoding='utf-8')
-        if f'"{FORMAT}"' in body[:150]:
-            try:
-                unpack(json.loads(body))
-            except (ValueError, KeyError, IndexError, TypeError) as error:
-                failures.append(f'{path}: invalid shared fixture: {error}')
     return failures, {
         'tracked_bytes': total,
         'added_lines': added,
