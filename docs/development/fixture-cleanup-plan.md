@@ -634,3 +634,6 @@ This closes the partially converted fixture; shared source helpers remain.
 Neighbor sampler outputs are replaced by independent source filtering/order assertions; all fourteen inputs and 73 expected rows are preserved.
 Recorded rows/environment and the obsolete old-client writer are removed; authored SQL, zones and seeds stay.
 Independent review, both Rust tests and Clippy passed before final pruning verification.
+
+Temporal candidate output recording (12,666 bytes) removed after review and seventeen tests with local PostgreSQL.
+Direct assertions retain candidate identity/scoring, useful refusals/warnings and escaped JSON source values, owning rows, prediction order and wire contracts.

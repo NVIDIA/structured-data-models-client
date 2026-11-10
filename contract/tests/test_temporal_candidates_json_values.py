@@ -4,7 +4,7 @@
 
 """Public regressions for temporal candidates, semantic types and JSON.
 
-Expected observations are checked into the repository; no old client runs.
+Expected values follow authored candidate and source-data rules.
 PostgreSQL scenarios require SDM_POSTGRES_TEST_DSN, and CI can require them
 with SDM_REQUIRE_POSTGRES.
 """
@@ -48,80 +48,173 @@ def _dsn() -> str | None:
 
 
 @functools.cache
-def vectors() -> dict[str, Any]:
-    return scenarios().load()
-
-
-@functools.cache
 def core() -> dict[str, Any]:
     """Observe each scenario through the current public client."""
     return scenarios().observe(dsn=_dsn())
 
 
-def test_scenarios_cover_temporal_identity_and_invalid_values() -> None:
-    """The expected results exercise each named edge case."""
-    document = vectors()
-    parts = {k: v['parts'] for k, v in document['candidates'].items()}
-    assert parts == {
-        'dates-repeated': 2,
-        'dates-distinct': 2,
-        'aware-one-instant': 2,
-        'aware-distinct': 2,
-        'zone-fold': 2,
-        'zone-against-utc': 3,
-        'same-text-two-zones': 3,
-        'times-one-instant': 2,
-        'timestamp-beside-datetime64': 2,
-        'naive-beside-aware': 3,
-    }
-    assert document['stype']['refusal']['message'].startswith(
-        '[INVALID_REQUEST] 5 is not a semantic type; use one of '
-    )
-    assert document['where']['runtime_warnings'] == [
-        'overflow encountered in cast'
-    ]
-    sent = json.dumps(document['json']['bodies'])
-    assert document['json']['refusal'] is None
-    assert '\\ud800' in sent and '\\udc00' in sent
+# Selected input positions express candidate identity and absent-key behavior.
+CANDIDATE_CASES = {
+    'dates-repeated': (2, [0, 2]),
+    'dates-distinct': (2, [0, 1]),
+    'aware-one-instant': (2, [0, 2]),
+    'aware-distinct': (2, [0, 1]),
+    'zone-fold': (2, [0, 2]),
+    'zone-against-utc': (3, [0, 1, 2]),
+    'same-text-two-zones': (3, [0, 1, 2]),
+    'times-one-instant': (2, [0, 2]),
+    'timestamp-beside-datetime64': (2, [2]),
+    'naive-beside-aware': (3, [1, 2]),
+}
 
 
-@pytest.mark.parametrize('name', list(scenarios().CANDIDATES))
-def test_temporal_candidates_preserve_identity_and_order(
-    name: str,
-) -> None:
-    """Equivalent temporal candidates collapse; distinct instants remain distinct."""
+def test_authored_candidate_cases_are_all_exercised():
+    assert set(CANDIDATE_CASES) == set(scenarios().CANDIDATES)
 
-    want = vectors()['candidates'][name]
+
+@pytest.mark.parametrize('name', CANDIDATE_CASES)
+def test_temporal_candidates_preserve_identity_and_order(name: str) -> None:
+    parts, positions = CANDIDATE_CASES[name]
+    inputs = scenarios().CANDIDATES[name][1]()
+    candidates = [inputs[i] for i in positions]
     got = core()['candidates'][name]
-    assert got == want, (
-        f'{name}: {json.dumps(got)[:400]} where expected is '
-        f'{json.dumps(want)[:400]}'
-    )
+    assert got['refusal'] is None
+    assert got['parts'] == parts
+    assert got['asked'] == [
+        f'PREDICT COUNT(buys.* WHERE buys.item_id = {json.dumps(str(candidate))}, 0, 30, days) > 0 FOR EACH users.user_id'
+        for candidate in candidates
+    ]
+    assert len(got['rankings']) == 2
+    for row, ranking in enumerate(got['rankings']):
+        scores = [
+            (3 * call + 5 * row) % 9 + 1 for call in range(len(candidates))
+        ]
+        winners = sorted(
+            range(len(candidates)), key=lambda call: -scores[call]
+        )[:2]
+        assert len(ranking) == len(winners)
+        for item, call in zip(ranking, winners, strict=True):
+            candidate = candidates[call]
+            assert item['candidate'] == {
+                'type': type(candidate).__name__,
+                'text': str(candidate),
+            }
+            assert type(item['score']) is float
+            assert item['score'] == scores[call] / 10
 
 
 def test_a_numeric_semantic_type_has_a_useful_refusal() -> None:
-    """The refusal names the invalid value and accepted semantic types."""
-
-    assert core()['stype'] == vectors()['stype']
+    refusal = core()['stype']['refusal']
+    assert refusal['error'] == 'StructuredDataError'
+    assert refusal['code'] == 'INVALID_REQUEST'
+    assert refusal['message'].startswith(
+        '[INVALID_REQUEST] 5 is not a semantic type; use one of '
+    )
+    for name in (
+        'ID',
+        'categorical',
+        'multicategorical',
+        'numerical',
+        'sequence',
+        'text',
+        'timestamp',
+    ):
+        assert repr(name) in refusal['message']
 
 
 def test_a_filter_reading_a_double_past_float32_warns() -> None:
-    """The filter reports overflow and preserves the materialization outcome."""
-
-    assert core()['where'] == vectors()['where']
+    assert core()['where']['refusal'] is None
+    assert core()['where']['runtime_warnings'] == [
+        'overflow encountered in cast'
+    ]
 
 
 def test_json_documents_preserve_escaped_lone_surrogates() -> None:
-    """PostgreSQL JSON values retain surrogate escapes through prediction."""
     if _dsn() is None:
         pytest.skip('SDM_POSTGRES_TEST_DSN is not configured')
-
-    want = vectors()['json']
     got = core()['json']
-    assert got['refusal'] == want['refusal'], got['refusal']
-    assert got['bodies'] == want['bodies'], (
-        'the model requests differ from the expected JSON'
-    )
+    assert got['refusal'] is None
+    assert len(got['bodies']) == 1
+    body = got['bodies'][0]
+    table_name = scenarios().JSON_TABLE
+    assert body['task'] == {
+        'kind': 'regression',
+        'target': {'column_name': 'TARGET', 'dtype': 'int64'},
+        'entity_table_names': [table_name],
+    }
+    assert body['model'] == 'kumo-relational'
+    assert body['output'] == {
+        'fields': ['prediction'],
+        'prediction_statistic': 'median',
+    }
+    assert body['inference'] == {
+        'run_mode': 'fast',
+        'use_prediction_time': False,
+    }
+    assert body['metadata'] == {
+        'source_query': f'PREDICT {table_name}.age FOR EACH {table_name}.id',
+        'num_context_examples': 8,
+        'num_prediction_examples': 2,
+    }
+    expected_docs = [
+        '{"s":"\\ud800"}',
+        '{"\\udc00":"x"}',
+        '["\\ud800","\\ud83d\\ude00"]',
+        '{"s":"ok"}',
+    ]
+    for half in ('context', 'predict'):
+        instance = body[half]['instance_table']
+        assert instance['format'] == 'arrays'
+        assert instance['columns'] == ['instance_id', '__kumo_entity_ref_0'] + (
+            ['TARGET'] if half == 'context' else []
+        )
+        rows = instance['rows']
+        assert len(rows) == (6 if half == 'context' else 2)
+        assert {r[1] for r in rows} == (
+            set(range(2, 8)) if half == 'context' else {0, 1}
+        )
+        assert len({r[0] for r in rows}) == len(rows)
+        for row in rows:
+            assert all(type(v) is int for v in row)
+            if half == 'context':
+                assert row[2] == 20 + row[1]
+        if half == 'predict':
+            assert [r[1] for r in rows] == [0, 1]
+        related = body[half]['related_tables']
+        assert set(related) == {table_name}
+        assert related[table_name]['columns'] == ['instance_id', 'id', 'doc']
+        assert related[table_name]['rows'] == [
+            [r[0], r[1], expected_docs[r[1] % 4]] for r in rows
+        ]
+    schema = body['schema']
+    assert set(schema) == {'instance_table', 'related_tables', 'relationships'}
+    assert schema['instance_table']['columns'] == {
+        'instance_id': {'dtype': 'int64', 'stype': 'ID', 'nullable': False},
+        '__kumo_entity_ref_0': {'dtype': 'int64', 'stype': 'ID'},
+        'TARGET': {'dtype': 'int64', 'stype': 'numerical'},
+    }
+    assert set(schema['related_tables']) == {table_name}
+    assert schema['related_tables'][table_name]['columns'] == {
+        'instance_id': {'dtype': 'int64', 'stype': 'ID', 'nullable': False},
+        'id': {'dtype': 'int64', 'nullable': False},
+        'doc': {'dtype': 'string', 'stype': 'categorical'},
+    }
+    assert schema['instance_table']['primary_key'] == 'instance_id'
+    assert schema['related_tables'][table_name]['primary_key'] == [
+        'instance_id',
+        'id',
+    ]
+    assert schema['related_tables'][table_name]['columns']['doc'] == {
+        'dtype': 'string',
+        'stype': 'categorical',
+    }
+    assert schema['relationships'] == [
+        {
+            'source_columns': ['__kumo_entity_ref_0'],
+            'target_table': table_name,
+            'target_columns': ['id'],
+        }
+    ]
 
 
 # --- FLOAT32_OVERFLOW and the host NumPy version ---------------------------
