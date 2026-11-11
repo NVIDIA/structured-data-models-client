@@ -171,7 +171,7 @@ in parts is not batched at all: a ranking is already a call per candidate and
 a forecast one per step, and batching a part would send that many times as
 many calls.
 
-The gathered graph may carry any number of tables and hops.
+The gathered graph may carry any number of tables; sampling supports at most six hops.
 Gradient explanations follow the model endpoint's supported outputs; the client does not impose a separate one-row or fast-context limit.
 
 ## Asking for more than one answer each

@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/73",
+  "$id": "sdm-contract/74",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -17701,6 +17701,7 @@
         "excluded_not_a_sequence",
         "statistic_unknown",
         "statistic_not_a_regression",
+        "sampling_hops_limit",
         "no_hop_num_hops",
         "no_hop_num_neighbors",
         "inference_run_mode_invalid",

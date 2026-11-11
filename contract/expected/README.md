@@ -29,7 +29,7 @@ Their differences from DuckDB follow the fixture loader's explicit mappings in `
 | SQLite / Postgres | Malformed text-time values are refused; the US-date fixture completes under these backends' existing read behavior |
 | Postgres | NaN-key fixtures refuse at materialize; a negative neighbor bound retains the existing `PROVIDER_ERROR` outcome |
 
-`sample.num-hops.seven` and `sample.num-neighbors.seven-hops` reach predict on every backend, where the reference refused past six hops: the client sets no most on hops.
+`sample.num-hops.seven` and `sample.num-neighbors.seven-hops` refuse at materialize with `UNSUPPORTED_REQUEST`: sampling supports at most six hops.
 The `multicall.body-30mib` cases reach predict on every backend: the client holds a call to no size of its own.
 `multicall.entities.100001` and `multicall.calls.101` are gathered: the client sets no most on the entities or the calls of one `materialize()`.
 `rank.entities-by-candidates.over` is refused at materialize only for the entities that name no user, as `rank.entities-by-candidates.at` is, since the client sets no entity ceiling over a ranking.

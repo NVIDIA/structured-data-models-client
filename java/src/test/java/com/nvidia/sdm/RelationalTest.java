@@ -38,6 +38,23 @@ import org.junit.jupiter.api.Test;
 
 /** Public multi-table journeys through Java, JNI, the shared sampler and an HTTP endpoint. */
 class RelationalTest {
+  @Test void samplingAcceptsSixHopsAndRefusesSeven() throws Exception {
+    Schema schema = fixture(false, false);
+    PredictiveQuery query = PredictiveQuery.parse(SCALAR);
+    for (String field : List.of("num_hops", "num_neighbors")) {
+      Object six = field.equals("num_hops") ? 6 : Collections.nCopies(6, 2);
+      Object seven = field.equals("num_hops") ? 7 : Collections.nCopies(7, 2);
+      Request request = query.materialize(schema, options(1L, 2L).option(field, six).build());
+      assertEquals(2, request.predictRows());
+      StructuredDataException error = assertThrows(StructuredDataException.class,
+          () -> query.materialize(schema, options(1L, 2L).option(field, seven).build()));
+      assertEquals("UNSUPPORTED_REQUEST", error.code());
+      assertEquals(field, error.details().get("field"));
+      assertEquals(6, ((Number) error.details().get("limit")).intValue());
+      assertTrue(error.getMessage().contains("at most 6 hops"));
+    }
+  }
+
   @Test void sanitizationReportSurvivesRequestPersistence() throws Exception {
     Schema schema = fixture(false, false);
     Request request = PredictiveQuery.parse(SCALAR).materialize(schema, options(1L, 2L).build());

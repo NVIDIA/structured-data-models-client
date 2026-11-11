@@ -1012,6 +1012,7 @@ pub fn template(sentence: Sentence) -> Template {
         S::StatisticNotARegression => said(
             r#"prediction_statistic applies only to a regression, and this question is a {task}; ask it without prediction_statistic"#,
         ),
+        S::SamplingHopsLimit => said("sampling supports at most {limit} hops; reduce {field}"),
         S::NoHopNumHops => said(
             r#"num_hops is {hops}, which asks for no hop at all, and a request samples at least 1. A request that crosses no relationship is a single-table one: give a hop, such as {advice:give_a_hop()}, or ask it of kumo-tabular"#,
         ),

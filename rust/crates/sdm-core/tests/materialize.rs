@@ -1180,13 +1180,25 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         assert_eq!(err.code, ErrorCode::InvalidRequest, "{values}");
         assert_eq!(err.fields["field"], Detail::text(field), "{values}");
     }
-    // The sampling options taken reach the first read, with as many hops as
-    // are asked.
+    // Reject unsupported depth before any provider read.
+    for (values, field) in [
+        (r#"{"num_hops": 7}"#, "num_hops"),
+        (r#"{"num_hops": 1000000}"#, "num_hops"),
+        (
+            r#"{"num_neighbors": [8, 8, 4, 4, 2, 2, 1]}"#,
+            "num_neighbors",
+        ),
+    ] {
+        let err = valued(values, &[]).unwrap_err();
+        assert_eq!(err.code, ErrorCode::UnsupportedRequest);
+        assert_eq!(err.fields["field"], Detail::text(field));
+        assert_eq!(err.fields["limit"], Detail::Scalar(Scalar::UInt64(6)));
+    }
+    // Supported sampling options reach the first read.
     for values in [
         r#"{"num_hops": 3}"#,
-        r#"{"num_hops": 7}"#,
-        r#"{"num_hops": 1000000}"#,
-        r#"{"num_neighbors": [8, 8, 4, 4, 2, 2, 1, 1]}"#,
+        r#"{"num_hops": 6}"#,
+        r#"{"num_neighbors": [8, 8, 4, 4, 2, 2]}"#,
         r#"{"num_neighbors": [4, 0]}"#,
         r#"{"random_seed": null}"#,
         r#"{"max_pq_iterations": 2, "use_prediction_time": true}"#,

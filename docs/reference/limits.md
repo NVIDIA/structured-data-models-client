@@ -1,7 +1,13 @@
 # Limits
 
-The client does not enforce the endpoint's size limits: context rows, rows scored per call, request bytes, tables and hops.
-A deployment that raises them is not held back, and a request past them is refused by the endpoint with its own message.
+The client does not enforce the endpoint's size limits: context rows, rows scored per call, request bytes and tables.
+A deployment that raises them is not held back. Requests above an endpoint's configured limits may be refused by that endpoint or its gateway. NIM can return detailed limit advice. Databricks Model Serving preserves structured refusal codes but sanitizes some error text.
+
+## In-process execution and preparation
+
+`SDMClient.in_process()` has no HTTP endpoint enforcing deployment limits. The client retains conservative sampling and batching defaults, but does not impose a fixed maximum row count based on assumed hardware. Explicitly larger requests must fit available host and device memory. SDM's internal chunking does not guarantee that all inputs fit, including the client's earlier sampling and conversion work.
+
+`query.materialize(..., lag_timesteps=3)` requests three historical target-feature columns. Preparation grows with the number of examples and lag columns, before any model call. Choose the history length needed for the task. Input, date-range and overflow validation remain in place, without a separate fixed lag-memory budget.
 
 ## Defaults
 
@@ -10,7 +16,7 @@ A deployment that raises them is not held back, and a request past them is refus
 | context rows | relational | 1,000 | as many as `num_context_samples` asks for |
 | context rows | tabular | sampled to 10,000, with a warning | as many as `num_context_samples` asks for; a direct `Request` is sent as given |
 | rows scored per call | relational | 10,000 | as many as `rows_per_call` asks for |
-| hops | relational | 2, or as `num_hops` / `num_neighbors` ask | as many as asked; a walk ends at the first hop that reaches no new row |
+| hops | relational | 2, or as `num_hops` / `num_neighbors` ask | at most 6, including the length of an explicit `num_neighbors` list |
 
 A relational request for more entities than one call scores is gathered as several calls, each with a context of its own, and `predict()` sends one call per batch and returns one result.
 Its `row_index` counts across the whole request, so `to_pandas()` gives the rows back in the order they were asked for.

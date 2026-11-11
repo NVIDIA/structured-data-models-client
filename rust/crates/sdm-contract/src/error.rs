@@ -1044,6 +1044,7 @@ sentences! {
     ExcludedNotASequence = "excluded_not_a_sequence", E::InvalidRequest;
     StatisticUnknown = "statistic_unknown", E::InvalidRequest;
     StatisticNotARegression = "statistic_not_a_regression", E::InvalidRequest;
+    SamplingHopsLimit = "sampling_hops_limit", E::UnsupportedRequest;
     NoHopNumHops = "no_hop_num_hops", E::InvalidRequest;
     NoHopNumNeighbors = "no_hop_num_neighbors", E::InvalidRequest;
     InferenceRunModeInvalid = "inference_run_mode_invalid", E::InvalidRequest;

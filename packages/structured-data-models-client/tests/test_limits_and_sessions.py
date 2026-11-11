@@ -2,12 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""What the client refuses before spending a round trip, and how sessions behave.
-
-The endpoint enforces several sizes, and a request past one of them comes back
-as a 500 or a 422 that names neither the limit nor how to get under it. Every
-check here exists so the caller reads a sentence instead.
-"""
+"""Client sampling boundaries and session behavior through public APIs."""
 
 from __future__ import annotations
 
@@ -64,6 +59,31 @@ def test_num_hops_must_be_a_whole_number(bad):
         query().materialize(indices=[1], model=KumoRelational(), num_hops=bad)
     assert 'num_hops must be a whole number' in str(error.value)
     assert error.value.code == 'INVALID_REQUEST'
+
+
+@pytest.mark.parametrize('field', ['num_hops', 'num_neighbors'])
+def test_sampling_accepts_six_hops_and_refuses_seven(field):
+    from test_frame_sessions_core import query
+
+    from sdm_client import KumoRelational
+
+    def options(depth):
+        return {field: depth if field == 'num_hops' else [2] * depth}
+
+    materializer = query()
+    request = materializer.materialize(
+        indices=[1], model=KumoRelational(), **options(6)
+    )
+    assert len(request.payloads) == 1
+    assert len(request.payloads[0]['predict']['instance_table']['rows']) == 1
+    with pytest.raises(UnsupportedRequestError) as error:
+        materializer.materialize(
+            indices=[1], model=KumoRelational(), **options(7)
+        )
+    assert error.value.code == 'UNSUPPORTED_REQUEST'
+    assert error.value.details['field'] == field
+    assert error.value.details['limit'] == 6
+    assert 'at most 6 hops' in str(error.value)
 
 
 @pytest.mark.parametrize(

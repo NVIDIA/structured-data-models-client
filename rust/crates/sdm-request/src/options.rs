@@ -943,9 +943,8 @@ pub fn run_mode(asked: Option<Integer>, given: Option<&str>) -> Result<RunMode, 
 /// The hops the sampling options ask for, as the client checks them
 /// (`_check_shape`): `num_neighbors`' length where it is given, else
 /// `num_hops`; none, or fewer than one, is `INVALID_REQUEST` (a request
-/// that crosses no relationship). The client sets no most: the model reads
-/// as many hops as the request carries, and a walk ends at the first hop
-/// that reaches no row.
+/// that crosses no relationship). Sampling supports at most six hops.
+/// An explicit neighbor list determines depth when supplied.
 pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result<(), CoreError> {
     let (
         field,
@@ -971,6 +970,14 @@ pub fn hops(num_hops: Option<Integer>, num_neighbors: Option<Integer>) -> Result
             Some(n) => refused.with_field("hops", Detail::text(n)),
             None => refused,
         });
+    }
+    if value.is_none_or(|n| n > 6) {
+        return Err(CoreError::new(
+            Sentence::SamplingHopsLimit,
+            "sampling supports at most six hops",
+        )
+        .with_field("field", Detail::text(field))
+        .with_field("limit", Detail::Scalar(Scalar::UInt64(6))));
     }
     Ok(())
 }
@@ -1395,11 +1402,19 @@ mod tests {
         let some = |n: u128| int(false, Some(n));
         assert!(hops(None, None).is_ok());
         assert!(hops(some(6), None).is_ok());
-        // No most: any count of one or more is taken.
-        assert!(hops(some(7), None).is_ok());
-        assert!(hops(some(1_000), None).is_ok());
-        assert!(hops(None, some(12)).is_ok());
-        assert!(hops(int(false, None), None).is_ok());
+        assert!(hops(None, some(6)).is_ok());
+        for (count, neighbors) in [
+            (some(7), None),
+            (some(1_000), None),
+            (None, some(7)),
+            (None, some(12)),
+            (int(false, None), None),
+        ] {
+            let error = hops(count, neighbors).unwrap_err();
+            assert_eq!(error.code, ErrorCode::UnsupportedRequest);
+            assert_eq!(error.sentence, Sentence::SamplingHopsLimit);
+            assert_eq!(error.fields["limit"], Detail::Scalar(Scalar::UInt64(6)));
+        }
         assert!(
             hops(some(9), some(2)).is_ok(),
             "the neighbors' length counts"
