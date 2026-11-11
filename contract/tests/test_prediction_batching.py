@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -590,3 +591,136 @@ def test_python_core_gathers_and_predicts_what_the_reference_refused(
     case is answered."""
     got = core_carried(case_id)
     assert got['outcome']['result'] == 'success', got['outcome']
+
+
+#: A tiny seeded three-call fixture: five users scored ``user_id % 3``,
+#: three of them asked one per call, sampled with a fixed seed.
+TINY = {
+    'base': 'shop',
+    'setup': [
+        'DROP TABLE orders',
+        'DROP TABLE users',
+        'CREATE TABLE users AS SELECT i::BIGINT AS user_id, '
+        '(i % 3)::DOUBLE AS score FROM range(5) t(i)',
+    ],
+    'pql': 'PREDICT users.score FOR EACH users.user_id',
+    'materialize': {'indices': [0, 1, 2], 'rows_per_call': 1, 'random_seed': 7},
+}
+#: The users in the order the seed samples them, each at its instance id.
+TINY_SAMPLE = [3, 1, 2, 4, 0]
+
+
+def test_three_seeded_calls_send_whole_requests() -> None:
+    r"""Each of the three calls is the whole request: the shared task,
+    schema, options and query, and its own context, which is the seeded
+    sample less the user that call scores, each labelled with its score,
+    and that user scored at the instance id after the sample's."""
+    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
+
+    run = runner()
+    connection, cleanup, _ = run._open(
+        {'input': TINY}, run.load_bases(), 'duckdb'
+    )
+    try:
+        with (
+            recorder().endpoint().serve() as (url, received),
+            warnings.catch_warnings(),
+        ):
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(run._source('duckdb', connection))
+            request = PredictiveQuery(TINY['pql'], schema).materialize(
+                **run._materialize_arguments(TINY['materialize'])
+            )
+            with SDMClient(url) as client:
+                client.predict(request, model=KumoRelational())
+    finally:
+        cleanup()
+    sent = []
+    for _, path, body in received.requests:
+        assert path == '/v1/predictions'
+        parsed = json.loads(body)
+        parsed['metadata'].pop('request_id')
+        sent.append(parsed)
+
+    def table(columns: list[str], rows: list[list[Any]]) -> dict[str, Any]:
+        return {'columns': columns, 'format': 'arrays', 'rows': rows}
+
+    def half(rows: list[list[Any]], columns: list[str]) -> dict[str, Any]:
+        return {
+            'instance_table': table(columns, rows),
+            'related_tables': {
+                'users': table(
+                    ['instance_id', 'user_id'], [row[:2] for row in rows]
+                )
+            },
+        }
+
+    shared = {
+        'model': 'kumo-relational',
+        'task': {
+            'kind': 'regression',
+            'target': {'column_name': 'TARGET', 'dtype': 'float32'},
+            'entity_table_names': ['users'],
+        },
+        'schema': {
+            'instance_table': {
+                'columns': {
+                    'instance_id': {
+                        'dtype': 'int64',
+                        'nullable': False,
+                        'stype': 'ID',
+                    },
+                    '__kumo_entity_ref_0': {'dtype': 'int64', 'stype': 'ID'},
+                    'TARGET': {'dtype': 'float32', 'stype': 'numerical'},
+                },
+                'primary_key': 'instance_id',
+            },
+            'related_tables': {
+                'users': {
+                    'columns': {
+                        'instance_id': {
+                            'dtype': 'int64',
+                            'nullable': False,
+                            'stype': 'ID',
+                        },
+                        'user_id': {'dtype': 'int64', 'nullable': False},
+                    },
+                    'primary_key': ['instance_id', 'user_id'],
+                }
+            },
+            'relationships': [
+                {
+                    'source_columns': ['__kumo_entity_ref_0'],
+                    'target_table': 'users',
+                    'target_columns': ['user_id'],
+                }
+            ],
+        },
+        'output': {'fields': ['prediction'], 'prediction_statistic': 'median'},
+        'inference': {'run_mode': 'fast', 'use_prediction_time': False},
+        'metadata': {
+            'num_context_examples': len(TINY_SAMPLE),
+            'num_prediction_examples': 1,
+            'source_query': TINY['pql'],
+        },
+    }
+    expected = []
+    for scored in TINY['materialize']['indices']:
+        context = [
+            [instance, user, float(user % 3)]
+            for instance, user in enumerate(TINY_SAMPLE)
+            if user != scored
+        ]
+        expected.append(
+            {
+                **shared,
+                'context': half(
+                    context, ['instance_id', '__kumo_entity_ref_0', 'TARGET']
+                ),
+                'predict': half(
+                    [[len(TINY_SAMPLE), scored]],
+                    ['instance_id', '__kumo_entity_ref_0'],
+                ),
+            }
+        )
+    assert sent == expected
