@@ -127,8 +127,11 @@ def loaded(path: Path) -> str | None:
         # Here keep the identity check for every non-generated field.
         case = copy.deepcopy(case)
         case['input_factory'] = source['input_factory']
-        case['input']['materialize']['indices'] = []
-        case['core']['materialize']['indices'] = []
+        if source['input_factory'] == 'query_attachment_72082':
+            case['input']['pql'] = source['input']['pql']
+        else:
+            case['input']['materialize']['indices'] = []
+            case['core']['materialize']['indices'] = []
     assert case == source
     return None
 

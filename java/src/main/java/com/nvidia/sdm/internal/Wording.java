@@ -99,7 +99,6 @@ public final class Wording {
                 + ") && List.of("
                 + String.join(", ", quotedAll(given.get(2)))
                 + ").contains(link.sourceColumn()))).toList())");
-    spelled.put("materialize_call", given -> "materialize()");
     spelled.put("missing_time", given -> "null");
     spelled.put(
         "name_candidates",
@@ -135,9 +134,6 @@ public final class Wording {
         given ->
             "Name another key with FromSourceOptions.builder().primaryKey(...), or pass"
                 + " checkKeys(false) to skip (one full scan per table).");
-    spelled.put(
-        "smaller_calls",
-        given -> "MaterializeOptions.builder().option(\"rows_per_call\", N)");
     spelled.put("trust_expressions", given -> "semanticModel(name, true)");
     return Map.copyOf(spelled);
   }

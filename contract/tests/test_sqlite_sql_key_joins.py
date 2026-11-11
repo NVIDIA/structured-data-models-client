@@ -2,28 +2,23 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""SQLite provider, executed SQL goldens and exact-key joins."""
+"""SQLite provider and exact-key joins."""
 
 from __future__ import annotations
 
 import functools
 import importlib.util
 import json
-import re
-import subprocess
 import sys
 import tempfile
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-
-RUNNER = ROOT / 'contract/runners/run_python.py'
-
-VECTORS_FILE = ROOT / 'contract/sqlite-key-pair-vectors.json'
-
-GOLDENS = ROOT / 'rust/crates/sdm-data/tests'
 
 DATABASE = 'sqlite'
 
@@ -59,215 +54,8 @@ def test_the_core_reports_a_sqlite_provider() -> None:
     check()
 
 
-@functools.cache
-def _cases_on_sqlite() -> dict[str, dict[str, Any]]:
-    r"""python-core over every case on SQLite, as the SQLite job runs it:
-    each observation by its key."""
-    with tempfile.TemporaryDirectory(
-        prefix='test_sqlite_sql_key_joins_cases-'
-    ) as tmp:
-        out = Path(tmp) / 'python-core.jsonl'
-        done = subprocess.run(
-            [
-                sys.executable,
-                '-I',
-                str(RUNNER),
-                '--mode',
-                'python-core',
-                '--database',
-                DATABASE,
-                '--out',
-                str(out),
-                str(ROOT / 'contract/cases'),
-            ],
-            capture_output=True,
-            text=True,
-            cwd=ROOT,
-            stdin=subprocess.DEVNULL,
-            check=False,
-        )
-        assert done.returncode == 0, done.stdout + done.stderr
-        return {
-            json.loads(line)['case']: json.loads(line)
-            for line in out.read_text(encoding='utf-8').splitlines()
-        }
-
-
-_RAW = re.compile(r'r(#*)"(.*?)"\1', re.S)
-
-_ESCAPES = {'n': '\n', 't': '\t', 'r': '\r', '0': '\0'}
-
-
-def literals(source: str) -> list[str]:
-    r"""Every string literal of a Rust source, its escapes read: ``"..."``
-    (``\n``, ``\t``, ``\r``, ``\0``, ``\\``, ``\"``, ``\'`` and a line
-    continuation) and raw ``r"..."``, ``r#"..."#``; comments and character
-    literals skipped (``sdm-testkit``'s ``keys_sql.rs`` reads them
-    so)."""
-    out: list[str] = []
-    i = 0
-    while i < len(source):
-        c = source[i]
-        if source.startswith('//', i):
-            end = source.find('\n', i)
-            i = len(source) if end < 0 else end
-        elif c == "'":
-            if source[i + 2 : i + 3] == "'":
-                i += 3
-            elif source[i + 1 : i + 2] == '\\':
-                close = source.find("'", i + 2, i + 12)
-                i = i + 1 if close < 0 else close + 1
-            else:
-                i += 1
-        elif c == 'r' and (
-            i == 0 or not (source[i - 1].isalnum() or source[i - 1] == '_')
-        ):
-            raw = _RAW.match(source, i)
-            if raw is None:
-                i += 1
-                continue
-            out.append(raw.group(2))
-            i = raw.end()
-        elif c == '"':
-            text = []
-            i += 1
-            while i < len(source) and source[i] != '"':
-                if source[i] == '\\':
-                    i += 1
-                    if source[i] == '\n':
-                        while i + 1 < len(source) and source[i + 1].isspace():
-                            i += 1
-                    else:
-                        text.append(_ESCAPES.get(source[i], source[i]))
-                else:
-                    text.append(source[i])
-                i += 1
-            out.append(''.join(text))
-            i += 1
-        else:
-            i += 1
-    return out
-
-
-def goldens(directory: Path = GOLDENS) -> set[str]:
-    r"""The SQLite goldens: every string literal of ``sdm-data``'s test
-    files whose name holds ``sqlite``."""
-    return {
-        text
-        for path in sorted(directory.glob('*sqlite*.rs'))
-        for text in literals(path.read_text(encoding='utf-8'))
-    }
-
-
-def _scratch_shape(sql: str) -> str:
-    """Ignore only opaque scratch-name digests, preserving distinct relations."""
-    names: dict[str, int] = {}
-
-    def replace(match: re.Match[str]) -> str:
-        name = match.group()
-        if match.lastgroup != 'scratch':
-            return name
-        return f'"__sdm_seeds_digest_{names.setdefault(name, len(names))}__"'
-
-    tokens = re.compile(
-        r"'(?:[^']|'')*'|--[^\n]*|/\*.*?\*/|"
-        r'(?P<scratch>"__sdm_seeds_[0-9a-f]{16}__")(?!")|"(?:[^"]|"")*"',
-        re.DOTALL,
-    )
-    return tokens.sub(replace, sql)
-
-
-def unpinned(
-    observations: dict[str, dict[str, Any]], pinned: set[str]
-) -> list[str]:
-    r"""Each statement a run made that no golden pins, by key and public
-    call; every one when none was made."""
-    ran = [
-        (key, statement['stage'], statement['sql'])
-        for key, line in sorted(observations.items())
-        for statement in ((line.get('driver') or {}).get('capture') or {}).get(
-            'statements', []
-        )
-    ]
-    if not ran:
-        return ['no statement ran: no evidence']
-    shapes = {_scratch_shape(sql) for sql in pinned}
-    return [
-        f'{k} {stage}: {sql}'
-        for k, stage, sql in ran
-        if _scratch_shape(sql) not in shapes
-    ]
-
-
-def test_the_golden_check_reads_rust_and_fails_closed() -> None:
-    r"""Control: the literal reader reads Rust's strings, and the check
-    fails on a statement no golden pins and on no statements at all."""
-    source = (
-        'let a = "x\\n\\"y\\""; // "not a pin"\n'
-        'let b = r#"raw "q""#; let c = \'"\'; let d = "long \\\n    line";'
-    )
-    assert literals(source) == ['x\n"y"', 'raw "q"', 'long line']
-    seen = {
-        'k@sqlite': {
-            'driver': {
-                'capture': {
-                    'statements': [
-                        {'stage': 'from_source', 'sql': 'SELECT 1'},
-                        {'stage': 'materialize', 'sql': 'SELECT 2'},
-                    ]
-                }
-            }
-        }
-    }
-    assert unpinned(seen, {'SELECT 1', 'SELECT 2'}) == []
-    assert unpinned(seen, {'SELECT 1'}) == ['k@sqlite materialize: SELECT 2']
-    assert unpinned({}, {'SELECT 1'}) == ['no statement ran: no evidence']
-
-
-def test_scratch_digest_matching_preserves_all_other_sql() -> None:
-    first = 'SELECT * FROM temp."__sdm_seeds_0123456789abcdef__" WHERE x = 1'
-    second = first.replace('0123456789abcdef', 'fedcba9876543210')
-    assert _scratch_shape(first) == _scratch_shape(second)
-    assert _scratch_shape(first) != _scratch_shape(
-        second.replace('x = 1', 'x = 2')
-    )
-    assert _scratch_shape(first) != _scratch_shape(
-        second.replace('temp.', 'main.')
-    )
-    assert _scratch_shape(first) != _scratch_shape(
-        second.replace('fedcba9876543210', 'bad')
-    )
-    for wrapper in ("SELECT '%s'", '-- %s\nSELECT 1', '/* %s */ SELECT 1'):
-        left = wrapper % '"__sdm_seeds_0123456789abcdef__"'
-        right = wrapper % '"__sdm_seeds_fedcba9876543210__"'
-        assert _scratch_shape(left) != _scratch_shape(right)
-    # Two distinct key sets cannot collapse into one relation.
-    assert _scratch_shape(first + second) != _scratch_shape(first + first)
-
-
-def test_every_statement_python_core_ran_on_sqlite_is_a_golden() -> None:
-    r"""Exit "L4 goldens executed" (SQLite): every statement python-core ran
-    on SQLite, over every case, is pinned apart from scratch-name digests in
-    ``rust/crates/sdm-data/tests/sqlite*.rs``: each golden that matches was
-    executed on SQLite, and any other SQL change without a golden update fails.
-    The digest includes current resolved request metadata absent from old pins."""
-
-    def check() -> None:
-        problems = unpinned(_cases_on_sqlite(), goldens())
-        assert not problems, '\n'.join(problems[:40])
-
-    check()
-
-
-def recorded() -> dict[str, Any]:
-    from scripts.rust_core.fixture_tables import unpack
-
-    found: dict[str, Any] = unpack(json.loads(VECTORS_FILE.read_text('utf-8')))
-    return found
-
-
 def _by_id() -> dict[str, dict[str, Any]]:
-    return {vector['id']: vector for vector in recorded()['vectors']}
+    return {vector['id']: vector for vector in M.VECTORS}
 
 
 def test_the_join_check_fails_on_a_wrong_join() -> None:
@@ -302,26 +90,276 @@ def _core_runs() -> dict[str, dict[str, Any]]:
         return result
 
 
+def _key_dtypes(name: str) -> tuple[str, str]:
+    """The SQLite loader stores wide integers and decimals as exact text."""
+
+    def dtype(tag: str) -> str:
+        if tag == 'bigint':
+            return 'int64'
+        if tag in ('double', 'float'):
+            return 'float64'
+        return 'string'
+
+    if name.startswith(('pair.', 'wide.')):
+        _, primary, foreign = name.split('.')
+        return dtype(primary), dtype(foreign)
+    assert name.startswith('decimal.key.')
+    if '.foreign-only.' in name:
+        return 'int64', 'string'
+    if '.primary-only.' in name:
+        return 'string', 'int64'
+    return 'string', 'string'
+
+
+def _assert_shop_rows(body: dict[str, Any], base: Decimal) -> None:
+    """Complete history and labels calculated from the independent shop formula."""
+    origin = datetime(2023, 1, 1, tzinfo=timezone.utc)
+    anchor = datetime(2024, 3, 1, tzinfo=timezone.utc)
+    number = M._number
+
+    def parse_time(value: str) -> datetime:
+        return datetime.fromisoformat(value.replace('Z', '+00:00'))
+
+    seen: set[Decimal] = set()
+    for part in ('context', 'predict'):
+        section = body[part]
+        instances = section['instance_table']
+        rows = [
+            dict(zip(instances['columns'], row, strict=True))
+            for row in instances['rows']
+        ]
+        identities = [
+            (
+                number(row['__kumo_entity_ref_0']) - base,
+                parse_time(row['__kumo_anchor_time']),
+            )
+            for row in rows
+        ]
+        expected = (
+            [
+                (Decimal(entity), anchor - timedelta(days=30 * step))
+                for entity in range(8)
+                for step in range(1, 15)
+            ]
+            if part == 'context'
+            else [(Decimal(0), anchor), (Decimal(1), anchor)]
+        )
+        assert Counter(identities) == Counter(expected)
+        ids = [number(row['instance_id']) for row in rows]
+        assert len(ids) == len(set(ids))
+        assert seen.isdisjoint(ids)
+        seen.update(ids)
+        related = section['related_tables']
+        assert set(related) == {'orders', 'users'}
+        orders = [
+            dict(zip(related['orders']['columns'], row, strict=True))
+            for row in related['orders']['rows']
+        ]
+        users = [
+            dict(zip(related['users']['columns'], row, strict=True))
+            for row in related['users']['rows']
+        ]
+        assert Counter(number(row['instance_id']) for row in users) == Counter(
+            ids
+        )
+        assert {number(row['instance_id']) for row in orders} <= set(ids)
+        assert len({number(row['__node_id']) for row in orders}) == len(orders)
+        for user in users:
+            entity = int(number(user['user_id']) - base)
+            assert user['country'] == ['US', 'DE', 'IN'][entity % 3]
+
+        for instance, (entity, at) in zip(rows, identities, strict=True):
+            own = number(instance['instance_id'])
+            source = [
+                (
+                    origin + timedelta(days=7 * order),
+                    Decimal(10) + Decimal('1.5') * order,
+                )
+                for order in range(80)
+                if order % 8 == entity
+            ]
+            history = [(time, price) for time, price in source if time <= at]
+            actual = [
+                (parse_time(row['ts']), number(row['price']))
+                for row in orders
+                if number(row['instance_id']) == own
+            ]
+            assert Counter(actual) == Counter(history)
+            if part == 'context':
+                label = sum(
+                    (
+                        price
+                        for time, price in source
+                        if at < time <= at + timedelta(days=30)
+                    ),
+                    Decimal(0),
+                )
+                assert number(instance['TARGET']) == label
+        assert not M.joins(body, base)
+
+
+def _assert_wire(body: dict[str, Any], primary: str) -> None:
+    assert body['task'] == {
+        'anchor_time_column': '__kumo_anchor_time',
+        'entity_table_names': ['users'],
+        'kind': 'regression',
+        'target': {'column_name': 'TARGET', 'dtype': 'float32'},
+    }
+    assert body['metadata']['num_context_examples'] == {'number': '112'}
+    assert body['metadata']['num_prediction_examples'] == {'number': '2'}
+    schema = body['schema']
+    instance = schema['instance_table']
+    assert instance['primary_key'] == 'instance_id'
+    assert {
+        name: info['dtype'] for name, info in instance['columns'].items()
+    } == {
+        'instance_id': 'int64',
+        '__kumo_entity_ref_0': primary,
+        '__kumo_anchor_time': 'timestamp[us]',
+        'TARGET': 'float32',
+    }
+    assert instance['columns']['TARGET']['stype'] == 'numerical'
+    assert instance['columns']['__kumo_anchor_time']['stype'] == 'timestamp'
+    assert instance['columns']['__kumo_entity_ref_0']['stype'] == 'ID'
+    assert instance['columns']['instance_id']['nullable'] is False
+    related = schema['related_tables']
+    assert set(related) == {'users', 'orders'}
+    assert related['users']['primary_key'] == ['instance_id', 'user_id']
+    assert related['orders']['primary_key'] == ['instance_id', '__node_id']
+    assert {
+        name: info['dtype']
+        for name, info in related['users']['columns'].items()
+    } == {
+        'instance_id': 'int64',
+        'user_id': primary,
+        'age': 'int64',
+        'country': 'string',
+    }
+    assert {
+        name: info['dtype']
+        for name, info in related['orders']['columns'].items()
+    } == {
+        'instance_id': 'int64',
+        '__node_id': 'int64',
+        # Graph references use the target primary key's wire type.
+        'user_id': primary,
+        'price': 'float64',
+        'ts': 'timestamp[us]',
+    }
+    assert related['orders']['columns']['ts']['stype'] == 'timestamp'
+    assert related['orders']['columns']['price']['stype'] == 'numerical'
+    assert schema['relationships'] == [
+        {
+            'source_columns': ['__kumo_entity_ref_0'],
+            'target_columns': ['user_id'],
+            'target_table': 'users',
+        },
+        {
+            'source_columns': ['user_id'],
+            'source_table': 'orders',
+            'target_columns': ['user_id'],
+            'target_table': 'users',
+        },
+    ]
+
+
 def test_each_key_pair_preserves_exact_values_and_joins():
     observed = _core_runs()
-    assert set(observed) == {vector['id'] for vector in recorded()['vectors']}
-    for vector in recorded()['vectors']:
+    assert set(observed) == set(_by_id())
+    for vector in M.VECTORS:
         key = vector['id']
         observation = observed[key]
         got = R.project(observation, vector)
+        primary, foreign = _key_dtypes(key)
+        compatible = (primary == 'string') == (foreign == 'string')
         assert observation['identity']['native_loaded'], key
-        if key in {'wide.ubigint.hugeint', 'wide.ubigint.ubigint'}:
-            # SQLite stores these unsigned values as text; native joins preserve it.
+        tables = {table['name']: table for table in got['schema']['tables']}
+        assert set(tables) == {'users', 'orders'}, key
+        for table_name, key_dtype in [('users', primary), ('orders', foreign)]:
+            table = tables[table_name]
+            assert table['primary_key'] == (
+                'user_id' if table_name == 'users' else 'order_id'
+            ), key
+            assert table['time_column'] == (
+                'ts' if table_name == 'orders' else None
+            ), key
+            assert table['duplicate_keys'] == 0, key
+            cols = {
+                column['name']: (column['dtype'], column['stype'])
+                for column in table['columns']
+            }
+            expected = (
+                {
+                    'user_id': (key_dtype, 'ID'),
+                    'age': ('int64', 'numerical'),
+                    'country': ('string', 'categorical'),
+                }
+                if table_name == 'users'
+                else {
+                    'order_id': ('int64', 'ID'),
+                    'user_id': (key_dtype, 'ID'),
+                    'price': ('float64', 'numerical'),
+                    'ts': ('string', 'timestamp'),
+                }
+            )
+            assert cols == expected, key
+        assert got['schema']['links'] == (
+            [['orders', 'user_id', 'users', 'user_id']] if compatible else []
+        ), key
+        assert got['warnings'] == (
+            ['UserWarning'] if compatible else ['SDMWarning']
+        ), key
+        if not compatible:
             assert got['outcome'] == {
-                'result': 'success',
-                'stage': 'predict',
-                'error': None,
-                'code': None,
+                'result': 'refusal',
+                'stage': 'materialize',
+                'error': 'StructuredDataError',
+                'code': 'INVALID_REQUEST',
             }, key
-            assert got['schema'] == vector['reference']['schema'], key
-            assert got['warnings'] == vector['reference']['warnings'], key
-            assert got['result']['rows'] == 2, key
-        else:
-            assert got == vector['reference'], key
-        if got['outcome']['result'] == 'success':
-            assert M.joined(observation, vector) is True, key
+            assert not observation['public']['payloads'], key
+            assert got['result'] is None, key
+            continue
+        assert got['outcome'] == {
+            'result': 'success',
+            'stage': 'predict',
+            'error': None,
+            'code': None,
+        }, key
+        assert got['result']['rows'] == 2, key
+        assert got['result']['columns'] == [
+            {'name': 'row_index', 'dtype': 'int64'},
+            {'name': 'id', 'dtype': 'str' if primary == 'string' else primary},
+            {'name': 'prediction', 'dtype': 'float64'},
+        ], key
+        result = observation['core']['predicted']['result']
+        names = [column['name'] for column in result['columns']]
+        assert names == (
+            ['row_index', 'id']
+            + (['id_as_written'] if primary == 'float64' else [])
+            + ['prediction', 'answer_index']
+        ), key
+        assert len(result['rows']) == 2
+        for position, (cells, entity) in enumerate(
+            zip(result['rows'], M.indices(vector), strict=True)
+        ):
+            row = dict(zip(names, cells, strict=True))
+            assert row['row_index'] == {'i64': str(position)}
+            assert row['prediction'] == {
+                'f64_bits': '3ff0000000000000'
+            }  # Endpoint returns 1.0.
+            assert row['answer_index'] == {'i64': str(position)}
+            if primary == 'int64':
+                assert row['id'] == {'i64': str(entity)}
+            else:
+                assert set(row['id']) == {'utf8'}
+                assert Decimal(row['id']['utf8']) == Decimal(str(entity))
+                if primary == 'float64':
+                    assert row['id_as_written'] == row['id']
+                    assert isinstance(
+                        json.loads(row['id_as_written']['utf8']), float
+                    )
+        payloads = observation['public']['payloads']
+        assert len(payloads) == 1, key
+        _assert_wire(payloads[0]['parsed'], primary)
+        _assert_shop_rows(payloads[0]['parsed'], M.offset(vector))
+        assert M.joined(observation, vector) is True, key

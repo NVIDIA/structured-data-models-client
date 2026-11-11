@@ -43,12 +43,10 @@ def _json_type(value: Any) -> str:
 
 
 def masked(parsed: Any, paths: Paths | None = None) -> Any:
-    r"""A parsed prediction payload with the value at each of ``paths``
-    (by default:data:`RANDOM_PATHS`) replaced by its JSON type, as
-    conservation compares it. The same rule holds the core's call (the payload it writes for the
-    endpoint, ``core.predicted.body``) across the core runners and to its
-    pin: one value, ``metadata.request_id``, under E35, approved by
-    the owner on 2026-10-10."""
+    """Mask random request-ID values while preserving field presence and type.
+
+    This lets capture-on/off comparisons detect any meaningful payload change.
+    """
     parsed = copy.deepcopy(parsed)
     for path in RANDOM_PATHS if paths is None else paths:
         node = parsed

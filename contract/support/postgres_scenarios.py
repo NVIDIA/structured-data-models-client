@@ -18,8 +18,6 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/postgres-regression-vectors.json'
-FORMAT = 'sdm-postgres-regression-vectors/1'
 #: The zone of every connection the recorder opens, set before anything is
 #: read, so no answer depends on the recorder's environment (``PGTZ``) or
 #: the server's default. The source reads every cursor through one
@@ -27,8 +25,6 @@ FORMAT = 'sdm-postgres-regression-vectors/1'
 #: (only ``time.new-york-auto-anchor``'s, on purpose); its ``setup`` names
 #: no zone, as ``tests/test_contract_cases.py`` holds every vector file to.
 UTC = "SET TimeZone TO 'UTC'"
-#: How a register entry names the vectors it covers, as the key vectors'.
-REGISTER_REF = 'contract/postgres-regression-vectors.json#'
 
 _USERS = 'CREATE TABLE users(id INTEGER PRIMARY KEY, age REAL, feature {})'
 _FILL = 'INSERT INTO users SELECT n, n * 10, {} FROM generate_series(1, 12) n'

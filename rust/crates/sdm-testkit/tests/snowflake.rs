@@ -2,31 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Snowflake on the core, held to what the old client sent and read
-//! on Snowflake: recordings (`contract/captures/snowflake/` and
-//! `contract/captures/s2/snowflake/`, the old client at 43e55f4f, connector
-//! 4.8.0, database and schema recorded as `{catalog}` and `{schema}`).
-//!
-//! - Goldens: each request kind the `snowflake` dialect renders without a
-//!   key set is planned under the source's database and schema, and each
-//!   statement is the one the old client sent for the same step, text and
-//!   parameters exactly (the catalog reads, the preview, the key counts, the
-//!   time bounds, the entity sample, the column ranges, the row count's
-//!   listing, a semantic view's YAML read).
-//! - The catalog reader: each recorded `DESCRIBE TABLE`, `SHOW IMPORTED
-//! KEYS`, table listing and session read, rebuilt in the Python row
-//!   adapter's text form (every column nullable text, in the result's
-//!   order, each non-null cell its `str`), read into the contract's catalog
-//!   answer as the old client reads the rows (`SNOW/table.py:160-189`,
-//!   `RE/graph.py:1024-1051`), the type map included (`:330-383`).
-//! - `conform` over the connector's own Arrow as recorded: narrow integers
-//!   and a `NUMBER(38,0)` that fits read as `int64`, one past it left a
-//!   decimal, a `NUMBER(p,s)` with a fraction read as a double, a zoned time
-//!   at its UTC instant with no zone (`RE/base/table.py:1093-1186`).
-//! - The data layer's answers for Snowflake: a failure with errno 2003 is
-//!   "not found", nothing else is; a name's spellings are as given, then
-//!   all three parts upper-cased, once; the session's parts fill only those
-//!   the source leaves out; the capabilities.
+//! Snowflake query planning, catalog interpretation and bound-key semantics.
+//! Small authored inputs check behavior independently of recorded client outputs.
+//! Four connector-produced Arrow samples retain external type interoperability coverage.
 
 use std::fs::File;
 use std::io::BufReader;
@@ -54,63 +32,6 @@ fn captures() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract/fixtures/maintained")
 }
 
-fn capture(case: &str) -> Value {
-    let text = std::fs::read_to_string(captures().join("snowflake.json")).unwrap();
-    let cases: Value = serde_json::from_str(&text).unwrap();
-    assert!(
-        cases.get(case).is_some(),
-        "no extracted Snowflake case {case}"
-    );
-    cases[case].clone()
-}
-
-/// A parameter as the recording writes it, as text.
-fn param_text(value: &Value) -> String {
-    match value {
-        Value::String(text) => text.clone(),
-        other => other.to_string(),
-    }
-}
-
-/// Each statement `case` recorded: its text and parameters.
-fn recorded(case: &str) -> Vec<(String, Vec<String>)> {
-    capture(case)["statements"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|s| {
-            (
-                s["text"].as_str().unwrap().to_owned(),
-                s["parameters"]
-                    .as_array()
-                    .map(|p| p.iter().map(param_text).collect())
-                    .unwrap_or_default(),
-            )
-        })
-        .collect()
-}
-
-/// The recorded result of the first statement of `case` whose text is
-/// `text` and whose parameters are `params`.
-fn recorded_result(case: &str, text: &str, params: &[&str]) -> Vec<RecordBatch> {
-    let capture = capture(case);
-    let statement = capture["statements"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|s| {
-            s["text"].as_str() == Some(text)
-                && s["parameters"]
-                    .as_array()
-                    .map(|p| p.iter().map(param_text).collect::<Vec<_>>())
-                    .unwrap_or_default()
-                    == params
-        })
-        .unwrap_or_else(|| panic!("{case} recorded no {text:?} {params:?}"));
-    arrow(case, statement["result"].as_str().unwrap())
-}
-
-/// A recorded table, as the Arrow IPC stream holds it.
 fn arrow(_case: &str, file: &str) -> Vec<RecordBatch> {
     let path = captures().join("snowflake").join(file);
     let reader =
@@ -170,15 +91,109 @@ fn planned(
         .collect())
 }
 
-/// `request`'s one statement, which `case` recorded exactly.
-fn one_recorded(case: &str, provider: &ProviderChoice, request: Value) -> (String, Vec<String>) {
+/// Check one SQL request without a historical statement-membership oracle.
+fn one_statement(_case: &str, provider: &ProviderChoice, request: Value) -> (String, Vec<String>) {
     let mut statements = planned(provider, request.clone()).unwrap();
     assert_eq!(statements.len(), 1, "{request}: {statements:?}");
     let statement = statements.remove(0);
-    assert!(
-        recorded(case).contains(&statement),
-        "{case} recorded no statement {statement:?} for {request}"
-    );
+    let (text, params) = &statement;
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let quote = |name: &str| format!("\"{}\"", name.replace('"', "\"\""));
+    let source = |name: &str| format!("\"{DB}\".\"{SCHEMA}\".{}", quote(name));
+    match request["request"].as_str().unwrap() {
+        "describe" => match request["part"].as_str().unwrap() {
+            "namespace" => assert_eq!(text, "SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()"),
+            "view_definition" => assert_eq!(text, "SELECT SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW(?)"),
+            "key_enforcement" => {
+                assert_eq!(text, &format!(r#"SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}""#))
+            }
+            part => panic!("unchecked description {part}"),
+        },
+        "preview" => {
+            let name = request["table"]["source"]
+                .as_array()
+                .unwrap()
+                .last()
+                .unwrap()
+                .as_str()
+                .unwrap();
+            let columns = request["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| quote(c.as_str().unwrap()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            assert_eq!(
+                flat,
+                format!(
+                    "SELECT {columns} FROM {} LIMIT {}",
+                    source(name),
+                    request["limit"]
+                )
+            );
+        }
+        "key_counts" => {
+            let keys = request["keys"].as_array().unwrap();
+            let parts = flat.split(" UNION ALL ").collect::<Vec<_>>();
+            assert_eq!(parts.len(), keys.len());
+            for (i, (key, part)) in keys.iter().zip(parts).enumerate() {
+                let columns = key["columns"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|c| quote(c.as_str().unwrap()))
+                    .collect::<Vec<_>>();
+                let missing = columns
+                    .iter()
+                    .map(|c| format!("{c} IS NULL"))
+                    .collect::<Vec<_>>()
+                    .join(" OR ");
+                let name = key["table"]["source"][0].as_str().unwrap();
+                assert_eq!(
+                    part,
+                    format!(
+                        "SELECT {i} AS k, COUNT(*) AS n, COUNT(DISTINCT {}) AS d, COUNT(CASE WHEN {missing} THEN 1 END) AS z FROM {}",
+                        columns.join(", "),
+                        source(name)
+                    )
+                );
+            }
+        }
+        "time_bounds" => assert_eq!(
+            flat,
+            format!(
+                "SELECT 0 as table_index, MIN(\"ts\") as min_date, MAX(\"ts\") as max_date FROM {}",
+                source("orders")
+            )
+        ),
+        "column_ranges" => assert_eq!(
+            flat,
+            format!(
+                "SELECT COUNT(*), MIN(\"ts\"), MAX(\"ts\"), COUNT(\"ts\") FROM {}",
+                source("orders")
+            )
+        ),
+        "sample_entities" => {
+            let n = request["n"].as_u64().unwrap().min(1_000_000);
+            let filter = if request["filters"].as_array().unwrap().is_empty() {
+                ""
+            } else {
+                " WHERE \"user_id\" IS NOT NULL"
+            };
+            assert_eq!(
+                flat,
+                format!(
+                    "SELECT \"user_id\" FROM {} SAMPLE ROW ({n} ROWS){filter}",
+                    source("users")
+                )
+            );
+        }
+        kind => panic!("unchecked request {kind}"),
+    }
+    if request["part"] != "view_definition" {
+        assert!(params.is_empty());
+    }
     statement
 }
 
@@ -187,46 +202,40 @@ fn table(name: &str) -> Value {
 }
 
 #[test]
-fn the_catalog_statements_are_the_old_clients() {
+fn catalog_statements_preserve_namespace_and_request_kind() {
     let p = &named();
-    one_recorded(
-        "base.binary",
-        p,
-        json!({"request": "describe", "part": "tables", "tables": []}),
+    let listing = planned(p, json!({"request":"describe","part":"tables","tables":[]})).unwrap();
+    assert_eq!(listing.len(), 1);
+    assert_eq!(
+        listing[0]
+            .0
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" "),
+        format!("SELECT TABLE_NAME FROM \"{DB}\".INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ?")
     );
-    for name in ["users", "orders"] {
-        let (text, _) = one_recorded(
-            "base.binary",
-            p,
-            json!({"request": "describe", "part": "columns", "tables": [table(name)]}),
-        );
-        assert_eq!(
-            text,
-            format!(r#"DESCRIBE TABLE "{DB}"."{SCHEMA}"."{name}""#)
-        );
-        // A table's keys are read from the same DESCRIBE as its columns.
-        one_recorded(
-            "base.binary",
-            p,
-            json!({"request": "describe", "part": "keys", "tables": [table(name)]}),
-        );
-        one_recorded(
-            "base.binary",
-            p,
-            json!({"request": "describe", "part": "foreign_keys", "tables": [table(name)]}),
-        );
+    assert_eq!(listing[0].1, [SCHEMA]);
+    for name in ["users", "orders", "USERS"] {
+        for (part, prefix) in [
+            ("columns", "DESCRIBE TABLE"),
+            ("keys", "DESCRIBE TABLE"),
+            ("foreign_keys", "SHOW IMPORTED KEYS IN TABLE"),
+        ] {
+            let got = planned(
+                p,
+                json!({"request":"describe","part":part,"tables":[table(name)]}),
+            )
+            .unwrap();
+            assert_eq!(
+                got,
+                vec![(format!("{prefix} \"{DB}\".\"{SCHEMA}\".\"{name}\""), vec![])]
+            );
+        }
     }
-    // The upper-cased spelling, as the old client wrote it after a miss.
-    one_recorded(
-        "snowflake.name.upper-case-folded",
-        p,
-        json!({"request": "describe", "part": "columns",
-               "tables": [{"source": [DB, SCHEMA, "USERS"]}]}),
-    );
 }
 
 #[test]
-fn the_session_is_read_with_the_old_clients_one_statement() {
+fn session_namespace_is_read_once() {
     // Each part left to the session, or the schema only, or the database
     // only: one statement, the old client's, whatever is named.
     for namespace in [
@@ -234,7 +243,7 @@ fn the_session_is_read_with_the_old_clients_one_statement() {
         vec![None, None],
         vec![None, Some(SCHEMA)],
     ] {
-        let (text, params) = one_recorded(
+        let (text, params) = one_statement(
             "snowflake.name.database-only",
             &snowflake(&namespace),
             json!({"request": "describe", "part": "namespace", "tables": []}),
@@ -245,27 +254,27 @@ fn the_session_is_read_with_the_old_clients_one_statement() {
 }
 
 #[test]
-fn the_reads_are_the_old_clients() {
+fn previews_key_counts_and_time_ranges_preserve_sql_semantics() {
     let p = &named();
-    one_recorded(
+    one_statement(
         "base.binary",
         p,
         json!({"request": "preview", "table": table("users"),
                "columns": ["user_id", "age", "country"], "limit": 1000}),
     );
-    one_recorded(
+    one_statement(
         "base.binary",
         p,
         json!({"request": "preview", "table": table("orders"),
                "columns": ["order_id", "user_id", "price", "ts"], "limit": 1000}),
     );
-    one_recorded(
+    one_statement(
         "snowflake.name.upper-case-folded",
         p,
         json!({"request": "preview", "table": {"source": [DB, SCHEMA, "USERS"]},
                "columns": ["user_id", "age", "country"], "limit": 1000}),
     );
-    one_recorded(
+    one_statement(
         "base.binary",
         p,
         json!({"request": "key_counts", "keys": [
@@ -274,19 +283,19 @@ fn the_reads_are_the_old_clients() {
     );
     // A key of two columns: `COUNT(DISTINCT a, b)`, Snowflake's, which
     // skips a row missing either part itself.
-    one_recorded(
+    one_statement(
         "rule.composite-key-given",
         p,
         json!({"request": "key_counts", "keys": [
             {"table": table("orders"), "columns": ["order_id", "line"]},
             {"table": table("users"), "columns": ["user_id"]}]}),
     );
-    one_recorded(
+    one_statement(
         "base.binary",
         p,
         json!({"request": "time_bounds", "columns": [{"table": table("orders"), "column": "ts"}]}),
     );
-    one_recorded(
+    one_statement(
         "snowflake.sampled.entity-table",
         p,
         json!({"request": "column_ranges", "table": table("orders"), "columns": ["ts"]}),
@@ -294,7 +303,7 @@ fn the_reads_are_the_old_clients() {
 }
 
 #[test]
-fn an_entity_sample_is_the_old_clients_unseeded_sample_of_rows() {
+fn entity_sampling_preserves_row_cap_and_ignores_seed() {
     let p = &named();
     let sample = |n: u64, seed: Value, filters: Value| {
         json!({"request": "sample_entities", "table": table("users"), "key": ["user_id"],
@@ -302,7 +311,7 @@ fn an_entity_sample_is_the_old_clients_unseeded_sample_of_rows() {
     };
     let not_null = json!([{"filter": "not_null", "column": "user_id"}]);
     let seed = |v: &str| json!({"t": "u64", "v": v});
-    let (text, _) = one_recorded(
+    let (text, _) = one_statement(
         "base.binary",
         p,
         sample(10_000, seed("42"), not_null.clone()),
@@ -312,13 +321,13 @@ fn an_entity_sample_is_the_old_clients_unseeded_sample_of_rows() {
         planned(p, sample(10_000, seed("7"), not_null.clone())).unwrap(),
         vec![(text, vec![])]
     );
-    one_recorded(
+    one_statement(
         "sample.max-pq-iterations-1",
         p,
         sample(1_000, seed("42"), not_null.clone()),
     );
     // A key the source declares not null takes no filter.
-    one_recorded(
+    one_statement(
         "key.past-2-53.catalog",
         p,
         sample(10_000, seed("42"), json!([])),
@@ -354,7 +363,7 @@ fn row_counts_name_the_exact_object_and_support_views() {
 #[test]
 fn a_semantic_views_definition_is_read_by_its_name_as_the_old_client_binds_it() {
     let p = &named();
-    let (text, params) = one_recorded(
+    let (text, params) = one_statement(
         "view.semantic.forecast",
         p,
         json!({"request": "describe", "part": "view_definition",
@@ -442,68 +451,14 @@ fn what_the_dialect_cannot_read_is_refused_by_name() {
 // --- the catalog reader -------------------------------------------------------
 
 /// A Python `str` of a recorded cell, as the row adapter writes it.
-fn python_text(column: &ArrayRef, row: usize) -> Option<String> {
-    if column.is_null(row) {
-        return None;
-    }
-    Some(match column.data_type() {
-        DataType::Utf8 => column.as_string::<i32>().value(row).to_owned(),
-        DataType::LargeUtf8 => column.as_string::<i64>().value(row).to_owned(),
-        DataType::Int64 => column.as_primitive::<Int64Type>().value(row).to_string(),
-        DataType::Boolean => if column.as_boolean().value(row) {
-            "True"
-        } else {
-            "False"
-        }
-        .to_owned(),
-        // A date or time cell (`created_on`) is never read.
-        _ => "<unread>".to_owned(),
-    })
-}
-
-/// `batches` in the row adapter's text form: each column nullable text, in
-/// the result's order, each non-null cell its `str`.
-fn as_rows(batches: &[RecordBatch]) -> Vec<RecordBatch> {
-    batches
-        .iter()
-        .map(|batch| {
-            let schema = Arc::new(Schema::new(
-                batch
-                    .schema()
-                    .fields()
-                    .iter()
-                    .map(|f| Field::new(f.name(), DataType::Utf8, true))
-                    .collect::<Vec<_>>(),
-            ));
-            let columns: Vec<ArrayRef> = batch
-                .columns()
-                .iter()
-                .map(|column| {
-                    Arc::new(
-                        (0..column.len())
-                            .map(|row| python_text(column, row))
-                            .collect::<StringArray>(),
-                    ) as ArrayRef
-                })
-                .collect();
-            RecordBatch::try_new(schema, columns).unwrap()
-        })
-        .collect()
-}
-
 fn read(request: Value, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     let request: DataRequest = serde_json::from_value(request).unwrap();
     layer().read(&request, &named(), batches)
 }
 
-/// The recorded `DESCRIBE TABLE` of `name` in `case`, read as its columns
-/// and its keys.
-fn described(case: &str, name: &str) -> (CatalogAnswer, CatalogAnswer) {
-    let rows = as_rows(&recorded_result(
-        case,
-        &format!(r#"DESCRIBE TABLE "{DB}"."{SCHEMA}"."{name}""#),
-        &[],
-    ));
+/// Read authored DESCRIBE rows as both columns and key declarations.
+fn described(rows: &[Described<'_>], name: &str) -> (CatalogAnswer, CatalogAnswer) {
+    let rows = describe_rows(rows);
     let ask = |part: &str| json!({"request": "describe", "part": part, "tables": [table(name)]});
     (
         read(ask("columns"), &rows).unwrap(),
@@ -513,7 +468,14 @@ fn described(case: &str, name: &str) -> (CatalogAnswer, CatalogAnswer) {
 
 #[test]
 fn a_tables_columns_are_read_from_its_describe_as_the_old_client_reads_them() {
-    let (columns, keys) = described("base.binary", "users");
+    let (columns, keys) = described(
+        &[
+            ("user_id", "NUMBER(38,0)", "Y", "N", "N"),
+            ("age", "NUMBER(38,0)", "Y", "N", "N"),
+            ("country", "VARCHAR(16777216)", "Y", "N", "N"),
+        ],
+        "users",
+    );
     let CatalogAnswer::Columns(columns) = columns else {
         panic!("not columns");
     };
@@ -541,7 +503,13 @@ fn a_tables_columns_are_read_from_its_describe_as_the_old_client_reads_them() {
 
 #[test]
 fn a_declared_primary_key_is_read_from_the_describe_and_not_enforced() {
-    let (columns, keys) = described("key.past-2-53.catalog", "users");
+    let (columns, keys) = described(
+        &[
+            ("user_id", "NUMBER(38,0)", "N", "Y", "N"),
+            ("age", "NUMBER(38,0)", "Y", "N", "N"),
+        ],
+        "users",
+    );
     let CatalogAnswer::Columns(columns) = columns else {
         panic!("not columns");
     };
@@ -557,7 +525,13 @@ fn a_declared_primary_key_is_read_from_the_describe_and_not_enforced() {
     assert!(!keys[0].enforced);
     // Two columns flagged: a key of both, which makes no table's key
     // (`RE/base/table.py:1016-1024`).
-    let (_, keys) = described("rule.composite-key-declared", "orders");
+    let (_, keys) = described(
+        &[
+            ("order_no", "NUMBER(38,0)", "N", "Y", "N"),
+            ("line", "NUMBER(38,0)", "N", "Y", "N"),
+        ],
+        "orders",
+    );
     let CatalogAnswer::Keys(keys) = keys else {
         panic!("not keys");
     };
@@ -571,36 +545,9 @@ fn a_declared_primary_key_is_read_from_the_describe_and_not_enforced() {
 
 #[test]
 fn each_declared_type_is_read_by_the_old_clients_type_map() {
-    for (case, name, column, dtype) in [
-        (
-            "decimal.target-38-18",
-            "orders",
-            "price",
-            Some(Dtype::Float),
-        ),
-        ("decimal.feature-38-0-wide", "users", "f", Some(Dtype::Int)),
-        ("time.timestamptz", "orders", "ts", Some(Dtype::Date)),
-        ("time.timestamp-ns", "orders", "ts", Some(Dtype::Date)),
-        ("time.feature-time-of-day", "users", "f", Some(Dtype::Time)),
-        ("feature.bool", "users", "f", Some(Dtype::Bool)),
-        ("base.binary", "orders", "price", Some(Dtype::Float)),
-        ("nested.list-int", "users", "f", Some(Dtype::Unsupported)),
-        ("nested.map", "users", "f", Some(Dtype::Unsupported)),
-        ("nested.union", "users", "f", Some(Dtype::Unsupported)),
-    ] {
-        let (CatalogAnswer::Columns(columns), _) = described(case, name) else {
-            panic!("not columns");
-        };
-        let found = columns.iter().find(|c| c.name == column).unwrap();
-        assert_eq!(
-            found.dtype, dtype,
-            "{case} {name}.{column} {}",
-            found.declared_type
-        );
-    }
-    // The declarations no recording holds, each as `_to_dtype` reads it.
     for (declared, dtype) in [
         ("NUMBER(10,2)", Some(Dtype::Float)),
+        ("NUMBER(38,18)", Some(Dtype::Float)),
         ("NUMBER(38,0)", Some(Dtype::Int)),
         ("NUMBER", Some(Dtype::Float)),
         ("NUMBER(38,x)", Some(Dtype::Float)),
@@ -710,45 +657,86 @@ fn a_unique_key_is_one_column_flagged_unique() {
     assert_eq!(keys[0].kind, KeyKind::Primary);
 }
 
-fn foreign_keys(case: &str, name: &str) -> Vec<CatalogForeignKey> {
-    let rows = as_rows(&recorded_result(
-        case,
-        &format!(r#"SHOW IMPORTED KEYS IN TABLE "{DB}"."{SCHEMA}"."{name}""#),
-        &[],
-    ));
+/// Minimal row-adapter representation of SHOW IMPORTED KEYS.
+fn imported_rows(keys: &[(&str, &str, &str)]) -> Vec<RecordBatch> {
+    let names = [
+        "created_on",
+        "pk_database_name",
+        "pk_schema_name",
+        "pk_table_name",
+        "pk_column_name",
+        "fk_database_name",
+        "fk_schema_name",
+        "fk_table_name",
+        "fk_column_name",
+        "key_sequence",
+        "update_rule",
+        "delete_rule",
+        "fk_name",
+        "pk_name",
+        "deferrability",
+        "rely",
+        "comment",
+    ];
+    let columns = names.iter().map(|name| {
+        let values = keys
+            .iter()
+            .map(|(constraint, from, to)| match *name {
+                "pk_database_name" | "fk_database_name" => Some(DB),
+                "pk_schema_name" | "fk_schema_name" => Some(SCHEMA),
+                "pk_table_name" => Some("users"),
+                "pk_column_name" => Some(*to),
+                "fk_table_name" => Some("orders"),
+                "fk_column_name" => Some(*from),
+                "fk_name" => Some(*constraint),
+                "pk_name" => Some("users_pk"),
+                _ => None,
+            })
+            .collect::<StringArray>();
+        (*name, Arc::new(values) as ArrayRef)
+    });
+    vec![RecordBatch::try_from_iter(columns).unwrap()]
+}
+
+fn foreign_keys(keys: &[(&str, &str, &str)]) -> Vec<CatalogForeignKey> {
     let CatalogAnswer::ForeignKeys(keys) = read(
-        json!({"request": "describe", "part": "foreign_keys", "tables": [table(name)]}),
-        &rows,
+        json!({"request":"describe","part":"foreign_keys","tables":[table("orders")]}),
+        &imported_rows(keys),
     )
     .unwrap() else {
-        panic!("not foreign keys");
+        panic!("not foreign keys")
     };
     keys
 }
 
 #[test]
 fn a_foreign_key_is_read_from_the_imported_keys_by_its_referenced_keys_name() {
-    let keys = foreign_keys("snowflake.forecast.catalog-keys", "orders");
+    let keys = foreign_keys(&[("buyer_fk", "buyer", "uid")]);
     assert_eq!(keys.len(), 1);
     assert_eq!(keys[0].columns, vec!["buyer".to_owned()]);
     assert_eq!(keys[0].referenced_columns, vec!["uid".to_owned()]);
     // The target table joined with dots, unquoted.
     assert_eq!(keys[0].referenced_table, format!("{DB}.{SCHEMA}.users"));
-    assert!(foreign_keys("base.binary", "orders").is_empty());
+    assert!(foreign_keys(&[]).is_empty());
     // A key of two columns: its two rows share the referenced key's name,
     // so they are one key, which links no table (`SNOW/table.py:174-189`).
-    let keys = foreign_keys("rule.composite-foreign-key-declared", "orders");
+    let keys = foreign_keys(&[
+        ("buyer_region_fk", "user_id", "user_id"),
+        ("buyer_region_fk", "region", "region"),
+    ]);
     assert_eq!(keys.len(), 2);
     assert_eq!(keys[0].key, keys[1].key);
 }
 
 #[test]
 fn the_tables_and_the_session_are_read_from_their_answers() {
-    let listing = recorded_result(
-        "base.binary",
-        "\n                    SELECT TABLE_NAME\n                    FROM \"{catalog}\".INFORMATION_SCHEMA.TABLES\n                    WHERE TABLE_SCHEMA = ?\n                    ",
-        &[SCHEMA],
-    );
+    let listing = vec![
+        RecordBatch::try_from_iter([(
+            "TABLE_NAME",
+            Arc::new(StringArray::from(vec!["users", "orders"])) as ArrayRef,
+        )])
+        .unwrap(),
+    ];
     assert_eq!(
         read(
             json!({"request": "describe", "part": "tables", "tables": []}),
@@ -757,11 +745,19 @@ fn the_tables_and_the_session_are_read_from_their_answers() {
         .unwrap(),
         CatalogAnswer::Tables(vec!["users".to_owned(), "orders".to_owned()])
     );
-    let session = recorded_result(
-        "snowflake.name.database-only",
-        "SELECT CURRENT_DATABASE(), CURRENT_SCHEMA()",
-        &[],
-    );
+    let session = vec![
+        RecordBatch::try_from_iter([
+            (
+                "CURRENT_DATABASE()",
+                Arc::new(StringArray::from(vec![DB])) as ArrayRef,
+            ),
+            (
+                "CURRENT_SCHEMA()",
+                Arc::new(StringArray::from(vec![SCHEMA])) as ArrayRef,
+            ),
+        ])
+        .unwrap(),
+    ];
     let ask = json!({"request": "describe", "part": "namespace", "tables": []});
     assert_eq!(
         read(ask.clone(), &session).unwrap(),
@@ -851,18 +847,22 @@ fn a_semantic_views_definition_is_its_yaml() {
 
 // --- conform ------------------------------------------------------------------
 
-/// The recorded preview of `columns` from `name` in `case`, as the
-/// connector handed it to the old client.
-fn previewed(case: &str, name: &str, columns: &[&str]) -> Vec<RecordBatch> {
-    let quoted: Vec<String> = columns.iter().map(|c| format!("\"{c}\"")).collect();
-    recorded_result(
-        case,
-        &format!(
-            r#"SELECT {} FROM "{DB}"."{SCHEMA}"."{name}" LIMIT 1000"#,
-            quoted.join(", ")
-        ),
-        &[],
-    )
+/// Original connector bytes retained only for distinct physical Arrow representations.
+fn connector_sample(kind: &str) -> Vec<RecordBatch> {
+    let file = match kind {
+        "narrow-integers" => {
+            "a4d1c73e1c1c48bdaeb829617953b6d38bcf89f3e23ed330e1b8e3abcf42fbc2.arrow"
+        }
+        "fractional-decimal" => {
+            "49087a631e81db9c4c1a573e575141cfe09ba86de71c56de9a648acd5aa50fdb.arrow"
+        }
+        "wide-decimal" => "b3673dc382515d8461ed952ef45ea16395215d79203c28f6ec27e2a303a00ec8.arrow",
+        "zoned-timestamp" => {
+            "d7e37050ac434076070cf7566f04218d29ca546ee3c163fd967bf90675fe37c7.arrow"
+        }
+        _ => panic!("unknown connector sample {kind}"),
+    };
+    arrow("", file)
 }
 
 fn conformed(batches: &[RecordBatch]) -> Vec<RecordBatch> {
@@ -879,19 +879,19 @@ fn conformed(batches: &[RecordBatch]) -> Vec<RecordBatch> {
 #[test]
 fn the_connectors_arrow_is_read_as_the_old_client_reads_it() {
     // Integers the connector narrows by their values: `int64`.
-    let read = conformed(&previewed(
-        "base.binary",
-        "users",
-        &["user_id", "age", "country"],
-    ));
+    let read = conformed(&connector_sample("narrow-integers"));
     assert_eq!(read[0].column(0).data_type(), &DataType::Int64);
+    assert_eq!(
+        read[0]
+            .column(0)
+            .as_primitive::<arrow_array::types::Int64Type>()
+            .values()
+            .as_ref(),
+        &[0, 1, 2, 3, 4, 5, 6, 7]
+    );
     assert_eq!(read[0].column(2).data_type(), &DataType::Utf8);
     // A `NUMBER(38,18)`: a double.
-    let read = conformed(&previewed(
-        "decimal.target-38-18",
-        "orders",
-        &["order_id", "user_id", "price", "ts"],
-    ));
+    let read = conformed(&connector_sample("fractional-decimal"));
     assert_eq!(read[0].column(2).data_type(), &DataType::Float64);
     assert_eq!(
         read[0]
@@ -901,18 +901,17 @@ fn the_connectors_arrow_is_read_as_the_old_client_reads_it() {
         11.5
     );
     // A `NUMBER(38,0)` past `int64`: left a decimal.
-    let read = conformed(&previewed(
-        "decimal.feature-38-0-wide",
-        "users",
-        &["user_id", "age", "country", "f"],
-    ));
+    let read = conformed(&connector_sample("wide-decimal"));
     assert_eq!(read[0].column(3).data_type(), &DataType::Decimal128(38, 0));
-    // A `TIMESTAMP_LTZ` in a Los Angeles session: its UTC instant, no zone.
-    let given = previewed(
-        "time.timestamptz",
-        "orders",
-        &["order_id", "user_id", "price", "ts"],
+    assert_eq!(
+        read[0]
+            .column(3)
+            .as_primitive::<arrow_array::types::Decimal128Type>()
+            .value(0),
+        12_345_678_901_234_567_890_123_456_789i128
     );
+    // A `TIMESTAMP_LTZ` in a Los Angeles session: its UTC instant, no zone.
+    let given = connector_sample("zoned-timestamp");
     let read = conformed(&given);
     assert_eq!(
         read[0].column(3).data_type(),
@@ -1110,9 +1109,9 @@ fn wall_clock(text: &str) -> i64 {
     seconds * 1_000_000_000
 }
 
-/// The seeds the old client's JSON `payload` holds: each id, and each of
+/// Authored seed JSON: each id, and each of
 /// the window's bounds where the rows carry them, in batch order.
-fn recorded_seeds(payload: &str) -> sdm_contract::data::KeyData {
+fn seed_data(payload: &str) -> sdm_contract::data::KeyData {
     use arrow_array::{Int64Array, TimestampNanosecondArray};
     let rows: Vec<Value> = serde_json::from_str(payload).unwrap();
     let id = |row: &Value| match row {
@@ -1186,15 +1185,42 @@ fn bound(request: Value, keys: sdm_contract::data::KeyData) -> Vec<(String, Stri
     found
 }
 
-/// The recorded key read of `case` whose text starts so and contains
-/// `marker`: its text, its key set's JSON and its other parameters.
-fn recorded_key_read(case: &str, marker: &str) -> (String, String, Vec<String>) {
-    let (text, params) = recorded(case)
-        .into_iter()
-        .find(|(text, _)| text.contains("FLATTEN") && text.contains(marker))
-        .unwrap_or_else(|| panic!("{case} recorded no key read with {marker:?}"));
-    (text, params[0].clone(), params[1..].to_vec())
+fn assert_bound_payload(sent: &[(String, String, Vec<String>)], payload: &str) -> String {
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        serde_json::from_str::<Value>(&sent[0].1).unwrap(),
+        serde_json::from_str::<Value>(payload).unwrap()
+    );
+    let sql = sent[0].0.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(sql.contains("f.index as __KUMO_BATCH__"));
+    assert!(sql.contains("FLATTEN(INPUT => PARSE_JSON(?))"));
+    assert!(
+        sql.contains("FROM TMP JOIN \"{catalog}\".\"{schema}\"."),
+        "{sql}"
+    );
+    assert!(sql.contains("ON \"user_id\" = TMP.__KUMO_ID__"));
+    sql
 }
+
+fn assert_window(sent: &[(String, String, Vec<String>)], payload: &str) -> String {
+    let sql = assert_bound_payload(sent, payload);
+    for clause in [
+        "f.value[0]::NUMBER as __KUMO_ID__",
+        "f.value[1]::TIMESTAMP_NTZ as __KUMO_END_TIME__",
+        "f.value[2]::TIMESTAMP_NTZ as __KUMO_START_TIME__",
+        "JOIN \"{catalog}\".\"{schema}\".\"orders\"",
+        "\"ts\" <= TMP.__KUMO_END_TIME__",
+        "\"ts\" > TMP.__KUMO_START_TIME__",
+        "WHERE \"ts\" <= ? AND \"ts\" > ?",
+    ] {
+        assert!(sql.contains(clause), "missing {clause}: {sql}");
+    }
+    assert_eq!(sql.matches('?').count(), 3);
+    assert_eq!(sent[0].2, ["2024-03-01 00:00:00", "2024-01-01 00:00:00"]);
+    sql
+}
+
+const WINDOW_SEEDS: &str = r#"[[7,"2024-03-01 00:00:00","2024-02-01 00:00:00"],[7,"2024-02-01 00:00:00","2024-01-01 00:00:00"]]"#;
 
 fn seeds_json(columns: &[(&str, Value)], flags: &[(&str, &str)]) -> Value {
     Value::Array(
@@ -1222,8 +1248,8 @@ fn time_type() -> Value {
 }
 
 #[test]
-fn a_window_read_by_time_is_the_old_clients_statement_and_json() {
-    let (text, payload, others) = recorded_key_read("base.binary", "\"ts\"\nFROM TMP");
+fn window_reads_bind_each_seed_and_global_bounds() {
+    let payload = WINDOW_SEEDS;
     let request = json!({
         "request": "neighbors", "table": table("orders"), "key": ["user_id"],
         "columns": ["ts"],
@@ -1234,15 +1260,16 @@ fn a_window_read_by_time_is_the_old_clients_statement_and_json() {
                    "lower": {"seed_column": "start", "inclusive": false},
                    "upper": {"seed_column": "end", "inclusive": true}},
         "per_seed": null, "order": null});
-    assert_eq!(
-        bound(request, recorded_seeds(&payload)),
-        vec![(text, payload, others)]
-    );
+    let sent = bound(request, seed_data(payload));
+    let sql = assert_window(&sent, payload);
+    assert!(sql.contains("SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"ts\" FROM TMP"));
+    assert!(!sql.contains("QUALIFY"));
+    assert!(!sql.contains("ORDER BY"));
 }
 
 #[test]
-fn a_neighbor_read_is_the_old_clients_statement_and_json() {
-    let (text, payload, others) = recorded_key_read("base.binary", "QUALIFY");
+fn neighbor_reads_preserve_order_and_per_seed_cap() {
+    let payload = WINDOW_SEEDS;
     let term = |column: &str, time: bool| json!({"column": column, "as_timestamp": time, "descending": time, "nulls_last": true});
     let request = json!({
         "request": "neighbors", "table": table("orders"), "key": ["user_id"],
@@ -1254,15 +1281,16 @@ fn a_neighbor_read_is_the_old_clients_statement_and_json() {
                    "lower": {"seed_column": "start", "inclusive": false},
                    "upper": {"seed_column": "end", "inclusive": true}},
         "per_seed": 32, "order": [term("ts", true), term("order_id", false)]});
-    assert_eq!(
-        bound(request, recorded_seeds(&payload)),
-        vec![(text, payload, others)]
-    );
+    let sent = bound(request, seed_data(payload));
+    let sql = assert_window(&sent, payload);
+    assert!(sql.contains("SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"order_id\", \"user_id\", \"price\", \"ts\" FROM TMP"));
+    assert!(sql.contains("QUALIFY ROW_NUMBER() OVER ( PARTITION BY TMP.__KUMO_BATCH__ ORDER BY \"ts\" DESC, \"order_id\" ) <= 32"));
+    assert!(sql.ends_with("ORDER BY TMP.__KUMO_BATCH__, \"ts\" DESC, \"order_id\""));
 }
 
 #[test]
-fn a_key_lookup_is_the_old_clients_statement_and_json_one_row_per_seed() {
-    let (text, payload, others) = recorded_key_read("base.binary", "f.value::NUMBER");
+fn lookup_preserves_seed_identity_and_duplicate_policy() {
+    let payload = "[7,7,3]";
     let lookup = |flags: &[(&str, &str)]| {
         json!({
             "request": "lookup", "table": table("users"), "key": ["user_id"],
@@ -1270,36 +1298,35 @@ fn a_key_lookup_is_the_old_clients_statement_and_json_one_row_per_seed() {
             "seeds": {"attachment": 2, "columns": seeds_json(&[
                 ("key", json!({"type": "int64"})), ("batch", json!({"type": "int64"}))], flags)}})
     };
-    // A key the source keeps unique: the old client's plain join.
-    assert_eq!(
-        bound(
-            lookup(&[("key", "sdm:key_unique")]),
-            recorded_seeds(&payload)
-        ),
-        vec![(text.clone(), payload.clone(), others.clone())]
-    );
-    // Any other: the old client's first row of each seed, and how many rows
-    // hold its key, which the old client counts after its fetch
-    // (`SNOW/sampler.py:246-260`), here in the statement.
-    let (select, rest) = text.split_once("\nFROM TMP").unwrap();
-    let counted = format!(
-        "{select}, COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS \"__kumo_matches__\"\nFROM TMP{rest}\nQUALIFY ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__ ORDER BY \"user_id\") = 1"
-    );
-    assert_eq!(
-        bound(lookup(&[]), recorded_seeds(&payload)),
-        vec![(counted, payload.clone(), others.clone())]
-    );
-    // A count not read: the first row of each seed alone.
-    let first = format!(
-        "{text}\nQUALIFY ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__ ORDER BY \"user_id\") = 1"
-    );
-    assert_eq!(
-        bound(
-            lookup(&[("batch", "sdm:count_unread")]),
-            recorded_seeds(&payload)
-        ),
-        vec![(first, payload, others)]
-    );
+    for (flags, qualify, count) in [
+        (vec![("key", "sdm:key_unique")], false, false),
+        (vec![], true, true),
+        (vec![("batch", "sdm:count_unread")], true, false),
+    ] {
+        let sent = bound(lookup(&flags), seed_data(payload));
+        let sql = assert_bound_payload(&sent, payload);
+        assert!(sent[0].2.is_empty());
+        assert_eq!(sql.matches('?').count(), 1);
+        assert!(sql.contains("f.value::NUMBER as __KUMO_ID__"));
+        assert!(sql.contains("JOIN \"{catalog}\".\"{schema}\".\"users\""));
+        assert!(sql.contains(
+            "SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"user_id\", \"age\", \"country\""
+        ));
+        assert_eq!(sql.contains("QUALIFY ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__ ORDER BY \"user_id\") = 1"), qualify);
+        assert_eq!(
+            sql.contains("COUNT(*) OVER (PARTITION BY TMP.__KUMO_BATCH__) AS \"__kumo_matches__\""),
+            count
+        );
+        if !qualify && !count {
+            assert_eq!(
+                sql,
+                "WITH TMP as ( SELECT f.index as __KUMO_BATCH__, f.value::NUMBER as __KUMO_ID__ \
+                 FROM TABLE(FLATTEN(INPUT => PARSE_JSON(?))) f ) \
+                 SELECT TMP.__KUMO_BATCH__ as __KUMO_BATCH__, \"user_id\", \"age\", \"country\" \
+                 FROM TMP JOIN \"{catalog}\".\"{schema}\".\"users\" ON \"user_id\" = TMP.__KUMO_ID__"
+            );
+        }
+    }
 }
 
 #[test]
@@ -1390,7 +1417,7 @@ fn a_missing_anchor_is_json_null_and_other_seeds_keep_their_window() {
 fn the_schemas_hybrid_tables_are_listed_and_read_as_the_old_client_reads_them() {
     let p = &named();
     // Asked of a table, answered for its schema (`SNOW/table.py:264-285`).
-    let (text, params) = one_recorded(
+    let (text, params) = one_statement(
         "key.declared-int32",
         p,
         json!({"request": "describe", "part": "key_enforcement", "tables": [table("users")]}),
@@ -1398,12 +1425,20 @@ fn the_schemas_hybrid_tables_are_listed_and_read_as_the_old_client_reads_them() 
     assert_eq!(text, format!(r#"SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}""#));
     assert!(params.is_empty());
     let ask = json!({"request": "describe", "part": "key_enforcement", "tables": [table("users")]});
-    // The recorded listing, every table plain: none enforces its key.
-    let listing = as_rows(&recorded_result(
-        "key.declared-int32",
-        &format!(r#"SHOW TABLES IN SCHEMA "{DB}"."{SCHEMA}""#),
-        &[],
-    ));
+    // Ordinary tables do not provide enforcement evidence.
+    let listing = vec![
+        RecordBatch::try_from_iter([
+            (
+                "name",
+                Arc::new(StringArray::from(vec!["users", "orders"])) as ArrayRef,
+            ),
+            (
+                "is_hybrid",
+                Arc::new(StringArray::from(vec!["N", "N"])) as ArrayRef,
+            ),
+        ])
+        .unwrap(),
+    ];
     assert_eq!(
         read(ask.clone(), &listing).unwrap(),
         CatalogAnswer::KeyEnforcement(vec![])
@@ -1452,17 +1487,7 @@ fn the_schemas_hybrid_tables_are_listed_and_read_as_the_old_client_reads_them() 
 
 #[test]
 fn independent_foreign_keys_to_one_primary_key_stay_independent() {
-    let statement = format!("SHOW IMPORTED KEYS IN TABLE \"{DB}\".\"{SCHEMA}\".\"orders\"");
-    let mut rows = as_rows(&recorded_result(
-        "rule.composite-foreign-key-declared",
-        &statement,
-        &[],
-    ));
-    let batch = &rows[0];
-    let mut columns = batch.columns().to_vec();
-    columns[12] = Arc::new(StringArray::from(vec!["buyer_fk", "seller_fk"]));
-    columns[13] = Arc::new(StringArray::from(vec!["users_pk", "users_pk"]));
-    rows[0] = RecordBatch::try_new(batch.schema(), columns).unwrap();
+    let rows = imported_rows(&[("buyer_fk", "buyer", "uid"), ("seller_fk", "seller", "uid")]);
     let CatalogAnswer::ForeignKeys(keys) = read(
         json!({"request": "describe", "part": "foreign_keys", "tables": [table("orders")]}),
         &rows,
@@ -1489,7 +1514,7 @@ fn zoned_windows_keep_utc_bounds_at_non_utc_dst_edges() {
                 ("key", json!({"type": "int64"})), ("batch", json!({"type": "int64"})), ("end", time_type())], &[])},
             "window": {"column": "ts", "source_type": "TIMESTAMP_LTZ(6)", "lower": null,
                 "upper": {"seed_column": "end", "inclusive": true}}, "per_seed": null, "order": null});
-        let sent = bound(request, recorded_seeds(&payload));
+        let sent = bound(request, seed_data(&payload));
         assert_eq!(sent[0].1, payload);
         assert_eq!(sent[0].2, vec![end.to_owned()]);
         assert!(

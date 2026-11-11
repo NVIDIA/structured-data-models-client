@@ -78,22 +78,18 @@ pub struct ContextDecision {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CountError {
     Zero,
-    AboveLimit,
     AbovePopulation,
 }
 
-/// The composition supplies the model limit; this engine owns no capability.
+/// The composition supplies the default sample size; this engine owns no capability.
 pub fn context_decision(
     population: usize,
     requested: Option<usize>,
-    limit: usize,
+    default: usize,
 ) -> Result<ContextDecision, CountError> {
-    let wanted = requested.unwrap_or(limit);
+    let wanted = requested.unwrap_or(default);
     if wanted == 0 {
         return Err(CountError::Zero);
-    }
-    if wanted > limit {
-        return Err(CountError::AboveLimit);
     }
     let reduced = population > wanted;
     Ok(ContextDecision {
@@ -135,10 +131,7 @@ mod tests {
                 .unwrap()
                 .advise_default_reduction
         );
-        assert_eq!(
-            context_decision(0, Some(11), 10),
-            Err(CountError::AboveLimit)
-        );
+        assert!(context_decision(20, Some(11), 10).unwrap().reduced);
         assert_eq!(
             sample_offsets(2, decision.wanted),
             Err(CountError::AbovePopulation)

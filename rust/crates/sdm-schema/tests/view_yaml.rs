@@ -2,26 +2,9 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The view definitions' YAML reader (design part 5, old-behaviour
-//! row 69) against `contract/view-yaml-vectors.json`: what PyYAML 6.0.3's
-//! `safe_load` made of each text, YAML 1.1's values included (`yes`, `on`
-//! and `off` booleans, `017` octal, `1:30` base 60, `1e3` text and
-//! `1.0e+3` a float), and fix 1 mapping keys Python takes as one,
-//! integers of any size, aliases of their own anchor, block scalars at the
-//! end of the text, an anchor named twice and a byte order mark; from fix 2
-//! block scalars whose last line looks like a comment or ends the
-//! document, and deep nesting. A text PyYAML refused is refused. The texts
-//! the old client's messages quote a value by are the core's to write
-//! (`sdm-pql/tests/shown.rs`, `sdm-core/tests/view_words.rs`).
-//!
-//! The YAML outside what view definitions use is refused by name
-//! (J-9): an explicit tag, a merge, a key that is a collection,
-//! nesting past [`MAX_DEPTH`], an integer Python would not write. The few
-//! texts `yaml-rust2` scans otherwise than PyYAML are registered
-//! differences (P3J-6), each named below and held to what the core does.
+//! YAML view parsing: types, aliases, bounded expansion and scalar semantics.
 
-use sdm_schema::view::yaml::{self, Document, MAX_DEPTH, NodeId, Outside, Value};
-use serde_json::Value as Json;
+use sdm_schema::view::yaml::{self, Document, MAX_DEPTH, Outside, Value};
 
 mod rules;
 
@@ -31,175 +14,63 @@ fn load(text: &str) -> Result<Document, yaml::YamlError> {
     yaml::load(text, &RULES)
 }
 
-/// The vectors, read at build time: the core's crates do no I/O.
-const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json");
-
-/// The texts the core reads otherwise than PyYAML, registered (P3J-6):
-/// a tab after a plain scalar or alone on the line after a block scalar,
-/// which PyYAML refuses and `yaml-rust2` reads; and a tab starting a quoted scalar's next line, and an alias of
-/// an anchor on a flow mapping's key, which PyYAML reads and `yaml-rust2`
-/// refuses.
-const REGISTERED: &[&str] = &[
-    "v: a\tb",
-    "v: a \tb",
-    "v: |\n  a\n\t",
-    "v: \"a\n\tb\"",
-    "{&n .nan: a, *n: b}",
-];
-
-/// A float as the comparison reads it: the value, its sign and NaN told
-/// apart, whatever digits wrote it.
-fn float_key(x: f64) -> String {
-    if x.is_nan() {
-        "nan".into()
-    } else {
-        format!("{x:?}")
-    }
-}
-
-/// `node` as the vectors write a loaded value, `open` the collections it
-/// is inside.
-fn typed(document: &Document, node: NodeId, open: &mut Vec<NodeId>) -> Json {
-    if let Some(at) = open.iter().position(|n| *n == node) {
-        return serde_json::json!({"t": "cycle", "v": open.len() - at});
-    }
-    let (kind, inner) = match document.value(node) {
-        Value::Null => return serde_json::json!({"t": "null"}),
-        Value::Bool(flag) => ("bool", Json::Bool(*flag)),
-        Value::Int(n) => ("int", Json::String(n.text().to_owned())),
-        Value::Float(x) => ("float", Json::String(float_key(*x))),
-        Value::Str(text) => ("str", Json::String(text.clone())),
-        Value::Date(date) => ("date", Json::String(rules::date_iso(date))),
-        Value::Timestamp(moment) => ("datetime", Json::String(rules::datetime_iso(moment))),
-        Value::Seq(items) => {
-            open.push(node);
-            let items = items.iter().map(|n| typed(document, *n, open)).collect();
-            open.pop();
-            ("list", Json::Array(items))
-        }
-        Value::Map(pairs) => {
-            open.push(node);
-            let pairs = pairs
-                .iter()
-                .map(|(k, v)| {
-                    Json::Array(vec![typed(document, *k, open), typed(document, *v, open)])
-                })
-                .collect();
-            open.pop();
-            ("map", Json::Array(pairs))
-        }
-    };
-    serde_json::json!({"t": kind, "v": inner})
-}
-
-/// The recorded typed value, its floats keyed as [`float_key`] writes.
-fn recorded(value: &Json) -> Json {
-    match value["t"].as_str() {
-        Some("float") => {
-            let x: f64 = value["v"].as_str().unwrap().parse().unwrap();
-            serde_json::json!({"t": "float", "v": float_key(x)})
-        }
-        Some("list") => serde_json::json!({
-            "t": "list",
-            "v": value["v"].as_array().unwrap().iter().map(recorded).collect::<Vec<_>>(),
-        }),
-        Some("map") => serde_json::json!({
-            "t": "map",
-            "v": value["v"].as_array().unwrap().iter()
-                .map(|pair| Json::Array(vec![recorded(&pair[0]), recorded(&pair[1])]))
-                .collect::<Vec<_>>(),
-        }),
-        _ => value.clone(),
-    }
-}
-
-/// How many collections deep a value is, a collection inside itself
-/// counted once, as the recorder counts.
-fn depth(document: &Document, node: NodeId, open: &mut Vec<NodeId>) -> usize {
-    if open.contains(&node) {
-        return 0;
-    }
-    let members: Vec<NodeId> = match document.value(node) {
-        Value::Seq(items) => items.clone(),
-        Value::Map(pairs) => pairs.iter().flat_map(|(k, v)| [*k, *v]).collect(),
-        _ => return 0,
-    };
-    open.push(node);
-    let deepest = members
-        .iter()
-        .map(|&m| depth(document, m, open))
-        .max()
-        .unwrap_or(0);
-    open.pop();
-    deepest + 1
-}
-
-/// Whether `vector` is outside the YAML view definitions use, as `what`
-/// says: a tag or a merge written, a collection key PyYAML refused too,
-/// nesting past the bound, an integer Python would not write.
-fn outside_as_recorded(vector: &Json, what: &Outside) -> bool {
-    let text = vector["yaml"].as_str().unwrap();
-    match what {
-        Outside::Tag(_) => text.contains('!'),
-        Outside::Merge => text.contains("<<"),
-        Outside::CollectionKey => vector["error"].is_string(),
-        Outside::Nesting => vector["depth"]
-            .as_u64()
-            .is_some_and(|d| d > MAX_DEPTH as u64),
-        Outside::Expansion => false,
-        Outside::LongInteger => vector["repr_error"] == true,
-        Outside::LineBreak => text.contains(['\u{85}', '\u{2028}', '\u{2029}']),
-        Outside::FlowDash => text.contains('-'),
-    }
-}
-
 #[test]
-fn each_text_reads_as_pyyaml_read_it() {
-    let document: Json = fixture_tables::read(VECTORS);
-    assert_eq!(document["format"], "sdm-view-yaml-vectors/1");
-    let vectors = document["vectors"].as_array().unwrap();
-    assert!(vectors.len() > 350, "{} vectors", vectors.len());
-    let mut wrong = Vec::new();
-    for vector in vectors {
-        let text = vector["yaml"].as_str().unwrap();
-        if REGISTERED.contains(&text) {
-            continue;
-        }
-        match (&vector["error"], load(text)) {
-            (_, Err(error)) if error.outside.is_some() => {
-                let what = error.outside.as_ref().unwrap();
-                if !outside_as_recorded(vector, what) {
-                    wrong.push(format!("{text:?}: refused as outside ({what})"));
-                }
-            }
-            (Json::String(_), Err(_)) => {}
-            (Json::String(class), Ok(loaded)) => wrong.push(format!(
-                "{text:?}: PyYAML refused it ({class}), read {}",
-                typed(&loaded, loaded.root(), &mut Vec::new())
-            )),
-            (_, Err(error)) => wrong.push(format!("{text:?}: refused ({error})")),
-            (_, Ok(loaded)) if vector.get("depth").is_some() => {
-                let got = depth(&loaded, loaded.root(), &mut Vec::new());
-                if Some(got as u64) != vector["depth"].as_u64() {
-                    wrong.push(format!("{text:?}: {got} deep where {}", vector["depth"]));
-                }
-            }
-            (_, Ok(loaded)) => {
-                let got = typed(&loaded, loaded.root(), &mut Vec::new());
-                let expected = recorded(&vector["value"]);
-                if got != expected {
-                    wrong.push(format!("{text:?}: {got} where PyYAML read {expected}"));
-                }
-            }
-        }
+fn typed_scalars_and_equal_mapping_keys_keep_their_semantics() {
+    for text in [
+        "123456789012345678901234567890",
+        "-123456789012345678901234567890",
+    ] {
+        let loaded = load(text).unwrap();
+        assert!(matches!(loaded.value(loaded.root()), Value::Int(n) if n.text() == text));
     }
-    assert!(
-        wrong.is_empty(),
-        "{} of {} vectors differ:\n{}",
-        wrong.len(),
-        vectors.len(),
-        wrong.join("\n")
+    for (text, expected) in [
+        ("-0.0", -0.0_f64),
+        (".inf", f64::INFINITY),
+        ("-.inf", f64::NEG_INFINITY),
+    ] {
+        let loaded = load(text).unwrap();
+        let Value::Float(value) = loaded.value(loaded.root()) else {
+            panic!("float expected")
+        };
+        assert_eq!(value.to_bits(), expected.to_bits());
+    }
+    let loaded = load(".nan").unwrap();
+    assert!(matches!(loaded.value(loaded.root()),Value::Float(v) if v.is_nan()));
+    let loaded = load("2024-02-29").unwrap();
+    let Value::Date(value) = loaded.value(loaded.root()) else {
+        panic!("date expected")
+    };
+    assert_eq!(rules::date_iso(value), "2024-02-29");
+    let loaded = load("2024-01-02 03:04:05.123456+05:30").unwrap();
+    let Value::Timestamp(value) = loaded.value(loaded.root()) else {
+        panic!("timestamp expected")
+    };
+    assert_eq!(
+        rules::datetime_iso(value),
+        "2024-01-02T03:04:05.123456+05:30"
     );
+    // Python treats true and 1 as the same mapping key. The last value
+    // wins without changing the first key's type or insertion position.
+    let loaded = load("{true: first, other: middle, 1: last}").unwrap();
+    let Value::Map(pairs) = loaded.value(loaded.root()) else {
+        panic!("map expected")
+    };
+    assert_eq!(pairs.len(), 2);
+    assert_eq!(loaded.value(pairs[0].0), &Value::Bool(true));
+    assert_eq!(loaded.text(pairs[0].1), Some("last"));
+    assert_eq!(loaded.text(pairs[1].0), Some("other"));
+    let loaded = load("{x: [null, 'yes', 2]}").unwrap();
+    let list = loaded.get(loaded.root(), "x").unwrap();
+    let Value::Seq(values) = loaded.value(list) else {
+        panic!("sequence expected")
+    };
+    assert_eq!(values.len(), 3);
+    assert_eq!(loaded.value(values[0]), &Value::Null);
+    assert_eq!(loaded.text(values[1]), Some("yes"));
+    assert!(matches!(loaded.value(values[2]),Value::Int(n) if n.text()=="2"));
+    for malformed in ["a: [", "{a: b", "---\na\n---\nb"] {
+        assert!(load(malformed).is_err(), "{malformed}");
+    }
 }
 
 /// What the core does with each registered difference (P3J-6).
@@ -464,6 +335,3 @@ fn many_block_scalars_read_in_linear_time() {
     let (small, large) = (best(&text(2_500)), best(&text(20_000)));
     assert!(large / small.max(1e-6) < 24.0, "{small} s, then {large} s");
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

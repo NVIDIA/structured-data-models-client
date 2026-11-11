@@ -9,8 +9,8 @@
 //! `metadata`, and each item's `id`, `row_index` and `forecast_step`, each
 //! required and typed as the bindings require it, checked in their order.
 //! For those fields a response the bindings refuse is refused here, and
-//! one they read is read (`tests/fixtures/response-vectors.json` holds the two
-//! together). A refusal names the field and why, never a value.
+//! one they read is read. Direct response reader tests cover both bindings.
+//! A refusal names the field and why, never a value.
 //!
 //! an item's `probabilities` is read as the bindings'
 //! `_float_dict` reads it: absent or `null` is none, any other value not an

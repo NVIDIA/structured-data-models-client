@@ -2,7 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Regression checks for fixture sharing, size enforcement and schema pruning."""
+"""Regression checks for repository size enforcement and schema pruning."""
 
 from __future__ import annotations
 
@@ -26,39 +26,7 @@ def load(name):
 
 
 lock = load('contract_lock')
-shared = load('fixture_tables')
 budget = load('repository_size')
-
-
-def test_shared_fields_preserve_absence_null_types_order_and_nested_values():
-    # These expectations are literal data, independent of the product engine.
-    source = {
-        'cases': [
-            {'a': None, 'nested': [{'x': 7}] * 8},
-            {'b': False},
-            {'a': 0},
-            {'a': '0'},
-        ]
-        * 4
-    }
-    encoded = shared.pack(source)
-    assert encoded['tables']
-    assert shared.unpack(json.loads(shared.dumps(encoded))) == source
-    assert shared.unpack(source) is source
-    encoded['expanded_sha256'] = '0' * 64
-    with pytest.raises(ValueError, match='digest'):
-        shared.unpack(encoded)
-
-
-def test_shared_fields_reject_cycles_and_invalid_indexes():
-    encoded = shared.pack([{'x': i % 2} for i in range(10)])
-    encoded['tables'][0]['rows'][0][0] = -2
-    with pytest.raises(ValueError, match='cell'):
-        shared.unpack(encoded)
-    encoded = shared.pack([{'x': i % 2} for i in range(10)])
-    encoded['tables'][0]['values'][0][0] = {'$fixture_table': 0}
-    with pytest.raises(ValueError, match='cyclic'):
-        shared.unpack(encoded)
 
 
 def schemas(root):

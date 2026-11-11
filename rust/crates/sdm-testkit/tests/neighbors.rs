@@ -2,32 +2,12 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! L1 vectors for the core's two `neighbors` reads on DuckDB (
-//! register ORD-2): `neighbors.json`, recorded from the
-//! reference's SQL sampler (`_by_fkey`, `_by_time`) by
-//! `neighbors_record.py` (a protected path, never recorded again to pass a
-//! dependency bump, F4), holds the rows each read returned for its seeds;
-//! `neighbor-requests.json` holds the requests the core makes for the same
-//! reads, which `sdm-engine`'s `neighbor_requests.rs` holds
-//! `sdm_engine::sample::by_fkey` and `by_time` to. Each request is planned
-//! by the root's data layer for DuckDB, its seeds bound as the provider
-//! binds a key set, and the answer the core admitted compared with the
-//! reference's rows.
-//!
-//! What the vectors record, the SQL sampler's policy: the latest rows up to
-//! each seed's anchor, the anchor itself included, newest first, ties by
-//! the key, at most `per_seed` of each seed, in `(seed, order)`; a window
-//! after its start and up to its end, both to the microsecond and before
-//! 1970 alike; a row whose time is null never returned; a row reached by
-//! several seeds returned for each. A `TIMESTAMPTZ` column is compared in
-//! the wall clock of the database's own zone (`SET GLOBAL TimeZone`, the
-//! machine's zone on the reference's host), not the source session's
-//! (`SET TimeZone='America/New_York'`), which no read's cursor carries, as
-//! the reference's cursors do not (register DT-13): the vectors' zoned
-//! case puts a row on either side of its anchor by which of the two is
-//! read, and the core reads it as the reference does. [`check`] fails
-//! closed: a perturbed row, and evidence missing, empty or retyped, each
-//! fail (seeded below).
+//! Neighbor reads execute authored seed/window inputs against DuckDB.
+//! Expected membership and order come from source rows filtered in Rust,
+//! independently of the product's SQL planning and sampling implementation.
+//! History is newest-first with key-ordered ties and a per-seed limit;
+//! windows exclude their start and include their end. Null times never match.
+//! Database and source-session time zones remain deliberately different.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -298,9 +278,66 @@ struct Counts {
     rows: usize,
 }
 
+type Event = (i64, i64, Option<i64>, f64);
+
+fn source_rows(connection: &Connection) -> BTreeMap<String, Vec<Event>> {
+    ["ev", "evtz"]
+        .into_iter()
+        .map(|table| {
+            let mut statement = connection
+                .prepare(&format!(
+                    "SELECT eid, uid, epoch_ns(ts), val FROM {table} ORDER BY eid"
+                ))
+                .unwrap();
+            let rows = statement
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+                .unwrap()
+                .collect::<Result<Vec<Event>, _>>()
+                .unwrap();
+            (table.to_owned(), rows)
+        })
+        .collect()
+}
+
+fn expected_rows(
+    case: &Value,
+    source: &BTreeMap<String, Vec<Event>>,
+) -> Result<Vec<Value>, String> {
+    let table = case["table"].as_str().ok_or("missing table")?;
+    let events = source.get(table).ok_or("unknown source table")?;
+    let seeds = case["seeds"].as_array().ok_or("missing seeds")?;
+    let history = case["form"] == "fkey";
+    let mut result = Vec::new();
+    for (batch, seed) in seeds.iter().enumerate() {
+        let key = seed[0].as_i64().ok_or("missing key")?;
+        let end = seed[if history { 1 } else { 2 }]
+            .as_i64()
+            .ok_or("missing end")?;
+        let start = if history { None } else { seed[1].as_i64() };
+        let mut selected: Vec<_> = events
+            .iter()
+            .filter(|(_, uid, ts, _)| {
+                *uid == key
+                    && ts.is_some_and(|time| time <= end && start.is_none_or(|lower| time > lower))
+            })
+            .collect();
+        if history {
+            selected.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
+            selected.truncate(case["per_seed"].as_u64().ok_or("missing limit")? as usize);
+        }
+        result.extend(
+            selected
+                .into_iter()
+                .map(|(eid, uid, ts, value)| json!([batch, eid, uid, ts, value])),
+        );
+    }
+    Ok(result)
+}
+
 fn check(
     vectors: &Value,
     found: &dyn Fn(&Value) -> Result<Vec<Value>, String>,
+    source: &BTreeMap<String, Vec<Event>>,
 ) -> Result<Counts, String> {
     let cases = vectors["cases"]
         .as_array()
@@ -309,20 +346,20 @@ fn check(
     let mut rows = 0;
     for case in cases {
         let id = case["id"].as_str().ok_or("a case has no id")?;
-        let wanted = case["rows"]
-            .as_array()
-            .ok_or_else(|| format!("{id}: no rows recorded"))?;
+        let wanted = expected_rows(case, source)?;
         let ordered = case["ordered"]
             .as_bool()
             .ok_or_else(|| format!("{id}: no order recorded"))?;
         let got = found(case).map_err(|e| format!("{id}: {e}"))?;
         let same = if ordered {
-            got == *wanted
+            got == wanted
         } else {
-            sorted(&got) == sorted(wanted)
+            sorted(&got) == sorted(&wanted)
         };
         if !same {
-            return Err(format!("{id}: rows otherwise than the reference's"));
+            return Err(format!(
+                "{id}: rows differ from source-derived expectations"
+            ));
         }
         rows += wanted.len();
     }
@@ -340,7 +377,7 @@ fn vectors() -> Value {
 }
 
 #[test]
-fn both_neighbor_reads_return_the_reference_s_rows_on_duckdb() {
+fn neighbor_reads_preserve_source_membership_and_order() {
     let vectors = vectors();
     let requests: Value = serde_json::from_str(REQUESTS).unwrap();
     let connection = database(&vectors).unwrap();
@@ -356,7 +393,7 @@ fn both_neighbor_reads_return_the_reference_s_rows_on_duckdb() {
         Ok(rows_of(&answered(&connection, request, seeds), &columns))
     };
     assert_eq!(
-        check(&vectors, &found).unwrap(),
+        check(&vectors, &found, &source_rows(&connection)).unwrap(),
         Counts {
             cases: 14,
             rows: 73
@@ -380,43 +417,45 @@ fn both_neighbor_reads_return_the_reference_s_rows_on_duckdb() {
     let asked = request(case, &requests, &seeds).unwrap();
     assert_eq!(
         rows_of(&answered(&other, asked, seeds), &columns),
-        *case["rows"].as_array().unwrap()
+        expected_rows(case, &source_rows(&other)).unwrap()
     );
 }
 
 #[test]
 fn the_check_fails_closed() {
     let vectors = vectors();
-    // The reference's own rows, as found: every seeded fault must fail.
-    let recorded = |case: &Value| -> Result<Vec<Value>, String> {
-        Ok(case["rows"].as_array().cloned().unwrap_or_default())
-    };
-    assert!(check(&vectors, &recorded).is_ok());
+    let source = source_rows(&database(&vectors).unwrap());
+    // Inject errors into the independent expected rows to check assertion sensitivity.
+    let recorded = |case: &Value| -> Result<Vec<Value>, String> { expected_rows(case, &source) };
+    assert!(check(&vectors, &recorded, &source).is_ok());
     let perturbed = |case: &Value| -> Result<Vec<Value>, String> {
-        let mut rows = case["rows"].as_array().cloned().unwrap_or_default();
+        let mut rows = expected_rows(case, &source)?;
         if case["id"] == "fkey/ties-kept-by-key" {
             rows.swap(1, 2);
         }
         Ok(rows)
     };
     assert!(
-        check(&vectors, &perturbed).is_err(),
+        check(&vectors, &perturbed, &source).is_err(),
         "a reordered tie passed"
     );
     let dropped = |case: &Value| -> Result<Vec<Value>, String> {
-        let mut rows = case["rows"].as_array().cloned().unwrap_or_default();
+        let mut rows = expected_rows(case, &source)?;
         if case["id"] == "time/window-ends" {
             rows.pop();
         }
         Ok(rows)
     };
-    assert!(check(&vectors, &dropped).is_err(), "a dropped row passed");
+    assert!(
+        check(&vectors, &dropped, &source).is_err(),
+        "a dropped row passed"
+    );
     let seeded: Vec<(&str, Seed)> = vec![
         ("no cases", Box::new(|v| v["cases"] = json!([]))),
         ("cases missing", Box::new(|v| v["cases"] = Value::Null)),
         (
-            "rows retyped",
-            Box::new(|v| v["cases"][0]["rows"] = json!("rows")),
+            "seeds retyped",
+            Box::new(|v| v["cases"][0]["seeds"] = json!("seeds")),
         ),
         (
             "order missing",
@@ -430,6 +469,9 @@ fn the_check_fails_closed() {
     for (fault, seed) in seeded {
         let mut faulty = vectors.clone();
         seed(&mut faulty);
-        assert!(check(&faulty, &recorded).is_err(), "{fault} passed");
+        assert!(
+            check(&faulty, &recorded, &source).is_err(),
+            "{fault} passed"
+        );
     }
 }

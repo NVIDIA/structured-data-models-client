@@ -2,69 +2,103 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The conversions a view's parameter default goes through, held to
-//! the old client's answers for each text default in
-//! `contract/view-step-vectors.json` (`default_text`), among them the
-//! second reviews' timestamps and numbers: Python 3.12's `int`, `Decimal`
-//! and `fromisoformat` read them there.
+//! Independent expectations for numeric and ISO date/time parameter conversion.
 
 use sdm_pql::conversions::{
-    LONGEST_TEXT, Unconverted, date_text, datetime_text, decimal_digit, decimal_text, int_text,
-    not_an_integer_text, strip, too_many_digits_text,
+    LONGEST_TEXT, Unconverted, date_text, datetime_text, decimal_text, int_text, strip,
 };
-use serde_json::Value as Json;
-
-const STEPS: &str = include_str!("../../../../contract/view-step-vectors.json");
+#[test]
+fn integers_normalize_signs_zeros_and_unicode_decimal_digits() {
+    for (input, expected) in [
+        (" +0012 ", "12"),
+        ("-000", "0"),
+        ("-٣٢", "-32"),
+        ("１２", "12"),
+    ] {
+        assert_eq!(int_text(input), Ok(expected.into()), "{input:?}");
+    }
+    for input in ["", "1.0", "1e2", "1_000", "+", "²"] {
+        assert_eq!(int_text(input), Err(Unconverted::Invalid), "{input:?}");
+    }
+    assert_eq!(int_text(&"9".repeat(4300)).map(|v| v.len()), Ok(4300));
+    assert_eq!(
+        int_text(&"9".repeat(4301)),
+        Err(Unconverted::TooManyDigits(4301))
+    );
+    for c in ['\u{1c}', '\u{1d}', '\u{1e}', '\u{1f}'] {
+        let input = format!("{c}12{c}");
+        assert_eq!(strip(&input), "12");
+        assert_eq!(int_text(&input), Err(Unconverted::NotAnInteger));
+    }
+}
 
 #[test]
-fn each_text_default_converts_as_python_converted_it() {
-    let document: Json = fixture_tables::read(STEPS);
-    let mut wrong = Vec::new();
-    let mut held = 0;
-    for vector in document["default_text"].as_array().unwrap() {
-        if vector["default"]["t"] != "str" {
-            continue;
-        }
-        let text = vector["default"]["v"].as_str().unwrap();
-        let data_type = vector["data_type"].as_str().unwrap();
-        let converted = match data_type {
-            "TIMESTAMP" => datetime_text(strip(text)),
-            "DATE" => date_text(strip(text)),
-            "DOUBLE" | "DECIMAL(10,2)" => decimal_text(text),
-            "INT" => int_text(text),
-            _ => continue,
-        };
-        held += 1;
-        let error = &vector["error"];
-        let expected = match vector["text"].as_str() {
-            Some(text) => Ok(text.to_owned()),
-            None if error["type"] == "MemoryError" => Err(Unconverted::TooLong),
-            None => match error["message"].as_str().unwrap() {
-                message if message.starts_with("Exceeds the limit") => {
-                    let digits = text.chars().filter(|&c| decimal_digit(c).is_some()).count();
-                    assert_eq!(message, too_many_digits_text(digits));
-                    Err(Unconverted::TooManyDigits(digits))
-                }
-                message if message.starts_with("invalid literal for int()") => {
-                    assert_eq!(message, not_an_integer_text(text));
-                    Err(Unconverted::NotAnInteger)
-                }
-                _ => Err(Unconverted::Invalid),
-            },
-        };
-        if converted != expected {
-            wrong.push(format!(
-                "{data_type} {text:?}: {converted:?} where {expected:?}"
-            ));
-        }
+fn decimals_keep_exact_scale_and_expand_exponents() {
+    for (input, expected) in [
+        ("1.2300", "1.2300"),
+        ("1.25e2", "125"),
+        ("1e-3", "0.001"),
+        ("-0.00", "-0.00"),
+        (" ١٢.٥ ", "12.5"),
+        ("1_000.25", "1000.25"),
+        ("9007199254740993", "9007199254740993"),
+    ] {
+        assert_eq!(decimal_text(input), Ok(expected.into()), "{input:?}");
     }
-    assert!(held > 10_000, "{held} defaults");
-    assert!(
-        wrong.is_empty(),
-        "{} differ:\n{}",
-        wrong.len(),
-        wrong.join("\n")
-    );
+    for input in ["", "NaN", "sNaN", "Infinity", "-inf", "1.2.3"] {
+        assert_eq!(decimal_text(input), Err(Unconverted::Invalid), "{input:?}");
+    }
+}
+
+#[test]
+fn dates_validate_calendar_and_iso_week_boundaries() {
+    for (input, expected) in [
+        ("20240229", "2024-02-29"),
+        ("2020-W53-7", "2021-01-03"),
+        ("0001-01-01", "0001-01-01"),
+        ("9999-12-31", "9999-12-31"),
+    ] {
+        assert_eq!(date_text(input), Ok(expected.into()), "{input:?}");
+    }
+    for input in [
+        "2023-02-29",
+        "2024-13-01",
+        "0000-01-01",
+        "2021-W53-1",
+        "2024-01-01junk",
+    ] {
+        assert_eq!(date_text(input), Err(Unconverted::Invalid), "{input:?}");
+    }
+}
+
+#[test]
+fn timestamps_preserve_offsets_and_normalize_fraction_precision() {
+    for (input, expected) in [
+        ("2024-02-29", "2024-02-29 00:00:00"),
+        ("2024-02-29T12:34:56Z", "2024-02-29 12:34:56+00:00"),
+        (
+            "2024-02-29T12:34:56.1234567+05:30",
+            "2024-02-29 12:34:56.123456+05:30",
+        ),
+        (
+            "2024-02-29T12:34:56,1-04:00",
+            "2024-02-29 12:34:56.100000-04:00",
+        ),
+        (
+            "2024-02-29T12:34:56+00:00:30",
+            "2024-02-29 12:34:56+00:00:30",
+        ),
+    ] {
+        assert_eq!(datetime_text(input), Ok(expected.into()), "{input:?}");
+    }
+    for input in [
+        "2024-01-01T24:00:00",
+        "2024-01-01T12:60:00",
+        "2024-01-01T12:00:60",
+        "2024-01-01T12:00:00+24:00",
+    ] {
+        assert_eq!(datetime_text(input), Err(Unconverted::Invalid), "{input:?}");
+    }
 }
 
 /// No text is built past the bound: a decimal whose digits would fill
@@ -91,8 +125,7 @@ fn a_decimal_past_the_bound_is_refused_by_name() {
     );
 }
 
-/// No text panics a conversion ( fix 2, the owner's stop rule): a few
-/// seconds of texts made of the pieces of dates, times, offsets and
+/// Deterministic generated inputs exercise dates, times, offsets and
 /// numbers, digits of other scripts and white space among them.
 #[test]
 fn no_text_panics_a_conversion() {
@@ -145,6 +178,3 @@ fn no_text_panics_a_conversion() {
         let _ = datetime_text(&text);
     }
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

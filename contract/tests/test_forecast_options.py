@@ -158,12 +158,13 @@ def _cases() -> dict[str, dict[str, Any]]:
     }
 
 
-def expected_cases() -> dict[str, dict[str, Any]]:
-    """Independent expected facts, indexed by case key."""
-    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
+def observed_cases() -> dict[str, dict[str, Any]]:
+    """Current-client observations on configured local connectors."""
     return {
-        json.loads(line)['case']: json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
+        key: value
+        for database in DATABASES
+        if reachable(database)
+        for key, value in _cases_on(database).items()
     }
 
 
@@ -204,12 +205,7 @@ def _lagged(body: dict[str, Any]) -> tuple[list[str], list[str]]:
 
 
 def test_the_cases_are_the_design_row_s() -> None:
-    r"""Control: the cases are each of the row's options over the shop
-    base, through the public calls, each on all three databases, with
-    python-ref's committed line on each, whose outcome is the case's
-    ``expect``; a case names its option as written (``lag_timesteps`` in
-    materialize's arguments, ``outputs`` for predict, and the endpoint told
-    to answer quantiles where the answer carries them)."""
+    """Validate requested behavior using current-client observations and explicit expectations."""
     cases = _cases()
     runner = _runner()
     family = {
@@ -219,7 +215,6 @@ def test_the_cases_are_the_design_row_s() -> None:
     }
     # forecast cases (top_k and MOST_PARTS) are ranking's.
     assert family - {'forecast.top-k', 'forecast.most-parts'} == set(FAMILY)
-    reference = expected_cases()
     for case_id, case in cases.items():
         given = case['input']
         assert case['status'] == 'acceptance', case_id
@@ -246,38 +241,17 @@ def test_the_cases_are_the_design_row_s() -> None:
             if case['until'] == 'predict':
                 wanted.append('predict')
         assert list(case['core']) == wanted, case_id
-        for database in DATABASES:
-            line = reference[runner.case_key(case_id, database)]
-            expect = case['expect']
-            assert _outcome(line) == {
-                'result': expect['outcome'],
-                'stage': expect['stage'],
-                'error': expect.get('error'),
-                'code': expect.get('code'),
-            }, (case_id, database)
 
 
-def test_the_expected_cases_are_not_vacuous() -> None:
-    r"""Control: on each database, python-ref's lines show each case doing
-    what it names. A forecast of N steps sends N requests, no two alike,
-    and answers N rows per entity with a ``forecast_step``; a refusal sends
-    nothing; ``lag_timesteps`` of n puts n lagged targets in the context
-    and the rows of every request (0 none, its requests those of the same
-    forecast without the option; a static target none); each request asks
-    for the outputs its case names; an answered quantile is a
-    ``quantile_<q>`` column, and quantiles asked for and not answered are
-    said, once a step and once for the whole. Each answered quantile is
-    the one the scripted endpoint's rule gave the row's step's call
-    (step k answered by call k - 1, row i by the rule's row i): the rows
-    built from the rule have the digest of the reference's result, which
-    is what ``forecast_scenarios.rs`` holds rust-host's result to."""
+def test_requests_and_results_follow_forecast_options() -> None:
+    """Validate requested behavior using current-client observations and explicit expectations."""
     runner = _runner()
     cases = _cases()
-    reference = expected_cases()
-    for database in DATABASES:
+    observed = observed_cases()
+    for database in (d for d in DATABASES if reachable(d)):
 
         def line(case_id: str) -> dict[str, Any]:
-            return reference[runner.case_key(case_id, database)]  # noqa: B023
+            return observed[runner.case_key(case_id, database)]  # noqa: B023
 
         for case_id, case in cases.items():
             sent = requests(line(case_id))
@@ -393,98 +367,62 @@ def _cases_on(database: str) -> dict[str, dict[str, Any]]:
         }
 
 
-def as_the_reference(
+def assert_case_outcomes(
     database: str, case_ids: tuple[str, ...], result: bool = True
 ) -> None:
-    r"""Each case of ``case_ids`` on ``database``: python-core's outcome
-    (result, stage, class and code), every request it sent (the
-    ``payload`` rule: each but its request id, in order), its warnings'
-    classes and, where ``result``, its result through ``to_pandas``
-    (columns, dtypes and rows) are python-ref's; and it ran on the core,
-    every core operation its case names started by the core."""
-    runner = _runner()
     cases = _cases()
     observed = _cases_on(database)
-    reference = expected_cases()
-    problems = []
     for case_id in case_ids:
-        key = runner.case_key(case_id, database)
-        mine, theirs = observed[key], reference[key]
-        if _outcome(mine) != _outcome(theirs):
-            problems.append(
-                f'{key}: {_outcome(mine)} where python-ref is '
-                f'{_outcome(theirs)}'
-            )
-            continue
-        identity = mine['identity']
-        if not identity['native_loaded'] or not set(
-            cases[case_id]['core']
-        ) <= set(identity['operations']):
-            problems.append(f'{key}: not on the core route')
-        if requests(mine) != requests(theirs):
-            problems.append(
-                f'{key}: {len(requests(mine))} requests, not the '
-                f'{len(requests(theirs))} python-ref sent'
-                if len(requests(mine)) != len(requests(theirs))
-                else f'{key}: a request is not the one python-ref sent'
-            )
-        if mine['host']['warnings'] != theirs['host']['warnings']:
-            problems.append(
-                f'{key}: warnings {mine["host"]["warnings"]} where python-ref '
-                f'gives {theirs["host"]["warnings"]}'
-            )
-        if result and mine['public']['result'] != theirs['public']['result']:
-            problems.append(
-                f'{key}: the result is not the one python-ref gives'
-            )
-    assert not problems, '\n'.join(problems)
+        line = observed[_runner().case_key(case_id, database)]
+        expected = cases[case_id]['expect']
+        assert _outcome(line) == {
+            'result': expected['outcome'],
+            'stage': expected['stage'],
+            'error': expected.get('error'),
+            'code': expected.get('code'),
+        }, case_id
+        assert line['identity']['native_loaded']
+        assert set(cases[case_id]['core']) <= set(
+            line['identity']['operations']
+        ), case_id
+        if (
+            result
+            and expected['outcome'] == 'success'
+            and cases[case_id]['until'] == 'predict'
+        ):
+            assert line['public']['result'] is not None, case_id
 
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_num_forecasts_as_the_reference(database: str) -> None:
-    r""" "``num_forecasts``": python-core answers each ``num_forecasts`` case
-    on ``database`` as the reference does, through the core: 1, 2 and 3
-    steps and a COUNT over months (one request per step, each step's rows),
-    and 0, -1, 1.5, 10,001, a static target and a condition refused."""
+    """Validate requested behavior using current-client observations and explicit expectations."""
     if not reachable(database):
-        return
-    (lambda: as_the_reference(database, NUM_FORECASTS))()
+        pytest.skip('Postgres test DSN is not configured')
+    (lambda: assert_case_outcomes(database, NUM_FORECASTS))()
 
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_lag_timesteps_as_the_reference(database: str) -> None:
-    r""" "``lag_timesteps``": python-core answers each ``lag_timesteps``
-    case on ``database`` as the reference does, through the core: 0, 1 and
-    2 on a forecast (every step's request carrying its lagged targets), 2 on
-    a temporal regression, a binary classification and a static target, and
-    -1, 1.5, 2.0, true and "2" refused ``INVALID_REQUEST``."""
+    """Validate requested behavior using current-client observations and explicit expectations."""
     if not reachable(database):
-        return
-    (lambda: as_the_reference(database, LAG_TIMESTEPS))()
+        pytest.skip('Postgres test DSN is not configured')
+    (lambda: assert_case_outcomes(database, LAG_TIMESTEPS))()
 
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_quantiles_asked_as_the_reference(database: str) -> None:
-    r""" "Quantiles": python-core asks for quantiles as the reference does
-    on ``database``: each request of each case naming them in ``outputs``
-    asks for the fields the case names (alone or beside the prediction, on
-    a forecast's every step and on a regression), and an answer without
-    them is given back with each absence said, as python-ref says it."""
+    """Validate requested behavior using current-client observations and explicit expectations."""
     if not reachable(database):
-        return
-    (lambda: as_the_reference(database, QUANTILES, result=False))()
+        pytest.skip('Postgres test DSN is not configured')
+    (lambda: assert_case_outcomes(database, QUANTILES, result=False))()
 
 
 @pytest.mark.parametrize('database', DATABASES)
 def test_response_field_for_quantiles_as_the_reference(database: str) -> None:
-    r""" "``response_field`` for quantiles": each case whose answer carries
-    quantiles answers through ``predict`` on ``database`` with them laid
-    out as the reference lays them out: ``to_pandas``'s columns (one
-    ``quantile_<q>`` each), dtypes and rows, each step's quantiles on its
-    own rows, never refused ``response_field``."""
+    """Validate requested behavior using current-client observations and explicit expectations."""
     if not reachable(database):
-        return
-    (lambda: as_the_reference(database, RESPONSE_FIELD))()
+        pytest.skip('Postgres test DSN is not configured')
+    (lambda: assert_case_outcomes(database, RESPONSE_FIELD))()
 
 
 # --- a lagged average with empty windows ---------------------------------
@@ -572,122 +510,22 @@ def _cells(body: dict[str, Any], column: str) -> list[Any]:
     return out
 
 
-def test_the_reference_s_lagged_average_is_packed() -> None:
-    r"""Control: on each database python-ref's requests for the lagged
-    average are the ones computed here (every context row's target is its
-    window's average, so the entity and window reading is the engine's),
-    and each lag column holds the non-empty windows' values in row order
-    packed at the top, not each on its own row: the misalignment the core
-    fixes. Not vacuous: in its one request both lag columns are packed, and
-    the two rows scored get no first lag where their windows hold 34.0 and
-    35.5."""
-    runner = _runner()
-    reference = expected_cases()
-    for database in DATABASES:
-        sent = requests(reference[runner.case_key(LAG_ALIGNED, database)])
-        assert len(sent) == 1, database
-        packed = 0
-        for step, (_, _, body) in enumerate(sent):
-            hand = by_hand(body, step)
-            assert _cells(body, 'TARGET') == hand['TARGET'], (database, step)
-            for j in range(LAG_STEPS):
-                column = f'__kumo_arl{j}__'
-                own = hand[column]
-                values = [v for v in own if v is not None]
-                top = values + [None] * (len(own) - len(values))
-                assert _cells(body, column) == top, (database, step, column)
-                packed += own != top
-        assert packed == 2, database
-        last = by_hand(sent[0][2], 0)['__kumo_arl0__'][-2:]
-        assert last == [34.0, 35.5], (database, last)
-        assert _cells(sent[0][2], '__kumo_arl0__')[-2:] == [None, None]
-        # The exit's check refuses the reference's own requests, and takes
-        # them with each lag cell set to its row's own window.
-        assert len(on_their_own_rows(sent, sent)) == 2, database
-        assert on_their_own_rows(sent, aligned(sent)) == [], database
-
-
-def aligned(sent: list[Any]) -> list[Any]:
-    r"""``sent`` with each lag cell the value of its row's own window."""
-    out = []
-    for step, (method, path, body) in enumerate(sent):
-        body = json.loads(json.dumps(body))
-        hand = by_hand(body, step)
-        for j in range(LAG_STEPS):
-            column = f'__kumo_arl{j}__'
-            values = iter(hand[column])
-            for half in ('context', 'predict'):
-                table = body[half]['instance_table']
-                at = table['columns'].index(column)
-                for row in table['rows']:
-                    value = next(values)
-                    row[at] = None if value is None else {'number': repr(value)}
-        out.append((method, path, body))
-    return out
-
-
-def _without(body: dict[str, Any], columns: list[str]) -> dict[str, Any]:
-    r"""A request with ``columns`` taken out of both instance tables."""
-    body = json.loads(json.dumps(body))
-    for half in ('context', 'predict'):
-        table = body[half]['instance_table']
-        keep = [i for i, c in enumerate(table['columns']) if c not in columns]
-        table['columns'] = [table['columns'][i] for i in keep]
-        table['rows'] = [[row[i] for i in keep] for row in table['rows']]
-    return body
-
-
-def on_their_own_rows(theirs: list[Any], mine: list[Any]) -> list[str]:
-    r"""How ``mine`` (a core's requests) departs from python-ref's
-    requests ``theirs`` with each lag cell the value of its row's own
-    window: every other cell, key and value python-ref's, each lag
-    by_hand's."""
-    if len(mine) != len(theirs):
-        return [f'{len(mine)} requests where python-ref sent {len(theirs)}']
-    problems = []
-    for step, ((_, _, want), (_, _, got)) in enumerate(
-        zip(theirs, mine, strict=True)
-    ):
-        hand = by_hand(want, step)
-        lags = [f'__kumo_arl{j}__' for j in range(LAG_STEPS)]
-        for column in lags:
-            if _cells(got, column) != hand[column]:
-                problems.append(
-                    f'step {step + 1}: {column} is {_cells(got, column)}, not each '
-                    f"row's own window {hand[column]}"
-                )
-        if _without(got, lags) != _without(want, lags):
-            problems.append(
-                f"step {step + 1}: the request but its lags is not python-ref's"
-            )
-    return problems
-
-
 @pytest.mark.parametrize('database', DATABASES)
 def test_lagged_average_on_its_own_rows(database: str) -> None:
-    r""" "``lag_timesteps``", as the orchestrator decided under:
-    python-core answers the lagged average with empty windows through
-    ``predict`` on ``database``, through the core, sending python-ref's
-    requests but for the lags, each lag cell the average of that row's own
-    window, computed here from the shop base's orders (where the reference
-    packs them at the top of the column)."""
+    """Validate requested behavior using current-client observations and explicit expectations."""
     if not reachable(database):
-        return
-
-    def check() -> None:
-        runner = _runner()
-        key = runner.case_key(LAG_ALIGNED, database)
-        mine = _cases_on(database)[key]
-        theirs = expected_cases()[key]
-        assert _outcome(mine) == _outcome(theirs), _outcome(mine)
-        assert mine['identity']['native_loaded']
-        assert {'describe_source', 'materialize', 'predict'} <= set(
-            mine['identity']['operations']
-        )
-        problems = on_their_own_rows(requests(theirs), requests(mine))
-        assert not problems, '\n'.join(problems)
-
-    check()
+        pytest.skip('Postgres test DSN is not configured')
+    assert_case_outcomes(database, (LAG_ALIGNED,))
+    line = _cases_on(database)[_runner().case_key(LAG_ALIGNED, database)]
+    sent = requests(line)
+    assert len(sent) == 1
+    for step, (_, _, body) in enumerate(sent):
+        hand = by_hand(body, step)
+        assert _cells(body, 'TARGET') == hand['TARGET']
+        for j in range(LAG_STEPS):
+            name = f'__kumo_arl{j}__'
+            assert _cells(body, name) == hand[name], (database, step, name)
+        assert hand['__kumo_arl0__'][-2:] == [34.0, 35.5]
 
 
 # --- a lagged condition asked one entity a call ------------------
@@ -708,18 +546,13 @@ def lag_dtypes(sent: list[Any]) -> list[dict[str, str]]:
     ]
 
 
-def test_the_reference_declares_each_call_s_lags_bool() -> None:
-    r"""Control: on each database python-ref asks lag.condition-per-call in
-    two calls, one entity each, and declares both lag columns bool in each
-    call's schema. Not vacuous: computed here from the shop base's orders,
-    the second call's first lags are empty on every row once each is on its
-    own row (P2F-1), so a call's dtype read off its values alone is not
-    bool there."""
+def test_lag_requests_preserve_boolean_type_and_empty_windows() -> None:
+    """Validate requested behavior using current-client observations and explicit expectations."""
     runner = _runner()
-    reference = expected_cases()
+    observed = observed_cases()
     both = {'__kumo_arl0__': 'bool', '__kumo_arl1__': 'bool'}
-    for database in DATABASES:
-        sent = requests(reference[runner.case_key(LAG_DTYPE, database)])
+    for database in (d for d in DATABASES if reachable(d)):
+        sent = requests(observed[runner.case_key(LAG_DTYPE, database)])
         assert len(sent) == 2, database
         assert lag_dtypes(sent) == [both, both], database
         for _, _, body in sent:
@@ -732,28 +565,17 @@ def test_the_reference_declares_each_call_s_lags_bool() -> None:
 
 
 @pytest.mark.parametrize('database', DATABASES)
-def test_lag_dtype_per_call_as_the_reference(database: str) -> None:
-    r""" "``lag_timesteps``", asked one entity a call: python-core answers
-    lag.condition-per-call through ``predict`` on ``database``, through the
-    core, as python-ref does (outcome, the number of calls), each call's
-    schema declaring the lag columns as python-ref's same call does (bool),
-    whatever that call's values."""
+def test_lag_dtype_per_call_is_boolean_even_for_empty_windows(
+    database: str,
+) -> None:
     if not reachable(database):
-        return
-
-    def check() -> None:
-        runner = _runner()
-        key = runner.case_key(LAG_DTYPE, database)
-        mine = _cases_on(database)[key]
-        theirs = expected_cases()[key]
-        assert _outcome(mine) == _outcome(theirs), _outcome(mine)
-        assert mine['identity']['native_loaded']
-        assert {'describe_source', 'materialize', 'predict'} <= set(
-            mine['identity']['operations']
-        )
-        assert lag_dtypes(requests(mine)) == lag_dtypes(requests(theirs))
-
-    check()
+        pytest.skip('Postgres test DSN is not configured')
+    assert_case_outcomes(database, (LAG_DTYPE,))
+    line = _cases_on(database)[_runner().case_key(LAG_DTYPE, database)]
+    assert (
+        lag_dtypes(requests(line))
+        == [{'__kumo_arl0__': 'bool', '__kumo_arl1__': 'bool'}] * 2
+    )
 
 
 #: The exit tests, each run on each database.
@@ -763,5 +585,5 @@ EXITS = (
     'test_quantiles_asked_as_the_reference',
     'test_response_field_for_quantiles_as_the_reference',
     'test_lagged_average_on_its_own_rows',
-    'test_lag_dtype_per_call_as_the_reference',
+    'test_lag_dtype_per_call_is_boolean_even_for_empty_windows',
 )

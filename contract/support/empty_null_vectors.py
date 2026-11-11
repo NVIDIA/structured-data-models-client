@@ -15,16 +15,8 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/empty-null-vectors.json'
 TEMPLATE = ROOT / 'contract/cases/s1/null.feature-all-null.json'
 RUNNER = ROOT / 'contract/runners/run_python.py'
-FORMAT = 'sdm-empty-null-vectors/1'
-#: How a register entry names the vectors it covers, in its ``refs``: this
-#: prefix, a vector's id or a glob of ids (``fnmatch``), and the transition
-#: it declares, for example
-#: ``contract/empty-null-vectors.json#empty.* refusal UNNAMED -> refusal
-#: UNSUPPORTED_REQUEST``.
-REGISTER_REF = 'contract/empty-null-vectors.json#'
 #: Each vector's case id is this prefix and the vector's id.
 CASE_PREFIX = 't132d.'
 #: The question every vector asks unless it names its own.

@@ -22,6 +22,8 @@ fn statement(dialect: &str, unique: bool) -> String {
     // Postgres reads every table under a schema.
     let namespace = if dialect == "postgres" {
         vec![Some("public".to_owned())]
+    } else if dialect == "snowflake" {
+        vec![Some("db".to_owned()), Some("public".to_owned())]
     } else {
         Vec::new()
     };
@@ -44,6 +46,7 @@ fn a_unique_key_is_counted_as_its_rows_less_its_nulls_on_every_dialect() {
         ("duckdb", '"'),
         ("postgres", '"'),
         ("databricks", '`'),
+        ("snowflake", '"'),
     ] {
         let key = format!("{quote}user_id{quote}");
         let nulls = format!("COUNT(CASE WHEN {key} IS NULL THEN 1 END)");

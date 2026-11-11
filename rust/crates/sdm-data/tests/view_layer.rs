@@ -2,13 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A semantic model through the data layer's port ( stage 2, design S3
-//! and S5): each question of a view's text answered in the provider's
-//! dialect (`view_text`), what a provider's failure says (`failure`), and a
-//! Databricks metric view's definition asked and read (`describe` of
-//! `ViewDefinition`), against the descriptions the old client's tests made
-//! (`contract/view-step-vectors.json`, `describe`). A layer given no white
-//! space reads no semantic model, and refuses one by name.
+//! Semantic-view questions, failures and Arrow-backed definitions through the data port.
+//! A layer without whitespace rules refuses view interpretation explicitly.
 
 use std::sync::Arc;
 
@@ -27,9 +22,6 @@ use sdm_contract::view::{
 use sdm_contract::{Detail, Sentence};
 use sdm_data::Data;
 use sdm_data::view_expr::Spaces;
-use serde_json::Value as Json;
-
-const STEPS: &str = include_str!("../../../../contract/view-step-vectors.json");
 
 /// Python's white space (`str.isspace`), which the core hands in from
 /// `sdm-pql`: the 29 characters Python 3.12 counts.
@@ -366,12 +358,8 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
 
 /// Rows as the describe gives them, each cell text or null, as many
 /// columns as the row has.
-fn batch(rows: &[Json]) -> RecordBatch {
-    let width = rows
-        .iter()
-        .map(|r| r.as_array().unwrap().len())
-        .max()
-        .unwrap_or(2);
+fn batch(rows: &[Vec<Option<&str>>]) -> RecordBatch {
+    let width = rows.iter().map(Vec::len).max().unwrap_or(2);
     let fields: Vec<Field> = (0..width)
         .map(|at| Field::new(format!("c{at}"), DataType::Utf8, true))
         .collect();
@@ -379,7 +367,7 @@ fn batch(rows: &[Json]) -> RecordBatch {
         .map(|at| {
             Arc::new(StringArray::from(
                 rows.iter()
-                    .map(|row| row.get(at).and_then(Json::as_str).map(str::to_owned))
+                    .map(|row| row.get(at).copied().flatten().map(str::to_owned))
                     .collect::<Vec<_>>(),
             )) as ArrayRef
         })
@@ -387,62 +375,64 @@ fn batch(rows: &[Json]) -> RecordBatch {
     RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).unwrap()
 }
 
-/// Each description the old client's tests made is read through the port
-/// as its reader read it: the definition, the dimensions' and parameters'
-/// types, the catalog and schema; or refused by name, the view's name
-/// quoted.
+/// Arrow batches from both warehouse and Spark preserve the same definition facts.
 #[test]
-fn a_metric_view_s_definition_is_read_as_the_old_client_read_it() {
-    let document: Json = fixture_tables::read(STEPS);
-    let vectors = document["describe"].as_array().unwrap();
-    assert!(vectors.len() > 20);
+fn metric_definition_is_read_through_the_data_layer_port() {
     let layer = Data::reading_views(spaces());
-    for vector in vectors {
-        let request = definition_request(&["cat", "sch", "sales_mv"]);
-        let read = layer.read(
-            &request,
-            &databricks(),
-            &[batch(vector["rows"].as_array().unwrap())],
-        );
-        match (&vector["error"], read) {
-            (Json::Null, Ok(CatalogAnswer::ViewDefinition(found))) => {
-                let expected = vector;
-                assert_eq!(found.kind, ViewKind::Metric);
-                assert_eq!(found.text, expected["definition"].as_str().unwrap());
-                // A dict in the old reader's order of first appearance.
-                let pairs = |value: &Json| -> Vec<(String, String)> {
-                    value
-                        .as_object()
-                        .unwrap()
-                        .iter()
-                        .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_owned()))
-                        .collect()
-                };
-                assert_eq!(found.columns, pairs(&expected["dtypes"]));
-                assert_eq!(found.parameters, pairs(&expected["parameters"]));
-                assert_eq!(
-                    found.located,
-                    vec![
-                        expected["catalog"].as_str().map(str::to_owned),
-                        expected["schema"].as_str().map(str::to_owned)
-                    ]
-                );
-            }
-            (error, Err(refused)) if !error.is_null() => {
-                assert!(
-                    matches!(
-                        refused.sentence,
-                        Sentence::ViewNotAMetricView | Sentence::ViewNoDefinition
-                    ),
-                    "{refused:?}"
-                );
-                assert_eq!(
-                    refused.fields["view"],
-                    Detail::text("`cat`.`sch`.`sales_mv`")
-                );
-            }
-            (error, read) => panic!("{error}: {read:?}"),
+    for width in [3, 4] {
+        let mut rows = vec![
+            vec![Some("id"), Some("bigint")],
+            vec![Some("total"), Some("double measure")],
+            vec![None, None],
+            vec![Some("# Parameters"), None],
+            vec![Some("start"), Some("date")],
+            vec![Some("# Detailed Table Information"), None],
+            vec![Some("Type"), Some("METRIC_VIEW")],
+            vec![Some("View Text"), Some("source: orders")],
+            vec![Some("Catalog"), Some("sales")],
+            vec![Some("Database"), Some("public")],
+        ];
+        for row in &mut rows {
+            row.resize(width, None);
         }
+        let answer = layer
+            .read(
+                &definition_request(&["cat", "sch", "sales_mv"]),
+                &databricks(),
+                &[batch(&rows)],
+            )
+            .unwrap();
+        let CatalogAnswer::ViewDefinition(found) = answer else {
+            panic!("expected a view definition")
+        };
+        assert_eq!(found.kind, ViewKind::Metric);
+        assert_eq!(found.text, "source: orders");
+        assert_eq!(found.columns, [("id".into(), "bigint".into())]);
+        assert_eq!(found.parameters, [("start".into(), "date".into())]);
+        assert_eq!(found.located, [Some("sales".into()), Some("public".into())]);
+    }
+}
+
+#[test]
+fn invalid_definitions_report_the_specific_reason_and_qualified_view_name() {
+    for (kind, text, expected) in [
+        ("VIEW", "source: orders", Sentence::ViewNotAMetricView),
+        ("METRIC_VIEW", "", Sentence::ViewNoDefinition),
+    ] {
+        let rows = vec![
+            vec![Some("# Detailed Table Information"), None],
+            vec![Some("Type"), Some(kind)],
+            vec![Some("View Text"), Some(text)],
+        ];
+        let error = Data::reading_views(spaces())
+            .read(
+                &definition_request(&["cat", "sch", "sales_mv"]),
+                &databricks(),
+                &[batch(&rows)],
+            )
+            .unwrap_err();
+        assert_eq!(error.sentence, expected);
+        assert_eq!(error.fields["view"], Detail::text("`cat`.`sch`.`sales_mv`"));
     }
 }
 
@@ -459,6 +449,3 @@ fn a_views_kind_is_known_before_its_definition_is_fetched() {
         Some(ViewKind::Semantic)
     );
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

@@ -515,15 +515,9 @@ def _users() -> Schema:
 
 def test_the_context_size_refused_is_named_as_the_caller_gave_it() -> None:
     # The old client's words, with the value as given, however large
-    # (review r1, P1-2 and P1-3).
+    # (review r1, P1-2 and P1-3). No size past one is refused.
     query = PredictiveQuery(
         'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', _users()
-    )
-    with pytest.raises(StructuredDataError) as past:
-        query.materialize(indices=[1], num_context_samples=10_001)
-    assert str(past.value).split('] ', 1)[1] == (
-        'num_context_samples is 10,001, and the endpoint accepts at most '
-        '10,000 context rows'
     )
     with pytest.raises(StructuredDataError) as below:
         query.materialize(indices=[1], num_context_samples=-(10**100))

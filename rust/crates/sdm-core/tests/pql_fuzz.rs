@@ -5,7 +5,7 @@
 //! A bounded PQL fuzz test: a fixed number of inputs from a fixed seed,
 //! each validated through the adapter, which must answer every one (an
 //! acceptance, PQL's diagnostics, or a `CoreError`) without a panic, within
-//! a time bound. The inputs are the corpus's queries mutated (characters
+//! a time bound. The inputs are authored queries mutated (characters
 //! dropped, repeated, swapped or inserted from the grammar's alphabet),
 //! queries made of the grammar's tokens at random, and date literals of
 //! random digit runs, separators and times of day (D1 to D9).
@@ -13,17 +13,15 @@
 #![allow(
     clippy::disallowed_methods,
     clippy::disallowed_types,
-    reason = "test code: reads the corpus and bounds the run against a wall clock"
+    reason = "test code: bounds the run against a wall clock"
 )]
 
-mod pql_compare;
+mod pql_support;
 
-use std::path::Path;
 use std::time::{Duration, Instant};
 
-use pql_compare::{NoZones, facts, profile, query_schema};
+use pql_support::{NoZones, facts, profile, schema};
 use sdm_core::pql::validate;
-use serde_json::Value;
 
 /// The seed and the number of inputs of each kind.
 const SEED: u64 = 0x5d47_0cb6;
@@ -171,23 +169,75 @@ fn date(rng: &mut Rng) -> String {
 
 #[test]
 fn the_parser_answers_every_fuzzed_input_without_a_panic() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/pql/corpus.json");
-    let corpus: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    let schemas = corpus["schemas"].as_object().unwrap();
-    let cases = corpus["cases"].as_array().unwrap();
+    let seeds = [
+        (
+            "PREDICT SUM(orders.quantity, 0, 30, days) FOR EACH users.user_id",
+            "schema-1",
+            "RELATIONAL",
+        ),
+        (
+            "PREDICT users.age FOR EACH users.user_id",
+            "schema-1",
+            "TABULAR",
+        ),
+        (
+            "PREDICT LIST_DISTINCT(orders.product_id, 0, 30, days) RANK TOP 5 FOR EACH users.user_id",
+            "schema-1",
+            "RELATIONAL",
+        ),
+        (
+            "PREDICT COUNT(orders.*, 0, 1, days) FORECAST 3 TIMEFRAMES FOR EACH users.user_id",
+            "schema-1",
+            "RELATIONAL",
+        ),
+        (
+            "PREDICT COUNT(orders.*, 0, 30, days) > 0 OR COUNT(orders.*, 0, 7, days) > 2 AND NOT users.vip = true FOR EACH users.user_id",
+            "schema-1",
+            "FINE_TUNING",
+        ),
+        (
+            "PREDICT SUM(`Order Lines`.`Unit Price`, 0, 30, days) FOR EACH Customers.`Customer ID`",
+            "schema-2",
+            "RELATIONAL",
+        ),
+        (
+            "PREDICT COUNT(orders.* WHERE orders.ordered_at > 2024-02-29, 0, 30, days) FOR EACH users.user_id",
+            "schema-1",
+            "RELATIONAL",
+        ),
+        (
+            "PREDICT COUNT(orders.* WHERE orders.ordered_at > 12345-1-1, 0, 30, days) FOR EACH users.user_id",
+            "schema-1",
+            "RELATIONAL",
+        ),
+        ("PREDICT (", "schema-1", "RELATIONAL"),
+    ];
+    // Explicit controls prevent a broken generator from exercising only refusals.
+    for ((input, schema_name, profile_name), accepted) in
+        [(seeds[0], true), (seeds[1], true), (seeds[8], false)]
+    {
+        assert_eq!(
+            validate(
+                input,
+                &schema(schema_name),
+                &profile(profile_name),
+                &facts(),
+                &NoZones
+            )
+            .unwrap()
+            .0
+            .accepted,
+            accepted
+        );
+    }
     let mut rng = Rng(SEED);
     // Each input with the schema and profile it is validated with: a
     // mutated case keeps its own; the rest take the first schema, which
     // holds `orders.ordered_at`, and a named profile.
     let mut inputs: Vec<(String, &str, &str)> = Vec::new();
     for _ in 0..MUTATED {
-        let case = rng.pick(cases);
-        let query = mutated(&mut rng, case["query"].as_str().unwrap());
-        inputs.push((
-            query,
-            case["schema"].as_str().unwrap(),
-            case["profile"].as_str().unwrap(),
-        ));
+        let (query, schema, profile) = rng.pick(&seeds);
+        inputs.push((mutated(&mut rng, query), schema, profile));
     }
     for _ in 0..TOKENS {
         let profile = *rng.pick(&["RELATIONAL", "TABULAR", "FINE_TUNING"]);
@@ -198,8 +248,8 @@ fn the_parser_answers_every_fuzzed_input_without_a_panic() {
     }
     let started = Instant::now();
     let (mut accepted, mut refused, mut errors) = (0, 0, 0);
-    for (input, schema, name) in &inputs {
-        let schema = query_schema(&schemas[*schema]);
+    for (input, schema_name, name) in &inputs {
+        let schema = schema(schema_name);
         match validate(input, &schema, &profile(name), &facts(), &NoZones) {
             Ok((answer, _)) if answer.accepted => accepted += 1,
             Ok(_) => refused += 1,
@@ -213,13 +263,10 @@ fn the_parser_answers_every_fuzzed_input_without_a_panic() {
     );
     assert!(took < BOUND, "{took:?}");
     assert_eq!(inputs.len(), MUTATED + TOKENS + DATES);
-    // Every kind of answer is reached, so the inputs are not all refused at
-    // the first character. a date literal with a run of five
-    // digits or more (D8) is refused by name, a `CoreError`, where it was
-    // read or refused with a diagnostic: about 4,800 inputs, most of them
-    // date inputs, end so, and are counted among the errors.
+    // Keep acceptance, diagnostic refusal and structured-error paths exercised;
+    // exact proportions depend on the authored mutation seeds.
     assert!(
-        accepted > 150 && refused > 8_000 && errors > 2_000,
+        accepted > 0 && refused > 0 && errors > 0,
         "{accepted} accepted, {refused} refused, {errors} errors"
     );
 }

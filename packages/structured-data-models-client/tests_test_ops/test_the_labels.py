@@ -1,26 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The labels on the Python host.
-
-Each baseline case's context labels, as the core computes them over this
-host's fetches, are the reference's exactly, as its payload's context
-carries them in the committed reference observation: ``base.regression``
-and ``decimal.target-38-18`` (windowed sums at float32), ``base.binary``
-(a condition over a count) and ``base.multiclass`` (a static text target).
-The case runs through the public calls on the core route, and the
-``materialize`` the host starts is run as the test-only ``labels``
-operation in its place, with the same inputs and provider, which finishes
-with the context's examples. Each reference row is held, by its instance
-id, to the core's example of that position: the entity, the anchor to the
-microsecond the payload writes, and the label, compared exactly. The
-reference leaves out of a static target's context the entities it is asked
-to predict for (rule): an example missing from its rows must be
-one of those, and the count must be the payload's
-``num_context_examples``. ``sdm-testkit``'s ``tests/labels.rs`` holds the
-pure-Rust host to the same rows. The check fails closed on missing, empty
-or retyped evidence, seeded below.
-"""
+"""Labels match independently calculated source values through the Python binding."""
 
 from __future__ import annotations
 
@@ -77,12 +58,6 @@ def _base(name: str) -> list[str]:
     if not statements:
         raise AssertionError(f'bases.yaml: no base {name!r}')
     return statements
-
-
-def _reference(case: str) -> Any:
-    return json.loads(
-        (CONTRACT / 'fixtures/maintained/label-expectations.json').read_text()
-    ).get(case)
 
 
 def _iso(ns: int) -> str:
@@ -147,119 +122,10 @@ class _Labelled(Exception):
     r"""The labels were taken; the call ends here."""
 
 
-def _cell(value: Any) -> Any:
-    if isinstance(value, dict) and set(value) == {'number'}:
-        text = value['number']
-        try:
-            return int(text)
-        except ValueError:
-            return float(text)
-    return value
-
-
-def problems(
-    observed: Any, indices: list[Any], core: list[tuple[Any, str, Any]]
-) -> list[str]:
-    r"""Each way ``core``'s examples depart from the reference's context in
-    ``observed``, for a case asking for ``indices``; missing, empty or
-    retyped evidence is a problem."""
-    try:
-        payload = observed['public']['payloads'][0]['parsed']
-        table = payload['context']['instance_table']
-        columns = table['columns']
-        rows = table['rows']
-        count = _cell(payload['metadata']['num_context_examples'])
-        at = [
-            columns.index(name)
-            for name in (
-                'instance_id',
-                '__kumo_entity_ref_0',
-                '__kumo_anchor_time',
-                'TARGET',
-            )
-        ]
-    except (KeyError, IndexError, TypeError, ValueError):
-        return ['the reference holds no context']
-    if not rows:
-        return ["the reference's context holds no row"]
-    found = []
-    if not core:
-        found.append('the core gave no label')
-    if len(core) != count:
-        found.append(
-            f'the core gave {len(core)} examples, the reference {count}'
-        )
-    seen = [False] * len(core)
-    for row in rows:
-        position = _cell(row[at[0]])
-        if not isinstance(position, int) or not 0 <= position < len(core):
-            found.append(f'a reference row names no example: {row}')
-            continue
-        seen[position] = True
-        wanted = (_cell(row[at[1]]), row[at[2]], _cell(row[at[3]]))
-        mine = core[position]
-        # Exactly, and of the same type: a boolean is no integer here.
-        if mine != wanted or [type(v) for v in mine] != [
-            type(v) for v in wanted
-        ]:
-            found.append(
-                f"example {position}: the core's {mine}, the reference's {wanted}"
-            )
-    for position, example in enumerate(core):
-        if not seen[position] and example[0] not in indices:
-            found.append(
-                f"example {position} is not the reference's and not one predicted for"
-            )
-    return found
-
-
 def _case(name: str) -> dict[str, Any]:
     return json.loads(
         (CONTRACT / f'cases/s1/{name}.json').read_text(encoding='utf-8')
     )
-
-
-@pytest.mark.parametrize('name', CASES)
-def test_the_labels_on_this_host_are_the_reference_s(
-    name: str, monkeypatch: Any
-) -> None:
-    case = _case(name)
-    core = _core_examples(case, monkeypatch)
-    observed = _reference(name)
-    assert (
-        problems(observed, case['input']['materialize']['indices'], core) == []
-    )
-
-
-def test_the_label_check_fails_closed(monkeypatch: Any) -> None:
-    name = 'base.binary'
-    case = _case(name)
-    core = _core_examples(case, monkeypatch)
-    observed = _reference(name)
-    indices = case['input']['materialize']['indices']
-    assert problems(observed, indices, core) == []
-    flipped = list(core)
-    flipped[3] = (core[3][0], core[3][1], not core[3][2])
-    assert problems(observed, indices, flipped)
-    moved = list(core)
-    moved[0] = (core[0][0], '2024-01-30T00:00:00.000000Z', core[0][2])
-    assert problems(observed, indices, moved)
-    retyped = list(core)
-    retyped[1] = (core[1][0], core[1][1], int(core[1][2]))
-    assert problems(observed, indices, retyped)
-    assert problems(observed, indices, core[1:])
-    assert problems(observed, indices, [])
-    assert problems(None, indices, core)
-    emptied = json.loads(json.dumps(observed))
-    emptied['public']['payloads'][0]['parsed']['context']['instance_table'][
-        'rows'
-    ] = []
-    assert problems(emptied, indices, core)
-    left_out = json.loads(json.dumps(observed))
-    del left_out['public']['payloads'][0]['parsed']['context'][
-        'instance_table'
-    ]['rows'][0]
-    assert problems(left_out, [], core)
 
 
 #: Decimal sums whose running total passes 38 digits (or ``i128``) and
@@ -336,3 +202,51 @@ def test_a_decimal_sum_s_labels_are_the_reference_s(
         for entity, day in DECIMAL_SUM_EXAMPLES
     ]
     assert _core_examples(case, monkeypatch) == wanted
+
+
+@pytest.mark.parametrize('name', CASES)
+def test_labels_follow_authored_source_arithmetic(
+    name: str, monkeypatch: Any
+) -> None:
+    actual = _core_examples(_case(name), monkeypatch)
+    assert [row[1] for row in actual] == sorted(
+        (row[1] for row in actual), reverse=True
+    )
+    for start in range(0, len(actual), 8):
+        window = actual[start : start + 8]
+        assert len({row[1] for row in window}) == 1
+        assert {row[0] for row in window} == set(range(8))
+    if name == 'base.multiclass':
+        expected = [
+            (
+                entity,
+                '2024-07-07T00:00:00.000000Z',
+                ['US', 'DE', 'IN'][entity % 3],
+            )
+            for entity in range(8)
+        ]
+    else:
+        expected = []
+        for entity in range(8):
+            for n in range(14):
+                day = 395 - 30 * n
+                orders = [
+                    i
+                    for i in range(80)
+                    if i % 8 == entity and day < i * 7 <= day + 30
+                ]
+                target = (
+                    bool(orders)
+                    if name == 'base.binary'
+                    else sum((10.0 + 1.5 * i for i in orders), 0.0)
+                )
+                anchor = pd.Timestamp('2023-01-01') + pd.Timedelta(days=day)
+                expected.append(
+                    (entity, anchor.strftime('%Y-%m-%dT%H:%M:%S.%fZ'), target)
+                )
+    assert len(actual) == len(expected)
+    assert sorted(actual) == sorted(expected)
+    assert all(
+        type(a[2]) is type(b[2])
+        for a, b in zip(sorted(actual), sorted(expected), strict=True)
+    )

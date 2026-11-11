@@ -289,9 +289,7 @@ def gather(
     A request of more entities than one call scores is gathered by the core
     as several calls (``main``'s 1fc5a686): its payloads are each
     call's, in order, and the state keeps how many rows each later call
-    scores. The most entities and calls one ``materialize`` holds are this
-    client's (``MOST_ENTITIES``, ``MOST_CALLS``), which the core holds the
-    call to.
+    scores, however many entities there are.
 
     Raises:
         StructuredDataError: The core's refusal, as:mod:`.errors` maps it,
@@ -344,14 +342,6 @@ def gather(
             },
         ),
     }
-    # The ceilings on what one materialize holds, which the caller may set
-    # as it sets the most steps of a forecast.
-    from sdm_client.materializers import relational
-
-    operation['most_entities'] = max(
-        0, min(int(relational.MOST_ENTITIES), 2**64 - 1)
-    )
-    operation['most_calls'] = max(0, min(int(relational.MOST_CALLS), 2**32 - 1))
     if candidates is not None:
         operation['candidates'] = 6
         attachments[6] = codec.attachment(_candidates(candidates))

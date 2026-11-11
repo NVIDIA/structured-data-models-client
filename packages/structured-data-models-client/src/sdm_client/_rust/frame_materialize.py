@@ -104,7 +104,6 @@ def _gather_locked(
     candidates: Sequence[Any] | None,
 ) -> tuple[tuple[dict[str, Any], ...], results.QueryFacts, results.CoreRequest]:
     from sdm_client import decompose
-    from sdm_client.materializers import relational
 
     anchor = options.get('anchor_time')
     call = {
@@ -116,8 +115,6 @@ def _gather_locked(
         'unseeded': 'random_seed' in options and options['random_seed'] is None,
         'options': sorted(set(options) - TAKEN),
         'most_parts': max(0, min(int(decompose.MOST_PARTS), 2**32 - 1)),
-        'most_entities': max(0, min(int(relational.MOST_ENTITIES), 2**64 - 1)),
-        'most_calls': max(0, min(int(relational.MOST_CALLS), 2**32 - 1)),
     }
     attachments = {
         1: _graph(materializer),

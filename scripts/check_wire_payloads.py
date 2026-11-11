@@ -3,24 +3,11 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Validate the recorded request bodies against the contract they are sent to.
+"""Validate freshly captured canonical wire requests against the pinned spec.
 
-The rest of the contract gate works on digests and on the response models: it
-proves the binding was generated from the pinned spec, and that the spec has
-not moved under it. Nothing read a request *body*. The client builds those as
-plain mappings rather than through the generated models, so a key renamed, a
-section dropped, or a value off an enum would reach the wire and only be
-refused by a deployment.
-
-This closes that over the payloads in ``tests/golden/wire_payloads.json``,
-which are recorded from real calls and already pinned against drift.
-
-It reads what the contract declares and no more. Six of the seventeen schemas
-a request reaches set ``additionalProperties: true``, so a key invented inside
-``output``, ``inference``, ``task``, ``target``, ``metadata`` or a column is
-contractual by construction. Rules the spec states in prose, such as which
-columns a prediction may name, are not expressible as a schema and are not
-read either.
+An explicit --payloads file supports malformed and mutation tests.
+The schema constrains declared fields; behavioral assertions cover source
+values, task derivation and sampling semantics separately.
 """
 
 from __future__ import annotations
@@ -32,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-PAYLOADS = REPO_ROOT / 'tests' / 'golden' / 'wire_payloads.json'
+
 
 #: Keywords OpenAPI 3.0 adds to JSON Schema that carry no constraint.
 ANNOTATIONS = frozenset(
@@ -154,9 +141,9 @@ def main() -> int:
     )
     parser.add_argument(
         '--payloads',
-        default=PAYLOADS,
+        default=None,
         type=Path,
-        help='The recorded bodies to read. Defaults to the golden file.',
+        help='Optional captured bodies; otherwise exercise current canonical requests.',
     )
     args = parser.parse_args()
 
@@ -179,7 +166,18 @@ def main() -> int:
     }
 
     try:
-        bodies = recorded_bodies(args.payloads)
+        if args.payloads is None:
+            from check_wire_behavior import assert_behavior, collect
+
+            current = collect()
+            assert_behavior(current)
+            bodies = [
+                (f'{name}[{i}]', body)
+                for name, calls in sorted(current.items())
+                for i, body in enumerate(calls)
+            ]
+        else:
+            bodies = recorded_bodies(args.payloads)
     except Unreadable as error:
         print(error, file=sys.stderr)
         return 1

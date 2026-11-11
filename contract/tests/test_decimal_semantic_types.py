@@ -4,8 +4,7 @@
 
 """Exact decimal values retain their declared semantic types.
 
-Current-client checks use retained expected values and scripted endpoint responses.
-No archived client runtime is executed.
+Assertions run the current client on each local connector.
 """
 
 from __future__ import annotations
@@ -52,25 +51,6 @@ def case() -> tuple[dict[str, Any], str]:
     return loaded, digest
 
 
-@functools.cache
-def expected_cases() -> dict[str, dict[str, Any]]:
-    """Independent expected facts, indexed by case key."""
-    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
-    return {
-        json.loads(line)['case']: json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
-    }
-
-
-def column_d(line: dict[str, Any]) -> dict[str, Any]:
-    r"""``orders.d`` in a line's public schema."""
-    [orders] = [
-        t for t in line['public']['schema']['tables'] if t['name'] == 'orders'
-    ]
-    [d] = [c for c in orders['columns'] if c['name'] == 'd']
-    return d
-
-
 def test_the_case_is_a_scaled_decimal_past_float64() -> None:
     r"""The case is what it names: one setup statement adding ``orders.d``,
     a ``DECIMAL(38, 18)`` stepping by 1e-18 over the shop base's 80 orders,
@@ -81,22 +61,6 @@ def test_the_case_is_a_scaled_decimal_past_float64() -> None:
     assert loaded['until'] == 'from_source'
     [setup] = loaded['input']['setup']
     assert '0.000000000000000001' in setup and 'DECIMAL(38, 18) AS d' in setup
-
-
-@pytest.mark.parametrize('case_key', KEYS)
-def test_python_ref_s_line_is_at_the_case_file(case_key: str) -> None:
-    """Independent expected facts agree with this case's stated behavior."""
-    _, digest = case()
-    line = expected_cases().get(case_key)
-    assert line is not None, f'{case_key}: no expected facts'
-    assert line['outcome']['result'] == 'success'
-    assert line['outcome']['stage'] == 'from_source'
-    want = (
-        {'dtype': 'string', 'stype': 'text'}
-        if case_key.endswith('@sqlite')
-        else {'dtype': 'float64', 'stype': 'categorical'}
-    )
-    assert {k: column_d(line)[k] for k in want} == want
 
 
 def _server() -> bool:
@@ -143,28 +107,56 @@ def core_run(database: str) -> dict[str, Any]:
 
 
 @pytest.mark.parametrize('case_key', KEYS)
-def test_python_core_reads_the_column_as_the_reference_does(
+def test_decimal_column_has_connector_specific_semantic_type(
     case_key: str,
 ) -> None:
-    r"""The rides-along exit: python-core, on the core route
-    (``describe_source`` run), gives ``orders.d`` the reference's dtype and
-    stype on each database, and the whole schema is the reference's."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
-        return
+        pytest.skip('Postgres test DSN is not configured')
+    run = core_run(database)
+    assert '' not in run, run.get('')
+    line = run[case_key]
+    assert line['identity']['native_loaded']
+    assert 'describe_source' in line['identity']['operations']
+    assert line['outcome']['result'] == 'success'
+    assert line['outcome']['stage'] == 'from_source'
+    sqlite = database == 'sqlite'
 
-    def check() -> None:
-        run = core_run(database)
-        assert '' not in run, run.get('')
-        line = run.get(case_key)
-        assert line is not None, f'{case_key}: not observed'
-        assert line['identity']['native_loaded']
-        assert 'describe_source' in line['identity']['operations']
-        want = expected_cases()[case_key]
-        assert column_d(line) == column_d(want), (
-            f'{case_key}: orders.d is {column_d(line)} where python-ref '
-            f'has {column_d(want)}'
-        )
-        assert line['public']['schema'] == want['public']['schema']
+    def column(name: str, dtype: str, stype: str) -> dict[str, str]:
+        return {'dtype': dtype, 'name': name, 'stype': stype}
 
-    check()
+    assert line['public']['schema'] == {
+        'links': [['orders', 'user_id', 'users', 'user_id']],
+        'tables': [
+            {
+                'columns': [
+                    column('order_id', 'int64', 'ID'),
+                    column('user_id', 'int64', 'ID'),
+                    column('price', 'float64', 'numerical'),
+                    column(
+                        'ts',
+                        'string' if sqlite else 'timestamp[us]',
+                        'timestamp',
+                    ),
+                    column('d', 'string', 'text')
+                    if sqlite
+                    else column('d', 'float64', 'categorical'),
+                ],
+                'duplicate_keys': 0,
+                'name': 'orders',
+                'primary_key': 'order_id',
+                'time_column': 'ts',
+            },
+            {
+                'columns': [
+                    column('user_id', 'int64', 'ID'),
+                    column('age', 'int64', 'numerical'),
+                    column('country', 'string', 'categorical'),
+                ],
+                'duplicate_keys': 0,
+                'name': 'users',
+                'primary_key': 'user_id',
+                'time_column': None,
+            },
+        ],
+    }

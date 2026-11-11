@@ -193,11 +193,8 @@ class PredictiveQuery:
                 and ``anchor_time``; ``prediction_statistic``: what a
                 regression's prediction reports of its predicted distribution,
                 ``'median'`` (the default) or ``'mean'``; and
-                ``rows_per_call``: how many entities one call scores, which
-                defaults to what the endpoint takes, 10,000, and may only be
-                lowered. Lower it for a graph wide enough that a full batch
-                outruns the 30 MiB body, or for a deployment holding to less
-                than this client knows of.
+                ``rows_per_call``: how many entities one call scores, 10,000
+                by default, taken as asked.
 
         Returns:
             A:class:`~sdm_client.Request` carrying the data.

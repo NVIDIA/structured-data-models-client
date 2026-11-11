@@ -215,39 +215,21 @@ def _context(
         has_custom_sorter,
         observe,
     )
-    from sdm_client.models import TABULAR_LIMITS
 
-    limit = TABULAR_LIMITS['context_rows_max']
+    # Sampled to the count asked for, else to the core's default.
     if decision is None:
-        over_limit = wanted is not None and bool(wanted > limit)
-        accepted = _call('check_tabular_cap', {'over_limit': over_limit})[
-            'accepted'
-        ]
-        if not accepted:
-            decision = {'kind': 'refused'}
-        else:
-            count = int(wanted) if isinstance(wanted, np.integer) else wanted
-            decision = _call(
-                'decide_tabular_context',
-                {
-                    'population': len(candidates),
-                    'requested': count,
-                },
-            )
-    if decision['kind'] == 'refused':
-        raise StructuredDataError(
-            f'num_context_samples is {wanted:,}, and the '
-            f'endpoint accepts at most {limit:,} context rows',
-            code='UNSUPPORTED_REQUEST',
+        count = int(wanted) if isinstance(wanted, np.integer) else wanted
+        decision = _call(
+            'decide_tabular_context',
+            {'population': len(candidates), 'requested': count},
         )
     if not decision['reduced']:
         return candidates
     if decision['advise_default_reduction']:
         count = decision['wanted']
         warnings.warn(
-            f'{table} has {len(candidates):,} rows that could be context and '
-            f'the endpoint accepts {count:,}, so {count:,} were '
-            f'sampled. {remedy}',
+            f'{table} has {len(candidates):,} rows that could be context, '
+            f'so {count:,}, the default, were sampled. {remedy}',
             category=SDMWarning,
             stacklevel=caller_stacklevel(),
         )

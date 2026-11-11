@@ -16,10 +16,6 @@ from types import ModuleType
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / 'contract/exact-key-vectors.json'
-FORMAT = 'sdm-exact-key-vectors/1'
-#: How a register entry names the vectors it covers, as the key vectors'.
-REGISTER_REF = 'contract/exact-key-vectors.json#'
 
 #: The first id, 2**53: past it a double holds only every other integer.
 FIRST = 2**53
@@ -197,6 +193,7 @@ def observe(vector: dict[str, Any], dsn: str) -> dict[str, Any]:
                     request = PredictiveQuery(
                         vector['pql'], schema
                     ).materialize(**arguments)
+                answer['raw_payloads'] = request.payloads
                 answer['payloads'] = regressions.payloads_projection(
                     request.payloads
                 )

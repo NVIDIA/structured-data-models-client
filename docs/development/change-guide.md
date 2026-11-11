@@ -50,7 +50,7 @@ The manifest's type contracts document admission boundaries, not universal model
 For an added or changed public symbol:
 
 1. Update the public implementation and meaningful behavior tests.
-2. Regenerate Python API/wire snapshots using the commands in CONTRIBUTING, and collect Java declarations with `scripts/snapshot_java_api.py` after compilation.
+2. Regenerate the Python public API inventory, run the independent wire behavior checks using the commands in CONTRIBUTING, and collect Java declarations with `scripts/snapshot_java_api.py` after compilation.
 3. Update its `api_inventory` mapping and the group's ownership, applicability, test links, and language exceptions.
 4. Add an `assertions` list to that symbol's inventory record.
    Each item contains `test`, an exact test in the group's language-specific selection (including a checked child test of a selected file/class), and `behavior`, the observable assertion it protects.

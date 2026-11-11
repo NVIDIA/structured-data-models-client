@@ -4,16 +4,13 @@
 
 //! No text panics the view definitions' readers ( fix 2, the owner's
 //! stop rule): a few seconds of texts made of YAML's pieces and the view
-//! sections' names, and of the recorded texts cut and spliced, each read
+//! sections' names, and of authored texts cut and spliced, each read
 //! as YAML, as a metric view with its joins walked, and as a semantic view
 //! read whole. A reader may refuse any of them; none may panic.
 
 use sdm_schema::view::joins;
 use sdm_schema::view::yaml;
 use sdm_schema::view::{metric, semantic};
-use serde_json::Value as Json;
-
-const VECTORS: &str = include_str!("../../../../contract/view-yaml-vectors.json");
 
 mod rules;
 
@@ -170,13 +167,21 @@ fn no_text_panics_a_reader() {
             .collect();
         read_every_way(&text);
     }
-    let document: Json = fixture_tables::read(VECTORS);
-    let texts: Vec<&str> = document["vectors"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|vector| vector["yaml"].as_str())
-        .collect();
+    let texts = [
+        "null",
+        "[true, 017, 1:30, .nan, 2024-02-29]",
+        "{x: [1, 2], y: {z: yes}}",
+        "&a [*a]",
+        "&a {x: *a}",
+        "v: |\n  literal\n  # text\n",
+        "v: >-\n  folded\n  words\n",
+        "tables:\n  - name: users\n    base_table: {database: db, schema: public, table: users}\n    primary_key: {columns: [id]}\n",
+        "source: c.s.orders\njoins: [{name: users, source: c.s.users, on: source.user_id = users.id}]\n",
+        "!!str yes",
+        "[unterminated",
+        "{x: :}",
+        "---\nx\n---\ny",
+    ];
     for _ in 0..10_000 {
         let a = texts[rng.below(texts.len())];
         let b = texts[rng.below(texts.len())];
@@ -192,6 +197,3 @@ fn no_text_panics_a_reader() {
         read_every_way(&format!("{}{piece}{}", &a[..i], &b[j..]));
     }
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

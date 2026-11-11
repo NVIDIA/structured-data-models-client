@@ -15,17 +15,10 @@ echoed back by the test-only fetch. The data is the DuckDB-built tables the
 vectors name, loaded into a database of their own by the contract loader
 (``contract/runners/databases.py``), as the cases' are.
 
-- L4 executed on Postgres: every request kind but ``describe`` (whose
-  answer is each dialect's own catalog shape, read into the contract's by
-  ``sdm-data``; the S1 cases judge it through ``Schema.from_source``), on
-  every base of ``contract/request-kinds.json``, is the Arrow schema and
-  rows that file records for DuckDB, except a seeded sample, whose rows
-  are the engine's own draw: as many distinct keys as asked, each a key
-  the table holds; and a key lookup, which Postgres answers as the
-  reference's own lookup statement does (``REFERENCE_LOOKUP``, read from
-  the reference's committed ``@postgres`` lines): the batch, the row's
-  columns, then ``__kumo_row__`` (1, the first row of its batch) and
-  ``__kumo_matches__``, the same rows as DuckDB's.
+- Every non-catalog request kind runs on all three authored bases.
+  Expected rows and schemas come from raw source tables, independently of
+  SDM planning or admission; PostgreSQL keeps its own lookup column layout
+  and seeded sampling is checked for count, distinctness and membership.
 - Key sets bound as the dialect binds them (``P1 d:131``): keys that
   collide as float64 (an unsigned key past int64, 38-digit and scale-18
   decimals, stored as Postgres ``numeric``) each find their own row, which
@@ -66,6 +59,7 @@ from typing import Any
 import duckdb
 import pyarrow as pa
 import pytest
+from request_kind_assertions import assert_source_answer, source_answer
 
 from sdm_client._rust import codec
 from sdm_client._rust.run import run
@@ -531,7 +525,7 @@ def test_a_key_set_past_the_control_cap_travels_as_an_attachment(
 
 
 def _cell(value: Any) -> Any:
-    r"""A cell as ``contract/request-kinds.json`` writes one."""
+    r"""A lossless scalar representation for comparing admitted and source rows."""
     if value is None or isinstance(value, (bool, str)):
         return value
     if isinstance(value, int):
@@ -560,78 +554,54 @@ def _canonical(table: pa.Table) -> list[list[Any]]:
     )
 
 
-def _reference_lookups() -> list[tuple[str, list[str], list[str]]]:
-    r"""Each key lookup the reference ran on Postgres, from its committed
-    ``@postgres`` lines (``contract/reference-env.txt``'s file): the
-    statement that keeps the first row of each batch, with its result's
-    column names and Postgres types."""
-    from scripts.rust_core.fixture_tables import unpack
-
-    path = ROOT / 'contract/fixtures/maintained/postgres-statements.json'
-    document = unpack(json.loads(path.read_text()))
-    return [tuple(lookup) for lookup in document['lookups']]
-
-
-def _helpers(columns: list[str]) -> tuple[list[str], list[str]]:
-    r"""The helper columns (``__kumo_*``) before and after a result's
-    row columns."""
-    before = []
-    for name in columns:
-        if not name.startswith('__kumo_'):
-            break
-        before.append(name)
-    after = []
-    for name in reversed(columns):
-        if not name.startswith('__kumo_'):
-            break
-        after.insert(0, name)
-    return before, after
-
-
-#: The reference's key lookup on Postgres: the helper columns before and
-#: after the row's own, the same in every committed lookup, each an int8.
+# Lookup helper layout: batch before user fields, row and match count after.
 REFERENCE_LOOKUP = (['__kumo_batch__'], ['__kumo_row__', '__kumo_matches__'])
 
 
-def test_the_reference_s_postgres_lookup_has_that_layout() -> None:
-    # Not hand-written: every key lookup the reference ran on Postgres in
-    # its committed lines has REFERENCE_LOOKUP's helper columns, as int8,
-    # and keeps only the first row of each batch.
-    lookups = _reference_lookups()
-    assert len(lookups) > 10
-    for sql, columns, types in lookups:
-        assert _helpers(columns) == REFERENCE_LOOKUP, columns
-        typed = dict(zip(columns, types, strict=True))
-        assert all(
-            typed[name] == 'int8' for part in REFERENCE_LOOKUP for name in part
-        ), (columns, types)
-        assert 'ROW_NUMBER() OVER (PARTITION BY TMP.__KUMO_BATCH__' in sql
-
-
-def _as_the_reference_looks_up(fetch: dict[str, Any]) -> dict[str, Any]:
-    r"""A lookup fetch of ``contract/request-kinds.json`` with its schema
-    and rows in:data:`REFERENCE_LOOKUP`'s layout: the batch, the row's
-    columns, ``__kumo_row__`` (1) and ``__kumo_matches__``."""
-    before, after = REFERENCE_LOOKUP
-    names = [name for name, _ in fetch['schema']]
-    typed = dict(fetch['schema'])
-    own = [name for name in names if not name.startswith('__kumo_')]
-    order = before + own + after
-    rows = []
-    for row in fetch['rows']:
-        cells = dict(zip(names, row, strict=True))
-        cells['__kumo_row__'] = '1'
-        rows.append([cells[name] for name in order])
-    return {
-        **fetch,
-        'schema': [[name, typed.get(name, 'int64')] for name in order],
-        'rows': sorted(
-            rows,
-            key=lambda row: json.dumps(
-                row, separators=(',', ':'), ensure_ascii=False
+def test_lookup_preserves_seed_batches_and_reports_duplicate_matches(
+    server: Server | None,
+) -> None:
+    if server is None:
+        pytest.skip('needs the local Postgres test service')
+    connection = server.database(
+        [
+            'CREATE TABLE users(user_id BIGINT, label VARCHAR)',
+            "INSERT INTO users VALUES (7, 'duplicate'), (7, 'duplicate'), (9, 'single')",
+        ]
+    )
+    try:
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'label'],
+                'key': ['user_id'],
+            },
+            pa.table(
+                {
+                    'key': pa.array([7, 99, 7, 9], pa.int64()),
+                    'batch': pa.array([0, 1, 2, 3], pa.int64()),
+                }
             ),
-        ),
-    }
+        )
+        assert result.schema == pa.schema(
+            [
+                ('__kumo_batch__', pa.int64()),
+                ('user_id', pa.int64()),
+                ('label', pa.string()),
+                ('__kumo_row__', pa.int64()),
+                ('__kumo_matches__', pa.int64()),
+            ]
+        )
+        rows = sorted(result.to_pylist(), key=lambda row: row['__kumo_batch__'])
+        assert [tuple(row.values()) for row in rows] == [
+            (0, 7, 'duplicate', 1, 2),
+            (2, 7, 'duplicate', 1, 2),
+            (3, 9, 'single', 1, 1),
+        ]
+    finally:
+        connection.close()
 
 
 def _base(name: str) -> list[str]:
@@ -650,15 +620,13 @@ def _base(name: str) -> list[str]:
     return out
 
 
-def test_every_request_kind_runs_on_postgres_as_on_duckdb(
+def test_every_request_kind_returns_source_data_on_postgres(
     server: Server | None,
 ) -> None:
     if server is None:
         return
-    # L4 executed on Postgres: every request kind the core plans, but the
-    # catalog's, on every base, answered by Postgres and admitted, is the
-    # schema and rows contract/request-kinds.json records on DuckDB, a
-    # lookup's in the reference's Postgres layout.
+    # Independent raw DuckDB source rows describe the same input loaded
+    # into Postgres. Neither expected schema nor rows use SDM admission.
     fetches = [
         f for f in KINDS['fetches'] if f['request']['request'] != 'describe'
     ]
@@ -679,13 +647,15 @@ def test_every_request_kind_runs_on_postgres_as_on_duckdb(
         for base in ('shop', 'declared', 'adventureworks')
     }
     connections: dict[str, Any] = {}
-    problems = []
+    sources = {}
     for fetch in fetches:
-        if fetch['request']['request'] == 'lookup':
-            fetch = _as_the_reference_looks_up(fetch)
         base = fetch['base']
         if base not in connections:
-            connections[base] = server.database(_base(base))
+            statements = _base(base)
+            connections[base] = server.database(statements)
+            sources[base] = duckdb.connect()
+            for statement in statements:
+                sources[base].execute(statement)
         connection = connections[base]
         if 'keys' in fetch:
             seeds = pa.table(
@@ -697,37 +667,13 @@ def test_every_request_kind_runs_on_postgres_as_on_duckdb(
             data, _ = _keyed(connection, fetch['request'], seeds)
         else:
             data = _admitted(connection, fetch['request'])
-        where = f'{base}: {fetch["name"]}'
-        schema = [[f.name, str(f.type)] for f in data.schema]
-        if schema != fetch['schema']:
-            problems.append(f'{where}: schema {schema}, not {fetch["schema"]}')
-            continue
-        rows = _canonical(data)
-        if fetch['request']['request'] == 'sample_entities':
-            # The engine's own seeded draw: as many distinct keys as asked,
-            # each one the table holds.
-            whole = _canonical(
-                _admitted(
-                    connection,
-                    {
-                        'request': 'scan',
-                        'table': fetch['request']['table'],
-                        'columns': fetch['request']['columns'],
-                        'filters': fetch['request']['filters'],
-                        'limit': None,
-                    },
-                )
-            )
-            wanted = min(fetch['request']['n'], len(whole))
-            if not (
-                len(rows) == wanted
-                and len({json.dumps(r) for r in rows}) == wanted
-                and all(row in whole for row in rows)
-            ):
-                problems.append(f'{where}: {rows} is no sample of {whole}')
-        elif rows != fetch['rows']:
-            problems.append(f'{where}: rows {rows}, not {fetch["rows"]}')
-    assert not problems, '\n'.join(problems)
+        expected = source_answer(sources[base], fetch, postgres=True)
+        assert_source_answer(
+            data, expected, fetch['request'], _canonical, postgres=True
+        )
+    assert len(fetches) == 30
+    for connection in [*connections.values(), *sources.values()]:
+        connection.close()
 
 
 def test_each_relation_form_postgres_takes_reads_the_table_it_names(

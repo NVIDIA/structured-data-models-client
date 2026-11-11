@@ -5,36 +5,16 @@
 use sdm_request::options::{BatchTask, rows_one_call_scores, rows_one_task_call_scores};
 
 #[test]
-fn temporal_links_cannot_raise_the_model_limit() {
-    for (asked, expected) in [
-        (None, 200),
-        (Some(100), 100),
-        (Some(199), 199),
-        (Some(200), 200),
-        (Some(201), 200),
-        (Some(1000), 200),
-        (Some(u64::MAX), 200),
+fn each_task_batches_by_its_default_and_the_size_asked_is_taken_as_is() {
+    for (task, default) in [
+        (BatchTask::TemporalLink, 200),
+        (BatchTask::Ordinary, 10_000),
     ] {
-        assert_eq!(
-            rows_one_task_call_scores(asked, BatchTask::TemporalLink),
-            expected
-        );
+        assert_eq!(rows_one_task_call_scores(None, task), default);
+        for asked in [1, 100, 20_000, u64::MAX] {
+            assert_eq!(rows_one_task_call_scores(Some(asked), task), asked);
+        }
     }
-}
-
-#[test]
-fn ordinary_and_decomposed_tasks_keep_their_existing_limit() {
-    for (asked, expected) in [
-        (None, 10_000),
-        (Some(100), 100),
-        (Some(201), 201),
-        (Some(1000), 1000),
-        (Some(u64::MAX), 10_000),
-    ] {
-        assert_eq!(
-            rows_one_task_call_scores(asked, BatchTask::Ordinary),
-            expected
-        );
-        assert_eq!(rows_one_call_scores(asked), expected);
-    }
+    assert_eq!(rows_one_call_scores(None), 10_000);
+    assert_eq!(rows_one_call_scores(Some(50_000)), 50_000);
 }

@@ -2,15 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! What `DESCRIBE TABLE EXTENDED` says of a metric view (M1,
-//! old-behaviour rows 21 to 24), read from its rows as the old client reads
-//! them (`DB/metric_view.py:1389-1475`), against every description its own
-//! tests made: four cells from a SQL warehouse, three from Spark, an empty
-//! cell `''` or null, Spark's `# col_name` rows, a relation that is no metric
-//! view, and one with no definition.
+//! Warehouse and Spark metric-view descriptions, with explicit expected facts.
+//! Preserve section boundaries, duplicate handling, location and typed refusals.
 
 use sdm_data::view_expr::describe::{self, DescribeRefusal};
-use serde_json::Value as Json;
 
 /// Python's white space (`str.isspace`), which the core hands in from
 /// `sdm-pql`: the 29 characters Python 3.12 counts, with the class the
@@ -39,76 +34,68 @@ fn spaces() -> &'static Spaces {
 
 use sdm_data::view_expr::Spaces;
 
-const VECTORS: &str = include_str!("../../../../contract/view-step-vectors.json");
-
-fn pairs(value: &Json) -> Vec<(String, String)> {
-    value
-        .as_object()
-        .unwrap()
-        .iter()
-        .map(|(name, entry)| (name.clone(), entry.as_str().unwrap().to_owned()))
-        .collect()
+#[test]
+fn warehouse_and_spark_descriptions_preserve_columns_parameters_and_location() {
+    for width in [3, 4] {
+        for blank in [None, Some(String::new())] {
+            let mut rows = vec![
+                row("# col_name", ""),
+                row("id", "bigint"),
+                row("total", "double measure"),
+                row("category", "string"),
+                row("id", "int"),
+                vec![blank.clone(); width],
+                row("ignored", "not a column"),
+                row("# Parameters", ""),
+                row("# col_name", ""),
+                row("start", "date"),
+                row("limit", "int"),
+                row("# Detailed Table Information", ""),
+                row("Type", "METRIC_VIEW"),
+                row("View Text", "source: orders"),
+                row("Catalog", "sales"),
+                row("Database", "public"),
+            ];
+            for cells in &mut rows {
+                cells.resize(width, blank.clone());
+            }
+            let found = describe::describe_view(&rows, spaces()).unwrap();
+            assert_eq!(found.definition, "source: orders");
+            assert_eq!(
+                found.dtypes,
+                [
+                    ("id".into(), "int".into()),
+                    ("category".into(), "string".into())
+                ]
+            );
+            assert_eq!(
+                found.parameters,
+                [
+                    ("start".into(), "date".into()),
+                    ("limit".into(), "int".into())
+                ]
+            );
+            assert_eq!(found.catalog.as_deref(), Some("sales"));
+            assert_eq!(found.schema.as_deref(), Some("public"));
+        }
+    }
 }
 
 #[test]
-fn a_description_is_read_as_the_old_client_read_it() {
-    let document: Json = fixture_tables::read(VECTORS);
-    let vectors = document["describe"].as_array().unwrap();
-    assert!(vectors.len() >= 20, "{} descriptions", vectors.len());
-    let mut wrong = Vec::new();
-    for vector in vectors {
-        let rows: Vec<Vec<Option<String>>> = vector["rows"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|row| {
-                row.as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|cell| cell.as_str().map(str::to_owned))
-                    .collect()
+fn ordinary_tables_and_views_are_not_metric_views() {
+    for kind in ["MANAGED", "VIEW", "metric_view"] {
+        let rows = [
+            row("# Detailed Table Information", ""),
+            row("Type", kind),
+            row("View Text", "source: orders"),
+        ];
+        assert_eq!(
+            describe::describe_view(&rows, spaces()),
+            Err(DescribeRefusal::NotAMetricView {
+                got: Some(kind.into())
             })
-            .collect();
-        let read = describe::describe_view(&rows, spaces());
-        match (read, vector.get("error")) {
-            (Ok(description), None) => {
-                let expected = (
-                    vector["definition"].as_str().unwrap().to_owned(),
-                    pairs(&vector["dtypes"]),
-                    pairs(&vector["parameters"]),
-                    vector["catalog"].as_str().map(str::to_owned),
-                    vector["schema"].as_str().map(str::to_owned),
-                );
-                let got = (
-                    description.definition,
-                    description.dtypes,
-                    description.parameters,
-                    description.catalog,
-                    description.schema,
-                );
-                if got != expected {
-                    wrong.push(format!("{}: {got:?} where {expected:?}", vector["name"]));
-                }
-            }
-            (Err(refusal), Some(error)) => {
-                let message = error["message"].as_str().unwrap();
-                let same = match &refusal {
-                    DescribeRefusal::NotAMetricView { got } => message.contains(&format!(
-                        "(got type '{}')",
-                        got.as_deref().unwrap_or("UNKNOWN")
-                    )),
-                    DescribeRefusal::NoDefinition => {
-                        message.starts_with("Could not read the definition")
-                    }
-                };
-                if !same {
-                    wrong.push(format!("{}: {refusal:?} where {message}", vector["name"]));
-                }
-            }
-            (read, error) => wrong.push(format!("{}: {read:?} where {error:?}", vector["name"])),
-        }
+        );
     }
-    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
 fn row(name: &str, value: &str) -> Vec<Option<String>> {
@@ -151,6 +138,3 @@ fn a_description_missing_its_type_or_text_is_refused() {
     assert_eq!(read.catalog.as_deref(), Some("c"));
     assert_eq!(read.schema, None);
 }
-
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;

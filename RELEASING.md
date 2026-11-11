@@ -1,11 +1,11 @@
 # Releasing
 
 Three Python distributions, one version, published together. A release is a tag, then
-an approval, then a publish. The tag builds everything. The `pypi` environment
-has required reviewers, so the job that creates the GitHub Release and attaches
-those distributions waits for one. Publishing them to PyPI is a third step,
-run by hand, because the service that owns those projects is not reachable
-from a public CI runner.
+two approvals. The tag builds everything. The `pypi` environment has required
+reviewers, so the job that creates the GitHub Release and attaches those
+distributions waits for one. The `kitmaker` environment has the same
+reviewers, so the job that publishes them to PyPI through Kitmaker waits for a
+second.
 
 The tag has to sit on a commit that is on `main` and whose CI run passed.
 The publish workflow checks both before it builds anything, so a tag on an
@@ -103,7 +103,7 @@ Expired or missing CI artifacts require rerunning CI; publication does not subst
 
 All three distributions must be present at the tagged version.
 The workflow also generates an SBOM from the exact wheels, reads the version's changelog entry and attaches distributions, build identities and the SBOM to the GitHub Release.
-**A green workflow means the artifacts are built and public, not that anything is on PyPI.**
+**A green tag run means every distribution is on PyPI with the bytes that were built.** The `kitmaker` job verifies that before it finishes, so a run waiting on the `kitmaker` approval, or one that failed in it, has attached the distributions to the GitHub Release and may have published none of them.
 
 **Publishing goes through Kitmaker, not straight to PyPI.** Kitmaker owns
 NVIDIA's PyPI organization and this project's OSRB record commits to releasing
@@ -113,15 +113,21 @@ accepts an Artifactory path or a GitHub release asset, and it refuses private
 GitHub assets, so **a release cannot publish while the repository is
 internal**.
 
-**The publish is run by a person, from inside NVIDIA's network.** Kitmaker's
-Portal is not on the public internet, so a GitHub-hosted runner cannot resolve
-it, and no workflow here can do this step. The repository holds no Portal
-address, project id or publishing credential for the same reason: none of them
-belongs in a public repository, and nothing in CI has a use for them. The
-procedure and the script live with the release owner, outside this repository.
+**The publish runs in the workflow, through Charon.** Kitmaker's Portal is on
+NVIDIA's network. The `kitmaker` job reaches it through Charon, a gateway that
+opens a Teleport tunnel on the runner and admits this repository, from `main`
+and `v*` tags, to the three Portal projects' routes alone; Charon's grant for
+this repository is kept in Charon's own repository, not here. The job runs
+`.github/workflows/kitmaker_release.py`.
 
-What that procedure has to do, so that a replacement is held to it: one Portal
-project exists per distribution, because Kitmaker matches the project name
+**Prove the route before tagging.** Run the `publish` workflow from `main`
+(Actions, publish, Run workflow). From a branch it builds nothing and the
+`kitmaker` job only asks Portal for each project, checks its name and that it
+is owned by `KITMAKER_PIC`, and publishes nothing. A release depends on the
+tunnel, the Charon grant and the token at once, and this is where a broken one
+shows up without a release standing on GitHub.
+
+What the publish does: one Portal project exists per distribution, because Kitmaker matches the project name
 against the distribution name parsed from each filename, and each id is checked
 against the name it should carry before anything is sent, so a renamed or
 reassigned id fails early rather than being trusted. Every project that has
@@ -135,11 +141,14 @@ creating it is what makes the distributions public. It cannot be a draft
 instead, because a draft's asset URLs are private and Kitmaker could not fetch
 them. Declining the approval means nothing was created at all.
 
-**Nothing in CI can publish to an index.** There is no stored publishing
-credential and no environment secret; the most the `release` job can do is
-attach files to a Release. The credential Kitmaker needs is a long-lived bearer
-token, which is why it is held by the person running the publish rather than by
-a workflow on a public repository.
+**The Portal token is an environment secret.** Kitmaker's credential is a
+long-lived bearer token, `KITMAKER_API_TOKEN`, held on the `kitmaker`
+environment beside the variable `KITMAKER_PIC`, the projects' owner. The
+environment admits only `main` and `v*` tags and has required reviewers, so a
+branch cannot read the token and every use of it is approved; a repository
+secret would be readable from a workflow on any branch. The token can publish
+only to the three projects its owner holds. Declining the `kitmaker` approval
+leaves the release on GitHub and nothing on the index.
 
 **This workflow does not sign what it ships.** PEP 740 attestations go to
 whoever uploads, and that is Kitmaker, so nothing here produces one naming this
@@ -196,10 +205,9 @@ finishes what did not land.
 `actions/download-artifact`, since an expired artifact cannot be downloaded.
 "Re-run all jobs" builds fresh, non-reproducible files, finds the earlier
 assets still attached, leaves them alone and reports each as already attached.
-That run goes green with the release holding one set of bytes and `dist/`
-another, so the workflow is not what catches this. The publish is, because it
-compares every attached asset's digest against the artifact before it submits
-anything. This happens once the artifact's retention runs out, and after any
+The `release` job goes green with the release holding one set of bytes and
+`dist/` another, and the `kitmaker` job then fails, because it compares every
+attached asset's digest against the artifact before it submits anything. This happens once the artifact's retention runs out, and after any
 change to the workflow that needs a fresh build.
 
 Recovery depends on the index: if nothing for this version is on PyPI, delete
@@ -220,10 +228,12 @@ Check the three projects on pypi.org and confirm each shows NVIDIA organization
 ownership. Portal reporting that a release completed is not the same as the
 package being installable, so install it the way a user would.
 
-For a final release, then mark the GitHub Release Latest; leave an alpha, beta
-or release candidate unmarked. The workflow leaves every release unmarked on
-purpose, because until the publish has worked it would advertise a version the
-index does not have. One exception is worth knowing: when there is no earlier
+For a final release, then mark the GitHub Release Latest, unless a higher
+final release is already on PyPI; leave an alpha, beta or release candidate
+unmarked. The workflow leaves every release unmarked on purpose: until the
+publish has worked it would advertise a version the index does not have, and
+which release should hold Latest depends on every other release's publish,
+which runs for different tags cannot see in order. One exception is worth knowing: when there is no earlier
 release to hold the position, GitHub reports the newest non-draft release as
 the latest one regardless, so the first release reads as Latest from the
 moment it is created.

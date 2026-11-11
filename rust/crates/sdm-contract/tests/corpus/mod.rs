@@ -151,8 +151,6 @@ pub fn messages() -> Vec<ControlMessage> {
             values: None,
             options: vec!["num_neighbors".into()],
             most_parts: None,
-            most_entities: None,
-            most_calls: None,
             candidates: None,
             sampler_state: Some(SamplerState {
                 version: 1,

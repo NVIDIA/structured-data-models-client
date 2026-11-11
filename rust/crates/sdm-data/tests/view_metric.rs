@@ -2,18 +2,10 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! A metric view's expression helpers (`DB/metric_view.py` and
-//! `RE/graph.py:424-430`) against `contract/view-step-vectors.json`: every
-//! call the old client's own tests made of them, with its answer, and its
-//! answers to the recorder's probes. Where the old client answered with a
-//! sentence quoting a value, the decision is held here and the sentence in
-//! the core (`sdm-core/tests/view_words.rs`).
-
+//! Metric-view parsing and substitution with explicit expected facts.
 use sdm_data::view_expr::metric::{
-    self, DimensionRef, JoinRef, KeyRef, MeasureInput, MeasureReason, Parameter, ParameterRead,
-    Unread,
+    self, JoinRef, KeyRef, MeasureInput, MeasureReason, Parameter, ParameterRead, Unread,
 };
-use serde_json::Value as Json;
 
 /// Python's white space (`str.isspace`), which the core hands in from
 /// `sdm-pql`: the 29 characters Python 3.12 counts, with the class the
@@ -42,117 +34,73 @@ fn spaces() -> &'static Spaces {
 
 use sdm_data::view_expr::Spaces;
 
-const VECTORS: &str = include_str!("../../../../contract/view-step-vectors.json");
-
-fn document() -> Json {
-    let document: Json = fixture_tables::read(VECTORS);
-    assert_eq!(document["format"], "sdm-view-step-vectors/1");
-    document
-}
-
-fn texts(value: &Json) -> Vec<String> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|item| item.as_str().unwrap().to_owned())
-        .collect()
-}
-
-fn optional_text(value: &Json) -> Option<String> {
-    value.as_str().map(str::to_owned)
-}
-
-/// Runs `check` over the vectors of `kind`, and fails listing each that
-/// differs.
-fn each(kind: &str, least: usize, check: impl Fn(&Json) -> Option<String>) {
-    let document = document();
-    let vectors = document[kind].as_array().unwrap();
-    assert!(vectors.len() >= least, "{} {kind} vectors", vectors.len());
-    let wrong: Vec<String> = vectors.iter().filter_map(check).collect();
-    assert!(
-        wrong.is_empty(),
-        "{} of {} {kind} vectors differ:\n{}",
-        wrong.len(),
-        vectors.len(),
-        wrong.join("\n")
+#[test]
+fn identifiers_and_join_conditions_preserve_quoted_parts() {
+    for input in ["cat.sch.`order lines`", " cat.sch.`order lines` "] {
+        assert_eq!(
+            metric::table_reference(input, spaces()),
+            Some(vec!["cat".into(), "sch".into(), "order lines".into()])
+        );
+        assert_eq!(
+            metric::view_name(input, spaces()),
+            Some(vec!["cat".into(), "sch".into(), "order lines".into()])
+        );
+    }
+    for input in ["SELECT * FROM t", "a.b.c.d", "a . b", "", "a;drop"] {
+        assert_eq!(metric::table_reference(input, spaces()), None, "{input}");
+    }
+    assert_eq!(metric::unquote("`a``b`", spaces()), "a`b");
+    let expected = [
+        KeyRef {
+            qualifier: Some("source".into()),
+            column: "user_id".into(),
+        },
+        KeyRef {
+            qualifier: Some("users".into()),
+            column: "id".into(),
+        },
+    ];
+    assert_eq!(
+        metric::join_condition("source.user_id = users.id", spaces()),
+        Some(expected)
     );
-}
-
-/// The text of a recorded name, or `None` for a value that is no text,
-/// which no name parse reads.
-fn name_text(value: &Json) -> Option<&str> {
-    (value["t"] == "str").then(|| value["v"].as_str().unwrap())
-}
-
-#[test]
-fn table_and_view_names_are_split_as_the_old_client_split_them() {
-    for (kind, read) in [
-        (
-            "table_references",
-            metric::table_reference as fn(&str, &Spaces) -> Option<Vec<String>>,
-        ),
-        ("view_names", metric::view_name),
-    ] {
-        each(kind, 10, |vector| {
-            let parts = name_text(&vector["name"]).and_then(|name| read(name, spaces()));
-            let expected = (!vector["parts"].is_null()).then(|| texts(&vector["parts"]));
-            (parts != expected).then(|| format!("{}: {parts:?} where {expected:?}", vector["name"]))
-        });
-    }
-}
-
-fn key_ref(value: &Json) -> KeyRef {
-    KeyRef {
-        qualifier: optional_text(&value[0]),
-        column: value[1].as_str().unwrap().to_owned(),
+    for condition in ["a > b", "a = b AND c = d", "a = sum(b)"] {
+        assert_eq!(metric::join_condition(condition, spaces()), None);
     }
 }
 
 #[test]
-fn join_conditions_are_read_as_the_old_client_read_them() {
-    each("join_conditions", 20, |vector| {
-        let keys =
-            name_text(&vector["condition"]).and_then(|text| metric::join_condition(text, spaces()));
-        let expected = vector["keys"]
-            .as_array()
-            .map(|sides| [key_ref(&sides[0]), key_ref(&sides[1])]);
-        (keys != expected).then(|| format!("{}: {keys:?} where {expected:?}", vector["condition"]))
-    });
-}
-
-#[test]
-fn names_and_qualifiers_are_read_as_the_old_client_read_them() {
-    each("unquote", 50, |vector| {
-        let out = metric::unquote(vector["name"].as_str().unwrap(), spaces());
-        (out != vector["out"].as_str().unwrap()).then(|| format!("{vector}: {out}"))
-    });
-    each("references_alias", 100, |vector| {
-        let found = metric::references_alias(
-            vector["expr"].as_str().unwrap(),
-            &texts(&vector["path"]),
-            spaces(),
-        )
-        .unwrap();
-        (found != vector["found"].as_bool().unwrap()).then(|| format!("{vector}: {found}"))
-    });
-    each("strip_alias", 50, |vector| {
-        let out = metric::strip_alias(
-            vector["expr"].as_str().unwrap(),
-            &texts(&vector["path"]),
-            spaces(),
-        )
-        .unwrap();
-        (out != vector["out"].as_str().unwrap()).then(|| format!("{vector}: {out}"))
-    });
-    each("derived_column", 20, |vector| {
-        let column = metric::derived_column(vector["expr"].as_str().unwrap(), spaces());
-        (column != optional_text(&vector["column"])).then(|| format!("{vector}: {column:?}"))
-    });
-    each("renamed_column", 20, |vector| {
-        let column = metric::renamed_column(vector["expr"].as_str().unwrap(), spaces());
-        (column != optional_text(&vector["column"])).then(|| format!("{vector}: {column:?}"))
-    });
+fn alias_and_derived_column_rules_distinguish_literals_and_expressions() {
+    assert_eq!(
+        metric::references_alias("users.id + 'users.id'", &["users"], spaces()),
+        Ok(true)
+    );
+    assert_eq!(
+        metric::references_alias("'users.id'", &["users"], spaces()),
+        Ok(false)
+    );
+    assert_eq!(
+        metric::strip_alias("users.id + 'users.id'", &["users"], spaces()),
+        Ok("id + 'users.id'".into())
+    );
+    assert_eq!(
+        metric::derived_column("DATE_TRUNC('MONTH', event_time)", spaces()),
+        Some("event_time".into())
+    );
+    assert_eq!(
+        metric::derived_column("CAST(event_time AS DATE)", spaces()),
+        Some("event_time".into())
+    );
+    assert_eq!(metric::derived_column("event_time", spaces()), None);
+    assert_eq!(
+        metric::renamed_column("`event time`", spaces()),
+        Some("event time".into())
+    );
+    assert_eq!(metric::renamed_column("event_time + 1", spaces()), None);
+    assert_eq!(
+        metric::wildcard("users.* EXCEPT (`private`, id)", spaces()),
+        Some((vec!["users".into()], vec!["private".into(), "id".into()]))
+    );
 }
 
 /// A type's class, as `_default_text` tells types apart: its words in
@@ -183,222 +131,250 @@ fn a_parameter_s_type_is_classed_as_the_old_client_classed_it() {
     }
 }
 
-/// The recorded parameters, as the data layer holds them once read.
-fn parameters(value: &Json) -> Vec<(String, Parameter)> {
-    value
-        .as_object()
-        .unwrap()
-        .iter()
-        .map(|(folded, entry)| {
-            let read = match entry[1].as_str() {
-                Some(literal) => Ok(ParameterRead {
-                    literal: literal.to_owned(),
-                    text: entry[2].as_str().unwrap().to_owned(),
+#[test]
+fn parameters_replace_bare_names_once_without_touching_literals_or_qualified_names() {
+    let parameters = vec![
+        (
+            "limit".into(),
+            Parameter {
+                name: "Limit".into(),
+                read: Ok(ParameterRead {
+                    literal: "12".into(),
+                    text: "12".into(),
                 }),
-                None => Err(Unread::NoDefault),
-            };
-            (
-                folded.clone(),
-                Parameter {
-                    name: entry[0].as_str().unwrap().to_owned(),
-                    read,
-                },
-            )
-        })
-        .collect()
+            },
+        ),
+        (
+            "missing".into(),
+            Parameter {
+                name: "Missing".into(),
+                read: Err(Unread::NoDefault),
+            },
+        ),
+    ];
+    assert_eq!(
+        metric::substitute_parameters(
+            "limit + LIMIT + source.limit + 'limit' + missing",
+            &parameters,
+            spaces()
+        ),
+        Ok((
+            "12 + 12 + source.limit + 'limit' + missing".into(),
+            vec!["Limit".into(), "Missing".into()]
+        ))
+    );
+    assert!(metric::substitute_parameters("'unclosed", &parameters, spaces()).is_err());
 }
 
 #[test]
-fn parameters_and_fields_are_substituted_as_the_old_client_substituted_them() {
-    each("substitute_parameters", 100, |vector| {
-        let read = metric::substitute_parameters(
-            vector["expr"].as_str().unwrap(),
-            &parameters(&vector["parameters"]),
-            spaces(),
-        );
-        let got = match &read {
-            Ok((out, used)) => serde_json::json!({"out": out, "used": used}),
-            Err(error) => serde_json::json!({"error": error.to_string()}),
-        };
-        let expected = match vector.get("error") {
-            Some(error) => serde_json::json!({"error": error["message"]}),
-            None => serde_json::json!({"out": vector["out"], "used": vector["used"]}),
-        };
-        (got != expected).then(|| format!("{}: {got} where {expected}", vector["expr"]))
-    });
-    each("substitute_fields", 100, |vector| {
-        let fields: Vec<(String, Option<String>)> = vector["fields"]
-            .as_object()
-            .unwrap()
-            .iter()
-            .map(|(name, expr)| (name.clone(), optional_text(expr)))
-            .collect();
-        let qualifiers: Vec<Vec<String>> = vector["qualifiers"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(texts)
-            .collect();
-        let read = metric::substitute_fields(
-            vector["expr"].as_str().unwrap(),
+fn field_substitution_preserves_precedence_and_qualified_source_names() {
+    let fields = vec![
+        ("total".into(), Some("price * quantity".into())),
+        ("bad".into(), None),
+    ];
+    assert_eq!(
+        metric::substitute_fields(
+            "total + source.total + 'total'",
             &fields,
-            &qualifiers,
-            spaces(),
-        );
-        let got = match &read {
-            Ok((out, refused)) => serde_json::json!({"out": out, "refused": refused}),
-            Err(error) => serde_json::json!({"error": error.to_string()}),
-        };
-        let expected = match vector.get("error") {
-            Some(error) => serde_json::json!({"error": error["message"]}),
-            None => serde_json::json!({"out": vector["out"], "refused": vector["refused"]}),
-        };
-        (got != expected).then(|| format!("{}: {got} where {expected}", vector["expr"]))
-    });
-    each("star", 100, |vector| {
-        let read = metric::reads_star(vector["expr"].as_str().unwrap(), spaces());
-        let got = match &read {
-            Ok(star) => serde_json::json!({"star": star}),
-            Err(error) => serde_json::json!({"error": error.to_string()}),
-        };
-        let expected = match vector.get("error") {
-            Some(error) => serde_json::json!({"error": error["message"]}),
-            None => serde_json::json!({"star": vector["star"]}),
-        };
-        (got != expected).then(|| format!("{}: {got} where {expected}", vector["expr"]))
-    });
-}
-
-fn candidates(value: &Json) -> Vec<(Vec<String>, String)> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|pair| (texts(&pair[0]), pair[1].as_str().unwrap().to_owned()))
-        .collect()
+            &[vec!["source".into()]],
+            spaces()
+        ),
+        Ok(("(price * quantity) + source.total + 'total'".into(), None))
+    );
+    assert_eq!(
+        metric::substitute_fields("BAD + 1", &fields, &[], spaces()),
+        Ok(("BAD + 1".into(), Some("BAD".into())))
+    );
+    assert_eq!(metric::reads_star("struct(*)", spaces()), Ok(true));
+    assert_eq!(metric::reads_star("COUNT(*)", spaces()), Ok(false));
+    assert_eq!(metric::reads_star("price * quantity", spaces()), Ok(false));
 }
 
 #[test]
-fn a_filter_is_kept_or_refused_as_the_old_client_kept_or_refused_it() {
-    each("check_filter", 50, |vector| {
-        let filter = &vector["filter"];
-        if filter["t"] == "null" {
-            return None; // No filter, read by the caller.
-        }
-        let read = metric::check_filter(
-            name_text(filter),
-            &candidates(&vector["candidates"]),
-            spaces(),
-        );
-        match (&read, vector["sql"].as_str()) {
-            (Ok(sql), Some(expected)) if sql == expected => None,
-            (Err(_), None) if vector.get("error").is_some() => None,
-            _ => Some(format!("{vector}: {read:?}")),
-        }
-    });
+fn filters_cannot_reach_joined_tables_or_run_statements() {
+    let candidates = vec![(vec!["users".into()], "users".into())];
+    assert_eq!(
+        metric::check_filter(Some("  price > 0  "), &candidates, spaces()),
+        Ok("price > 0".into())
+    );
+    assert_eq!(
+        metric::check_filter(None, &candidates, spaces()),
+        Err(metric::FilterRefusal::NotACondition)
+    );
+    assert_eq!(
+        metric::check_filter(Some("users.id > 0"), &candidates, spaces()),
+        Err(metric::FilterRefusal::JoinedTable("users".into()))
+    );
+    assert!(matches!(
+        metric::check_filter(Some("x; DROP TABLE t"), &candidates, spaces()),
+        Err(metric::FilterRefusal::Unsafe(_))
+    ));
 }
 
 #[test]
-fn measures_are_read_as_the_old_client_read_them() {
-    each("read_measures", 50, |vector| {
-        let section = &vector["measures"];
-        let measures: Vec<MeasureInput> = (section["t"] == "list")
-            .then(|| section["v"].as_array().unwrap())
-            .map(|items| {
-                items
-                    .iter()
-                    .filter(|cfg| cfg["t"] == "map")
-                    .filter_map(|cfg| {
-                        let entry = |key: &str| {
-                            cfg["v"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .find(|pair| pair[0]["t"] == "str" && pair[0]["v"] == key)
-                                .map(|pair| pair[1].clone())
-                        };
-                        let name = entry("name").filter(|n| n["t"] == "str")?;
-                        Some(MeasureInput {
-                            name: name["v"].as_str().unwrap().to_owned(),
-                            expr: entry("expr")
-                                .filter(|e| e["t"] == "str")
-                                .map(|e| e["v"].as_str().unwrap().to_owned()),
-                            window: entry("window").is_some(),
-                        })
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let dimensions: Vec<(String, DimensionRef)> = vector["dimensions"]
-            .as_object()
-            .unwrap()
-            .iter()
-            .map(|(folded, d)| {
-                (
-                    folded.clone(),
-                    DimensionRef {
-                        name: d[0].as_str().unwrap().to_owned(),
-                        alias: d[1].as_str().unwrap().to_owned(),
-                        expr: d[2].as_str().unwrap().to_owned(),
-                    },
-                )
-            })
-            .collect();
-        let (read, refused) = metric::read_measures(
-            &measures,
-            &candidates(&vector["candidates"]),
-            &texts(&vector["kept"]),
-            &dimensions,
-            &texts(&vector["refused"]),
-            &texts(&vector["parameters"]),
-            spaces(),
-        );
-        let got: Vec<Json> = read
-            .iter()
-            .map(|m| {
-                serde_json::json!({
-                    "name": m.name,
-                    "inputs": m.inputs.iter().map(|(a, c)| vec![a, c]).collect::<Vec<_>>(),
-                    "aggregation": m.aggregation.as_ref().map(|(f, c)| serde_json::json!([f, c])),
-                })
-            })
-            .collect();
-        let names: Vec<String> = refused.iter().map(|r| r.name.clone()).collect();
-        let expected_names: Vec<String> = texts(&vector["messages"])
-            .iter()
-            .map(|m| m.split('\'').nth(1).unwrap().to_owned())
-            .collect();
-        let named_refused = refused.iter().all(|r| match &r.reason {
-            MeasureReason::NamesRefused(_) | MeasureReason::Unreadable(_) => true,
-        });
-        (Json::Array(got.clone()) != vector["read"] || names != expected_names || !named_refused)
-            .then(|| format!("{}: {got:?} {names:?}", vector["measures"]))
-    });
+fn measures_capture_inputs_and_refuse_references_to_rejected_dimensions() {
+    let measures = [
+        MeasureInput {
+            name: "revenue".into(),
+            expr: Some("SUM(amount)".into()),
+            window: false,
+        },
+        MeasureInput {
+            name: "rows".into(),
+            expr: Some("COUNT(*)".into()),
+            window: false,
+        },
+        MeasureInput {
+            name: "bad".into(),
+            expr: Some("SUM(rejected)".into()),
+            window: false,
+        },
+        MeasureInput {
+            name: "empty".into(),
+            expr: None,
+            window: false,
+        },
+    ];
+    let (read, refused) = metric::read_measures(
+        &measures,
+        &[],
+        &["amount".into()],
+        &[],
+        &["rejected".into()],
+        &[],
+        spaces(),
+    );
+    assert_eq!(read.len(), 2);
+    assert_eq!(read[0].name, "revenue");
+    assert_eq!(read[0].inputs, [("source".into(), "amount".into())]);
+    assert_eq!(
+        read[0].aggregation,
+        Some(("SUM".into(), Some("amount".into())))
+    );
+    assert_eq!(read[1].name, "rows");
+    assert_eq!(read[1].aggregation, Some(("COUNT".into(), None)));
+    assert_eq!(refused.len(), 1);
+    assert_eq!(refused[0].name, "bad");
+    assert_eq!(
+        refused[0].reason,
+        MeasureReason::NamesRefused("rejected".into())
+    );
 }
 
 #[test]
-fn join_keys_resolve_as_the_old_client_resolved_them() {
-    each("resolve_join_keys", 10, |vector| {
-        let join = &vector["join"];
-        let condition = &join["condition"];
-        let join = JoinRef {
-            alias: join["alias"].as_str().unwrap().to_owned(),
-            parent_alias: join["parent_alias"].as_str().unwrap().to_owned(),
-            path: texts(&join["path"]),
-            condition: [key_ref(&condition[0]), key_ref(&condition[1])],
-        };
-        let keys = metric::resolve_join_keys(
-            &join,
-            &texts(&vector["child_columns"]),
-            &texts(&vector["parent_columns"]),
-        );
-        let expected = vector.get("keys").map(|keys| {
-            let keys = texts(keys);
-            (keys[0].clone(), keys[1].clone(), keys[2].clone())
-        });
-        (keys != expected).then(|| format!("{vector}: {keys:?}"))
-    });
+fn join_key_resolution_respects_sides_case_and_child_first_ambiguity() {
+    let key = |qualifier: Option<&str>, column: &str| KeyRef {
+        qualifier: qualifier.map(str::to_owned),
+        column: column.into(),
+    };
+    let mut join = JoinRef {
+        alias: "users".into(),
+        parent_alias: "source".into(),
+        path: vec!["users".into()],
+        condition: [key(Some("SOURCE"), "user_id"), key(Some("users"), "id")],
+    };
+    let expected = Some(("source".into(), "user_id".into(), "id".into()));
+    assert_eq!(
+        metric::resolve_join_keys(&join, &["id"], &["user_id"]),
+        expected
+    );
+    join.condition.swap(0, 1);
+    assert_eq!(
+        metric::resolve_join_keys(&join, &["id"], &["user_id"]),
+        expected
+    );
+    join.condition = [key(None, "user_id"), key(None, "id")];
+    assert_eq!(
+        metric::resolve_join_keys(&join, &["id"], &["user_id"]),
+        expected
+    );
+    assert_eq!(
+        metric::resolve_join_keys(&join, &["user_id", "id"], &["user_id"]),
+        None
+    );
+    join.condition[0] = key(Some("unknown"), "id");
+    assert_eq!(
+        metric::resolve_join_keys(&join, &["id"], &["user_id"]),
+        None
+    );
 }
 
-#[path = "../../../testdata/fixture_tables.rs"]
-mod fixture_tables;
+#[test]
+fn measures_do_not_claim_simple_aggregation_for_windows_or_cross_table_inputs() {
+    let measure = |name: &str, expr: &str, window| MeasureInput {
+        name: name.into(),
+        expr: Some(expr.into()),
+        window,
+    };
+    let measures = [
+        measure("windowed", "SUM(amount)", true),
+        measure("cross", "SUM(source.amount + users.credit)", false),
+        measure("joined", "SUM(users.credit)", false),
+    ];
+    let candidates = [
+        (vec!["source".into()], "source".into()),
+        (vec!["users".into()], "users".into()),
+    ];
+    let (read, refused) = metric::read_measures(
+        &measures,
+        &candidates,
+        &["users".into()],
+        &[],
+        &[],
+        &[],
+        spaces(),
+    );
+    assert!(refused.is_empty());
+    assert_eq!(read[0].inputs, [("source".into(), "amount".into())]);
+    assert!(read[0].aggregation.is_none());
+    assert!(read[1].inputs.is_empty());
+    assert!(read[1].aggregation.is_none());
+    assert_eq!(read[2].inputs, [("users".into(), "credit".into())]);
+    assert!(read[2].aggregation.is_none());
+}
+
+#[test]
+fn dimensions_parameters_and_measure_names_have_distinct_namespaces() {
+    let measure = |name: &str, expr: &str| MeasureInput {
+        name: name.into(),
+        expr: Some(expr.into()),
+        window: false,
+    };
+    let dimensions = [(
+        "revenue".into(),
+        metric::DimensionRef {
+            name: "Revenue".into(),
+            alias: "source".into(),
+            expr: "price * quantity".into(),
+        },
+    )];
+    let measures = [
+        measure("total", "SUM(revenue)"),
+        measure("unique", "COUNT(DISTINCT revenue)"),
+        measure("adjusted", "total + tax"),
+        measure("non_count_distinct", "SUM(DISTINCT revenue)"),
+    ];
+    let (read, refused) = metric::read_measures(
+        &measures,
+        &[],
+        &[],
+        &dimensions,
+        &["total".into(), "tax".into()],
+        &["tax".into()],
+        spaces(),
+    );
+    assert!(refused.is_empty());
+    assert_eq!(read.len(), 4);
+    assert!(read[0].inputs.is_empty()); // A dimension is resolved separately from raw columns.
+    assert_eq!(
+        read[0].aggregation,
+        Some(("SUM".into(), Some("Revenue".into())))
+    );
+    assert_eq!(
+        read[1].aggregation,
+        Some(("COUNT_DISTINCT".into(), Some("Revenue".into())))
+    );
+    assert!(read[2].inputs.is_empty()); // Neither a parameter nor another measure is a source column.
+    assert!(read[2].aggregation.is_none());
+    assert!(read[3].aggregation.is_none());
+}

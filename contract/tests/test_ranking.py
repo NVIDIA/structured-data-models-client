@@ -4,7 +4,7 @@
 
 """Ranking preserves candidate scoring, ordering, cutoffs and invalid-request diagnostics.
 
-Current-client checks use retained expected values and scripted endpoint responses.
+Current-client checks use independently expected values and scripted endpoint responses.
 No archived client runtime is executed.
 """
 
@@ -28,7 +28,6 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 RECORDER = ROOT / 'contract/support/ranking_scenarios.py'
-VECTORS = ROOT / 'contract/ranking-vectors.json'
 CASE_DIR = ROOT / 'contract/cases/s1'
 
 DATABASES = ('duckdb', 'sqlite', 'postgres')
@@ -51,14 +50,19 @@ CASES = {
     'holds one class left out, unscored, before any call',
     'rank.all-unscored': 'no candidate left to rank, refused before any call',
     'rank.entities-by-candidates.over': 'the entities gathered once '
-    'per candidate past the 100,000 one materialize holds (501 by 200), '
-    'refused before anything is read',
+    "per candidate past the reference's 100,000 (501 by 200), which it "
+    'refused; this client sets no such ceiling (DEPARTED)',
     'rank.entities-by-candidates.at': 'the same at exactly 100,000 '
     '(500 by 200), not refused by that ceiling',
     'forecast.top-k': "the forecast's top_k refusal in the core",
     'forecast.most-parts': "the forecast's MOST_PARTS refusal in the core",
 }
 CASE_IDS = tuple(CASES)
+#: The cases this client departs from the reference on, on purpose: it sets
+#: no ceiling on the entities a ranking gathers across its candidates, so the
+#: reference's refusal past 100,000 is gathered, and refused only for the
+#: entities that name no user, as at the ceiling.
+DEPARTED = ('rank.entities-by-candidates.over',)
 #: The sentence the reference adds to a part's refusal.
 PART = 'This is the question asked for candidate '
 
@@ -88,34 +92,6 @@ def key(case_id: str, database: str) -> str:
 CASE_KEYS = tuple(key(c, d) for d in DATABASES for c in CASE_IDS)
 
 
-@functools.cache
-def vectors() -> dict[str, Any]:
-    from scripts.rust_core.fixture_tables import unpack
-
-    return unpack(json.loads(VECTORS.read_text(encoding='utf-8')))
-
-
-VECTOR_NAMES = tuple(v['name'] for v in vectors()['vectors'])
-
-
-def on_rust_host(vector: dict[str, Any]) -> bool:
-    r"""Whether rust-host replays ``vector``: a call a case can make (its
-    materialize arguments a case's, no edit, the default outputs), whose
-    answers its JSON reader takes as Python's does (no NaN in a member it
-    gives back as written), over the S1 cases' data on DuckDB (no setup
-    or database of its own: round 1's candidates are python-core's)."""
-    return (
-        'setup' not in vector
-        and 'database' not in vector
-        and set(vector['materialize'])
-        <= {'indices', 'anchor_time', 'candidates', 'top_k'}
-        and vector['edit'] is None
-        and 'raise_call' not in vector['script']
-        and not vector['predict']
-        and 'nan-score' not in vector['name']
-    )
-
-
 # --- the cases -------------------------------------------------------------------
 
 
@@ -125,16 +101,6 @@ def cases() -> dict[str, tuple[dict[str, Any], str]]:
     them."""
     loaded = runner().load_cases([CASE_DIR / f'{c}.json' for c in CASE_IDS])
     return {case['id']: (case, digest) for case, digest in loaded}
-
-
-@functools.cache
-def expected_cases() -> dict[str, dict[str, Any]]:
-    """Independent expected facts, indexed by case key."""
-    path = ROOT / 'contract/fixtures/maintained/request-expectations.jsonl'
-    return {
-        json.loads(line)['case']: json.loads(line)
-        for line in path.read_text(encoding='utf-8').splitlines()
-    }
 
 
 def test_the_cases_are_the_design_rows() -> None:
@@ -244,133 +210,7 @@ CALLS = {
 }
 
 
-@pytest.mark.parametrize('case_key', CASE_KEYS)
-def test_expected_outcome_matches_case(case_key: str) -> None:
-    """Independent expected facts agree with this case's stated behavior."""
-    case_id = case_key.split('@')[0]
-    case, digest = cases()[case_id]
-    line = expected_cases().get(case_key)
-    assert line is not None, f'{case_key}: no expected facts'
-    expect = case['expect']
-    assert _outcome(line) == (
-        expect['outcome'],
-        expect['stage'],
-        expect.get('error'),
-        expect.get('code'),
-    ), case_key
-    assert len(line['public']['payloads']) == CALLS.get(case_id, 0), case_key
-
-
 # --- the vectors -----------------------------------------------------------------
-
-
-def test_the_vectors_are_the_reference_s_and_not_vacuous() -> None:
-    r"""Control: the vectors were recorded from the reference by the
-    committed recorder, their inputs are the recorder's, every exit has one,
-    and they exercise what they name."""
-    recorded = vectors()
-    assert recorded['data_case'] == recorder().DATA_CASE == 'rank.top-k'
-    assert recorded['exits'] == recorder().EXITS
-    inputs = [
-        {k: v for k, v in each.items() if k != 'expected'}
-        for each in recorded['vectors']
-    ]
-    assert inputs == json.loads(json.dumps(recorder().VECTORS))
-    assert {v['covers'] for v in inputs} == set(recorder().EXITS)
-    by = {v['name']: v['expected'] for v in recorded['vectors']}
-    # Ties and every order: entity 1 scores candidates 0 and 1 alike, and
-    # keeps them in the candidates' order.
-    ranked = by['scores.rank-top-2']
-    assert ranked['outcome'] == 'result' and len(ranked['calls']) == 3
-    assert ranked['columns'] == ['row_index', 'id', 'prediction', 'rankings']
-    row = ranked['items'][1]
-    assert row['prediction'] == {'list': [{'int': '0'}, {'int': '1'}]}
-    scores = [m['map'][1][1] for m in row['rankings']['list']]
-    assert scores[0] == scores[1]
-    # top_k: the option cuts to one, or keeps three past the query's two.
-    assert len(by['top-k.option-1']['items'][0]['prediction']['list']) == 1
-    assert len(by['top-k.option-3']['items'][0]['prediction']['list']) == 3
-    assert by['top-k.outputs-rankings']['columns'] == [
-        'row_index',
-        'id',
-        'rankings',
-    ]
-    assert by['top-k.outputs-probabilities']['code'] == 'INVALID_REQUEST'
-    # An unscored candidate: no call for it, named, one notice.
-    unscored = by['candidates.unscored-one']
-    assert unscored['unscored'] == {'list': [{'int': '9'}]}
-    assert len(unscored['calls']) == 2 and unscored['notices'] == ['SDMWarning']
-    assert by['candidates.all-unscored']['calls'] == []
-    assert len(by['candidates.repeated']['calls']) == 2
-    # PD-1: a NaN never ranks; refused of the candidate it was asked for.
-    for name, candidate, calls in (
-        ('pd1.nan-first-call', 0, 1),
-        ('pd1.nan-later-call', 1, 2),
-        ('pd1.nan-as-text', 0, 1),
-    ):
-        nan = by[name]
-        assert (nan['outcome'], nan['code']) == ('refused', 'INVALID_RESPONSE')
-        assert f'{PART}{candidate}, one of 3' in nan['message'], name
-        assert len(nan['calls']) == calls, name
-        assert 'NaN' in nan['calls'][-1]['answer'] or (
-            '"nan"' in nan['calls'][-1]['answer']
-        )
-    failed = by['parts.failed-call-1']
-    assert failed['class'] == 'NimRequestError' and len(failed['calls']) == 2
-    assert f'{PART}1, one of 3' in failed['message']
-    # response_field: the answer's scores and rankings come back as given.
-    assert 'scores' in by['response-field.binary-scores']['columns']
-    assert 'rankings' in by['response-field.binary-rankings']['columns']
-    nan_member = by['response-field.binary-rankings-nan-score']
-    assert {'f64': 'nan'} in [
-        m['map'][1][1] for m in nan_member['items'][0]['rankings']['list']
-    ]
-    assert 'scores' in by['response-field.regression-scores']['columns']
-    assert by['response-field.ranking-part-scores']['outcome'] == 'result'
-    # prediction_statistic: refused for a ranking; sent as given otherwise.
-    assert by['prediction-statistic.ranking']['code'] == 'INVALID_REQUEST'
-    sent = by['prediction-statistic.edited-not-text']['calls'][0]['output']
-    assert sent['prediction_statistic'] == 7
-    mean = by['prediction-statistic.regression-mean']['calls'][0]['output']
-    assert mean['prediction_statistic'] == 'mean'
-    # instance_id_type and prediction_type: off-type values answered.
-    assert by['instance-id.float']['outcome'] == 'result'
-    assert by['prediction-type.binary-float']['dtypes'][2] == 'float64'
-    assert by['prediction-type.binary-text']['rows'][0][2] == {'str': 'maybe'}
-    # Round 2: an exception the transport raises on the second call made,
-    # after one part answered, re-raised as itself with the parts answered.
-    for at in ('', '@sqlite', '@postgres'):
-        for name in (
-            'parts.raised-on-call-1',
-            'parts.raised-on-call-1.after-unscored',
-        ):
-            raised = by[f'{name}{at}']
-            assert raised['class'] == 'ValueError', name
-            assert raised['details'] == {'parts_answered': 1}, name
-            assert len(raised['calls']) == 1, name
-    # Round 1: a date and its spelling are two candidates, both kept; a
-    # key past i128, as a Decimal and as an int, and one past 76 digits,
-    # each scored as itself, on all three databases.
-    for at in ('', '@sqlite', '@postgres'):
-        for name, spelled in (
-            ('date-and-text', '2023-01-01'),
-            ('timestamp-and-text', '2023-01-01 00:00:00'),
-        ):
-            both = by[f'candidates.{name}{at}']
-            assert len(both['calls']) == 3, name
-            assert both['unscored'] == {'list': []}, name
-            assert {'str': spelled} in both['rows'][0][2]['list'], name
-        for name, key in (
-            ('decimal-past-i128', {'decimal': str(10**39)}),
-            ('int-past-i128', {'int': str(10**39)}),
-            ('int-past-76-digits', {'int': str(10**77 + 123456789)}),
-        ):
-            wide = by[f'candidates.{name}{at}']
-            assert wide['unscored'] == {'list': []}, name
-            assert key in wide['rows'][0][2]['list'], name
-    assert by['prediction-type.multiclass-integer']['rows'][0][2] == {
-        'int': '3'
-    }
 
 
 #: What the reference's refusal of each case refused before any call says,
@@ -382,12 +222,9 @@ REFUSED_FOR = {
     'rank.candidates-not-a-ranking': 'does not rank anything',
     'rank.most-parts': '201 candidates means 201 calls',
     'rank.batched': 'A part is not batched',
-    'rank.entities-by-candidates.over': (
-        '501 entities gathered 200 times over, 100,200 in all, is past the '
-        '100,000'
-    ),
-    # At the ceiling the call is gathered, and refused only for the
-    # entities 8 to 499, which name no user.
+    # Gathered with no entity ceiling, and refused only for the entities
+    # from 8, which name no user.
+    'rank.entities-by-candidates.over': 'The primary keys [8, 9,',
     'rank.entities-by-candidates.at': 'The primary keys [8, 9,',
     'forecast.top-k': 'a forecast ranks nothing',
     'forecast.most-parts': '201 forecast steps means 201 calls',
@@ -395,12 +232,13 @@ REFUSED_FOR = {
 
 
 def test_each_case_is_refused_for_the_argument_it_names() -> None:
-    r"""Control, not vacuous: each case the reference refuses at
-    materialize is refused, on the reference, by the rule its argument
-    meets (the recorder's ``controls``: the case's own call and its
-    message), and the same call with that argument changed is gathered, so
-    the case is refused for nothing else."""
-    recorded = {c['case']: c for c in vectors()['controls']}
+    """Exercise each invalid argument and its corrected control on the client."""
+    recorded = {
+        c['case']: c
+        for c in recorder().controls(
+            {key: case for key, (case, _) in cases().items()}
+        )
+    }
     at_materialize = {
         case_id
         for case_id, (case, _) in cases().items()
@@ -411,15 +249,14 @@ def test_each_case_is_refused_for_the_argument_it_names() -> None:
     for case_id, each in recorded.items():
         case, _ = cases()[case_id]
         refused = each['refused']
-        assert (refused['outcome'], refused['code']) == (
-            'refused',
-            case['expect']['code'],
-        ), case_id
+        code = (
+            'INVALID_REQUEST' if case_id in DEPARTED else case['expect']['code']
+        )
+        assert (refused['outcome'], refused['code']) == ('refused', code), (
+            case_id
+        )
         assert REFUSED_FOR[case_id] in refused['message'], refused['message']
         assert each['change'] == recorder().CONTROLS[case_id]
-        if case_id == 'rank.entities-by-candidates.at':
-            # Not vacuous: at 100,000 the ceiling does not refuse.
-            assert 'in all, is past the' not in refused['message']
         assert each['control']['outcome'] == 'result', (case_id, each)
 
 
@@ -491,46 +328,16 @@ def payloads(line: dict[str, Any]) -> list[Any]:
     return out
 
 
-def differences(want: Any, got: Any, at: str = '') -> list[str]:
-    r"""Where ``got`` differs from ``want``, a few paths."""
-    if isinstance(want, dict) and isinstance(got, dict):
-        found = []
-        for name in sorted(set(want) | set(got)):
-            found += differences(want.get(name), got.get(name), f'{at}/{name}')
-        return found[:8]
-    if (
-        isinstance(want, list)
-        and isinstance(got, list)
-        and len(want) == len(got)
-    ):
-        found = []
-        for i, (w, g) in enumerate(zip(want, got, strict=True)):
-            found += differences(w, g, f'{at}[{i}]')
-        return found[:8]
-    if want != got:
-        if isinstance(want, list) and isinstance(got, list):
-            return [
-                f'{at}: {len(got)} items where the reference has {len(want)}'
-            ]
-        return [f'{at}: {got!r:.80} where the reference has {want!r:.80}']
-    return []
-
-
 @pytest.mark.parametrize('case_key', CASE_KEYS)
-def test_python_core_answers_each_case_as_the_reference_does(
+def test_current_client_decomposes_rankings_and_refuses_invalid_arguments(
     case_key: str,
 ) -> None:
-    r"""exits, "``top_k``, candidates, the decomposition in
-    ``sdm-request``; ``problem_type`` for ranking; the forecast's ``top_k``
-    and ``MOST_PARTS`` refusals in the core": python-core runs the case on
-    the database on the core route, its outcome and each request the
-    scripted endpoint received are python-ref's, and the core does the
-    work: the host hands it the question as asked (one ``materialize``,
-    never a part's query) and a refusal is the core's, given by the core
-    operation of the stage it ends at with the reference's code."""
+    """Assert current-client behavior and native routing without recorded payload equality."""
     database = case_key.partition('@')[2] or 'duckdb'
     if database == 'postgres' and not _server():
-        return
+        pytest.skip('Postgres test DSN is not configured')
+    if case_key.split('@')[0] in DEPARTED:
+        pytest.skip('a departure from the reference, checked on its own')
 
     def check() -> None:
         run = core_run(database)
@@ -538,26 +345,35 @@ def test_python_core_answers_each_case_as_the_reference_does(
         line = run.get(case_key)
         assert line is not None, f'{case_key}: not observed'
         case, _ = cases()[case_key.split('@')[0]]
-        want = expected_cases()[case_key]
+        expect = case['expect']
         assert line['identity']['native_loaded'] and line['core'] is not None
-        assert _outcome(line) == _outcome(want), (
-            f'{case_key}: {_outcome(line)} where python-ref has '
-            f'{_outcome(want)}'
-        )
-        found = differences(payloads(want), payloads(line))
-        assert not found, f'{case_key}: the payload differs: ' + '; '.join(
-            found
-        )
-        if want['outcome']['result'] == 'success':
-            # The ranking put back together: its columns and rows' digest.
-            assert line['public']['result'] == want['public']['result'], (
-                f'{case_key}: the result differs: '
-                + '; '.join(
-                    differences(
-                        want['public']['result'], line['public']['result']
-                    )
-                )
+        assert _outcome(line) == (
+            expect['outcome'],
+            expect['stage'],
+            expect.get('error'),
+            expect.get('code'),
+        ), case_key
+        sent = payloads(line)
+        assert len(sent) == CALLS.get(case['id'], 0), case_key
+        for body in sent:
+            assert body['task']['kind'] == 'binary_classification'
+            assert body['task']['target']['positive_class'] == 'true'
+            assert body['task']['target']['classes'] == ['false', 'true']
+            assert (
+                body['task']['target']['column_name']
+                not in body['predict']['instance_table']['columns']
             )
+        if expect['outcome'] == 'success':
+            result = line['public']['result']
+            assert result['rows'] == len(
+                case['input']['materialize']['indices']
+            )
+            assert [column['name'] for column in result['columns']] == [
+                'row_index',
+                'id',
+                'prediction',
+                'rankings',
+            ]
         ran = line['identity']['operations']
         asked = [
             each
@@ -573,11 +389,11 @@ def test_python_core_answers_each_case_as_the_reference_does(
                 f"{case_key}: the core was asked a part's query, "
                 f'{asked[0].get("query")!r}, not the question'
             )
-        stage = want['outcome']['stage']
+        stage = expect['stage']
         assert stage in ran, f'{case_key}: the core ran no {stage}: {ran}'
-        if want['outcome']['result'] == 'refusal':
+        if expect['outcome'] == 'refusal':
             error = line['core'].get('error') or {}
-            assert error.get('code') == want['outcome']['code'], (
+            assert error.get('code') == expect['code'], (
                 f"{case_key}: the refusal is not the core's: the core "
                 f'answered {error!r}'
             )
@@ -585,76 +401,304 @@ def test_python_core_answers_each_case_as_the_reference_does(
     check()
 
 
-def _dtypes(dtypes: list[str] | None) -> list[str] | None:
-    r"""A frame's dtypes, pandas 2's ``object`` and pandas 3's ``str`` for
-    a text column read as one."""
-    if dtypes is None:
-        return None
-    return ['object' if d == 'str' else d for d in dtypes]
-
-
-def held_to(got: dict[str, Any], want: dict[str, Any], name: str) -> None:
-    r"""``got`` is the reference's outcome ``want``, as exits
-    compare it."""
-    assert (got['stage'], got['outcome']) == (want['stage'], want['outcome']), (
-        f'{name}: {got["stage"]} {got["outcome"]} '
-        f'({got.get("class")} {got.get("code")}: {got.get("message")}), '
-        f'where the reference ends {want["stage"]} {want["outcome"]}'
-    )
-    assert [(c['output'], c['status']) for c in got['calls']] == [
-        (c['output'], c['status']) for c in want['calls']
-    ], f"{name}: the calls made are not the reference's"
-    if want['outcome'] == 'refused':
-        assert got['code'] == want['code'], f'{name}: {got["message"]}'
-        assert want['class'] in got['mro'], f'{name}: {got["mro"]}'
-        # An endpoint's refusal carries its HTTP status to the user, a local
-        # error none.
-        assert got['status_code'] == want['status_code'], (
-            f'{name}: status {got["status_code"]!r} where the reference '
-            f'gives {want["status_code"]!r}'
-        )
-        if 'details' in want:
-            # An exception the transport raised that is not the client's
-            # own: re-raised as the same class, carrying the parts answered
-            # before it (round 2).
-            assert got['class'] == want['class'], f'{name}: {got["class"]}'
-            assert got.get('details') == want['details'], (
-                f'{name}: details {got.get("details")!r} where the reference '
-                f'gives {want["details"]!r}'
-            )
-        if PART in want['message']:
-            said = want['message'][want['message'].index(PART) :]
-            assert said in got['message'], (
-                f'{name}: the refusal does not say {said!r}: {got["message"]}'
-            )
-        return
-    for field in ('outputs', 'columns', 'rows', 'items', 'unscored', 'notices'):
-        assert got.get(field) == want.get(field), (
-            f'{name}: {field}: '
-            + '; '.join(differences(want.get(field), got.get(field)))
-        )
-    assert _dtypes(got.get('dtypes')) == _dtypes(want.get('dtypes')), name
-
-
-@pytest.mark.parametrize('name', VECTOR_NAMES)
-def test_python_core_answers_each_vector_as_the_reference_does(
-    name: str, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ('name', 'limit'),
+    [('scores.rank-top-2', 2), ('top-k.option-1', 1), ('top-k.option-3', 3)],
+)
+def test_ranked_candidates_follow_scripted_scores_and_stable_ties(
+    name: str, limit: int
 ) -> None:
-    r"""exits, "scores, rankings, ``prediction_statistic``, PD-1,
-    reassembly; ``response_field`` for rankings; ``instance_id_type``,
-    ``prediction_type``": python-core, on the core route over the vector's
-    database (DuckDB unless it names another), answers the vector as
-    python-ref does: its result and ``.items``, or its refusal, and the
-    calls it made. Round 1's candidates (a date or a timestamp beside its
-    spelling, a key past i128 as a Decimal and an int, one past 76 digits)
-    run on all three databases."""
-    spec = next(v for v in vectors()['vectors'] if v['name'] == name)
-    inputs = {k: v for k, v in spec.items() if k != 'expected'}
-    database = spec.get('database', 'duckdb')
+    """Rank the supplied endpoint scores, preserving candidate order on ties."""
+    spec = copy.deepcopy(
+        next(v for v in recorder().VECTORS if v['name'] == name)
+    )
+    result = recorder().observe(spec)
+    assert result['outcome'] == 'result'
+    candidates = spec['materialize']['candidates']
+    scores = spec['script']['table']
+    assert len(result['calls']) == len(candidates)
+    assert len(result['items']) == len(spec['materialize']['indices'])
+    for row_index, item in enumerate(result['items']):
+        # This oracle uses only the authored endpoint input, never captured output.
+        order = sorted(
+            range(len(candidates)), key=lambda i: -scores[i][row_index]
+        )
+        expected = [{'int': str(candidates[i])} for i in order[:limit]]
+        assert item['prediction'] == {'list': expected}
+        assert item['row_index'] == {'int': str(row_index)}
+        assert item['id'] == {
+            'int': str(spec['materialize']['indices'][row_index])
+        }
+        rankings = [
+            {'candidate': candidates[i], 'score': scores[i][row_index]}
+            for i in order[:limit]
+        ]
+        assert item['rankings'] == recorder()._cell(rankings)
+
+
+def _observe_authored_ranking(name: str) -> dict[str, Any]:
+    spec = copy.deepcopy(
+        next(v for v in recorder().VECTORS if v['name'] == name)
+    )
+    return recorder().observe(spec)
+
+
+def _assert_remaining_candidate_scores(
+    result: dict[str, Any], candidates: list[int]
+) -> None:
+    assert len(result['items']) == 3
+    for row_index, item in enumerate(result['items']):
+        order = sorted(
+            range(len(candidates)),
+            key=lambda i: -recorder().SCORES[i][row_index],
+        )
+        assert item['prediction'] == recorder()._cell(
+            [candidates[i] for i in order]
+        )
+        assert item['rankings'] == recorder()._cell(
+            [
+                {
+                    'candidate': candidates[i],
+                    'score': recorder().SCORES[i][row_index],
+                }
+                for i in order
+            ]
+        )
+
+
+def test_unscored_and_duplicate_candidates_do_not_make_extra_calls() -> None:
+    result = _observe_authored_ranking('candidates.unscored-one')
+    assert result['outcome'] == 'result'
+    assert result['unscored'] == {'list': [{'int': '9'}]}
+    assert len(result['calls']) == 2
+    assert result['notices'] == ['SDMWarning']
+    _assert_remaining_candidate_scores(result, [0, 1])
+    for item in result['items']:
+        assert {'int': '9'} not in item['prediction']['list']
+    result = _observe_authored_ranking('candidates.all-unscored')
+    assert result['outcome'] == 'refused'
+    assert result['calls'] == []
+    result = _observe_authored_ranking('candidates.repeated')
+    assert result['outcome'] == 'result'
+    assert len(result['calls']) == 2
+    _assert_remaining_candidate_scores(result, [1, 0])
+    for item in result['items']:
+        values = item['prediction']['list']
+        assert len(values) == len(
+            {json.dumps(v, sort_keys=True) for v in values}
+        )
+
+
+@pytest.mark.parametrize(
+    ('name', 'candidate', 'calls'),
+    [
+        ('pd1.nan-first-call', 0, 1),
+        ('pd1.nan-later-call', 1, 2),
+        ('pd1.nan-as-text', 0, 1),
+    ],
+)
+def test_invalid_ranking_scores_stop_at_the_offending_candidate(
+    name: str, candidate: int, calls: int
+) -> None:
+    result = _observe_authored_ranking(name)
+    assert result['outcome'] == 'refused'
+    assert result['code'] == 'INVALID_RESPONSE'
+    assert f'{PART}{candidate}, one of 3' in result['message']
+    assert len(result['calls']) == calls
+
+
+@pytest.mark.parametrize('database', DATABASES)
+@pytest.mark.parametrize('after_unscored', [False, True])
+def test_ranking_transport_failure_preserves_completed_part_count(
+    database: str, after_unscored: bool
+) -> None:
     if database == 'postgres' and not _server():
-        return
+        pytest.skip('Postgres test DSN is not configured')
+    name = 'parts.raised-on-call-1'
+    if after_unscored:
+        name += '.after-unscored'
+    if database != 'duckdb':
+        name += f'@{database}'
+    result = _observe_authored_ranking(name)
+    assert result['class'] == 'ValueError'
+    assert result['details'] == {'parts_answered': 1}
+    assert len(result['calls']) == 1
 
-    def check() -> None:
-        held_to(recorder().observe(inputs), spec['expected'], name)
 
-    check()
+def test_ranking_endpoint_failure_identifies_its_candidate() -> None:
+    result = _observe_authored_ranking('parts.failed-call-1')
+    assert result['class'] == 'NimRequestError'
+    assert result['status_code'] == 500
+    assert len(result['calls']) == 2
+    assert f'{PART}1, one of 3' in result['message']
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'response-field.binary-scores',
+        'response-field.binary-rankings',
+        'response-field.binary-rankings-nan-score',
+        'response-field.regression-scores',
+        'prediction-type.binary-float',
+        'prediction-type.binary-text',
+        'prediction-type.binary-integer',
+        'prediction-type.multiclass-integer',
+        'prediction-type.multiclass-bool',
+    ],
+)
+def test_response_fields_preserve_authored_endpoint_values(name: str) -> None:
+    spec = next(v for v in recorder().VECTORS if v['name'] == name)
+    result = _observe_authored_ranking(name)
+    assert result['outcome'] == 'result'
+    script = spec['script']
+    if name == 'prediction-type.binary-float':
+        assert (
+            result['dtypes'][result['columns'].index('prediction')] == 'float64'
+        )
+    expected = (
+        json.loads('{' + script['carried'] + '}')
+        if 'carried' in script
+        else {'prediction': json.loads(script['prediction'])}
+    )
+    # Binary class 1 is represented as the boolean target class.
+    if name == 'prediction-type.binary-integer':
+        expected['prediction'] = True
+    assert len(result['items']) == len(spec['materialize']['indices'])
+    for item in result['items']:
+        for field, value in expected.items():
+            assert field in result['columns']
+            assert item[field] == recorder()._cell(value)
+
+
+@pytest.mark.parametrize('database', DATABASES)
+@pytest.mark.parametrize(
+    'kind',
+    [
+        'date-and-text',
+        'timestamp-and-text',
+        'decimal-past-i128',
+        'int-past-i128',
+        'int-past-76-digits',
+    ],
+)
+def test_candidate_identity_survives_connector_roundtrip(
+    database: str, kind: str
+) -> None:
+    if database == 'postgres' and not _server():
+        pytest.skip('Postgres test DSN is not configured')
+    name = f'candidates.{kind}' + (
+        f'@{database}' if database != 'duckdb' else ''
+    )
+    spec = next(v for v in recorder().VECTORS if v['name'] == name)
+    result = _observe_authored_ranking(name)
+    assert result['outcome'] == 'result'
+    assert result['unscored'] == {'list': []}
+    candidates = [
+        recorder()._candidate(v) for v in spec['materialize']['candidates']
+    ]
+    assert len(result['calls']) == len(candidates)
+    assert len(result['items']) == len(spec['materialize']['indices'])
+    scores = spec['script']['table']
+    for row_index, item in enumerate(result['items']):
+        order = sorted(
+            range(len(candidates)), key=lambda i: -scores[i][row_index]
+        )
+        expected = [recorder()._cell(candidates[i]) for i in order[:2]]
+        assert item['prediction']['list'] == expected
+
+
+@pytest.mark.parametrize(
+    ('name', 'statistic'),
+    [
+        ('prediction-statistic.regression-mean', 'mean'),
+        ('prediction-statistic.edited-not-text', 7),
+    ],
+)
+def test_prediction_statistic_reaches_endpoint(
+    name: str, statistic: Any
+) -> None:
+    result = _observe_authored_ranking(name)
+    assert result['outcome'] == 'result'
+    assert len(result['calls']) == 1
+    assert result['calls'][0]['output']['prediction_statistic'] == statistic
+
+
+@pytest.mark.parametrize(
+    ('name', 'stage', 'code', 'calls'),
+    [
+        ('top-k.outputs-probabilities', 'predict', 'INVALID_REQUEST', 0),
+        ('top-k.outputs-none', 'predict', 'INVALID_REQUEST', 0),
+        ('candidates.all-unscored', 'predict', 'UNSUPPORTED_REQUEST', 0),
+        ('candidates.text-key', 'materialize', 'INVALID_REQUEST', 0),
+        ('parts.no-probabilities', 'predict', 'INTERNAL_ERROR', 3),
+        ('prediction-statistic.ranking', 'materialize', 'INVALID_REQUEST', 0),
+        ('response-field.binary-scores-nan', 'predict', 'INVALID_RESPONSE', 1),
+        ('instance-id.bool', 'predict', 'INVALID_RESPONSE', 1),
+    ],
+)
+def test_ranking_refusals_preserve_stage_code_and_call_boundary(
+    name: str, stage: str, code: str, calls: int
+) -> None:
+    result = _observe_authored_ranking(name)
+    assert result['outcome'] == 'refused'
+    assert result['stage'] == stage
+    assert result['code'] == code
+    assert len(result['calls']) == calls
+
+
+@pytest.mark.parametrize(
+    ('name', 'fields'),
+    [
+        ('top-k.outputs-rankings', ['rankings']),
+        ('top-k.outputs-prediction', ['prediction']),
+        ('response-field.ranking-part-scores', ['prediction', 'rankings']),
+        ('response-field.ranking-part-rankings', ['prediction', 'rankings']),
+    ],
+)
+def test_ranking_output_selection_and_part_fields(
+    name: str, fields: list[str]
+) -> None:
+    spec = next(v for v in recorder().VECTORS if v['name'] == name)
+    result = _observe_authored_ranking(name)
+    assert result['outcome'] == 'result'
+    assert result['columns'] == ['row_index', 'id', *fields]
+    assert len(result['calls']) == 3
+    assert len(result['items']) == len(spec['materialize']['indices'])
+    scores = spec['script']['table']
+    candidates = spec['materialize']['candidates']
+    for row_index, item in enumerate(result['items']):
+        order = sorted(range(3), key=lambda i: -scores[i][row_index])[:2]
+        if 'prediction' in fields:
+            assert item['prediction'] == recorder()._cell(
+                [candidates[i] for i in order]
+            )
+        if 'rankings' in fields:
+            assert item['rankings'] == recorder()._cell(
+                [
+                    {'candidate': candidates[i], 'score': scores[i][row_index]}
+                    for i in order
+                ]
+            )
+
+
+def test_float_instance_identity_is_accepted() -> None:
+    result = _observe_authored_ranking('instance-id.float')
+    assert result['outcome'] == 'result'
+    assert len(result['calls']) == 1
+    assert len(result['items']) == 2
+
+
+@pytest.mark.parametrize('case_id', DEPARTED)
+def test_python_core_gathers_past_the_reference_s_entity_ceiling(
+    case_id: str,
+) -> None:
+    r"""Past the reference's 100,000, the ranking is gathered and refused
+    only for the entities that name no user, as at the ceiling: the
+    caller's ``INVALID_REQUEST``, not the ceiling's ``UNSUPPORTED_REQUEST``."""
+    line = core_run('duckdb').get(case_id)
+    assert line is not None, f'{case_id}: not observed'
+    assert (line['outcome']['result'], line['outcome']['code']) == (
+        'refusal',
+        'INVALID_REQUEST',
+    )

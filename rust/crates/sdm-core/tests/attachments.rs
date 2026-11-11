@@ -49,7 +49,6 @@ const READ: &[&str] = &[
     "DecideTabularTask.input",
     "OrderSampledTabularRows.input",
     "SelectTabularRows.input",
-    "CheckTabularCap.input",
     "CheckDirectShape.input",
     "BindDirect.input",
     "CheckDirectRows.input",

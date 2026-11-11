@@ -158,37 +158,28 @@ views, and a notebook's own session are in
 
 ## Which rows get scored
 
-`materialize(indices=[...])` names the entities. It gathers each one's
-neighbourhood, checks every limit before sending, and refuses with the limit it
-would break rather than letting the endpoint return a 500.
+`materialize(indices=[...])` names the entities and gathers each one's
+neighbourhood. The client holds a request to no size of its own: a request
+past what the endpoint takes is the endpoint's refusal, shown as it said it.
 
 | Limit | Value |
 |---|---|
 | context rows, by default | `1,000` |
-| context rows, with `num_context_samples` | `10,000` |
-| rows scored at once | `10,000` |
-| tables in the gathered graph | `15` |
-| hops gathered | `6` |
 | classes | `10` |
 
-**More rows than one call scores are not refused.** They are gathered in
-batches of at most that many, and `predict()` sends one call per batch and
-returns one result, whose rows are numbered across the whole request, so
-`to_pandas()` gives the indices back in the order they were asked for. The
-10,000 is the deployment's `TFM_MAX_TEST_ROWS`, not a property of the
-protocol; pass `rows_per_call=` to ask in smaller batches, which is what a
-graph too wide for a full one needs. It only goes down.
+**Rows are scored in batches.** They are gathered in batches of 10,000, and
+`predict()` sends one call per batch and returns one result, whose rows are
+numbered across the whole request, so `to_pandas()` gives the indices back in
+the order they were asked for. Pass `rows_per_call=` to ask in batches of
+another size.
 
-Every batch is built before the first is sent, so one `materialize()` gathers
-at most 100,000 entities, in at most 100 calls. Both are this client's own:
-the endpoint is never asked for more than one call holds. A question asked
+Every batch is built before the first is sent, each with its own context, so
+the whole population is held in memory at once. A question asked
 in parts is not batched at all: a ranking is already a call per candidate and
 a forecast one per step, and batching a part would send that many times as
 many calls.
 
-**The table limit is on the graph a request carries, not on the schema.** A
-schema may describe far more than fifteen tables; what counts is how many the
-query actually reaches.
+The gathered graph may carry any number of tables; sampling supports at most six hops.
 Gradient explanations follow the model endpoint's supported outputs; the client does not impose a separate one-row or fast-context limit.
 
 ## Asking for more than one answer each
@@ -306,8 +297,6 @@ change. The ones worth knowing:
 |---|---|
 | every candidate's context holds one class | each gathered entity reached it, or none did, so there is nothing to tell apart and nothing is sent; widen with `num_context_samples` or ask over a table of pairs. One such candidate among several is dropped with a warning instead, and named on `result.unscored_candidates` |
 | no entity existed at the anchor | the entity table's time column starts after the anchor, so nothing existed to ask about |
-| more than 100,000 entities at once | every batch is built before any is sent; ask about fewer at a time |
-| more than 100 calls at once | a context is gathered per call; ask about fewer entities, or raise `rows_per_call` if you lowered it |
 | more entities than one call scores, on a ranking or a forecast | each candidate or step is already a call, and batching one would send that many times as many; ask about fewer at a time |
 | an output this question cannot give | `rankings` on a regression, `explanation` on a client-assembled ranking |
 | `422 UNSUPPORTED_OUTPUT` | the client sent an output the deployment does not serve, such as `explanation` |

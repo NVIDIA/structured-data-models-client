@@ -68,7 +68,6 @@ pub enum Operation {
     DecideTabularTask(crate::direct::DirectInput),
     OrderSampledTabularRows(crate::direct::DirectInput),
     SelectTabularRows(crate::direct::DirectInput),
-    CheckTabularCap(crate::direct::DirectInput),
     CheckDirectShape(crate::direct::DirectInput),
     CheckDirectCell(crate::direct::DirectInput),
     CheckColumn(crate::direct::DirectInput),
@@ -160,7 +159,6 @@ impl Operation {
             Operation::DecideTabularTask(_) => "decide_tabular_task",
             Operation::OrderSampledTabularRows(_) => "order_sampled_tabular_rows",
             Operation::SelectTabularRows(_) => "select_tabular_rows",
-            Operation::CheckTabularCap(_) => "check_tabular_cap",
             Operation::CheckDirectShape(_) => "check_direct_shape",
             Operation::CheckDirectCell(_) => "check_direct_cell",
             Operation::CheckColumn(_) => "check_column",
@@ -332,7 +330,6 @@ impl Operation {
             | Operation::DecideTabularTask(v)
             | Operation::OrderSampledTabularRows(v)
             | Operation::SelectTabularRows(v)
-            | Operation::CheckTabularCap(v)
             | Operation::CheckDirectShape(v)
             | Operation::CheckDirectCell(v)
             | Operation::FeatureImportance(v)
@@ -1358,19 +1355,6 @@ pub struct Materialize {
     /// `too_many_parts`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub most_parts: Option<u32>,
-    /// The most entities one `materialize` gathers, across the calls it is
-    /// asked in, which the host lets its caller set (`main`'s
-    /// `MOST_ENTITIES`); 100,000 where it names none (design choice 1,
-    /// multi-call `predict`, read which asks a request of more
-    /// rows than one call scores in several calls; until then the core
-    /// refuses more than one call's rows, a lower bound than either).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub most_entities: Option<u64>,
-    /// The most model calls one request is asked in (`main`'s
-    /// `MOST_CALLS`); 100 where the host names none (read as
-    /// `most_entities`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub most_calls: Option<u32>,
     /// The sampler state the materializer's last run left, which the host
     /// hands back as it took it; none for a materializer's
     /// first run.
@@ -1980,10 +1964,6 @@ pub struct Attachments {
     pub select_tabular_rows_input: crate::tabular::SelectTabularRows,
     #[schemars(rename = "DirectValue.select_tabular_rows")]
     pub select_tabular_rows_output: crate::tabular::SelectedTabularRows,
-    #[schemars(rename = "CheckTabularCap.input")]
-    pub check_tabular_cap_input: crate::tabular::CheckTabularCap,
-    #[schemars(rename = "DirectValue.check_tabular_cap")]
-    pub check_tabular_cap_output: crate::tabular::CheckedTabularCap,
     #[schemars(rename = "ObserveTabularMembership.input")]
     pub observe_tabular_membership_input: crate::tabular::ObserveTabularMembership,
     #[schemars(rename = "DirectValue.observe_tabular_membership")]

@@ -786,24 +786,47 @@ def test_the_schema_s_warnings_are_worded_here_as_the_reference_words_them() -> 
     ]
 
 
-def test_a_remedy_names_a_table_as_python_writes_its_name() -> None:
-    # The vectors CPython 3.12's repr wrote (tests/quoted.json, from
-    # ): each name a remedy holds is the literal Python reads back.
-    vectors = json.loads(
-        (Path(__file__).parent / 'quoted.json').read_text(encoding='utf-8')
-    )['vectors']
-    assert len(vectors) >= 20
-    for vector in vectors:
-        [(_, text)] = _shown(
-            _warning(
-                'time_columns_refused_load_stamp',
-                table=vector['name'],
-                column='c',
-                variant='refused_load_stamp',
-            )
+@pytest.mark.parametrize(
+    'name',
+    [
+        '',
+        'users',
+        'with space',
+        'a.b',
+        'a`b',
+        "it's",
+        'say "hello"',
+        'both\'"',
+        'a\\b',
+        'a\nb',
+        'a\tb',
+        'a\rb',
+        'a\0b',
+        'é',
+        '東京',
+        '😀',
+        '\U000e0041',
+        '\u0085',
+        '\u2028',
+        '\u0378',
+        '\ue000',
+        '\u00ad',
+    ],
+)
+def test_a_remedy_names_a_table_as_python_writes_its_name(name: str) -> None:
+    [(_, text)] = _shown(
+        _warning(
+            'time_columns_refused_load_stamp',
+            table=name,
+            column='c',
+            variant='refused_load_stamp',
         )
-        assert text.endswith(f"time_columns={{{vector['repr']}: 'c'}}."), text
-        assert ast.literal_eval(vector['repr']) == vector['name']
+    )
+    # CPython itself is the independent quoting oracle, not a stored copy
+    # of its output or the client's warning renderer.
+    assert text.endswith(f"time_columns={{{name!r}: 'c'}}."), text
+    remedy = text.rsplit('time_columns=', 1)[1].removesuffix('.')
+    assert ast.literal_eval(remedy) == {name: 'c'}
 
 
 def test_a_warning_its_fields_cannot_fill_names_the_core_s_defect() -> None:

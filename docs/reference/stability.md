@@ -129,10 +129,9 @@ python -W error::DeprecationWarning -m pytest
 Tests enforce the contract. `tests/golden/public_api.json` records every
 exported name and signature. `tests/test_release_contract.py` compares them on
 every run. Changing the public surface requires recording a new snapshot in
-the same commit, making the change visible in review. The wire payloads of
-canonical requests are similarly recorded in
-`tests/golden/wire_payloads.json`, because what the endpoint receives is part
-of the contract too.
+the same commit, making the change visible in review. Canonical wire requests run through the current client and are checked against independent source-value, task and sampling assertions.
+When the pinned model specification is available, the same current payloads also pass its request-schema checks.
+There is no recorded wire-output snapshot to refresh.
 
 A public name may not hand out a type that is not public. The same test file
 reads every type a public signature, dataclass field, property or class

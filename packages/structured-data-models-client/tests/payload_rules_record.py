@@ -20,7 +20,6 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[3]
-OUT = Path(__file__).with_name('payload-rules.json')
 
 BINARY = 'PREDICT COUNT(orders.*, 0, 30, days) > 0 FOR EACH users.user_id'
 MULTICLASS = 'PREDICT users.country FOR EACH users.user_id'

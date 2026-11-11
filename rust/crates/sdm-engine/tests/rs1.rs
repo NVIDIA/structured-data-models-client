@@ -2,7 +2,8 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! RS-1 against numpy, from two files of vectors recorded from numpy 2.5.3
+//! RS-1 against numpy, from independent vectors recorded from NumPy
+//! 2.5.3 (rs1.json) and 2.5.4 (rs1-draws.json)
 //! (protected paths: they are never recorded again to pass a dependency
 //! bump, F4):
 //!
