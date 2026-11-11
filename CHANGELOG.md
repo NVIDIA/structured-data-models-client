@@ -110,6 +110,10 @@ these packages. All five distributions share one version and one entry.
 - A request's description leaves out a wire table carrying an integer past
   the float range on every pandas release. pandas 3.1 had started to build
   a frame around one, where earlier releases refused it.
+- A Snowflake `TIME` column keeps its values. It was read as a timestamp, which
+  turned every time of day into `NaT`; it is now read as ISO text
+  (`HH:MM:SS`, with the fraction of a second where there is one), nulls
+  staying null, and is no longer taken for a time column.
 
 ## 1.0.0 - 2026-10-15
 
