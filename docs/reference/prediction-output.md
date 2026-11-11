@@ -103,9 +103,19 @@ has one; a single-table request may have none.
 order.** The endpoint is not required to return rows in the order they were
 sent, and a request split across several calls certainly will not.
 
+`row_index` is the *position* in the frame passed as `predict`, not that
+frame's index label, so drop the index before making it a column. A frame that
+was filtered or sorted carries labels that are no longer its positions, and
+merging on those pairs a row with another row's answer, or drops it, without
+saying so.
+
 ```python
 answers = result.to_pandas()
-joined = to_score.reset_index(names='row_index').merge(answers, on='row_index')
+joined = (
+    to_score.reset_index(drop=True)
+    .reset_index(names='row_index')
+    .merge(answers, on='row_index')
+)
 ```
 
 ## Columns

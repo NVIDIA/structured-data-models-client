@@ -1,6 +1,6 @@
 ---
 name: sdm-relational
-description: "Ask kumo-relational a question about an entity and the records linked to it: write the question as a predictive query over a schema of related tables, covering classification, regression, forecasting and ranking the candidates an entity may link to. Triggers: kumo-relational, KumoRelational, PREDICT, FOR EACH, predictive query, PQL, Schema.from_data, Schema.from_source, Relationship, ranking, forecast, link prediction, explanation, Snowflake, Databricks, warehouse, metric view, semantic view, SQL, catalog."
+description: "Ask kumo-relational a question about an entity and the records linked to it: write the question as a predictive query over a schema of related tables, covering classification, regression, forecasting and ranking the candidates an entity may link to. Triggers: kumo-relational, KumoRelational, PREDICT, FOR EACH, predictive query, PQL, Schema.from_data, Schema.from_source, Relationship, ranking, forecast, link prediction, explanation, Snowflake, Databricks, warehouse, metric view, semantic view, SQL, catalog, SDMClient.in_process, run the model in this process, no NIM."
 ---
 
 # Asking kumo-relational
@@ -120,6 +120,14 @@ print(answer.to_pandas())
 
 `id` is the entity, `row_index` its position in `indices`. Join on the key when
 it is there, otherwise on `row_index`, and never on row order.
+
+## Without a NIM
+
+Every example here points at a NIM. With none to point at, the same client
+runs the model in this process: `SDMClient.in_process()` in place of the URL,
+and the rest unchanged. It is an extra, it loads the published weights, and on
+a CPU its numbers differ from a GPU's. All of that is in
+[`references/in-process.md`](references/in-process.md).
 
 ## Describing the data
 

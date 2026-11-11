@@ -3,7 +3,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Three checks this repository has to pass before it can be published.
+"""The checks this repository has to pass before it can be published.
 
 ``spdx`` asserts every first-party source file carries a licence header. A file
 added without one is otherwise invisible until a release audit finds it.
@@ -12,6 +12,12 @@ added without one is otherwise invisible until a release audit finds it.
 dropped. An example naming one is worse than no example, and a sweep that
 chooses its own roots will miss a tree, so this enumerates from
 ``git ls-files``.
+
+``in-process`` asserts the skills' in-process references install the way the
+client's own version allows. They build from a checkout because no release
+carries ``in_process()`` yet, and the release that first does makes that
+instruction wrong. Nothing else would catch it: the references are prose, and
+the example harness runs them against this tree rather than against the index.
 
 ``internal`` asserts no internal-only reference reaches a *shipped* file. The
 distinction matters: an internal URL in a provenance record is correct and
@@ -362,11 +368,179 @@ def check_repository_url() -> int:
     return 0
 
 
+IN_PROCESS_REFERENCES = (
+    'skills/tabular/references/in-process.md',
+    'skills/relational/references/in-process.md',
+)
+
+# The release that first carries `in_process()`. Until the index has it the
+# references have to build from a checkout; from that release on they must not,
+# and the extra needs a floor no older than this. It is the feature's release
+# rather than "any prerelease", so that 2.1.0rc1 does not read as a client
+# without the feature and ask for the checkout back.
+FIRST_IN_PROCESS = '2.0.0'
+CHECKOUT_INSTALL = 'git clone -b v2-candidate'
+# A version, as PEP 440's grammar spells one. That grammar orders the
+# suffixes as well as naming them: a development release precedes whatever it
+# hangs off, a pre-release precedes the release it names, and a post-release
+# follows it. A local label orders after nothing that matters here, so it is
+# read and dropped.
+PEP_440 = re.compile(
+    r"""
+    v?
+    (?:(?P<epoch>\d+)!)?
+    (?P<release>\d+(?:\.\d+)*)
+    (?:[-_.]?(?P<pre_name>alpha|beta|preview|pre|rc|a|b|c)
+       [-_.]?(?P<pre>\d+)?)?
+    (?:-(?P<implicit_post>\d+)
+       |[-_.]?(?P<post_name>post|rev|r)[-_.]?(?P<post>\d+)?)?
+    (?:[-_.]?(?P<dev_name>dev)[-_.]?(?P<dev>\d+)?)?
+    (?:\+[a-z0-9]+(?:[-_.][a-z0-9]+)*)?
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+PRE_RELEASE_NAMES = {
+    'alpha': 'a',
+    'a': 'a',
+    'beta': 'b',
+    'b': 'b',
+    'c': 'rc',
+    'pre': 'rc',
+    'preview': 'rc',
+    'rc': 'rc',
+}
+BEFORE_ANY = (-1,)
+AFTER_ANY = (1,)
+
+IN_PROCESS_FLOOR = re.compile(
+    r'structured-data-models-client\[in-process\]>=([^\'"\s,\]]+)'
+)
+CLIENT_VERSION_FILE = (
+    'packages/structured-data-models-client/src/sdm_client/_version.py'
+)
+
+
+def _version(version: str) -> tuple[object, ...]:
+    """What the version sorts as, by PEP 440's rules.
+
+    Trailing zeros go, so 2.0 is the 2.0.0 it names. A release with nothing
+    after it sorts above every pre-release of itself and below every
+    post-release of itself, and a development release with neither of those in
+    front of it sorts below the lot.
+    """
+    found = PEP_440.fullmatch(version.strip())
+    if found is None:
+        raise ValueError(f'not a version this check can read: {version!r}')
+
+    release = [int(part) for part in found['release'].split('.')]
+    while len(release) > 1 and release[-1] == 0:
+        release.pop()
+
+    posted = (
+        found['post_name'] is not None or found['implicit_post'] is not None
+    )
+    if found['pre_name'] is not None:
+        pre: tuple[object, ...] = (
+            0,
+            PRE_RELEASE_NAMES[found['pre_name'].lower()],
+            int(found['pre'] or 0),
+        )
+    elif found['dev_name'] is not None and not posted:
+        pre = BEFORE_ANY
+    else:
+        pre = AFTER_ANY
+
+    post = (
+        (0, int(found['implicit_post'] or found['post'] or 0))
+        if posted
+        else BEFORE_ANY
+    )
+    dev = (
+        (0, int(found['dev'] or 0))
+        if found['dev_name'] is not None
+        else AFTER_ANY
+    )
+
+    return (int(found['epoch'] or 0), tuple(release), pre, post, dev)
+
+
+def check_in_process_install() -> int:
+    """The in-process references must install the way this version allows."""
+    version_file = REPO_ROOT / CLIENT_VERSION_FILE
+    found = re.search(
+        r"__version__ = '([^']+)'", version_file.read_text(encoding='utf-8')
+    )
+    if found is None:
+        print(f'no __version__ in {CLIENT_VERSION_FILE}', file=sys.stderr)
+        return 1
+    version = found.group(1)
+    first = _version(FIRST_IN_PROCESS)
+    unpublished = _version(version) < first
+
+    findings = []
+    for relative in IN_PROCESS_REFERENCES:
+        body = (REPO_ROOT / relative).read_text(encoding='utf-8')
+        checkout = CHECKOUT_INSTALL in body
+        if unpublished and not checkout:
+            findings.append(
+                f'{relative}: installs from the index, but {version} is '
+                f'before {FIRST_IN_PROCESS}, the release that first carries in_process()'
+            )
+        if not unpublished and checkout:
+            findings.append(
+                f'{relative}: still builds from a checkout, but {version} is '
+                f'{FIRST_IN_PROCESS} or later'
+            )
+        if not unpublished:
+            floor = IN_PROCESS_FLOOR.search(body)
+            if floor is None:
+                findings.append(
+                    f'{relative}: the extra names no version floor, so an '
+                    'older client satisfies it'
+                )
+            else:
+                try:
+                    floored = _version(floor.group(1))
+                except ValueError:
+                    findings.append(
+                        f'{relative}: the extra floors at {floor.group(1)}, '
+                        'which is not a version pip can read'
+                    )
+                else:
+                    if floored < first:
+                        findings.append(
+                            f'{relative}: the extra floors at '
+                            f'{floor.group(1)}, which a client without '
+                            f'in_process() satisfies; {FIRST_IN_PROCESS} is '
+                            'the first that carries it'
+                        )
+
+    for finding in findings:
+        print(f'in-process install: {finding}', file=sys.stderr)
+    if findings:
+        print(
+            '\nA reader runs the first install that fits their client. When '
+            'a release carries in_process(), drop the checkout block from '
+            'both references and pin the extra to that version.',
+            file=sys.stderr,
+        )
+        return 1
+    print(f'the in-process references install the way {version} allows')
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         'check',
-        choices=('spdx', 'internal', 'retired', 'repo-url', 'all'),
+        choices=(
+            'spdx',
+            'internal',
+            'retired',
+            'repo-url',
+            'in-process',
+            'all',
+        ),
     )
     args = parser.parse_args()
     if args.check == 'spdx':
@@ -377,11 +551,14 @@ def main() -> int:
         return check_retired()
     if args.check == 'repo-url':
         return check_repository_url()
+    if args.check == 'in-process':
+        return check_in_process_install()
     return (
         check_spdx()
         | check_internal()
         | check_retired()
         | check_repository_url()
+        | check_in_process_install()
     )
 
 

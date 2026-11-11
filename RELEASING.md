@@ -77,6 +77,12 @@ The version is written in several places, and all of them move together:
 `tests/test_release_contract.py` fails if `_version.py`, the Rust workspace, `java/pom.xml` or a first-party pin disagree.
 Search for the old version afterwards to catch anything else, such as the coordinates in `java/README.md`.
 
+Going from a prerelease to a release also retires the checkout build the
+skills' in-process references tell a reader to run, because the extra alone
+carries `in_process()` from then on. `python scripts/check_repo_hygiene.py
+in-process` fails until both `skills/*/references/in-process.md` drop that
+block and pin the extra to the version that first carries it.
+
 Update `CHANGELOG.md`: the entries for the release go under its own heading
 with the date you are tagging on, not the date you wrote them, so the tag
 carries a changelog that names the version it

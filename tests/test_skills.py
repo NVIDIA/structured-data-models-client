@@ -14,7 +14,9 @@ to the client, which answers without connecting. The rest is marked
 ``SDM_RELATIONAL_URL``. Those re-run every example that can be run -- see
 ``complete()`` -- and compare what it printed to the block pasted beneath it,
 and probe the handful of claims the skills make about a deployment rather than
-about this client.
+about this client. The in-process references need no endpoint but load the
+published weights, so they are marked ``in_process`` and run only with
+``SDM_IN_PROCESS`` set.
 """
 
 from __future__ import annotations
@@ -176,6 +178,20 @@ def test_a_skill_announces_itself(name):
     )
 
 
+@pytest.mark.parametrize('name', ['tabular', 'relational'])
+def test_a_skill_says_how_to_run_its_model_here(name):
+    """A skill assumes a URL. Where there is none, the model runs in the
+    agent's own process, and the skill has to say so where it is found: in
+    the skill itself, and in the index an agent starts from."""
+    reference = f'{name}/references/in-process.md'
+    assert '](references/in-process.md)' in rendered(
+        SKILLS / name / 'SKILL.md'
+    ), f'{name} never says how to run its model in this process'
+    assert f']({reference})' in rendered(SKILLS / 'README.md'), (
+        f'the index does not list {reference}'
+    )
+
+
 @pytest.mark.parametrize('path', documents(), ids=str)
 def test_a_document_is_written_in_the_one_markdown_this_file_reads(path):
     """Fences are ```` ``` ```` at the margin, and nothing is indented code.
@@ -291,6 +307,7 @@ EVERY_TABLE = {
         (['Refusal', 'Cause'], False),
     ],
     'skills/relational/references/beyond-one-answer.md': [],
+    'skills/relational/references/in-process.md': [],
     'skills/relational/references/warehouses.md': [
         (['Source', 'Connection it takes', 'Namespace', 'Extra'], True)
     ],
@@ -304,6 +321,7 @@ EVERY_TABLE = {
         (['', '`kumo-tabular`'], True),
         (['Refusal', 'Cause'], False),
     ],
+    'skills/tabular/references/in-process.md': [],
     'skills/tabular/references/pql.md': [(['Clause', 'On one table'], True)],
 }
 
@@ -2069,6 +2087,7 @@ def test_the_tabular_model_refuses_a_second_table(schema):
 
 TABULAR_URL = os.environ.get('SDM_TABULAR_URL')
 RELATIONAL_URL = os.environ.get('SDM_RELATIONAL_URL')
+IN_PROCESS = os.environ.get('SDM_IN_PROCESS')
 
 #: The placeholder every example points at, swapped for a real one below.
 PLACEHOLDER = 'http://localhost:8000'
@@ -2099,11 +2118,15 @@ def examples(path: Path) -> list[tuple[str, str | None]]:
     ]
 
 
-def assert_every_example_prints_what_it_shows(path: Path, url: str):
+def assert_every_example_prints_what_it_shows(
+    path: Path, url: str | None = None
+):
     """Output marked **Verified** has to be what that example printed.
 
     Pasted results are the first thing to rot, and a number that drifted is
-    worse than no number: it reads as measured.
+    worse than no number: it reads as measured. ``url`` replaces the
+    placeholder the examples point at; a document whose examples run the
+    model here points at none and passes none.
     """
     import io
     from contextlib import redirect_stdout
@@ -2123,7 +2146,9 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
         with redirect_stdout(printed):
             exec(  # noqa: S102 - running the documentation is the test
                 compile(
-                    code.replace(PLACEHOLDER, url), f'{path}#{index}', 'exec'
+                    code if url is None else code.replace(PLACEHOLDER, url),
+                    f'{path}#{index}',
+                    'exec',
                 ),
                 namespace,
             )
@@ -2201,6 +2226,42 @@ def test_the_tabular_examples_print_what_the_skill_shows(name):
 def test_the_relational_examples_print_what_the_skill_shows(name):
     pytest.importorskip('duckdb')
     assert_every_example_prints_what_it_shows(SKILLS / name, RELATIONAL_URL)
+
+
+def installed(module: str, extra: str) -> None:
+    """Fail, rather than skip, when an opt-in run is missing what it needs."""
+    try:
+        importlib.import_module(module)
+    except ImportError:  # pragma: no cover
+        pytest.fail(
+            f'SDM_IN_PROCESS is set but {module} is not installed. '
+            f"Install it with: pip install '{extra}'"
+        )
+
+
+@pytest.mark.in_process
+@pytest.mark.skipif(
+    not IN_PROCESS,
+    reason='set SDM_IN_PROCESS=1 to load the published weights and run them',
+)
+@pytest.mark.parametrize(
+    'name',
+    ['tabular/references/in-process.md', 'relational/references/in-process.md'],
+)
+def test_the_in_process_examples_print_what_the_skill_shows(name):
+    """These examples open no connection: they fetch the published weights
+    and run the model here, which is what the reference claims they do.
+
+    ``SDM_IN_PROCESS`` is the reader asking for exactly this, so a missing
+    piece is a broken setup and fails here rather than skipping quietly. The
+    extra is not the whole of it for the relational reference: gathering a
+    request reaches the client's data providers, which import the connectors
+    package even when the tables are frames already in memory.
+    """
+    installed('sdm', 'structured-data-models-client[in-process]')
+    if name.startswith('relational/'):
+        installed('sdm_connectors', 'structured-data-models-connectors')
+    assert_every_example_prints_what_it_shows(SKILLS / name)
 
 
 # --- What the tables in the skills claim ----------------------------------
