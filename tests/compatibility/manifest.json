@@ -8297,6 +8297,11 @@
       "base_commit": "868363fd938dd37b46fac62578d13922f83f91a8",
       "record": "api_contracts/gradient-explanations",
       "reason": "The client no longer enforces the endpoint's payload size limit, so the test that client-only provenance does not count toward that limit was removed with it; the remaining gradient tests are unchanged."
+    },
+    {
+      "base_commit": "8c9d723c9f6ecff8c2f6f4d6d5357af17ea4399e",
+      "record": "api_contracts/gradient-explanations",
+      "reason": "The client no longer enforces the endpoint's payload size limit, so the test that client-only provenance does not count toward that limit was removed with it; the remaining gradient tests are unchanged."
     }
   ],
   "capabilities": [
