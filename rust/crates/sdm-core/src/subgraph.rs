@@ -48,7 +48,7 @@ use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_engine::graph::{Graph, Table};
 use sdm_engine::keys::{self, Key};
 use sdm_engine::sample::{self, SEED_TIME};
-use sdm_request::options::Hop;
+use sdm_request::options::{Hop, Hops};
 use sdm_request::payload::{SampledColumn, SampledLink, SampledTable};
 
 use crate::describe::{ask, ask_all_vec};
@@ -64,22 +64,36 @@ struct Visit {
     /// Each row's number, by its key and example (the reference's
     /// `Mapper`), for a table with a key.
     nodes: BTreeMap<(Key, usize), usize>,
-    /// The rows reached at each hop, the entity's first.
+    /// The rows reached at each hop, the entity's first; a hop past the
+    /// end reached none.
     counts: Vec<usize>,
     /// The frames visited so far.
     offset: usize,
 }
 
 impl Visit {
-    fn new(name: &str, hops: usize) -> Visit {
+    fn new(name: &str) -> Visit {
         Visit {
             name: name.to_owned(),
             frames: Vec::new(),
             batches: Vec::new(),
             nodes: BTreeMap::new(),
-            counts: vec![0; hops + 1],
+            counts: Vec::new(),
             offset: 0,
         }
+    }
+
+    /// The rows reached at hop `hop`.
+    fn reached(&self, hop: usize) -> usize {
+        self.counts.get(hop).copied().unwrap_or(0)
+    }
+
+    /// Counts `rows` more reached at hop `hop`.
+    fn add_reached(&mut self, hop: usize, rows: usize) {
+        if self.counts.len() <= hop {
+            self.counts.resize(hop + 1, 0);
+        }
+        self.counts[hop] += rows;
     }
 
     fn rows(&self) -> usize {
@@ -119,10 +133,11 @@ pub(crate) struct Walk<'a> {
     /// The hops walked, each with the neighbors it keeps of each row: the
     /// run mode's two by default, or as the sampling options ask
     /// (`num_hops`, `num_neighbors`, [`options::neighbors`]); the walk ends
-    /// at a hop of size zero.
+    /// at a hop of size zero, after the last, or at a hop no row is walked
+    /// from, past which nothing is reached.
     ///
     /// [`options::neighbors`]: sdm_request::options::neighbors
-    pub neighbors: &'a [Hop],
+    pub neighbors: &'a Hops,
     /// The features left out, by table: a static target's columns, which
     /// the reference's sampler neither reads nor sends
     /// (`get_exclude_cols_dict`, `exclude_cols_dict`).
@@ -293,7 +308,7 @@ impl Walk<'_> {
     /// [`sample_columns`].
     pub(crate) async fn run(&self, entity_rows: RecordBatch) -> Result<Walked, CoreError> {
         let examples = entity_rows.num_rows();
-        let mut visits = vec![Visit::new(&self.entity.name, self.neighbors.len())];
+        let mut visits = vec![Visit::new(&self.entity.name)];
         let mut edges: Vec<Edge> = Vec::new();
         {
             let entity = &mut visits[0];
@@ -311,9 +326,17 @@ impl Walk<'_> {
             }
             entity.frames.push(entity_rows);
             entity.batches.push((0..examples).collect());
-            entity.counts[0] = examples;
+            entity.add_reached(0, examples);
         }
-        for (hop, neighbors) in self.neighbors.iter().enumerate() {
+        for hop in 0.. {
+            let Some(neighbors) = self.neighbors.get(hop) else {
+                break;
+            };
+            // A hop no table has rows to walk from reaches none, nor does
+            // any after it: the walk ends, as it would hop by hop.
+            if visits.iter().all(|visit| visit.reached(hop) == 0) {
+                break;
+            }
             // A hop of size zero ends the walk (`neighbors == 0`).
             let neighbors = match neighbors {
                 Hop::Stop => break,
@@ -352,7 +375,7 @@ impl Walk<'_> {
         neighbors: &sdm_contract::data::NeighborLimit,
     ) -> Result<(), CoreError> {
         let at = position(visits, name)?;
-        if visits[at].counts[hop] == 0 {
+        if visits[at].reached(hop) == 0 {
             return Ok(());
         }
         let table = table_named(self.graph, name)?;
@@ -479,7 +502,7 @@ impl Walk<'_> {
                             return Err(internal("a row looked up was already reached"));
                         }
                     }
-                    dst_visit.counts[hop + 1] += examples.len();
+                    dst_visit.add_reached(hop + 1, examples.len());
                     dst_visit.frames.push(added);
                     dst_visit.batches.push(examples);
                     for &i in &missing {
@@ -641,7 +664,7 @@ impl Walk<'_> {
                 ),
             };
             let kept_examples: Vec<usize> = kept.iter().map(|&i| examples[i]).collect();
-            src_visit.counts[hop + 1] += kept.len();
+            src_visit.add_reached(hop + 1, kept.len());
             src_visit.frames.push(take(&fetched, &kept)?);
             src_visit.batches.push(kept_examples);
             edge(edges, src, fkey, name, false).extend(rows, cols);
@@ -840,8 +863,7 @@ fn reach(visits: &mut Vec<Visit>, name: &str) -> usize {
     match visits.iter().position(|v| v.name == name) {
         Some(at) => at,
         None => {
-            let hops = visits[0].counts.len() - 1;
-            visits.push(Visit::new(name, hops));
+            visits.push(Visit::new(name));
             visits.len() - 1
         }
     }

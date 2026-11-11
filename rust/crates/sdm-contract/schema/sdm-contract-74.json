@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/72",
+  "$id": "sdm-contract/74",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -305,12 +305,6 @@
         },
         "DirectValue.select_tabular_rows": {
           "$ref": "#/$defs/SelectedTabularRows"
-        },
-        "CheckTabularCap.input": {
-          "$ref": "#/$defs/CheckTabularCap"
-        },
-        "DirectValue.check_tabular_cap": {
-          "$ref": "#/$defs/CheckedTabularCap"
         },
         "ObserveTabularMembership.input": {
           "$ref": "#/$defs/ObserveTabularMembership"
@@ -699,8 +693,6 @@
         "tabular_arrow_session",
         "SelectTabularRows.input",
         "DirectValue.select_tabular_rows",
-        "CheckTabularCap.input",
-        "DirectValue.check_tabular_cap",
         "ObserveTabularMembership.input",
         "DirectValue.observe_tabular_membership",
         "DecideTabularTask.input",
@@ -3865,33 +3857,7 @@
       "type": "string",
       "enum": [
         "zero",
-        "above_limit",
         "above_population"
-      ]
-    },
-    "CheckTabularCap": {
-      "description": "Reached native comparison against the model cap, before frame length reads.",
-      "type": "object",
-      "properties": {
-        "over_limit": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "over_limit"
-      ]
-    },
-    "CheckedTabularCap": {
-      "type": "object",
-      "properties": {
-        "accepted": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "accepted"
       ]
     },
     "ObserveTabularMembership": {
@@ -7987,22 +7953,6 @@
           "default": []
         },
         "most_parts": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint32",
-          "minimum": 0
-        },
-        "most_entities": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
-        "most_calls": {
           "type": [
             "integer",
             "null"
@@ -13772,24 +13722,6 @@
             },
             "op": {
               "type": "string",
-              "const": "check_tabular_cap"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "op",
-            "input"
-          ]
-        },
-        {
-          "description": "An input-sized direct value, carried as typed JSON bytes.",
-          "type": "object",
-          "properties": {
-            "input": {
-              "$ref": "#/$defs/AttachmentId"
-            },
-            "op": {
-              "type": "string",
               "const": "check_direct_shape"
             }
           },
@@ -14548,24 +14480,6 @@
             },
             "most_parts": {
               "description": "The most steps a forecast is asked as, one call each, which the host\nlets its caller set (the client's `decompose.MOST_PARTS`); 200 where\nit names none. A forecast of more is refused, `INVALID_REQUEST`, rule\n`too_many_parts`.",
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint32",
-              "minimum": 0
-            },
-            "most_entities": {
-              "description": "The most entities one `materialize` gathers, across the calls it is\nasked in, which the host lets its caller set (`main`'s\n`MOST_ENTITIES`); 100,000 where it names none (design choice 1,\nmulti-call `predict`, read which asks a request of more\nrows than one call scores in several calls; until then the core\nrefuses more than one call's rows, a lower bound than either).",
-              "type": [
-                "integer",
-                "null"
-              ],
-              "format": "uint64",
-              "minimum": 0
-            },
-            "most_calls": {
-              "description": "The most model calls one request is asked in (`main`'s\n`MOST_CALLS`); 100 where the host names none (read as\n`most_entities`).",
               "type": [
                 "integer",
                 "null"
@@ -17530,7 +17444,6 @@
         "direct_scored",
         "direct_target_missing",
         "direct_target_scored",
-        "direct_context_limit",
         "tabular_missing_row_index",
         "direct_multilabel",
         "direct_relational_frames",
@@ -17686,7 +17599,6 @@
         "undeclared",
         "seed_past_range",
         "big_integer_past_type",
-        "lag_past_payload",
         "date_literal_packed",
         "local_zone_unread",
         "clock_past_years",
@@ -17739,7 +17651,6 @@
         "model_lacks_task",
         "temporal_link_unserved",
         "model_lacks_outputs",
-        "context_past_model",
         "no_context_rows",
         "too_many_classes",
         "one_class_column",
@@ -17758,9 +17669,6 @@
         "explanation_fast_mode",
         "options_unread",
         "options_unread_statistic",
-        "payload_smaller_calls",
-        "payload_no_smaller_call",
-        "call_past_endpoint",
         "outputs_none",
         "not_finite",
         "past_int64",
@@ -17771,7 +17679,6 @@
         "lag_past_times",
         "num_context_samples_not_whole",
         "num_context_samples_below_one",
-        "num_context_samples_past_most",
         "num_hops_not_whole",
         "num_hops_none",
         "random_seed_not_whole",
@@ -17794,10 +17701,9 @@
         "excluded_not_a_sequence",
         "statistic_unknown",
         "statistic_not_a_regression",
+        "sampling_hops_limit",
         "no_hop_num_hops",
         "no_hop_num_neighbors",
-        "hops_past_endpoint",
-        "hops_past_endpoint_uncounted",
         "inference_run_mode_invalid",
         "inference_config_not_an_object",
         "inference_option_unknown",
@@ -17836,7 +17742,6 @@
         "entity_table_empty",
         "entity_key_missing",
         "target_not_a_feature",
-        "context_past_rows",
         "held_by_several_rows_one",
         "held_by_several_rows",
         "held_by_several_rows_many",
@@ -17845,7 +17750,6 @@
         "frame_key_missing_parts",
         "frame_no_valid_rows",
         "not_in_table",
-        "subgraph_past_tables",
         "unresolved",
         "anchor_not_a_time",
         "anchor_before_data",
@@ -17862,9 +17766,6 @@
         "no_entity_passed_several",
         "anchor_too_late_several",
         "forecast_top_k",
-        "most_entities",
-        "most_entities_parts",
-        "most_calls",
         "not_yet_materialize",
         "missing_index_table",
         "missing_index_tables",

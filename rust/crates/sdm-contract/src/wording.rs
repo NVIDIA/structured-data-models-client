@@ -201,7 +201,6 @@ advice! {
     EmptyRequest = "empty_request", [];
     GiveAHop = "give_a_hop", [];
     KeepOneLink = "keep_one_link", ["source_table", "target_table", "others"];
-    MaterializeCall = "materialize_call", [];
     MissingTime = "missing_time", [];
     NameCandidates = "name_candidates", ["column"];
     NamePrimaryKey = "name_primary_key", ["table"];
@@ -214,7 +213,6 @@ advice! {
     ResultFrame = "result_frame", [];
     SetPrimaryKey = "set_primary_key", ["target_table", "target_column"];
     SkipKeyCheck = "skip_key_check", [];
-    SmallerCalls = "smaller_calls", [];
     TrustExpressions = "trust_expressions", [];
 }
 
@@ -339,9 +337,6 @@ pub fn template(sentence: Sentence) -> Template {
         }
         S::DirectTargetScored => said(
             r#"predict carries the target column {target!r}. Those are the rows whose answer is being asked for, so the column has to be absent; drop it with predict.drop(columns=[{target!r}])"#,
-        ),
-        S::DirectContextLimit => said(
-            r#"this request carries {context_rows:,} context rows and {model} reads at most {context_rows_max:,}. A request built directly is sent as it was given, so choose the rows you want as context, or gather it with materialize(), which keeps the context under the cap and says how"#,
         ),
         S::TabularMissingRowIndex => said(
             r#"kumo-tabular returned a response that does not match the contract: PredictionItem response is missing required field 'row_index'"#,
@@ -747,9 +742,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::BigIntegerPastType => said(
             r#"column {column!r} holds a value that {admitted_type}, the type it was described as, cannot hold"#,
         ),
-        S::LagPastPayload => said(
-            r#"the {lag_timesteps:,} past steps lag_timesteps asks for make the request larger than the {limit:,} bytes the endpoint takes; ask for fewer steps"#,
-        ),
         S::DateLiteralPacked => said(
             r#"{query!r} is not a query a relational model can answer: {literal} is not a valid instance of time"#,
         ),
@@ -888,9 +880,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::ModelLacksOutputs => said(
             r#"{model} does not produce {unsupported_outputs!r}; it produces {supported_outputs!r}"#,
         ),
-        S::ContextPastModel => said(
-            r#"this request carries {context_rows:,} context rows and {model} reads at most {context_rows_max:,}. A request built directly is sent as it was given, so choose the rows you want as context, or gather it with {advice:materialize_call()}, which keeps the context under the cap and says how"#,
-        ),
         S::NoContextRows => said(
             r#"no context rows are left: every row that could be context is also being scored, and a row carrying the answer being asked for is not sent as context. Score fewer rows, so that the rest are there to learn from"#,
         ),
@@ -942,15 +931,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::OptionsUnreadStatistic => said(
             r#"{model} does not read inference option(s) {unsupported!r}; drop them from inference_config to send the request without them. The keys this client forwards are {forwarded!r}, and the endpoint decides for itself whether it serves the value given for one. A regression's statistic is chosen with {advice:choose_statistic()} instead: 'median', the default, or 'mean'"#,
         ),
-        S::PayloadSmallerCalls => said(
-            r#"Context size exceeds the 30MB limit. This call is {bytes:,} bytes, and the endpoint takes at most {limit:,}. What comes down is one of three. For an ordinary question it is the call: {advice:smaller_calls()} below the {rows_per_call:,} this one holds asks for the same entities in more and smaller calls. Where the context is itself over the limit, no call is small enough, and it is num_context_samples, num_neighbors or the columns the graph carries. For a ranking or a forecast, which is one call per candidate or step and is never batched, it is the entities."#,
-        ),
-        S::PayloadNoSmallerCall => said(
-            r#"Context size exceeds the 30MB limit. This call is {bytes:,} bytes, and the endpoint takes at most {limit:,}. A call already scores one row, so there is no smaller one to ask for: what comes down is num_context_samples, num_neighbors or the columns the graph carries."#,
-        ),
-        S::CallPastEndpoint => said(
-            r#"the request is {bytes:,} bytes and the endpoint takes at most {limit:,} bytes; reduce the number of tables in the graph, their columns, the neighbourhood sampled or the context gathered (num_context_samples)"#,
-        ),
         S::OutputsNone => said(r#"outputs must name at least one field"#),
         S::NotFinite => said(
             r#"encountered a non-finite value ({value}); NIM requests must contain finite numbers or nulls"#,
@@ -978,9 +958,6 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::NumContextSamplesBelowOne => said(
             r#"num_context_samples must be at least 1; a model predicts from labelled examples, and {given!S} leaves it none"#,
-        ),
-        S::NumContextSamplesPastMost => said(
-            r#"num_context_samples is {given!I:,}, and the endpoint accepts at most {limit:,} context rows"#,
         ),
         S::NumHopsNotWhole => said(r#"num_hops must be a whole number, got {given!N} {given!G}"#),
         S::NumHopsNone => said(r#"num_hops must be a whole number, got {advice:nothing()}"#),
@@ -1035,18 +1012,13 @@ pub fn template(sentence: Sentence) -> Template {
         S::StatisticNotARegression => said(
             r#"prediction_statistic applies only to a regression, and this question is a {task}; ask it without prediction_statistic"#,
         ),
+        S::SamplingHopsLimit => said("sampling supports at most {limit} hops; reduce {field}"),
         S::NoHopNumHops => said(
-            r#"num_hops is {hops}, which asks for no hop at all, and the endpoint reads between 1 and {limit}. A request that crosses no relationship is a single-table one: give a hop, such as {advice:give_a_hop()}, or ask it of kumo-tabular"#,
+            r#"num_hops is {hops}, which asks for no hop at all, and a request samples at least 1. A request that crosses no relationship is a single-table one: give a hop, such as {advice:give_a_hop()}, or ask it of kumo-tabular"#,
         ),
         S::NoHopNumNeighbors => said(
-            r#"num_neighbors is empty, which asks for no hop at all, and the endpoint reads between 1 and {limit}. A request that crosses no relationship is a single-table one: give a hop, such as {advice:give_a_hop()}, or ask it of kumo-tabular"#,
+            r#"num_neighbors is empty, which asks for no hop at all, and a request samples at least 1. A request that crosses no relationship is a single-table one: give a hop, such as {advice:give_a_hop()}, or ask it of kumo-tabular"#,
         ),
-        S::HopsPastEndpoint => {
-            said(r#"this request samples {hops} hops and the endpoint reads at most {limit}"#)
-        }
-        S::HopsPastEndpointUncounted => {
-            said(r#"this request samples more hops than the endpoint reads, at most {limit}"#)
-        }
         S::InferenceRunModeInvalid => {
             said("inference run_mode is text of at most 1024 characters, or null")
         }
@@ -1153,7 +1125,6 @@ pub fn template(sentence: Sentence) -> Template {
         S::TargetNotAFeature => {
             said(r#"the column the query predicts is not one of the features of the entity table"#)
         }
-        S::ContextPastRows => said(r#"the context holds more rows than a request takes"#),
         S::HeldBySeveralRowsOne => said(
             r#"Cannot score {keys[0]!r}: more than one row of table '{table}' holds this value of '{key}', so which row is meant would be a guess. The source does not enforce the key; keep one row per value, or key the table on columns that identify a row."#,
         ),
@@ -1173,9 +1144,6 @@ pub fn template(sentence: Sentence) -> Template {
             said("Found no valid rows in table '{table}'; supply valid non-missing {requirements}.")
         }
         S::NotInTable => said(r#""The primary keys {keys!r} do not exist in the '{table}' table""#),
-        S::SubgraphPastTables => said(
-            r#"the request's subgraph carries {tables:,} tables, and the endpoint reads at most {limit:,}"#,
-        ),
         S::Unresolved => {
             said(r#"{query!r} is not a query a relational model can answer: {reasons!R}"#)
         }
@@ -1221,15 +1189,6 @@ pub fn template(sentence: Sentence) -> Template {
         ),
         S::ForecastTopK => said(
             r#"top_k is how many candidates a ranking keeps, and a forecast ranks nothing; it gives back one value per step"#,
-        ),
-        S::MostEntities => said(
-            r#"{entities:,} entities is past the {limit:,} one {advice:materialize_call()} will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time"#,
-        ),
-        S::MostEntitiesParts => said(
-            r#"{entities:,} entities gathered {gathered_times:,} times over, {total:,} in all, is past the {limit:,} one {advice:materialize_call()} will hold at once, since every batch is built, with its own context, before any is sent; ask about fewer entities at a time"#,
-        ),
-        S::MostCalls => said(
-            r#"{entities:,} entities are gathered as {calls:,} calls of {rows_per_call:,}, and every one is built, with its own context, before any is sent. That is past the {limit:,} calls this will hold at once; ask about fewer entities at a time"#,
         ),
         S::NotYetMaterialize => said(
             r#"materializing this request needs the {rule!r} rule, which is not one this client's core supports yet"#,

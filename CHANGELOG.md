@@ -148,6 +148,14 @@ The public API snapshot records this version update; publication remains pending
   and `candidates=` instead. 1.0.0 built the request, and the endpoint
   refused it.
 
+### Removed
+
+- The client no longer enforces its own copies of the endpoint's limits, so a deployment that raises them is not held back: the 10,000 relational context rows (`num_context_samples` may be larger), the 10,000 predict rows per call (`rows_per_call` may be larger; 10,000 stays the default batch), the tabular refusal past 10,000 context rows (`materialize()` still samples to 10,000 by default, with a warning), the 30 MiB request body, the 15-table cap, and the 100,000-entity and 100-call guards on `materialize()`.
+  The endpoint refuses what it does not take.
+  Sampling still supports at most six hops, including explicit neighbor-list depth.
+  The Databricks gateway's 16 MB check, `MOST_PARTS`, `top_k` of at most 20 and the 64 MiB response cap stay.
+  The contract is version 74.
+
 ### Fixed
 
 - Explicit empty outputs remain invalid with `EXPLAIN`; unsupported local-runtime outputs are refused before model weights load.

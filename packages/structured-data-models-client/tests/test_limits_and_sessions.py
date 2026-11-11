@@ -2,12 +2,7 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""What the client refuses before spending a round trip, and how sessions behave.
-
-The endpoint enforces several sizes, and a request past one of them comes back
-as a 500 or a 422 that names neither the limit nor how to get under it. Every
-check here exists so the caller reads a sentence instead.
-"""
+"""Client sampling boundaries and session behavior through public APIs."""
 
 from __future__ import annotations
 
@@ -19,7 +14,7 @@ from test_limits_and_absent_outputs import sent
 
 from sdm_client import Schema, UnsupportedRequestError
 from sdm_client.errors import StructuredDataError
-from sdm_client.models import KUMO_RELATIONAL, RELATIONAL_LIMITS
+from sdm_client.models import KUMO_RELATIONAL
 
 
 def payload(*, predict_rows: int, context_rows: int) -> dict:
@@ -54,20 +49,6 @@ def _Gathered(*payloads):
     )
 
 
-def test_the_declared_limits_are_pinned_to_what_was_read_off_the_endpoint():
-    """A pin, not a probe.
-
-    These numbers were read from the relational NIM. This asserts they have
-    not drifted in the client, which is all it can do offline. The live suites
-    check that the endpoint still agrees.
-    """
-    assert RELATIONAL_LIMITS['context_rows_fast'] == 1_000
-    assert RELATIONAL_LIMITS['context_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['predict_rows_max'] == 10_000
-    assert RELATIONAL_LIMITS['hops_max'] == 6
-    assert RELATIONAL_LIMITS['tables_max'] == 15
-
-
 @pytest.mark.parametrize('bad', ['2', True])
 def test_num_hops_must_be_a_whole_number(bad):
     from test_frame_sessions_core import query
@@ -78,6 +59,31 @@ def test_num_hops_must_be_a_whole_number(bad):
         query().materialize(indices=[1], model=KumoRelational(), num_hops=bad)
     assert 'num_hops must be a whole number' in str(error.value)
     assert error.value.code == 'INVALID_REQUEST'
+
+
+@pytest.mark.parametrize('field', ['num_hops', 'num_neighbors'])
+def test_sampling_accepts_six_hops_and_refuses_seven(field):
+    from test_frame_sessions_core import query
+
+    from sdm_client import KumoRelational
+
+    def options(depth):
+        return {field: depth if field == 'num_hops' else [2] * depth}
+
+    materializer = query()
+    request = materializer.materialize(
+        indices=[1], model=KumoRelational(), **options(6)
+    )
+    assert len(request.payloads) == 1
+    assert len(request.payloads[0]['predict']['instance_table']['rows']) == 1
+    with pytest.raises(UnsupportedRequestError) as error:
+        materializer.materialize(
+            indices=[1], model=KumoRelational(), **options(7)
+        )
+    assert error.value.code == 'UNSUPPORTED_REQUEST'
+    assert error.value.details['field'] == field
+    assert error.value.details['limit'] == 6
+    assert 'at most 6 hops' in str(error.value)
 
 
 @pytest.mark.parametrize(
@@ -246,20 +252,10 @@ def gathered_in_calls(*, calls: int, context_rows: int):
     )
 
 
-@pytest.mark.parametrize('over', [False, True], ids=['under', 'over'])
-def test_the_context_cap_is_held_to_each_call_and_not_their_sum(over):
-    """Both sides of the cap, because only the allowed one was covered: a
-    per-call count that always read nought would have passed that alone."""
-
-    cap = RELATIONAL_LIMITS['context_rows_max']
-    each = cap + 1 if over else cap // 2 + 1
-    request = gathered_in_calls(calls=2, context_rows=each)
-    if not over:
-        sent(request)
-        return
-    with pytest.raises(StructuredDataError) as refused:
-        sent(request)
-    assert f'{each:,} context rows' in str(refused.value)
+def test_each_call_s_context_is_sent_at_any_size():
+    """The client holds a context to no size of its own, in each call or
+    across them."""
+    sent(gathered_in_calls(calls=2, context_rows=10_001))
 
 
 def test_a_batched_request_reports_the_context_one_call_carries():

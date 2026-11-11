@@ -29,6 +29,12 @@ Their differences from DuckDB follow the fixture loader's explicit mappings in `
 | SQLite / Postgres | Malformed text-time values are refused; the US-date fixture completes under these backends' existing read behavior |
 | Postgres | NaN-key fixtures refuse at materialize; a negative neighbor bound retains the existing `PROVIDER_ERROR` outcome |
 
+`sample.num-hops.seven` and `sample.num-neighbors.seven-hops` refuse at materialize with `UNSUPPORTED_REQUEST`: sampling supports at most six hops.
+The `multicall.body-30mib` cases reach predict on every backend: the client holds a call to no size of its own.
+`multicall.entities.100001` and `multicall.calls.101` are gathered: the client sets no most on the entities or the calls of one `materialize()`.
+`rank.entities-by-candidates.over` is refused at materialize only for the entities that name no user, as `rank.entities-by-candidates.at` is, since the client sets no entity ceiling over a ranking.
+These outcomes were recorded from the runner's observations (`run_python.py`, then `check_observations.py --expect`) on DuckDB and SQLite; the Postgres entries take the same outcomes, as no Postgres server was available.
+
 These expectations describe the declared fixture mappings; they do not claim that every backend supports identical physical types.
 `explain.two-entities` now succeeds on all three backends: The client supports explanations for multiple prediction rows.
 `contract/tests/test_query_options.py::test_each_explained_entity_retains_its_own_raw_response` independently checks both rows' distinct explanation values, the request batch size and the public success outcome.

@@ -787,7 +787,6 @@ sentences! {
     DirectScored = "direct_scored", E::InvalidRequest;
     DirectTargetMissing = "direct_target_missing", E::InvalidRequest;
     DirectTargetScored = "direct_target_scored", E::InvalidRequest;
-    DirectContextLimit = "direct_context_limit", E::UnsupportedRequest;
     TabularMissingRowIndex = "tabular_missing_row_index", E::InvalidResponse;
     DirectMultilabel = "direct_multilabel", E::UnsupportedRequest;
     DirectRelationalFrames = "direct_relational_frames", E::UnsupportedRequest;
@@ -943,7 +942,6 @@ sentences! {
     Undeclared = "undeclared", E::UnsupportedRequest;
     SeedPastRange = "seed_past_range", E::InvalidRequest;
     BigIntegerPastType = "big_integer_past_type", E::ValueOutOfRange;
-    LagPastPayload = "lag_past_payload", E::InvalidRequest;
     DateLiteralPacked = "date_literal_packed", E::InvalidRequest, rule "date_literal_packed";
     LocalZoneUnread = "local_zone_unread", E::InvalidRequest;
     ClockPastYears = "clock_past_years", E::InvalidRequest;
@@ -996,7 +994,6 @@ sentences! {
     ModelLacksTask = "model_lacks_task", E::UnsupportedRequest;
     TemporalLinkUnserved = "temporal_link_unserved", E::UnsupportedRequest, rule "temporal_link_prediction";
     ModelLacksOutputs = "model_lacks_outputs", E::UnsupportedRequest;
-    ContextPastModel = "context_past_model", E::UnsupportedRequest;
     NoContextRows = "no_context_rows", E::UnsupportedRequest;
     TooManyClasses = "too_many_classes", E::UnsupportedRequest;
     OneClassColumn = "one_class_column", E::UnsupportedRequest;
@@ -1015,9 +1012,6 @@ sentences! {
     ExplanationFastMode = "explanation_fast_mode", E::UnsupportedRequest;
     OptionsUnread = "options_unread", E::UnsupportedRequest;
     OptionsUnreadStatistic = "options_unread_statistic", E::UnsupportedRequest;
-    PayloadSmallerCalls = "payload_smaller_calls", E::InvalidRequest;
-    PayloadNoSmallerCall = "payload_no_smaller_call", E::InvalidRequest;
-    CallPastEndpoint = "call_past_endpoint", E::InvalidRequest;
     OutputsNone = "outputs_none", E::InvalidRequest;
     NotFinite = "not_finite", E::InvalidRequest;
     PastInt64 = "past_int64", E::InvalidRequest;
@@ -1028,7 +1022,6 @@ sentences! {
     LagPastTimes = "lag_past_times", E::ValueOutOfRange;
     NumContextSamplesNotWhole = "num_context_samples_not_whole", E::InvalidRequest;
     NumContextSamplesBelowOne = "num_context_samples_below_one", E::InvalidRequest;
-    NumContextSamplesPastMost = "num_context_samples_past_most", E::UnsupportedRequest;
     NumHopsNotWhole = "num_hops_not_whole", E::InvalidRequest;
     NumHopsNone = "num_hops_none", E::InvalidRequest;
     RandomSeedNotWhole = "random_seed_not_whole", E::InvalidRequest;
@@ -1051,10 +1044,9 @@ sentences! {
     ExcludedNotASequence = "excluded_not_a_sequence", E::InvalidRequest;
     StatisticUnknown = "statistic_unknown", E::InvalidRequest;
     StatisticNotARegression = "statistic_not_a_regression", E::InvalidRequest;
+    SamplingHopsLimit = "sampling_hops_limit", E::UnsupportedRequest;
     NoHopNumHops = "no_hop_num_hops", E::InvalidRequest;
     NoHopNumNeighbors = "no_hop_num_neighbors", E::InvalidRequest;
-    HopsPastEndpoint = "hops_past_endpoint", E::UnsupportedRequest;
-    HopsPastEndpointUncounted = "hops_past_endpoint_uncounted", E::UnsupportedRequest;
     InferenceRunModeInvalid = "inference_run_mode_invalid", E::InvalidRequest;
     InferenceConfigNotAnObject = "inference_config_not_an_object", E::InvalidRequest;
     InferenceOptionUnknown = "inference_option_unknown", E::InvalidRequest;
@@ -1093,7 +1085,6 @@ sentences! {
     EntityTableEmpty = "entity_table_empty", E::InvalidRequest;
     EntityKeyMissing = "entity_key_missing", E::InvalidRequest;
     TargetNotAFeature = "target_not_a_feature", E::InvalidRequest;
-    ContextPastRows = "context_past_rows", E::InvalidRequest;
     HeldBySeveralRowsOne = "held_by_several_rows_one", E::InvalidRequest;
     HeldBySeveralRows = "held_by_several_rows", E::InvalidRequest;
     HeldBySeveralRowsMany = "held_by_several_rows_many", E::InvalidRequest;
@@ -1102,7 +1093,6 @@ sentences! {
     FrameKeyMissingParts = "frame_key_missing_parts", E::InvalidRequest;
     FrameNoValidRows = "frame_no_valid_rows", E::InvalidRequest;
     NotInTable = "not_in_table", E::InvalidRequest;
-    SubgraphPastTables = "subgraph_past_tables", E::InvalidRequest;
     Unresolved = "unresolved", E::InvalidRequest;
     AnchorNotATime = "anchor_not_a_time", E::InvalidRequest;
     AnchorBeforeData = "anchor_before_data", E::InvalidRequest;
@@ -1119,9 +1109,6 @@ sentences! {
     NoEntityPassedSeveral = "no_entity_passed_several", E::InvalidRequest;
     AnchorTooLateSeveral = "anchor_too_late_several", E::InvalidRequest;
     ForecastTopK = "forecast_top_k", E::InvalidRequest, rule "forecast_top_k";
-    MostEntities = "most_entities", E::UnsupportedRequest, rule "most_entities";
-    MostEntitiesParts = "most_entities_parts", E::UnsupportedRequest, rule "most_entities";
-    MostCalls = "most_calls", E::UnsupportedRequest, rule "most_calls";
     NotYetMaterialize = "not_yet_materialize", E::UnsupportedRequest;
     MissingIndexTable = "missing_index_table", W::MissingIndices;
     MissingIndexTables = "missing_index_tables", W::MissingIndices;

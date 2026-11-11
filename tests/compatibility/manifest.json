@@ -4630,8 +4630,7 @@
           "packages/structured-data-models-client/tests/test_envelope_and_result.py::test_explain_default_outputs_names_missing_structured_gradient_step",
           "packages/structured-data-models-client/tests/test_runtime_ownership.py::test_installed_explanations_has_one_origin_and_no_retired_dependencies",
           "packages/structured-data-models-client/tests/test_relational_explanations.py::test_explain_one_class_refusal_names_source_column",
-          "packages/structured-data-models-client/tests/test_tabular_explanations.py::test_empty_explanation_view_retains_columns",
-          "packages/structured-data-models-client/tests/test_payload_rules.py::test_client_only_provenance_does_not_consume_model_payload_limit"
+          "packages/structured-data-models-client/tests/test_tabular_explanations.py::test_empty_explanation_view_retains_columns"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/GradientExplanationsTest.java#publicGradientCollectionSurvivesNestedMergesAndSessions",
@@ -8293,6 +8292,16 @@
       "base_commit": "a441e59a7dfb507185a11e3d157cd762529c9e40",
       "record": "type_contracts/arrow-admission-and-inference",
       "reason": "Fixture cleanup removes unused historical observation/provenance fields. All 110 vector IDs and every retained type, witness, admission and inference fact remain unchanged; update the whole-file checksum and reference the renamed test that checks actual runtime refusals instead of recorded expectations."
+    },
+    {
+      "base_commit": "868363fd938dd37b46fac62578d13922f83f91a8",
+      "record": "api_contracts/gradient-explanations",
+      "reason": "The client no longer enforces the endpoint's payload size limit, so the test that client-only provenance does not count toward that limit was removed with it; the remaining gradient tests are unchanged."
+    },
+    {
+      "base_commit": "8c9d723c9f6ecff8c2f6f4d6d5357af17ea4399e",
+      "record": "api_contracts/gradient-explanations",
+      "reason": "The client no longer enforces the endpoint's payload size limit, so the test that client-only provenance does not count toward that limit was removed with it; the remaining gradient tests are unchanged."
     }
   ],
   "capabilities": [

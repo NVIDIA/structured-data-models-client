@@ -79,11 +79,6 @@ pub const RESERVED: [&str; 2] = [INSTANCE_ID, ANCHOR_TIME];
 const NO_ANCHOR: i64 = -9_223_372_036_854_775_807;
 /// The largest integer a JSON number carries exactly in every reader.
 const JSON_SAFE: i128 = 9_007_199_254_740_991;
-/// The largest payload the endpoint takes, in bytes (`_MAX_SIZE`), counted
-/// as the bytes the payload is written as and sent, UTF-8 (register PD-2),
-/// not the reference's `json.dumps` count, which escapes every character
-/// past ASCII.
-pub const PAYLOAD_BYTES: usize = 30 * 1024 * 1024;
 
 /// One column of a sampled table: as sampled, or a text feature as the
 /// reference's sampler sends it, each value its words
@@ -219,11 +214,6 @@ pub struct Sampled {
     /// How many candidates the call asked be kept (`top_k`), written into
     /// the task as the engine writes it.
     pub top_k: Option<u32>,
-    /// The most rows any call of the request this payload is one call of
-    /// scores (`_the_largest_batch`, `main`'s multi-call `predict`): the
-    /// size a refusal of a payload past the endpoint's limit names as the
-    /// one to ask below.
-    pub rows_per_call: usize,
     /// The lagged target columns (`lag_timesteps`), in order; none
     /// where the call asks for none.
     pub lags: Vec<LagColumn>,
@@ -1440,17 +1430,6 @@ fn build_mode(
         num_prediction_examples: sampled.num_test as u64,
     };
     let model = "kumo-relational".to_owned();
-    // Only this small state-only member is counted separately; never copy or
-    // reparse the potentially 30MiB table data merely to measure its wire size.
-    let client_only_bytes = if client_generated_keys.is_empty() {
-        0
-    } else {
-        serde_json::to_vec(&client_generated_keys)
-            .expect("string map serializes")
-            .len()
-            + br#""client_generated_keys":"#.len()
-            + 1 // comma separating the member from model-facing members
-    };
     let bytes = if link.is_some() {
         StatePayload {
             client_analysis_delta: None,
@@ -1511,42 +1490,6 @@ fn build_mode(
         }
         .to_bytes()
     };
-    // The limit counts the bytes the request sends, as written (PD-2).
-    // The refusal names what to change, as the reference's client words
-    // its engine's (`_said_in_this_client_s_terms`, `main`'s 1fc5a686): a
-    // call scoring several rows can be asked as smaller calls, below the
-    // most rows a call of the request scores (`smaller_calls`); a call of
-    // one row cannot, and only a narrower context helps
-    // (`no_smaller_call`).
-    let model_bytes = bytes.len() - client_only_bytes;
-    if model_bytes > PAYLOAD_BYTES {
-        let count = |n: usize| Detail::Scalar(sdm_contract::Scalar::UInt64(n as u64));
-        return Err(CoreError::new(
-            if sampled.num_test > 1 {
-                Sentence::PayloadSmallerCalls
-            } else {
-                Sentence::PayloadNoSmallerCall
-            },
-            "the request is larger than the endpoint takes",
-        )
-        .with_field("field", Detail::text("payload"))
-        .with_field("bytes", count(model_bytes))
-        .with_field("limit", count(PAYLOAD_BYTES))
-        .with_field(
-            "batch_too_large_to_send",
-            Detail::Scalar(sdm_contract::Scalar::Bool(true)),
-        )
-        .with_field(
-            "remedy",
-            Detail::text(if sampled.num_test > 1 {
-                "smaller_calls"
-            } else {
-                "no_smaller_call"
-            }),
-        )
-        .with_field("rows", count(sampled.num_test))
-        .with_field("rows_per_call", count(sampled.rows_per_call)));
-    }
     Ok(Built {
         bytes,
         answering: answered.len(),

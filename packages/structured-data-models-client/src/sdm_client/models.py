@@ -42,27 +42,10 @@ from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 from sdm_client.base import ModelSpec, RuntimeContract
 from sdm_client.errors import StructuredDataError, UnknownModelError
 
-# Sizes the relational endpoint enforces. `predict_rows_max` is the serving
-# layer's own `TFM_MAX_TEST_ROWS`, measured at the boundary rather than read
-# from a document: 10,000 rows to score are answered, and 10,001 come back
-#
-#   [422 UNSUPPORTED_SHAPE] N_test 10001 exceeds limit 10000.
-#
-# A deployment may be configured to hold to less, which is what the
-# `rows_per_call` option on materialize() is for.
-#
-# The endpoint refuses past these, so the client refuses first with a message
-# that names the limit. See the architecture note on inference knobs:
-# `run_mode` is derived from these rather than being set.
-#
-# Prediction row limits also bound the batches requested from the Rust core.
-# Keep endpoint limits and batching consistent so each batch is accepted.
+# Fixed properties of the relational model. The client holds a request to no
+# size of its own: the endpoint's limits are the endpoint's to enforce.
 RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
-    'context_rows_max': 10_000,
-    'predict_rows_max': 10_000,
-    'hops_max': 6,
-    'tables_max': 15,
     'classes_max': 10,
 }
 
@@ -72,18 +55,6 @@ RELATIONAL_LIMITS = {
 DEFAULT_PREDICTION_STATISTIC = 'median'
 PREDICTION_STATISTICS = frozenset({'mean', 'median'})
 SUMMARISED_TASK_KINDS = frozenset({'regression', 'forecasting'})
-
-# The tabular endpoint refuses a context past this, exactly:
-#
-#   [422 UNSUPPORTED_SHAPE] N_train 10001 exceeds limit 10000.
-#
-# Measured against the deployment rather than read from a document, at the
-# boundary: 10,000 rows answer, 10,001 refuse. Declared so the client refuses
-# first, because the alternative is encoding and transmitting an arbitrarily
-# large context to be told the limit at the far end.
-TABULAR_LIMITS = {
-    'context_rows_max': 10_000,
-}
 
 KUMO_TABULAR = ModelSpec(
     model_id=TFM_MODEL_KUMO_TABULAR,
@@ -95,7 +66,6 @@ KUMO_TABULAR = ModelSpec(
         outputs=frozenset(
             {'prediction', 'probabilities', 'quantiles', 'explanation'}
         ),
-        limits=TABULAR_LIMITS,
         explanation_formats=('sdm_gradient_v1',),
     ),
 )

@@ -36,9 +36,9 @@ use sdm_contract::ops::{ModelEndpoint, OperationResult, Predicted};
 use sdm_contract::run::Endpoint;
 use sdm_contract::{CoreError, CoreWarning, Detail, Scalar, Sentence};
 use sdm_request::predict::{
-    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_bytes, call_starts,
-    empty, layout, left_out, merge, nothing_to_score, numbered_from, predict_rows, preflight,
-    prepare, refused, steps_unexplained, table,
+    Notice, Part, absent, absent_notice, bad_response, body, by_step, call_starts, empty, layout,
+    left_out, merge, nothing_to_score, numbered_from, predict_rows, preflight, prepare, refused,
+    steps_unexplained, table,
 };
 use sdm_request::serving::{self, Failure};
 use sdm_wire::json::{self, Value};
@@ -445,12 +445,12 @@ pub(crate) async fn one(
             &bodies,
             inputs.supports_sessions && inputs.endpoint.is_none(),
         );
-        // Validate all full calls before any network effect, including their size.
+        // Validate all full calls before any network effect.
         // Retain only the small scoring half alongside encoded fallback bytes.
         let plans = bodies
             .into_iter()
             .map(|body| {
-                let bytes = call_bytes(&body)?;
+                let bytes = body.to_bytes();
                 let scoring = if session.is_some() {
                     sdm_request::frame_session::subset(
                         &body,

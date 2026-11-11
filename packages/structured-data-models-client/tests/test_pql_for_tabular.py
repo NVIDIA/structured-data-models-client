@@ -174,10 +174,10 @@ def test_tabular_context_budget_limits_actual_rows(count):
     assert request.predict_rows == 1
 
 
-def test_tabular_context_budget_above_model_limit_is_refused():
-    with pytest.raises(StructuredDataError) as error:
-        query().materialize(indices=[1], num_context_samples=10_001)
-    assert error.value.code == 'UNSUPPORTED_REQUEST'
+def test_tabular_context_budget_past_10_000_is_taken():
+    # The client sets no most: more than the rows there takes them all.
+    request = query().materialize(indices=[1], num_context_samples=10_001)
+    assert request.context_rows > 0
 
 
 @pytest.mark.parametrize('count', [500, 10_001])

@@ -19,11 +19,6 @@ if TYPE_CHECKING:
     from sdm_client.sanitization import SanitizationReport
 
 
-# Host memory limits passed to Rust for request-size enforcement.
-MOST_ENTITIES = 100_000
-MOST_CALLS = 100
-
-
 class RelationalMaterializer:
     """Retain host resources while Rust owns sampling and request construction."""
 

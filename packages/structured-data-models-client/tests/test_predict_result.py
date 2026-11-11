@@ -13,7 +13,6 @@ from __future__ import annotations
 import importlib.util
 import json
 import math
-import re
 import struct
 import sys
 from pathlib import Path
@@ -40,20 +39,6 @@ def _recorder() -> Any:
 
 R = _recorder()
 CASES = [c for c in R.CASES if c['covers'] != R.BOUNDARY]
-CASES.append(
-    {
-        'name': 'size.one-past-the-limit',
-        'covers': R.SIZE,
-        'query': R.REGRESSION,
-        'setup': [
-            *R.shop(),
-            "CREATE OR REPLACE TABLE users AS SELECT *, repeat('a', 275690) AS note FROM users",
-        ],
-        'materialize': {'indices': [0, 1], 'anchor_time': R.ANCHOR},
-        'predict': {},
-        'script': 'order:given',
-    }
-)
 BOUNDARIES = [c for c in R.CASES if c['covers'] == R.BOUNDARY]
 
 
@@ -90,7 +75,6 @@ REFUSALS = {
     'prepare.not-a-request': 'INVALID_REQUEST',
     'carry.longdouble-num-context': 'INVALID_REQUEST',
     'carry.ndarray-target-transforms': 'UNSUPPORTED_REQUEST',
-    'size.one-past-the-limit': 'INVALID_REQUEST',
 }
 VALID_NUMERIC_TEXT = {
     'digit-separator',
@@ -136,8 +120,6 @@ def test_public_prediction_obeys_scripted_values_and_input_contract(
         for key in ('field', 'reason'):
             if key in spec.get('core_outcome', {}):
                 assert got['fields'][key] == spec['core_outcome'][key]
-        if name == 'size.one-past-the-limit':
-            assert re.search(r'30 ?MB|30 ?MiB|31,?457,?280', got['message'])
         return
     assert got['outcome'] == 'result', (name, got)
     assert calls and got['model'] == 'kumo-relational'

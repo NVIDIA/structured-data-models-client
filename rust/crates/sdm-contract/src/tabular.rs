@@ -64,7 +64,6 @@ pub struct DecideTabularContext {
 #[serde(rename_all = "snake_case")]
 pub enum TabularCountError {
     Zero,
-    AboveLimit,
     AbovePopulation,
 }
 
@@ -470,19 +469,6 @@ pub enum TabularOrderError {
     TimestampDateMismatch,
     TimestampAwarenessMismatch,
     TemporalYearOutOfRange,
-}
-
-/// Reached native comparison against the model cap, before frame length reads.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct CheckTabularCap {
-    pub over_limit: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct CheckedTabularCap {
-    pub accepted: bool,
 }
 
 /// One ordinary selection composition. Only proven-passive native producers

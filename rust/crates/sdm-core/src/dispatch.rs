@@ -324,13 +324,6 @@ pub fn start(
                 crate::direct::value(&asker, &crate::tabular_selection::select(input)?)
             })
         }
-        Operation::CheckTabularCap(request) => {
-            let input: sdm_contract::tabular::CheckTabularCap =
-                take_json(&mut attachments, request.input)?;
-            Run::new(move |asker| async move {
-                crate::direct::value(&asker, &sdm_request::tabular::check_materialized_cap(input))
-            })
-        }
         Operation::CheckDirectShape(request) => {
             let input: sdm_contract::direct::DirectShape =
                 take_json(&mut attachments, request.input)?;
@@ -786,8 +779,6 @@ pub(crate) fn materialize(
                     values,
                     options: request.options,
                     most_parts: request.most_parts,
-                    most_entities: request.most_entities,
-                    most_calls: request.most_calls,
                     facts,
                     zones: Arc::clone(&zones),
                     #[cfg(feature = "test-ops")]

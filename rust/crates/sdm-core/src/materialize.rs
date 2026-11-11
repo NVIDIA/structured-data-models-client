@@ -49,8 +49,7 @@
 //! narrowed to the size asked, the hops the options ask bounded, the
 //! entity count, the reserved names, the statistic, the inference
 //! options, a static target's columns kept out of what is read and sent,
-//! the subgraph's 15 tables, the payload's layout and byte limit
-//! ([`sdm_request::payload`]), and the notices of what the request leaves
+//! the payload's layout ([`sdm_request::payload`]), and the notices of what the request leaves
 //! out, each a code and fields the host words; and it refuses with
 //! `UNSUPPORTED_REQUEST` naming the rule ([`sdm_engine::not_yet`]) every
 //! input whose request takes a rule it does not port yet (register entry
@@ -139,18 +138,6 @@ const DEFAULT_SEED: u128 = 42;
 /// How many times as many candidates as examples a run tries
 /// (`max_pq_iterations`' default).
 const ITERATIONS: usize = 10;
-/// The most tables a request's subgraph carries (`_MAX_SUBGRAPH_TABLES`).
-const SUBGRAPH_TABLES: usize = 15;
-/// The most entities one `materialize` gathers where the host names no
-/// limit (`main`'s `MOST_ENTITIES`): every call's payload is built, with
-/// its own context, before any is sent, so the whole population is held at
-/// once.
-pub const MOST_ENTITIES: u64 = 100_000;
-/// The most model calls one request is gathered as where the host names no
-/// limit (`main`'s `MOST_CALLS`): a context is gathered for every call.
-pub const MOST_CALLS: u32 = 100;
-/// The most rows an instance table may hold (`MAX_TABLE_ROWS`).
-const TABLE_ROWS: usize = 10_000;
 /// How many examples the reference labels at once, stopping once it has
 /// the run mode's (`_sample_target_set`'s `batch_size`): the first batch
 /// holds every example a context takes whenever all of it is labelled.
@@ -183,12 +170,6 @@ pub(crate) struct Inputs {
     pub options: Vec<String>,
     /// The most steps a forecast is asked as (`Materialize.most_parts`).
     pub most_parts: Option<u32>,
-    /// The most entities one `materialize` gathers
-    /// (`Materialize.most_entities`).
-    pub most_entities: Option<u64>,
-    /// The most calls one request is gathered as
-    /// (`Materialize.most_calls`).
-    pub most_calls: Option<u32>,
     pub facts: HostFacts,
     /// The zones the run resolves names with: the host's local zone, which
     /// places a date literal's two-digit year (`pql::local_year`).
@@ -2904,7 +2885,6 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
         .with_field("parts", Detail::Scalar(Scalar::UInt64(steps.count)))
         .with_field("rows_per_call", Detail::Scalar(Scalar::UInt64(per_call))));
     }
-    refuse_entities(entities, steps.count, inputs.most_entities)?;
     let handed = inputs.memo.clone().unwrap_or_else(|| SamplerMemo {
         source: inputs.source.clone(),
         ..SamplerMemo::default()
@@ -2964,36 +2944,6 @@ pub(crate) fn asked_rows_per_call(
         None => Ok(None),
         Some(given) => options::rows_per_call(given),
     }
-}
-
-/// Refuses a population too large to hold (`main`'s
-/// `refuse_more_entities_than_fit_in_memory`), from the count alone, before
-/// anything is read: `entities` gathered `times` over (a forecast's steps
-/// each gather it whole), past the host's limit, 100,000 where it names
-/// none, `UNSUPPORTED_REQUEST`, rule `most_entities`.
-pub(crate) fn refuse_entities(
-    entities: u64,
-    times: u64,
-    most: Option<u64>,
-) -> Result<(), CoreError> {
-    let most = most.unwrap_or(MOST_ENTITIES);
-    let total = entities.saturating_mul(times);
-    if total <= most {
-        return Ok(());
-    }
-    Err(CoreError::new(
-        if times == 1 {
-            Sentence::MostEntities
-        } else {
-            Sentence::MostEntitiesParts
-        },
-        "more entities were asked for than one materialize holds at once",
-    )
-    .with_field("field", Detail::text("indices"))
-    .with_field("entities", Detail::Scalar(Scalar::UInt64(entities)))
-    .with_field("gathered_times", Detail::Scalar(Scalar::UInt64(times)))
-    .with_field("total", Detail::Scalar(Scalar::UInt64(total)))
-    .with_field("limit", Detail::Scalar(Scalar::UInt64(most))))
 }
 
 /// A request's payload and query, attached.
@@ -3137,8 +3087,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         anchor_time,
         facts,
         zones,
-        most_entities,
-        most_calls,
         types,
         ..
     } = inputs;
@@ -3220,13 +3168,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         .with_field("reason", Detail::text("empty")));
     }
     // More entities than one call scores are gathered as several calls
-    // (`main`'s 1fc5a686), up to a population the host's limit holds,
-    // refused from the count alone before anything is read.
-    refuse_entities(
-        u64::try_from(indices.len()).unwrap_or(u64::MAX),
-        1,
-        most_entities,
-    )?;
+    // (`main`'s 1fc5a686), however many there are.
     // The statistic the caller chose, one the endpoint reports, and no
     // column named as the wire names its own (the client's checks before
     // it gathers; their order among the checks above is not the client's,
@@ -3525,7 +3467,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // The examples: a reservoir sample of the entity table, kept one row
     // per entity, with the entity table's columns the query reads; for a
     // temporal query, walked back from the context's anchor by the window.
-    let context_examples = mode.context_examples();
+    // A best run gathers its own examples, or as many as were asked past
+    // them: the client sets no most.
+    let context_examples = match mode {
+        options::RunMode::Fast => mode.context_examples(),
+        options::RunMode::Best => mode.context_examples().max(asked_examples.unwrap_or(0)),
+    };
     // `max_pq_iterations` times as many candidates as examples; a
     // float's count is no slice bound for a temporal query's walk, the
     // engine's `TypeError`, the caller's error.
@@ -3872,19 +3819,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     ))
     .map_err(|_| internal("a call's rows past usize"))?;
     let num_test = indices.len();
-    let calls = num_test.div_ceil(per_call);
-    let most = most_calls.unwrap_or(MOST_CALLS);
-    if calls > most as usize {
-        return Err(CoreError::new(
-            Sentence::MostCalls,
-            "the entities asked for are gathered as more calls than one materialize holds at once",
-        )
-        .with_field("field", Detail::text("indices"))
-        .with_field("entities", count(num_test))
-        .with_field("calls", count(calls))
-        .with_field("rows_per_call", count(per_call))
-        .with_field("limit", Detail::Scalar(Scalar::UInt32(most))));
-    }
     // How many candidates the call asked be kept (`_candidates_to_rank`,
     // ), which the engine writes into the task; then the inference
     // options, read for the task's config class, as the engine reads them
@@ -3947,16 +3881,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         });
     }
     excluded_by_caller(&graph, &exclude_cols, &mut excluded)?;
-    if num_train > TABLE_ROWS {
-        return Err(invalid(
-            Sentence::ContextPastRows,
-            "the context holds more rows than a request takes",
-            "query",
-        ));
-    }
-    // The rows the largest call scores (`_the_largest_batch`), which a
-    // payload past the endpoint's body names as the size to come down from.
-    let largest = per_call.min(num_test);
     let train_anchors = anchors.len();
     let entity_names = crate::subgraph::sample_columns(&graph, entity, &excluded);
     // The labelled context's examples before narrowing, then the entities
@@ -3976,7 +3900,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     {
         entity_read.push(time.clone());
     }
-    let mut gathered = Vec::with_capacity(calls);
+    let mut gathered = Vec::with_capacity(num_test.div_ceil(per_call));
     let mut sent = BTreeSet::new();
     let mut answering = 0;
     // Each call's payload, in order: the context's examples and labels, the
@@ -4150,30 +4074,16 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         )
         .await?;
         keep_stored_times(&mut memo, &read_times);
-        // The subgraph carries at most as many tables as the endpoint
-        // reads, refused as the reference's engine refuses it
-        // (`_get_context`).
-        if walked.tables.len() > SUBGRAPH_TABLES {
-            return Err(invalid(
-                Sentence::SubgraphPastTables,
-                "the request's subgraph carries more tables than the endpoint reads",
-                "tables",
-            )
-            .with_field("tables", count(walked.tables.len()))
-            .with_field("limit", count(SUBGRAPH_TABLES)));
-        }
         sent.extend(walked.tables.iter().map(|t| t.name.clone()));
         // The lagged columns of this call's examples: the narrowed
         // context's, then this call's own entities, each its own row's,
         // sliced from the whole request's columns, so each column's type
         // is the request's whatever this call's rows hold, typed
         // over the gathered context before narrowing; the
-        // columns are computed at the first call's payload, where the
-        // reference's size refusal falls, held to the largest call's rows.
+        // columns are computed at the first call's payload.
         if lag_columns.is_none()
             && let Some(lag) = &lag
         {
-            lag.fits(num_train + largest)?;
             lag_columns = Some(
                 lag.columns(
                     &(0..num_train)
@@ -4213,7 +4123,6 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             return_embeddings,
             options: options.clone(),
             statistic: statistic.clone(),
-            rows_per_call: largest,
             top_k,
             lags,
             float_text: crate::pql::float_text,

@@ -64,11 +64,7 @@ pub(crate) async fn call(
     body: Value,
 ) -> Result<Value, CoreError> {
     match asker
-        .call_model(
-            endpoint,
-            "application/json".into(),
-            predict::call_bytes(&body)?,
-        )
+        .call_model(endpoint, "application/json".into(), body.to_bytes())
         .await
     {
         Reply::Model(ModelResult::Response { status, body, .. })

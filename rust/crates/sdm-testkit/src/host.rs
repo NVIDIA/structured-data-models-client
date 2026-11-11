@@ -1794,8 +1794,6 @@ fn start_materialize(
             values: Some(AttachmentId(6)),
             options: vec![],
             most_parts: None,
-            most_entities: None,
-            most_calls: None,
             sampler_state: sampler
                 .as_ref()
                 .and_then(|held| held.as_ref())

@@ -93,8 +93,9 @@ pub const INFERENCE_OPTIONS: [&str; 6] = [
 /// The most classes `kumo-relational` classifies (`classes_max`).
 pub const CLASSES_MAX: usize = 10;
 
-/// The most context rows `kumo-relational` reads (`context_rows_max`).
-pub const CONTEXT_ROWS_MAX: usize = 10_000;
+/// The context rows a single-table request is sampled to where the caller
+/// names no `num_context_samples` (`context_rows_max`): a default, not a cap.
+pub const CONTEXT_ROWS_DEFAULT: usize = 10_000;
 
 /// The context the mode that explains takes at most (`context_rows_fast`).
 pub const CONTEXT_ROWS_FAST: usize = 1_000;
@@ -334,12 +335,6 @@ fn instance_table<'a>(payload: &'a Value, half: &str) -> Option<(Vec<&'a str>, &
     (names.len() == columns.len()).then_some((names, rows.as_slice()))
 }
 
-/// The rows of one half, counted as `Request._rows` counts them: none
-/// where the half cannot be read.
-fn rows_of(payload: &Value, half: &str) -> usize {
-    instance_table(payload, half).map_or(0, |(_, rows)| rows.len())
-}
-
 /// The rows one call scores (`_envelope_rows(payload, 'predict')`): its
 /// predict half's rows, none where the half cannot be read.
 pub fn predict_rows(payload: &Value) -> Option<usize> {
@@ -471,12 +466,6 @@ pub fn prepare(
         });
     check_shapes(spec, kind, anchored, linked, tables)?;
     check_task_outputs(spec, kind, &outputs, true)?;
-    let rows = payloads
-        .iter()
-        .map(|p| rows_of(p, "context"))
-        .max()
-        .unwrap_or(0);
-    check_capacity(spec, rows, false)?;
     if spec.id == TABULAR {
         // The tabular model takes no relational request this build sends.
         return Err(not_yet("model"));
@@ -875,27 +864,6 @@ fn is_chosen(value: &Value) -> bool {
         Value::Array(items) => !items.is_empty(),
         Value::Object(members) => !members.is_empty(),
     }
-}
-
-/// The bytes of the call `body` writes, as the host sends them, unchanged:
-/// refused past the endpoint's limit (`PAYLOAD_BYTES`), counted on these
-/// bytes, the envelope included, which are the bytes sent (register PD-2,
-/// fix round 1), before the model is called.
-pub fn call_bytes(call: &Value) -> Result<Vec<u8>, CoreError> {
-    let bytes = call.to_bytes();
-    if bytes.len() > crate::payload::PAYLOAD_BYTES {
-        return Err(CoreError::new(
-            Sentence::CallPastEndpoint,
-            "the call is larger than the endpoint takes",
-        )
-        .with_field("field", Detail::text("call"))
-        .with_field("bytes", Detail::Scalar(Scalar::UInt64(bytes.len() as u64)))
-        .with_field(
-            "limit",
-            Detail::Scalar(Scalar::UInt64(crate::payload::PAYLOAD_BYTES as u64)),
-        ));
-    }
-    Ok(bytes)
 }
 
 /// The entity a row is about, as the result gives it: as the reference's
@@ -2351,23 +2319,6 @@ fn check_task_outputs(
     }
     Ok(())
 }
-fn check_capacity(spec: &Spec, rows: usize, direct: bool) -> Result<(), CoreError> {
-    if (direct || spec.id == RELATIONAL) && rows > CONTEXT_ROWS_MAX {
-        return Err(unsupported(
-            if direct {
-                Sentence::DirectContextLimit
-            } else {
-                Sentence::ContextPastModel
-            },
-            spec.id,
-            "the request's context is larger than the model reads",
-        )
-        .with_field("context_rows", count(rows))
-        .with_field("context_rows_max", count(CONTEXT_ROWS_MAX)));
-    }
-    Ok(())
-}
-
 /// Model preflight for live direct request facts, before conversion or empty handling.
 pub fn bind_direct(
     input: sdm_contract::direct::DirectCallFacts,
@@ -2404,7 +2355,6 @@ pub fn bind_direct(
         input.tables,
     )?;
     check_task_outputs(spec, &input.kind, &outputs, false)?;
-    check_capacity(spec, input.context_rows, true)?;
     Ok(sdm_contract::direct::BoundDirectCall {
         facts,
         model: input.model,

@@ -1745,25 +1745,6 @@ def test_refusals_preserve_source_read_order(
     assert _where_read(schema, connection) == {where}
 
 
-def test_too_many_entities_are_refused_before_the_source_is_read(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    r"""More entities than one ``materialize`` holds are refused from the
-    count alone, before the old route's engine reads anything
-    (``relational.py:339``): the tracker's entity-count row."""
-    from sdm_client.errors import StructuredDataError
-    from sdm_client.materializers import relational
-
-    monkeypatch.setattr(relational, 'MOST_ENTITIES', 1)
-    connection = _CompletingConnection()
-    schema = _rebuilt(connection)
-    mark = len(connection.calls)
-    with pytest.raises(StructuredDataError) as refused:
-        _asked(schema)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert len(connection.calls) == mark
-
-
 class _EmptyingWarehouse(_CompletingWarehouse):
     r"""The completing warehouse, whose ``shop.users`` holds no row while
     ``empty`` says so: every read of its rows answers none, and its count

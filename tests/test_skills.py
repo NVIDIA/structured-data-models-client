@@ -2231,10 +2231,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
         'Sessions': capabilities.sessions,
     }
     if name == 'tabular':
-        from sdm_client.models import TABULAR_LIMITS
-
         said['Explanations'] = 'explanation' in capabilities.outputs
-        said['Context rows'] = TABULAR_LIMITS['context_rows_max']
     assert set(shown) == set(said), (
         f'{name} shows rows nothing checks: {sorted(set(shown) ^ set(said))}'
     )
@@ -2264,10 +2261,6 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
 #: and a row naming no limit is a number nobody is holding to anything.
 LIMIT_ROWS = {
     'context rows, by default': 'context_rows_fast',
-    'context rows, with `num_context_samples`': 'context_rows_max',
-    'rows scored at once': 'predict_rows_max',
-    'tables in the gathered graph': 'tables_max',
-    'hops gathered': 'hops_max',
     'classes': 'classes_max',
 }
 
