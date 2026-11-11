@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 RECORDER = ROOT / 'contract/support/query_option_scenarios.py'
 ENDPOINT = ROOT / 'tests/support/scripted_endpoint.py'
+SHOP = ROOT / 'contract/support/shop_requests.py'
 CASES = ROOT / 'contract/cases/s1'
 
 DATABASES = ('duckdb', 'sqlite', 'postgres')
@@ -207,6 +208,10 @@ def recorder() -> ModuleType:
 
 def endpoint() -> ModuleType:
     return _module('scripted_endpoint', ENDPOINT)
+
+
+def shop() -> ModuleType:
+    return _module('shop_requests', SHOP)
 
 
 def key(case_id: str, database: str) -> str:
@@ -620,6 +625,10 @@ def test_current_client_sends_requested_query_and_output_options(
             if case['input']['pql'].startswith('EXPLAIN '):
                 assert 'explanation' in body['output']['fields']
         assert_request_options(case, sent)
+        if expected[0] == 'success':
+            # Each call's context, anchors, labels and related rows, as
+            # the filter, ASSUMING and the target derive them.
+            shop().assert_sent(case, runner().load_bases(), sent)
 
     check()
 

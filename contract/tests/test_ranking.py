@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNNER = ROOT / 'contract/runners/run_python.py'
 RECORDER = ROOT / 'contract/support/ranking_scenarios.py'
 CASE_DIR = ROOT / 'contract/cases/s1'
+SHOP = ROOT / 'contract/support/shop_requests.py'
 
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 
@@ -83,6 +84,10 @@ def runner() -> ModuleType:
 
 def recorder() -> ModuleType:
     return _module('ranking_scenarios', RECORDER)
+
+
+def shop() -> ModuleType:
+    return _module('shop_requests', SHOP)
 
 
 def key(case_id: str, database: str) -> str:
@@ -364,6 +369,9 @@ def test_current_client_decomposes_rankings_and_refuses_invalid_arguments(
                 not in body['predict']['instance_table']['columns']
             )
         if expect['outcome'] == 'success':
+            # One call per candidate, each candidate's membership in the
+            # window the label, over the context the anchors gather.
+            shop().assert_sent(case, runner().load_bases(), sent)
             result = line['public']['result']
             assert result['rows'] == len(
                 case['input']['materialize']['indices']

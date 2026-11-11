@@ -29,7 +29,7 @@ use sdm_contract::data::{
     DataRequest, DescribePart, Dialect, FetchPlan, ProviderChoice, Relation, SqlParam,
 };
 use sdm_contract::{Detail, ErrorCode};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 fn contract() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../contract")
@@ -169,4 +169,124 @@ fn a_relation_of_no_part_or_of_three_is_refused_by_name() {
             );
         }
     }
+}
+
+/// A key-set parameter bound as `__sdm_seeds__`: its attachment, the key
+/// and batch columns, then `more`.
+fn key_set(attachment: u64, more: &[Value]) -> Value {
+    let mut columns = vec![
+        json!({"name": "key", "type": {"type": "int64"}, "nullable": true}),
+        json!({"name": "batch", "type": {"type": "int64"}, "nullable": false}),
+    ];
+    columns.extend(more.iter().cloned());
+    json!({
+        "param": "key_set",
+        "keys": {"attachment": attachment, "columns": columns},
+        "relation": "__sdm_seeds__",
+    })
+}
+
+/// The statements `request` plans on Postgres, as the contract writes them.
+fn planned(request: Value) -> Value {
+    let request: DataRequest = serde_json::from_value(request).unwrap();
+    let FetchPlan::Sql { statements, .. } = plan(&request).unwrap() else {
+        panic!("not SQL");
+    };
+    serde_json::to_value(statements).unwrap()
+}
+
+/// base.regression's entity lookup and its neighbor read, as Postgres
+/// renders them whole: the key set bound once as JSON, each column read,
+/// the time bound and the per-seed cap, newest first.
+#[test]
+fn a_lookup_and_a_neighbor_read_render_whole_with_their_key_sets() {
+    let time = json!({
+        "name": "time",
+        "type": {"type": "timestamp", "unit": "ns", "zone": null},
+        "nullable": false,
+    });
+    let column = |name: &str| json!({"name": name, "column": name});
+    let lookup = planned(json!({
+        "request": "lookup",
+        "table": {
+            "source": ["users"],
+            "columns": [column("user_id"), column("age"), column("country")],
+            "found": true,
+        },
+        "key": ["user_id"],
+        "columns": ["user_id", "age", "country"],
+        "seeds": {"attachment": 2, "columns": key_set(2, &[])["keys"]["columns"]},
+    }));
+    assert_eq!(
+        lookup,
+        json!([{
+            "dialect": "postgres",
+            "text": r#"WITH "__sdm_seeds__" AS (
+  SELECT (r.value #>> '{}')::bigint AS "key", (r.ordinality - 1)::bigint AS "batch"
+  FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS r(value, ordinality)
+)
+SELECT l.b AS "__kumo_batch__", l.c0 AS "user_id", l.c1 AS "age", l.c2 AS "country", l.r AS "__kumo_row__", l.m AS "__kumo_matches__"
+FROM (
+  SELECT s."batch" AS b, t."user_id" AS c0, t."age" AS c1, t."country" AS c2,
+         ROW_NUMBER() OVER (PARTITION BY s."batch"
+           ORDER BY t."user_id") AS r,
+         COUNT(*) OVER (PARTITION BY s."batch") AS m
+  FROM "__sdm_seeds__" s
+  JOIN "public"."users" t
+    ON t."user_id" = s."key"
+) AS l
+WHERE l.r = 1
+ORDER BY l.b"#,
+            "params": [key_set(2, &[])],
+        }])
+    );
+    let neighbors = planned(json!({
+        "request": "neighbors",
+        "table": {
+            "source": ["orders"],
+            "columns": [column("order_id"), column("user_id"), column("price"), column("ts")],
+            "found": true,
+        },
+        "key": ["user_id"],
+        "columns": ["order_id", "user_id", "price", "ts"],
+        "seeds": {
+            "attachment": 3,
+            "columns": key_set(3, std::slice::from_ref(&time))["keys"]["columns"],
+        },
+        "window": {
+            "column": "ts",
+            "source_type": "timestamp without time zone",
+            "lower": null,
+            "upper": {"seed_column": "time", "inclusive": true},
+        },
+        "per_seed": 32,
+        "order": [
+            {"column": "ts", "as_timestamp": true, "descending": true, "nulls_last": true},
+            {"column": "order_id", "as_timestamp": false, "descending": false, "nulls_last": true},
+        ],
+    }));
+    assert_eq!(
+        neighbors,
+        json!([{
+            "dialect": "postgres",
+            "text": r#"WITH "__sdm_seeds__" AS (
+  SELECT (r.value->>'id')::bigint AS "key", (r.ordinality - 1)::bigint AS "batch", w2."ts" AS "time"
+  FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY AS r(value, ordinality)
+  CROSS JOIN (SELECT ROW(t.*)::"public"."orders" AS base FROM "public"."orders" AS t LIMIT 1) AS b
+  CROSS JOIN LATERAL jsonb_populate_record(b.base, jsonb_build_object('ts', r.value->'e')) AS w2
+)
+SELECT s."batch" AS "__kumo_batch__", n.c0 AS "order_id", n.c1 AS "user_id", n.c2 AS "price", n.c3 AS "ts", n.r AS "__kumo_row__"
+FROM "__sdm_seeds__" s
+CROSS JOIN LATERAL (
+  SELECT t."order_id" AS c0, t."user_id" AS c1, t."price" AS c2, t."ts" AS c3, ROW_NUMBER() OVER (ORDER BY t."ts" DESC NULLS LAST, t."order_id" ASC NULLS LAST) AS r
+  FROM "public"."orders" t
+  WHERE t."user_id" = s."key"
+    AND t."ts" <= s."time"
+  ORDER BY t."ts" DESC NULLS LAST, t."order_id" ASC NULLS LAST
+  LIMIT 32
+) AS n
+ORDER BY s."batch", n.r"#,
+            "params": [key_set(3, &[time])],
+        }])
+    );
 }

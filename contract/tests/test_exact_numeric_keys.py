@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import functools
 import importlib.util
+import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
@@ -37,6 +41,8 @@ EDITED_LINK = 'key.past-2-53.edited-link'
 CATALOG = 'key.past-2-53.catalog'
 
 CASE_IDS = (GIVEN_KEY, GIVEN_LINK, EDITED_LINK, CATALOG)
+
+WIDE = 'key.uint64-above-int64-max'
 
 LINK = {
     'source_table': 'orders',
@@ -386,3 +392,76 @@ def test_each_case_holds_an_exact_key_past_2_53(case_id: str) -> None:
         ),
     }[case_id]
     assert (given['from_source'], given.get('edits')) == expected
+
+
+@functools.cache
+def wide_on_postgres() -> dict[str, Any]:
+    r"""python-core's observation of the wide-key case on PostgreSQL."""
+    with tempfile.TemporaryDirectory(prefix='exact_numeric_keys-') as tmp:
+        given = Path(tmp) / 'cases'
+        given.mkdir()
+        shutil.copy(CASES / f'{WIDE}.json', given)
+        out = Path(tmp) / 'python-core.jsonl'
+        done = subprocess.run(
+            [
+                sys.executable,
+                '-I',
+                str(RUNNER),
+                '--mode',
+                'python-core',
+                '--database',
+                'postgres',
+                '--out',
+                str(out),
+                str(given),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            stdin=subprocess.DEVNULL,
+            check=False,
+            timeout=600,
+        )
+        assert done.returncode == 0, done.stdout + done.stderr
+        return json.loads(out.read_text(encoding='utf-8'))
+
+
+def test_adjacent_keys_past_int64_reach_the_wire_as_exact_strings() -> None:
+    r"""PostgreSQL's whole-number ``NUMERIC`` keys past ``2**63 - 1``, where
+    1.0.0 raised ``OverflowError``: the adjacent 2**63 and 2**63 + 1 the
+    case asks for are sent as their exact text, two keys, in the instance
+    table and in each related table, where a double would make them one."""
+    _server()
+    line = wide_on_postgres()
+    assert line['outcome'] == {
+        'result': 'success',
+        'stage': 'predict',
+        'error': None,
+        'code': None,
+    }
+    asked = [str(2**63), str(2**63 + 1)]
+    case, _ = runner().load_cases([CASES / f'{WIDE}.json'])[0]
+    assert [str(i) for i in case['input']['materialize']['indices']] == asked
+    (payload,) = [each['parsed'] for each in line['public']['payloads']]
+    schema = payload['schema']
+    assert schema['instance_table']['columns']['__kumo_entity_ref_0'] == {
+        'dtype': 'string',
+        'stype': 'ID',
+    }
+    for name in ('users', 'orders'):
+        column = schema['related_tables'][name]['columns']['user_id']
+        assert column['dtype'] == 'string', name
+    predict = payload['predict']
+    table = predict['instance_table']
+    at = table['columns'].index('__kumo_entity_ref_0')
+    keys = {row[0]['number']: row[at] for row in table['rows']}
+    assert list(keys.values()) == asked
+    users = predict['related_tables']['users']
+    user_at = users['columns'].index('user_id')
+    assert [row[user_at] for row in users['rows']] == asked
+    orders = predict['related_tables']['orders']
+    order_at = orders['columns'].index('user_id')
+    assert orders['rows']
+    assert {row[order_at] for row in orders['rows']} == set(asked)
+    for row in orders['rows']:
+        assert row[order_at] == keys[row[0]['number']]

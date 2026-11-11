@@ -103,3 +103,58 @@ fn family_cases_execute_with_expected_outcomes_and_encodable_results() {
         }
     }
 }
+
+/// The texts `seen`'s `stage` ran.
+fn ran(seen: &Observed, stage: &str) -> Vec<String> {
+    let driver = seen.driver.as_ref().expect("a driver record");
+    driver["capture"]["statements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["stage"] == stage)
+        .map(|s| s["sql"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// Each answered case reads its time column through a cast to `TIMESTAMP`
+/// wherever it bounds or orders by it: the range of times, both bounds of
+/// the label window, and the neighbors' upper bound and newest-first order.
+#[test]
+fn each_time_column_is_cast_in_every_bound_and_order() {
+    let mut checked = 0;
+    for (case, seen) in observed() {
+        if seen.answer.outcome().0 != "success" {
+            continue;
+        }
+        let time = if case.id == "time.text-declared" {
+            "happened"
+        } else {
+            "ts"
+        };
+        let cast = format!(r#"CAST(t."{time}" AS TIMESTAMP)"#);
+        let materialized = ran(&seen, "materialize");
+        let reads = |text: &str| materialized.iter().any(|sql| sql.contains(text));
+        assert!(
+            reads(&format!(r#"MIN(CAST("{time}" AS TIMESTAMP)) as min_date"#)),
+            "{}: the range of times",
+            case.id
+        );
+        assert!(
+            reads(&format!("{cast} <= s.\"end\"\n AND {cast} > s.\"start\"")),
+            "{}: the label window",
+            case.id
+        );
+        assert!(
+            reads(&format!("{cast} <= s.\"time\"")),
+            "{}: the neighbors' bound",
+            case.id
+        );
+        assert!(
+            reads(&format!("ORDER BY {cast} DESC NULLS LAST")),
+            "{}: newest first",
+            case.id
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 9);
+}
