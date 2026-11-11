@@ -466,6 +466,45 @@ def test_an_oversized_request_is_refused_before_it_is_sent():
     assert 'rows to score' in str(error.value)
 
 
+def test_default_gateway_limit_accepts_exact_bytes_then_refuses_one_more():
+    """Check the client guard, not a hosted gateway or model's acceptance."""
+    limit = 16_000_000
+
+    def encoded_size(payload):
+        records = [{'request_json': json.dumps(payload, separators=(',', ':'))}]
+        return len(
+            json.dumps(
+                {'dataframe_records': records}, separators=(',', ':')
+            ).encode('utf-8')
+        )
+
+    payload = {'text': ''}
+    payload['text'] = 'x' * (limit - encoded_size(payload))
+    assert encoded_size(payload) == limit
+    workspace = Workspace(answer={'predictions': []})
+    transport = DatabricksServingTransport(ENDPOINT, workspace)
+    try:
+        assert transport.predict(payload) == {'predictions': []}
+        assert len(workspace.serving_endpoints.calls) == 1
+        records = workspace.serving_endpoints.calls[0]['dataframe_records']
+        assert (
+            len(
+                json.dumps(
+                    {'dataframe_records': records}, separators=(',', ':')
+                ).encode('utf-8')
+            )
+            == limit
+        )
+        payload['text'] += 'x'
+        with pytest.raises(StructuredDataError) as error:
+            transport.predict(payload)
+        assert error.value.code == 'INVALID_REQUEST'
+        assert error.value.details == {'bytes': limit + 1, 'limit': limit}
+        assert len(workspace.serving_endpoints.calls) == 1
+    finally:
+        transport.close()
+
+
 def test_the_size_counted_is_the_wrapped_envelope_not_the_payload():
     """Every quote is escaped again once the payload is a string inside the
     envelope, so a payload under the limit can be over it on the wire."""

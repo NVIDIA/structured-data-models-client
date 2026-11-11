@@ -37,6 +37,7 @@ def request_for(context_rows, predict_rows, model):
         'users': pd.DataFrame(
             {
                 'id': range(count),
+                'feature': [i * 2.5 for i in range(count)],
                 'value': [i * 1.25 for i in range(context_rows)]
                 + [None] * predict_rows,
             }
@@ -54,6 +55,7 @@ def request_for(context_rows, predict_rows, model):
         keys['events'] = 'event'
     schema = Schema.from_data(tables, primary_keys=keys)
     schema['users']['value'].stype = 'numerical'
+    schema['users']['feature'].stype = 'numerical'
     options = (
         {'rows_per_call': predict_rows}
         if isinstance(model, KumoRelational)
