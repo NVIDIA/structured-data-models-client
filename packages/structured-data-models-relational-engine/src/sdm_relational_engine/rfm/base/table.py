@@ -1165,9 +1165,46 @@ class Table(ABC):
             except (ValueError, TypeError, ArithmeticError):
                 return ser
 
+        def _time_of_day_to_text(ser: pd.Series) -> pd.Series:
+            r"""A time-of-day column as ISO text: ``HH:MM:SS``, followed by the
+            fraction of a second where there is one, exact to the unit of the
+            column. Nulls stay null.
+            """
+            arrow_type = ser.dtype.pyarrow_dtype
+            ticks = 10 ** {'s': 0, 'ms': 3, 'us': 6, 'ns': 9}[arrow_type.unit]
+            width = len(str(ticks)) - 1
+            raw = ser.astype(
+                pd.ArrowDtype(
+                    pa.int32() if arrow_type.bit_width == 32 else pa.int64()
+                )
+            )
+
+            def _format(value: int) -> str:
+                seconds, fraction = divmod(int(value), ticks)
+                minutes, second = divmod(seconds, 60)
+                hour, minute = divmod(minutes, 60)
+                text = f'{hour:02d}:{minute:02d}:{second:02d}'
+                if fraction:
+                    text += '.' + str(fraction).zfill(width).rstrip('0')
+                return text
+
+            return pd.Series(
+                [None if pd.isna(v) else _format(v) for v in raw],
+                index=ser.index,
+                name=ser.name,
+                dtype=pd.ArrowDtype(pa.string()),
+            )
+
         for column_name in df.columns:
             dtype = (dtype_dict or {}).get(column_name)
             stype = (stype_dict or {}).get(column_name)
+
+            if (
+                dtype == Dtype.string
+                and isinstance(df[column_name].dtype, pd.ArrowDtype)
+                and pa.types.is_time(df[column_name].dtype.pyarrow_dtype)
+            ):
+                df[column_name] = _time_of_day_to_text(df[column_name])
 
             if isinstance(
                 df[column_name].dtype, pd.ArrowDtype

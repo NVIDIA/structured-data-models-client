@@ -9,6 +9,8 @@ import pandas as pd
 from dateutil.parser import UnknownTimezoneWarning
 from predictive_query.schema.typing import Dtype, Stype
 
+_TIME_OF_DAY = r'\d{1,2}:\d{2}(:\d{2}(\.\d+)?)?'
+
 
 def contains_timestamp(ser: pd.Series, column_name: str, dtype: Dtype) -> bool:
     if not Stype.timestamp.supports_dtype(dtype):
@@ -37,6 +39,11 @@ def contains_timestamp(ser: pd.Series, column_name: str, dtype: Dtype) -> bool:
         return False
 
     ser = ser.astype(str)  # Avoid parsing numbers as unix timestamps.
+
+    # A time of day names no moment, though `pd.to_datetime` places it on
+    # today's date:
+    if ser.str.fullmatch(_TIME_OF_DAY).all():
+        return False
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', UnknownTimezoneWarning)

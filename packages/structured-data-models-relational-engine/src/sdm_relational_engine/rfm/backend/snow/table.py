@@ -349,7 +349,9 @@ class SnowTable(Table):
         if dtype.startswith('DATE') or dtype.startswith('TIMESTAMP'):
             return Dtype.date
         if dtype.startswith('TIME'):
-            return Dtype.time
+            # A time of day has no date, so it is no timestamp. It is read as
+            # its ISO text, which keeps every value and its precision:
+            return Dtype.string
         if dtype.startswith('VECTOR'):
             try:  # Parse element data type from 'VECTOR(dtype, dimension)':
                 dtype = dtype.split(',')[0].split('(')[1].strip()
