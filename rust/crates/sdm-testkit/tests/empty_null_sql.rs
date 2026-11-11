@@ -94,3 +94,52 @@ fn family_cases_execute_with_expected_outcomes_and_encodable_results() {
         }
     }
 }
+
+/// The texts `seen`'s `stage` ran.
+fn ran(seen: &Observed, stage: &str) -> Vec<String> {
+    let driver = seen.driver.as_ref().expect("a driver record");
+    driver["capture"]["statements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["stage"] == stage)
+        .map(|s| s["sql"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// Nulls and empty facts leave every windowed read whole: the label window's
+/// two cast bounds, and the neighbors' cast bound, nulls-last newest-first
+/// order and per-seed cap; an all-null feature is still read by the lookup.
+#[test]
+fn null_and_empty_reads_keep_their_window_order_and_projection() {
+    let cast = r#"CAST(t."ts" AS TIMESTAMP)"#;
+    let mut checked = 0;
+    for (case, seen) in observed() {
+        if seen.answer.outcome().0 != "success" {
+            continue;
+        }
+        let materialized = ran(&seen, "materialize");
+        let reads = |text: &str| materialized.iter().any(|sql| sql.contains(text));
+        assert!(
+            reads(&format!("{cast} <= s.\"end\"\n AND {cast} > s.\"start\"")),
+            "{}: the label window",
+            case.id
+        );
+        assert!(
+            reads(&format!(
+                "{cast} <= s.\"time\"\nQUALIFY ROW_NUMBER() OVER (\n  PARTITION BY s.\"batch\"\n  ORDER BY {cast} DESC NULLS LAST, t.\"order_id\" ASC NULLS LAST\n) <= 32"
+            )),
+            "{}: the neighbors",
+            case.id
+        );
+        if case.id == "null.feature-all-null" {
+            assert!(
+                reads("t.\"user_id\", t.\"age\", t.\"country\", t.\"f\"\nFROM"),
+                "{}: the all-null feature",
+                case.id
+            );
+        }
+        checked += 1;
+    }
+    assert_eq!(checked, 5);
+}

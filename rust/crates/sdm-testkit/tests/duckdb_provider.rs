@@ -1071,6 +1071,61 @@ fn materialization_records_complete_encodable_database_reads() {
     assert!(comparable > 0);
     assert_eq!(logged["compared"].as_u64(), Some(comparable as u64));
     assert_eq!(logged["differing"], serde_json::json!([]));
+    // The journey's budget: ten reads describe the source; materialize
+    // re-reads the two catalogs (plan B's refreshes) and runs six more.
+    let per_stage = |stage: &str| statements.iter().filter(|s| s["stage"] == stage).count();
+    assert_eq!(
+        (
+            per_stage("from_source"),
+            per_stage("materialize"),
+            per_stage("predict")
+        ),
+        (10, 8, 0)
+    );
+    let refreshes = statements
+        .iter()
+        .filter(|s| s["purpose"] == sdm_testkit::plan_b::LOCATE)
+        .count();
+    assert_eq!(refreshes, 2);
+    assert_eq!(logged["statements"].as_u64(), Some(18));
+    // One whole entity lookup and one whole neighbor read, each with the
+    // key set it binds.
+    let (lookup, neighbors) = keyed_reads(&observed.fetches);
+    assert_eq!(
+        lookup,
+        serde_json::json!([{
+            "dialect": "duckdb",
+            "text": r#"SELECT s."batch" AS "__kumo_batch__", COUNT(*) OVER (PARTITION BY s."batch") AS "__kumo_matches__", t."user_id", t."age", t."country"
+FROM "__sdm_seeds__" s
+JOIN "users" t
+  ON t."user_id" = s."key"
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY s."batch"
+) = 1"#,
+            "params": [key_set(2, &[])],
+        }])
+    );
+    assert_eq!(
+        neighbors,
+        serde_json::json!([{
+            "dialect": "duckdb",
+            "text": r#"SELECT s."batch" AS "__kumo_batch__", t."order_id", t."user_id", t."price", t."ts"
+FROM "__sdm_seeds__" s
+JOIN "orders" t
+  ON t."user_id" = s."key"
+ AND CAST(t."ts" AS TIMESTAMP) <= s."time"
+QUALIFY ROW_NUMBER() OVER (
+  PARTITION BY s."batch"
+  ORDER BY CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."order_id" ASC NULLS LAST
+) <= 32
+ORDER BY s."batch", CAST(t."ts" AS TIMESTAMP) DESC NULLS LAST, t."order_id" ASC NULLS LAST"#,
+            "params": [key_set(3, &[serde_json::json!({
+                "name": "time",
+                "type": {"type": "timestamp", "unit": "ns", "zone": null},
+                "nullable": false,
+            })])],
+        }])
+    );
     for stage in ["from_source", "materialize"] {
         assert!(
             statements
@@ -1095,6 +1150,35 @@ fn materialization_records_complete_encodable_database_reads() {
             assert_eq!(column, &field["name"]);
         }
     }
+}
+
+/// The planned statements of a run's entity lookup and of its neighbor
+/// read with a per-seed cap.
+fn keyed_reads(fetches: &[Value]) -> (Value, Value) {
+    let planned = |wanted: &dyn Fn(&Value) -> bool| {
+        let found: Vec<_> = fetches.iter().filter(|f| wanted(&f["request"])).collect();
+        assert_eq!(found.len(), 1, "one such read");
+        found[0]["plan"]["statements"].clone()
+    };
+    (
+        planned(&|r| r["request"] == "lookup"),
+        planned(&|r| r["request"] == "neighbors" && !r["per_seed"].is_null()),
+    )
+}
+
+/// A key-set parameter bound as `__sdm_seeds__`: its attachment, the key
+/// and batch columns, then `more`.
+fn key_set(attachment: u64, more: &[Value]) -> Value {
+    let mut columns = vec![
+        serde_json::json!({"name": "key", "type": {"type": "int64"}, "nullable": true}),
+        serde_json::json!({"name": "batch", "type": {"type": "int64"}, "nullable": false}),
+    ];
+    columns.extend(more.iter().cloned());
+    serde_json::json!({
+        "param": "key_set",
+        "keys": {"attachment": attachment, "columns": columns},
+        "relation": "__sdm_seeds__",
+    })
 }
 
 /// The answer to the one statement the shipped data layer plans for the

@@ -95,3 +95,47 @@ fn family_cases_execute_with_expected_outcomes_and_encodable_results() {
         }
     }
 }
+
+/// The texts `seen`'s `stage` ran.
+fn ran(seen: &Observed, stage: &str) -> Vec<String> {
+    let driver = seen.driver.as_ref().expect("a driver record");
+    driver["capture"]["statements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["stage"] == stage)
+        .map(|s| s["sql"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// A summed decimal is the label read's one value column; a wide decimal
+/// feature is read by the entity lookup; a key past `BIGINT` joins each
+/// keyed read through the seed cast to the key's type.
+#[test]
+fn decimal_reads_project_their_columns_and_cast_wide_keys() {
+    let seen: std::collections::BTreeMap<String, Observed> = observed()
+        .into_iter()
+        .map(|(case, seen)| (case.id, seen))
+        .collect();
+    let summed = ran(&seen["decimal.sum-10-2"], "materialize");
+    assert!(
+        summed.iter().any(|sql| sql.starts_with(
+            "SELECT s.\"batch\" AS \"__kumo_batch__\", t.\"ts\", t.\"amount\"\nFROM \"__sdm_seeds__\" s\n"
+        )),
+        "{summed:#?}"
+    );
+    let wide = ran(&seen["decimal.feature-38-0-wide"], "materialize");
+    assert!(
+        wide.iter().any(|sql| sql.contains(
+            "t.\"user_id\", t.\"age\", t.\"country\", t.\"f\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t"
+        )),
+        "{wide:#?}"
+    );
+    let keyed = ran(&seen["decimal.key-wide"], "materialize");
+    let cast = r#"ON t."user_id" = TRY_CAST(s."key" AS DECIMAL(38,0))"#;
+    assert_eq!(
+        keyed.iter().filter(|sql| sql.contains(cast)).count(),
+        3,
+        "{keyed:#?}"
+    );
+}

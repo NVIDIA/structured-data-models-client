@@ -115,3 +115,43 @@ fn family_cases_execute_with_expected_outcomes_and_encodable_results() {
         }
     }
 }
+
+/// The texts `seen`'s `stage` ran.
+fn ran(seen: &Observed, stage: &str) -> Vec<String> {
+    let driver = seen.driver.as_ref().expect("a driver record");
+    driver["capture"]["statements"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|s| s["stage"] == stage)
+        .map(|s| s["sql"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+/// A list column is read by the preview, which describes it, and left out
+/// of the entity lookup, which sends no list.
+#[test]
+fn a_list_column_is_previewed_and_left_out_of_the_lookup() {
+    let mut checked = 0;
+    for (case, seen) in observed() {
+        if !matches!(case.id.as_str(), "nested.list-int" | "nested.fixed-array") {
+            continue;
+        }
+        assert!(
+            ran(&seen, "from_source").contains(
+                &r#"SELECT "user_id", "age", "country", "f" FROM "users" LIMIT 1000"#.to_owned()
+            ),
+            "{}: the preview",
+            case.id
+        );
+        assert!(
+            ran(&seen, "materialize").iter().any(|sql| sql.contains(
+                "t.\"user_id\", t.\"age\", t.\"country\"\nFROM \"__sdm_seeds__\" s\nJOIN \"users\" t"
+            )),
+            "{}: the lookup",
+            case.id
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 2);
+}
