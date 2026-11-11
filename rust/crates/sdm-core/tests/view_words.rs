@@ -217,6 +217,93 @@ fn unsafe_text_and_untrusted_calls_are_worded_by_name() {
 }
 
 #[test]
+fn every_expression_refusal_reason_keeps_its_wording() {
+    for (expr, dialect, expected) in [
+        (
+            "\u{1c}select\u{1c}1",
+            None,
+            "it contains the SQL keyword 'select'",
+        ),
+        ("x --", None, "it contains '--'"),
+        (
+            "X FROM PAYROLL //",
+            Some(ExprDialect::Snowflake),
+            "it contains '//'",
+        ),
+        ("x)", None, "it closes a '(' it never opened"),
+        ("(x", None, "it leaves a '(' unclosed"),
+        (
+            "a$$ + secret(x) + b$$",
+            None,
+            "it leaves '$$' unpaired, so which part of it is quoted text cannot be established",
+        ),
+        (
+            "$$x$$",
+            Some(ExprDialect::Databricks),
+            "it contains '$$', which Databricks SQL does not quote with",
+        ),
+        (
+            "\"MY\\COL\" * 2",
+            Some(ExprDialect::Snowflake),
+            "it has a backslash inside a double-quoted name",
+        ),
+    ] {
+        let reason = view_expr::unsafe_reason(expr, dialect, spaces())
+            .map(|r| view_words::expr_reason(&r, dialect_words(&r)));
+        assert_eq!(reason.as_deref(), Some(expected), "{expr:?}");
+    }
+    let wide = ["a", "col", "d", "name", "order_date", "x", "y", "z"];
+    for (expr, dialect, columns, expected) in [
+        (
+            "cat.sch.f(x)",
+            ExprDialect::Databricks,
+            &wide[..],
+            "it calls the qualified function 'f'",
+        ),
+        (
+            "`f`(x)",
+            ExprDialect::Databricks,
+            &wide[..],
+            "it calls a function by a quoted name",
+        ),
+        (
+            "a[0](x)",
+            ExprDialect::Databricks,
+            &wide[..],
+            "it calls the result of an expression",
+        ),
+        (
+            "identifier(x)",
+            ExprDialect::Databricks,
+            &["x"][..],
+            "it names a function through IDENTIFIER()",
+        ),
+        (
+            "user",
+            ExprDialect::Databricks,
+            &["x"][..],
+            "it reads the session value 'user'",
+        ),
+        (
+            "`user`",
+            ExprDialect::Databricks,
+            &["x"][..],
+            "it reads the session value `user`",
+        ),
+        (
+            "\"user\"",
+            ExprDialect::Snowflake,
+            &["x"][..],
+            "it reads the session value \"user\"",
+        ),
+    ] {
+        let reason = view_expr::untrusted_call_reason(expr, dialect, columns, spaces())
+            .map(|r| view_words::expr_reason(&r, dialect_words(&r)));
+        assert_eq!(reason.as_deref(), Some(expected), "{expr:?}");
+    }
+}
+
+#[test]
 fn yaml_defaults_have_explicit_values_and_refusals() {
     for (kind, input, expected) in [
         ("INT", "'0012'", "12"),

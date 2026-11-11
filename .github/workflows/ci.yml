@@ -830,6 +830,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [configuration, native-wheel, native-test-ops]
+    services:
+      postgres: *postgres-service
     env:
       CELL: ref-pandas3
       CELL_PINS: pandas==3.0.6 pyarrow==25.0.1 numpy==2.5.3
@@ -872,6 +874,9 @@ jobs:
           "$RUNNER_TEMP/kit/bin/python" -I -c 'import sdm_client._native as n; assert n.TEST_OPS'
           echo "SDM_KIT_PYTHON=$RUNNER_TEMP/kit/bin/python" >> "$GITHUB_ENV"
       - name: The runner's controls and the route tests
+        env:
+          SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+          SDM_REQUIRE_POSTGRES: '1'
         run: python -m pytest contract/tests -q -m 'not tooling' -n auto --dist loadfile --timeout=600 --max-worker-restart=0
       # Observe the installed native client in each supported dependency cell.
       - &contract-gate

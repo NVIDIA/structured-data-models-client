@@ -294,13 +294,13 @@ def test_public_refusal_names_the_invalid_input(case_key: str) -> None:
             'INVALID_REQUEST',
         )
         required_words = ['users.d', 'type string', 'constant', 'quotes']
-    elif case_key == 'key.uint64-above-int64-max@sqlite':
-        # The maintained SQLite path now handles this input successfully.
+    elif case_key in {
+        'key.uint64-above-int64-max@sqlite',
+        'key.uint64-above-int64-max@postgres',
+    }:
+        # SQLite and PostgreSQL read these keys as exact text and succeed.
         assert _outcome(got['outcome']) == ('success', 'predict', None, None)
         return
-    elif case_key == 'key.uint64-above-int64-max@postgres':
-        expected = ('refusal', 'from_source', 'OverflowError', None)
-        required_words = ['int']
     assert same_outcome(expected, _outcome(got['outcome'])), case_key
     said = _words(got['message'])
     assert not said.startswith(GENERIC), (
@@ -349,24 +349,33 @@ def test_public_warnings_name_source_bounds_and_index_requirements(
     assert len(warnings) == count, (case_key, label, got['warnings'])
     if not count:
         return
-    message = warnings[0][1]
-    if label == 'context-before-data':
-        bounds = (
-            ('2023-12-03', '2024-01-01')
-            if case_id == 'shape.star.customers'
-            else ('2022-12-31', '2023-01-01')
-        )
-        assert all(bound in message for bound in bounds), message
-    elif label == 'anchor-after-data':
-        assert '2030-01-01' in message and '2024-07-07' in message
-    elif label == 'missing-indices':
-        counts = ('7', '4') if case_id == 'shape.star.customers' else ('3', '2')
-        assert (
-            f'Missing {counts[0]} indices in {counts[1]} tables' in message
-        ), message
-        assert 'primary' in message and 'foreign' in message, message
-    else:
-        assert message == 'overflow encountered in cast'
+    star = case_id == 'shape.star.customers'
+    expected_message = {
+        'context-before-data': (
+            'Context anchor timestamp is too early or aggregation time range '
+            'is too large. To form proper input data, we would need data back '
+            "to '{}', however, your data only contains data back to '{}'."
+        ).format(
+            *(
+                ('2023-12-03 00:00:00', '2024-01-01 00:00:00')
+                if star
+                else ('2022-12-31 00:00:00', '2023-01-01 00:00:00')
+            )
+        ),
+        'anchor-after-data': (
+            "Anchor timestamp '2030-01-01 00:00:00' is after the latest "
+            "timestamp '2024-07-07 00:00:00' in the data. Please make sure "
+            'this is intended.'
+        ),
+        'missing-indices': (
+            'Missing {} indices in {} tables for optimal database querying. '
+            'For improving runtime, we strongly suggest to create indices for '
+            'primary and foreign keys, e.g., automatically by instantiating '
+            'Kumo Relational via `KumoRelational(graph, optimize=True)`.'
+        ).format(*((7, 4) if star else (3, 2))),
+        'runtime-warning': 'overflow encountered in cast',
+    }[label]
+    assert warnings[0][1] == expected_message
 
 
 @pytest.mark.parametrize('name', sorted(INFINITY_SHOWN))
@@ -383,8 +392,14 @@ def test_infinite_timestamp_bounds_have_actionable_warning(name: str) -> None:
         warning for warning in got['warnings'] if 'time column' in warning[1]
     ]
     assert len(guessed) == 1
-    assert guessed[0][0] == 'SDMWarning'
-    assert INFINITY_SHOWN[name] in guessed[0][1]
+    assert guessed[0] == [
+        'SDMWarning',
+        'Some time columns were inferred, or refused, on a guess about what '
+        'a column holds:\n- events.f was not taken as the time column because '
+        f'every row that holds a value holds {INFINITY_SHOWN[name]}. If it '
+        'does say when a row became true, name it: '
+        "time_columns={'events': 'f'}.",
+    ]
 
 
 def test_diagnostic_cases_and_connector_selectors_are_complete() -> None:

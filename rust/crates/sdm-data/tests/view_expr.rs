@@ -87,7 +87,20 @@ fn pure_calls_are_allowed_but_user_code_and_session_values_require_trust() {
             "secret('scope', 'key')",
             "custom_function(x)",
             "db.custom_function(x)",
+            "current_catalog",
+            "current_database",
+            "current_date",
+            "current_path",
+            "current_role",
+            "current_schema",
+            "current_time",
+            "current_timestamp",
             "current_user",
+            "localtime",
+            "localtimestamp",
+            "session_user",
+            "user",
+            "x + CURRENT_USER",
         ] {
             let verdict =
                 view_expr::expression_verdict(expr, dialect, false, &["x"], spaces()).unwrap();
