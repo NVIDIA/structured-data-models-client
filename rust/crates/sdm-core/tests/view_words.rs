@@ -225,6 +225,11 @@ fn every_expression_refusal_reason_keeps_its_wording() {
             "it contains the SQL keyword 'select'",
         ),
         ("x --", None, "it contains '--'"),
+        (
+            "X FROM PAYROLL //",
+            Some(ExprDialect::Snowflake),
+            "it contains '//'",
+        ),
         ("x)", None, "it closes a '(' it never opened"),
         ("(x", None, "it leaves a '(' unclosed"),
         (
