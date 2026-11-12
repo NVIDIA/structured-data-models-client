@@ -82,7 +82,47 @@
       <dependency>
         <groupId>commons-codec</groupId>
         <artifactId>commons-codec</artifactId>
-        <version>1.22.1</version>
+        <version>1.23.0</version>
+      </dependency>
+      <!-- Spark 4.0.1 brings these at vulnerable versions; each pin is the lowest release on Spark's own line that clears them. -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>4.1.138.Final</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.glassfish.jersey</groupId>
+        <artifactId>jersey-bom</artifactId>
+        <version>3.0.17</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-bom</artifactId>
+        <version>2.25.5</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId><artifactId>zookeeper</artifactId><version>3.9.5</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId><artifactId>zookeeper-jute</artifactId><version>3.9.5</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId><artifactId>avro</artifactId><version>1.12.1</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId><artifactId>avro-mapred</artifactId><version>1.12.1</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.avro</groupId><artifactId>avro-ipc</artifactId><version>1.12.1</version>
+      </dependency>
+      <dependency>
+        <groupId>com.ibm.icu</groupId><artifactId>icu4j</artifactId><version>77.1</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -115,7 +155,16 @@
       <exclusions>
         <!-- Applications choose the SLF4J binding; tests already use slf4j-simple. -->
         <exclusion><groupId>org.apache.logging.log4j</groupId><artifactId>log4j-slf4j2-impl</artifactId></exclusion>
+        <!-- org.lz4 stopped at 1.8.x; the maintained fork is declared below. -->
+        <exclusion><groupId>org.lz4</groupId><artifactId>lz4-java</artifactId></exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>at.yawk.lz4</groupId>
+      <artifactId>lz4-java</artifactId>
+      <version>1.11.4</version>
+      <scope>provided</scope>
+      <optional>true</optional>
     </dependency>
     <!-- Official unified authentication, including refreshed OAuth credentials. -->
     <dependency>
