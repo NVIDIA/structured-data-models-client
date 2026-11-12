@@ -10,7 +10,7 @@
 //!
 //! The Python wheel of DuckDB links ICU, so a session there takes `SET
 //! TimeZone` and casts a `TIMESTAMPTZ` in that zone. The `icu` feature of
-//! `duckdb` 1.10506.0 needs DuckDB's sources beside the crate, which the
+//! `duckdb` 1.10506.1 needs DuckDB's sources beside the crate, which the
 //! published crate does not carry, so it cannot be built.
 //! [`open`] loads ICU explicitly instead, the extension DuckDB signs for
 //! this exact version, installed from DuckDB's repository the first time

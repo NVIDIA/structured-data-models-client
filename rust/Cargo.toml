@@ -19,7 +19,7 @@ license = "Apache-2.0"
 repository = "https://github.com/NVIDIA/structured-data-models-client"
 publish = false
 
-# One Arrow major across the workspace: duckdb =1.10506.0 (DuckDB 1.5.6, the
+# One Arrow major across the workspace: duckdb =1.10506.1 (DuckDB 1.5.6, the
 # embedded engine) uses Arrow 58, and arrow-pyarrow 58 needs pyo3 0.28.
 # Upgrade these dependencies together.
 [workspace.dependencies]
@@ -33,7 +33,7 @@ arrow-row = "58"
 arrow-schema = "58"
 arrow-select = "58"
 base64 = "0.22"
-duckdb = { version = "=1.10506.0", features = ["bundled"] }
+duckdb = { version = "=1.10506.1", features = ["bundled"] }
 # Python's regular expressions, lookaround and backtracking order included,
 # for view-expression validation.
 fancy-regex = "0.19"
