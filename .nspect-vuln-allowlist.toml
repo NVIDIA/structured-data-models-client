@@ -1,0 +1,203 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+version = "1.0.0"
+
+[[oss.allowlist]]
+cve-id = "CVE-2026-115905"
+package = "zip"
+versions = ["6.0.0"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Build dependency of libduckdb-sys only. libduckdb-sys reaches this workspace only through sdm-testkit, the dev-only test host (publish = false). cargo tree -p sdm-py and -p sdm-jni with -e normal,build show no zip on any of the five release targets. No shipped wheel or native library contains it."
+
+[[oss.allowlist]]
+cve-id = "CVE-2026-115907"
+package = "zip"
+versions = ["6.0.0"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Build dependency of libduckdb-sys only. libduckdb-sys reaches this workspace only through sdm-testkit, the dev-only test host (publish = false). cargo tree -p sdm-py and -p sdm-jni with -e normal,build show no zip on any of the five release targets. No shipped wheel or native library contains it."
+
+[[oss.allowlist]]
+cve-id = "CVE-2026-115909"
+package = "zip"
+versions = ["6.0.0"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Build dependency of libduckdb-sys only. libduckdb-sys reaches this workspace only through sdm-testkit, the dev-only test host (publish = false). cargo tree -p sdm-py and -p sdm-jni with -e normal,build show no zip on any of the five release targets. No shipped wheel or native library contains it."
+
+[[oss.allowlist]]
+cve-id = "CVE-2026-56817"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-13743"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-13744"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-13753"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-13755"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-23495"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-23581"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-29111"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-33768"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-33790"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-9430"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-9433"
+package = "Netty Project"
+versions = ["4.1.118"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from io.netty 4.1.118.Final under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2025-12456"
+package = "Apache ZooKeeper"
+versions = ["3.9.3"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from org.apache.zookeeper:zookeeper 3.9.3 under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-3557"
+package = "Apache ZooKeeper"
+versions = ["3.9.3"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from org.apache.zookeeper:zookeeper 3.9.3 under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2025-28525"
+package = "Jersey"
+versions = ["3.0.16"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from org.glassfish.jersey 3.0.16 under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "BDSA-2026-2029"
+package = "Apache Avro"
+versions = ["1.12.0"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from org.apache.avro:avro 1.12.0 under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "CVE-2025-5222"
+package = "ICU4J"
+versions = ["76.1"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from com.ibm.icu:icu4j 76.1 under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "CVE-2026-106451"
+package = "lz4java"
+versions = ["1.8.0"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from org.lz4:lz4-java 1.8.0 under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."
+
+[[oss.allowlist]]
+cve-id = "CVE-2026-34481"
+package = "Apache Log4j Layout for JSON template"
+versions = ["2.24.3"]
+jira = "NO-REF"
+exception_status = "open"
+exception_expiration = 2027-05-12
+comment = "Comes from org.apache.logging.log4j:log4j-layout-template-json 2.24.3 under org.apache.spark:spark-sql_2.13 4.0.1. java/pom.xml declares Spark with provided scope and optional true, so it is never packaged, never copied to target/lib and never passed to a consumer. mvn -f java/pom.xml dependency:tree lists it as provided (optional). No Python wheel contains Java code, and the Java library is not published anywhere."

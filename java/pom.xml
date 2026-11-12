@@ -68,6 +68,25 @@
     <sdm.java.flags>--enable-native-access=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED</sdm.java.flags>
   </properties>
 
+  <!-- Spark is declared first, so without these pins its older Jackson and
+       the Commons Codec under commons-compress win at compile scope. -->
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>2.22.4</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>commons-codec</groupId>
+        <artifactId>commons-codec</artifactId>
+        <version>1.22.1</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
     <!-- Streaming file decompression and S3 input; no subprocess or whole-object heap copy. -->
     <dependency>
