@@ -4,8 +4,9 @@ The Python wheel and Java JAR carry the Rust core, built from
 rust/bindings/sdm-py and rust/bindings/sdm-jni with production features for the targets
 x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin, x86_64-pc-windows-msvc. These are the crates
 linked into any production build, other than this repository's own, each with the
-licence, copyright and notice files it ships, and then the Rust standard
-library. Written by scripts/rust_core/rust_notices.py from rust/Cargo.lock;
+licence, copyright and notice files it ships, then the IANA Time Zone
+Database that jiff-tzdb embeds, and then the Rust standard library.
+Written by scripts/rust_core/rust_notices.py from rust/Cargo.lock;
 regenerate it with --write rather than editing it.
 
 Crates
@@ -5113,6 +5114,22 @@ Licence: MIT
 
 --- LICENSE-MIT ---
 (the same text as LICENSE-MIT of dyn-clone 1.0.20 above)
+
+
+The IANA Time Zone Database
+===========================
+
+jiff-tzdb 0.1.9 embeds the IANA Time Zone Database, release 2026e,
+compiled to TZif data: https://www.iana.org/time-zones. The tz project states
+its terms in the LICENSE file of that release,
+https://data.iana.org/time-zones/releases/tzdata2026e.tar.gz:
+
+--- LICENSE ---
+Unless specified below, all files in the tz code and data (including
+this LICENSE file) are in the public domain.
+
+If the files date.c, newstrftime.3, and strftime.c are present, they
+contain material derived from BSD and use the BSD 3-clause license.
 
 
 The Rust standard library

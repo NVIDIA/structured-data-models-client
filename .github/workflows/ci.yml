@@ -458,6 +458,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-native-linux-x86_64
+          retention-days: 1
           path: java-natives/
 
   # The binding with its test-only operations, built beside native-wheel by
@@ -506,10 +507,12 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-wheel-test-ops
+          retention-days: 1
           path: native-test-ops/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-test-ops-native
+          retention-days: 1
           path: rust/target/release/libsdm_jni.so
 
   native-wheel-aarch64:
@@ -539,6 +542,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ matrix.artifact }}
+          retention-days: ${{ matrix.build == 'test-ops' && 1 || '' }}
           path: native/
       - name: The Java binding, by platform
         if: matrix.java == 'shipped'
@@ -549,6 +553,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-native-linux-aarch64
+          retention-days: 1
           path: java-natives/
 
   # The binding's tests on the wheel that ships, at the E16 floor: the file
@@ -1499,6 +1504,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-native-${{ matrix.platform }}
+          retention-days: 1
           path: java-natives/
 
   # The one JAR, with every platform's native (the all-natives profile
@@ -1551,6 +1557,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-jar
+          retention-days: 1
           path: java-jar/
 
   java-test:

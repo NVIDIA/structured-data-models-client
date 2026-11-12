@@ -12,7 +12,9 @@ shipped Linux, macOS and Windows target, with proc macros and build scripts left
 them is linked, and the workspace's own crates left out because they are
 this repository's. For each, the file reproduces the licence, copyright and
 notice files the crate ships, which is what its licence asks of a binary
-distribution, and the Rust standard library is named after them.
+distribution. The IANA Time Zone Database that jiff-tzdb embeds follows them
+with the release it embeds and the tz project's own statement of its terms,
+and then the Rust standard library is named.
 
     scripts/rust_core/rust_notices.py --write regenerate the file
     scripts/rust_core/rust_notices.py --check fail if it is out of date
@@ -65,9 +67,31 @@ The Python wheel and Java JAR carry the Rust core, built from
 rust/bindings/sdm-py and rust/bindings/sdm-jni with production features for the targets
 {', '.join(TARGETS)}. These are the crates
 linked into any production build, other than this repository's own, each with the
-licence, copyright and notice files it ships, and then the Rust standard
-library. Written by scripts/rust_core/rust_notices.py from rust/Cargo.lock;
+licence, copyright and notice files it ships, then the IANA Time Zone
+Database that jiff-tzdb embeds, and then the Rust standard library.
+Written by scripts/rust_core/rust_notices.py from rust/Cargo.lock;
 regenerate it with --write rather than editing it.
+"""
+
+TZDB_LICENSE_RELEASE = '2026e'
+TZDB_LICENSE = """\
+Unless specified below, all files in the tz code and data (including
+this LICENSE file) are in the public domain.
+
+If the files date.c, newstrftime.3, and strftime.c are present, they
+contain material derived from BSD and use the BSD 3-clause license."""
+
+TZDB = """\
+The IANA Time Zone Database
+===========================
+
+jiff-tzdb {crate} embeds the IANA Time Zone Database, release {release},
+compiled to TZif data: https://www.iana.org/time-zones. The tz project states
+its terms in the LICENSE file of that release,
+https://data.iana.org/time-zones/releases/tzdata{release}.tar.gz:
+
+--- LICENSE ---
+{licence}
 """
 
 STD = """\
@@ -139,6 +163,49 @@ def _text(path: pathlib.Path) -> str:
     return '\n'.join(line.rstrip() for line in text.strip().splitlines())
 
 
+def _tzdb_release(root: pathlib.Path) -> str:
+    """The IANA Time Zone Database release the jiff-tzdb crate at `root`
+    embeds, as its `VERSION` names it.
+
+    Stops when the release cannot be read, or when it is not the one whose
+    LICENSE file :data:`TZDB_LICENSE` reproduces, so that a new release is
+    attributed only after its terms are read again.
+    """
+    source = root / 'tzname.rs'
+    text = source.read_text() if source.is_file() else ''
+    found = re.search(
+        r'static VERSION: Option<&str> = Some\(r?"(\d{4}[a-z]+)"\);', text
+    )
+    if not found:
+        sys.exit(f'{source} names no IANA Time Zone Database release')
+    release = found.group(1)
+    if release != TZDB_LICENSE_RELEASE:
+        sys.exit(
+            f'jiff-tzdb embeds tzdata{release}, but TZDB_LICENSE is the '
+            f'LICENSE of tzdata{TZDB_LICENSE_RELEASE}; read the new LICENSE '
+            f'and update both'
+        )
+    return release
+
+
+def _tzdb(
+    packages: dict[tuple[str, str], dict], crates: list[tuple[str, str]]
+) -> str:
+    """The section for the IANA Time Zone Database, if jiff-tzdb is linked."""
+    for name, version in crates:
+        if name == 'jiff-tzdb':
+            root = pathlib.Path(packages[(name, version)]['manifest_path'])
+            return (
+                TZDB.format(
+                    crate=version,
+                    release=_tzdb_release(root.parent),
+                    licence=TZDB_LICENSE,
+                )
+                + '\n\n'
+            )
+    return ''
+
+
 def render() -> str:
     packages = _packages()
     crates = _linked()
@@ -203,6 +270,7 @@ def render() -> str:
         + '\n\n\n'
         + '\n\n\n'.join(sections)
         + '\n\n\n'
+        + _tzdb(packages, crates)
         + STD.format(toolchain=_toolchain())
     )
 
