@@ -195,11 +195,14 @@ def _tzdb(
     for name, version in crates:
         if name == 'jiff-tzdb':
             root = pathlib.Path(packages[(name, version)]['manifest_path'])
-            return TZDB.format(
-                crate=version,
-                release=_tzdb_release(root.parent),
-                licence=TZDB_LICENSE,
-            ) + '\n\n'
+            return (
+                TZDB.format(
+                    crate=version,
+                    release=_tzdb_release(root.parent),
+                    licence=TZDB_LICENSE,
+                )
+                + '\n\n'
+            )
     return ''
 
 

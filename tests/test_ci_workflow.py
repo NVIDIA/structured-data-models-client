@@ -1291,7 +1291,9 @@ def test_contract_installer_preserves_supported_duckdb_runtime(
     assert '$CELL_PINS duckdb pyyaml' in install
 
 
-def test_unreleased_binaries_are_kept_one_day_and_shipped_wheels_are_not() -> None:
+def test_unreleased_binaries_are_kept_one_day_and_shipped_wheels_are_not() -> (
+    None
+):
     uploads = {
         step['with']['name']: step['with']
         for job in _workflow()['jobs'].values()
@@ -1299,14 +1301,16 @@ def test_unreleased_binaries_are_kept_one_day_and_shipped_wheels_are_not() -> No
         if str(step.get('uses', '')).startswith('actions/upload-artifact@')
     }
     unreleased = sorted(
-        name for name in uploads if name.startswith('java-') or 'test-ops' in name
+        name
+        for name in uploads
+        if name.startswith('java-') or 'test-ops' in name
     )
     assert {'java-jar', 'java-test-ops-native', 'native-wheel-test-ops'} <= set(
         unreleased
     )
-    assert {name: uploads[name].get('retention-days') for name in unreleased} == {
-        name: 1 for name in unreleased
-    }
+    assert {
+        name: uploads[name].get('retention-days') for name in unreleased
+    } == {name: 1 for name in unreleased}
     assert uploads['${{ matrix.artifact }}']['retention-days'] == (
         "${{ matrix.build == 'test-ops' && 1 || '' }}"
     )
