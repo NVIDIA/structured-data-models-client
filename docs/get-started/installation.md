@@ -9,6 +9,12 @@
 | `pip install 'structured-data-models-client[databricks-serving]'` | Reaches a model served on Databricks Model Serving, through `SDMClient.for_databricks_serving`. Not in `[all]`: it is a way to reach a model, not a backend. |
 | `pip install 'structured-data-models-client[in-process]'` | Runs the models in this Python process with structured-data-models, through `SDMClient.in_process`. Brings PyTorch. **Python 3.11 or later**: on 3.10 the extra installs nothing, and `in_process()` says why. Not in `[all]`, for the same reason as `[databricks-serving]`. |
 
+The `postgres`, `lakebase` and `all` extras install psycopg 3.1 or later.
+The `postgres` extra also installs psycopg-binary.
+Both are licensed LGPL-3.0-only.
+Your installer resolves them from the package index.
+NVIDIA's wheels do not bundle them.
+
 **Install distribution names; import module names.**
 The three maintained distributions and their imports are listed below.
 The client wheel includes the shared Rust core for PQL, sampling and prediction preparation.

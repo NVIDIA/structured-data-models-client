@@ -89,6 +89,12 @@ See [the local-model quickstart](docs/get-started/quickstart.md).
 | `pip install 'structured-data-models-client[snowflake]'` | Reads tables from a warehouse. Also `[sqlite]`, `[duckdb]`, `[postgres]`, `[databricks]`, `[lakebase]`, `[s3]` |
 | `pip install 'structured-data-models-client[all]'` | Both models and every warehouse backend |
 
+The `postgres`, `lakebase` and `all` extras install psycopg 3.1 or later.
+The `postgres` extra also installs psycopg-binary.
+Both are licensed LGPL-3.0-only.
+Your installer resolves them from the package index.
+NVIDIA's wheels do not bundle them.
+
 [Installation](docs/get-started/installation.md) has the rest, including what
 differs on Databricks.
 

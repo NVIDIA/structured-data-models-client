@@ -10,6 +10,9 @@ Compiled dependencies
 Python native wheels and Java native libraries include Rust dependencies.
 Their licenses and notices are collected in
 packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt.
+They embed the IANA Time Zone Database through the jiff-tzdb crate. The tz
+project places it in the public domain. Its release and the tz project's
+LICENSE are in the same file.
 Optional Python connector dependencies are resolved at installation time.
 
 The offline schema visualization includes Mermaid 11.15.0, distributed under

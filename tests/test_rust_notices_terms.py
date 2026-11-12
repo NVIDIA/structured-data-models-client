@@ -2,7 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Which of a crate's files ``rust_notices.py`` reproduces as its terms.
+"""Which of a crate's files ``rust_notices.py`` reproduces as its terms, and
+which IANA Time Zone Database release it attributes.
 
 yaml-rust2 ships its two licences as ``MIT-LICENSE`` and
 ``Apache-LICENSE``, which the pattern missed, so the notices script stopped
@@ -46,3 +47,24 @@ def test_a_crate_s_terms_files_are_found_by_name(
     name: str, terms: bool
 ) -> None:
     assert bool(rust_notices.TERMS.match(name)) is terms
+
+
+@pytest.mark.parametrize(
+    ('version', 'release'),
+    [
+        ('Some(r"2026e")', '2026e'),
+        ('Some(r"2027a")', None),
+        ('None', None),
+    ],
+)
+def test_the_embedded_tzdb_release_is_read_from_jiff_tzdb(
+    tmp_path: Path, version: str, release: str | None
+) -> None:
+    (tmp_path / 'tzname.rs').write_text(
+        f'pub(super) static VERSION: Option<&str> = {version};\n'
+    )
+    if release is None:
+        with pytest.raises(SystemExit):
+            rust_notices._tzdb_release(tmp_path)
+    else:
+        assert rust_notices._tzdb_release(tmp_path) == release

@@ -175,6 +175,8 @@ Both workflows share one repository-wide concurrency group, while the required p
 They reuse production wheel, JAR and JNI artifacts from successful full CI for the exact candidate commit.
 The matrix loads the exact JAR; focused Java API and giant tests compile the exact clean source commit and load the verified packaged JNI, recording source-equivalent execution.
 Set the same `ci_run_id` dispatch input to pin identical bytes across reruns.
+CI keeps the JAR and JNI artifacts for one day.
+A later dispatch needs a CI run from that day.
 For the optional registry, use the installed candidate Python interpreter, its pretrained model runtime, the candidate JNI library and Maven:
 
 ```sh

@@ -8,6 +8,9 @@ This distribution includes third-party code:
 - The native module, sdm_client._native, statically links Rust crates. Their
   licenses and notices are in THIRD-PARTY-NOTICES-RUST.txt, beside this file
   in the wheel's .dist-info/licenses directory.
+- The native module embeds the IANA Time Zone Database through the jiff-tzdb
+  crate. The tz project places it in the public domain. Its release and the
+  tz project's LICENSE are in THIRD-PARTY-NOTICES-RUST.txt.
 - The offline schema visualization bundles Mermaid 11.15.0 and its
   dependencies, MIT licensed, as sdm_client/assets/mermaid.min.js. Its license
   is in sdm_client/assets/MERMAID_LICENSE, its source in

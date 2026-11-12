@@ -158,6 +158,8 @@ The public API snapshot records this version update; publication remains pending
 
 ### Fixed
 
+- The client wheel's notices name the IANA Time Zone Database that its native module embeds, with the release and the tz project's LICENSE.
+  The installation docs say that the `postgres` and `lakebase` extras install LGPL-3.0-only psycopg, which the wheels do not bundle.
 - Explicit empty outputs remain invalid with `EXPLAIN`; unsupported local-runtime outputs are refused before model weights load.
 - Gradient identities and merging run in Rust, with generated transport keys distinguished from genuine source keys.
   Merged explanations and predictions now use matching row indices, including repeated result parts.
