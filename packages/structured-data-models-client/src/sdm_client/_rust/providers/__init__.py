@@ -57,15 +57,19 @@ _WRITTEN_IN: dict[str, str] = {
 
 
 def __getattr__(name: str) -> Any:
-    r"""A provider class, imported and kept on the first read of its name."""
+    r"""A provider class, imported on each read of its name.
+
+    The class read is not bound here. A name bound on the first read would
+    outlive the module it was read from, and a run that follows a test which
+    swapped a driver out and back would answer with the class the swap made
+    rather than the one the module holds.
+    """
     if name not in _WRITTEN_IN:
         raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
     module = importlib.import_module(
         f'sdm_client._rust.providers.{_WRITTEN_IN[name]}'
     )
-    made = getattr(module, name)
-    globals()[name] = made
-    return made
+    return getattr(module, name)
 
 
 def for_source(source: Any) -> tuple[dict[str, Any], Any]:
