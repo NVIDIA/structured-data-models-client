@@ -1291,9 +1291,7 @@ def test_contract_installer_preserves_supported_duckdb_runtime(
     assert '$CELL_PINS duckdb pyyaml' in install
 
 
-def test_unreleased_binaries_are_kept_one_day_and_shipped_wheels_are_not() -> (
-    None
-):
+def test_unreleased_binaries_expire_in_a_day() -> None:
     uploads = {
         step['with']['name']: step['with']
         for job in _workflow()['jobs'].values()
