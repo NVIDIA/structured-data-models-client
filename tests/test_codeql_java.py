@@ -98,3 +98,12 @@ def test_java_build_is_traced_before_analysis_and_checked_after() -> None:
         == "matrix.language == 'java-kotlin'"
     )
     assert job['permissions']['security-events'] == 'write'
+
+
+def test_release_branch_is_scanned() -> None:
+    workflow = yaml.load(
+        (ROOT / '.github/workflows/codeql.yml').read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    for event in ('push', 'pull_request'):
+        assert workflow['on'][event]['branches'] == ['main', 'v2-candidate']
