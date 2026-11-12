@@ -15,16 +15,9 @@ to that, by its imports and by running one with pandas unimportable.
 
 from __future__ import annotations
 
+import importlib
+import sys
 from typing import Any
-
-from sdm_client._rust.providers.databricks import (
-    DatabricksSparkProvider,
-    DatabricksSqlProvider,
-)
-from sdm_client._rust.providers.duckdb import DuckDBProvider
-from sdm_client._rust.providers.postgres import PostgresProvider
-from sdm_client._rust.providers.snowflake import SnowflakeProvider
-from sdm_client._rust.providers.sqlite import SqliteProvider
 
 __all__ = [
     'DatabricksSparkProvider',
@@ -48,6 +41,35 @@ _BY_KIND: dict[str, tuple[str, str]] = {
     'databricks-spark': ('databricks', 'DatabricksSparkProvider'),
     'snowflake': ('snowflake', 'SnowflakeProvider'),
 }
+
+#: The module each provider class is written in. Every one of them imports the
+#: warehouse package, which is an optional dependency, so a module is imported
+#: when a run first names its kind of source rather than when this one is. A
+#: route over frames names none of them and needs none of the package.
+_WRITTEN_IN: dict[str, str] = {
+    'DatabricksSparkProvider': 'databricks',
+    'DatabricksSqlProvider': 'databricks',
+    'DuckDBProvider': 'duckdb',
+    'PostgresProvider': 'postgres',
+    'SnowflakeProvider': 'snowflake',
+    'SqliteProvider': 'sqlite',
+}
+
+
+def __getattr__(name: str) -> Any:
+    r"""A provider class, imported on each read of its name.
+
+    The class read is not bound here. A name bound on the first read would
+    outlive the module it was read from, and a run that follows a test which
+    swapped a driver out and back would answer with the class the swap made
+    rather than the one the module holds.
+    """
+    if name not in _WRITTEN_IN:
+        raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+    module = importlib.import_module(
+        f'sdm_client._rust.providers.{_WRITTEN_IN[name]}'
+    )
+    return getattr(module, name)
 
 
 def for_source(source: Any) -> tuple[dict[str, Any], Any]:
@@ -87,7 +109,7 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
             'has no provider for'
         )
     dialect, name = _BY_KIND[kept.kind]
-    made = globals()[name]
+    made = getattr(sys.modules[__name__], name)
     choice['dialect'] = dialect
     parts = kept.namespace_parts()
     if any(part is not None for part in parts):
