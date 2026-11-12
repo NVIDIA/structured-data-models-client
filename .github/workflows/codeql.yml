@@ -24,9 +24,9 @@ name: CodeQL
 
 on:
   push:
-    branches: [main]
+    branches: [main, v2-candidate]
   pull_request:
-    branches: [main]
+    branches: [main, v2-candidate]
   schedule:
     # Monday, off the hour: scheduled runs queue behind everyone else's at the
     # boundary, and GitHub drops them under load.
