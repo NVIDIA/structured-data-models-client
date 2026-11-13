@@ -12,6 +12,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 CI = ROOT / '.github/workflows/ci.yml'
 #: Java's S1 legs: JDK, platform, database.
@@ -107,9 +109,43 @@ def test_the_java_tests_run_with_postgres_required() -> None:
         assert job['env']['SDM_POSTGRES_TEST_DSN'].startswith('postgresql://')
 
 
-def test_the_jar_s_artifact_holds_the_jdbc_drivers() -> None:
-    job, _ = _jobs()['java-jar']
-    assert 'cp -R java/target/jdbc java-jar/jdbc' in _text(job)
-    pom = (ROOT / 'java/pom.xml').read_text(encoding='utf-8')
-    for driver in ('duckdb_jdbc', 'sqlite-jdbc', 'postgresql'):
-        assert driver in pom, driver
+def test_the_jar_s_artifact_lists_and_never_carries_third_party_jars() -> None:
+    jobs = _jobs()
+    job, _ = jobs['java-jar']
+    text = _text(job)
+    assert 'java_dependency_list.py java/target' in text
+    assert '> java-jar/java-dependencies.tsv' in text
+    assert 'target/lib' not in text and 'target/jdbc' not in text
+    for name, (consumer, _) in jobs.items():
+        if 'jar/lib' in _text(consumer) or 'jar/jdbc' in _text(consumer):
+            assert 'java jar/FetchDependencies.java jar' in _text(consumer), (
+                name
+            )
+
+
+def test_every_downloadable_native_carries_its_notices() -> None:
+    workflow = yaml.safe_load(CI.read_text(encoding='utf-8'))
+    uploaded = set()
+    for job in workflow['jobs'].values():
+        for step in job.get('steps', []):
+            artifact = str(step.get('with', {}).get('name', ''))
+            if not str(step.get('uses', '')).startswith(
+                'actions/upload-artifact@'
+            ):
+                continue
+            if not artifact.startswith(('java-native', 'java-test-ops-native')):
+                continue
+            uploaded.add(artifact)
+            notices = (
+                'LICENSE NOTICE',
+                'packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt '
+                + step['with']['path'],
+            )
+            for notice in notices:
+                assert notice in _text(job), (artifact, notice)
+    assert uploaded == {
+        'java-native-linux-x86_64',
+        'java-native-linux-aarch64',
+        'java-native-${{ matrix.platform }}',
+        'java-test-ops-native',
+    }
