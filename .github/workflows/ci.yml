@@ -455,6 +455,7 @@ jobs:
         run: |
           mkdir -p java-natives/linux-x86_64
           cp rust/target/release/libsdm_jni.so java-natives/linux-x86_64/
+          cp LICENSE NOTICE packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt java-natives/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-native-linux-x86_64
@@ -509,11 +510,16 @@ jobs:
           name: native-wheel-test-ops
           retention-days: 1
           path: native-test-ops/
+      - name: The test-only Java binding, with its notices
+        run: |
+          mkdir -p java-test-ops-native
+          cp rust/target/release/libsdm_jni.so LICENSE NOTICE \
+            packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt java-test-ops-native/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-test-ops-native
           retention-days: 1
-          path: rust/target/release/libsdm_jni.so
+          path: java-test-ops-native/
 
   native-wheel-aarch64:
     name: native-wheel (aarch64, ${{ matrix.build }})
@@ -549,6 +555,7 @@ jobs:
         run: |
           mkdir -p java-natives/linux-aarch64
           cp rust/target/release/libsdm_jni.so java-natives/linux-aarch64/
+          cp LICENSE NOTICE packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt java-natives/
       - if: matrix.java == 'shipped'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -1501,6 +1508,7 @@ jobs:
           library=libsdm_jni.dylib
           if [ "$RUNNER_OS" = Windows ]; then library=sdm_jni.dll; fi
           cp "rust/target/release/$library" "java-natives/${{ matrix.platform }}/"
+          cp LICENSE NOTICE packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt java-natives/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-native-${{ matrix.platform }}
@@ -1508,7 +1516,10 @@ jobs:
           path: java-natives/
 
   # The one JAR, with every platform's native (the all-natives profile
-  # refuses a JAR missing one), and its runtime dependencies beside it.
+  # refuses a JAR missing one). Its third-party runtime dependencies and
+  # JDBC drivers are listed, not carried: each job that needs them fetches
+  # them from Maven Central, so the downloadable artifact holds no
+  # third-party JAR.
   java-jar:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1542,9 +1553,8 @@ jobs:
       - name: The JAR's artifact
         run: |
           mkdir -p java-jar
-          cp java/target/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar java/jar-load/JarLoad.java java-jar/
-          cp -R java/target/lib java-jar/lib
-          cp -R java/target/jdbc java-jar/jdbc
+          cp java/target/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar java/jar-load/JarLoad.java java/jar-load/FetchDependencies.java java-jar/
+          python3 scripts/java_dependency_list.py java/target ~/.m2/repository > java-jar/java-dependencies.tsv
           cp java/pom.xml java-jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.pom
           python3 - <<'PYCODE'
           import hashlib, json, os, pathlib
@@ -1672,6 +1682,7 @@ jobs:
             echo "::error::a Rust toolchain is in the container"; exit 1
           fi
           java -version
+          java jar/FetchDependencies.java jar
           separator=:
           if [ "$RUNNER_OS" = Windows ]; then separator=';'; fi
           java $FLAGS -cp "jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar${separator}jar/lib/*" jar/JarLoad.java
@@ -1728,6 +1739,8 @@ jobs:
         with:
           python-version: '3.12'
       - uses: ./.github/actions/python-cache
+      - name: The JAR's dependencies, from Maven Central
+        run: java jar/FetchDependencies.java jar
       - name: The S0 cases on the Java host
         run: |
           pip install pytest pyyaml jsonschema
@@ -1811,7 +1824,7 @@ jobs:
       # The reference cell's data-library pins, DuckDB 2 and
       # the drivers the contract loader writes SQLite and Postgres with:
       # what the runner's capture and the loader read with, never what the
-      # Java host reads with (its JDBC drivers, in the JAR's artifact).
+      # Java host reads with (its JDBC drivers, listed in the JAR's artifact).
       - name: Install the runner's environment
         run: |
           printf '%s\n' $CELL_PINS duckdb==2.0.0 > "$RUNNER_TEMP/cell.txt"
@@ -1826,6 +1839,8 @@ jobs:
           unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
             -Dtest=SchemaTest,PredictTest,PostgresReadTest,PostgresKeylessOrderTest test
+      - name: The JAR's dependencies, from Maven Central
+        run: java jar/FetchDependencies.java jar
       - name: The S1 cases on the Java host
         run: |
           python contract/runners/run_java.py --database "$DATABASE" \
