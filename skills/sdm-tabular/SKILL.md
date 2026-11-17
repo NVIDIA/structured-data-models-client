@@ -9,7 +9,7 @@ One table. You hold rows whose answer is known and rows whose answer you want.
 Both go in one request, the model reads them together, and the answer comes
 back a row at a time.
 
-Load [`../relational/SKILL.md`](../relational/SKILL.md) instead when the
+Load [`../sdm-relational/SKILL.md`](../sdm-relational/SKILL.md) instead when the
 question is about an entity and the records linked to it. The two models share
 this client's objects -- `Schema`, `PredictiveQuery`, `Request` -- and the
 language. What differs is almost everything that can be asked in it.
@@ -222,7 +222,7 @@ datetimes may appear as derived columns, and a table without numerical
 features gives an empty list. A gradient is the change in that output score
 per unit change in that column: a diagnostic, not a causal effect or a
 feature-importance ranking. The whole shape is under Explanations in
-[`docs/reference/prediction-output.md`](../../docs/reference/prediction-output.md).
+[`docs/reference/prediction-output.md`](https://github.com/NVIDIA/structured-data-models-client/blob/main/docs/reference/prediction-output.md).
 
 ## When it refuses
 
@@ -241,4 +241,4 @@ Catch `StructuredDataError` to catch all of them.
 ## Then
 
 - [`references/pql.md`](references/pql.md) — the query language on one table
-- [`../relational/SKILL.md`](../relational/SKILL.md) — when the question is about an entity and what it links to
+- [`../sdm-relational/SKILL.md`](../sdm-relational/SKILL.md) — when the question is about an entity and what it links to
