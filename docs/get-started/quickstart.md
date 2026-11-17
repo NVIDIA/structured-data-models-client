@@ -164,6 +164,21 @@ The relational notebook installs
 the tabular notebook installs
 `structured-data-models-client[databricks,databricks-serving]`.
 
+## Snowflake notebooks
+
+The Snowflake quickstarts run on Container Runtime with an active Snowpark
+session and a deployed NIM endpoint:
+
+- [Kumo Relational](../../examples/snowflake/kumo_relational_quickstart.ipynb)
+  samples uploaded AdventureWorks tables in place through `SnowflakeSource`.
+- [Kumo Tabular](../../examples/snowflake/kumo_tabular_quickstart.ipynb)
+  reads `Cleaned_data.csv` from a Snowflake stage and predicts through direct
+  requests and PQL.
+
+Download and upload the sample data yourself, following the notebook's source
+links and schema instructions. Configure external access for package
+installation and any NIM endpoint outside Snowflake.
+
 ## A model in this process
 
 The model can also run in your own Python process, with no NIM at all. The

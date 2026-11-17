@@ -9,6 +9,11 @@ these packages. All five distributions share one version and one entry.
 
 ### Added
 
+- Snowflake Container Runtime quickstarts for Kumo Relational and Kumo Tabular
+  in `examples/snowflake/`. The relational example samples uploaded
+  AdventureWorks tables through `SnowflakeSource`; the tabular example reads
+  `Cleaned_data.csv` from a stage. Both call a deployed NIM.
+
 - `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
   Python process with structured-data-models, through the same calls as a NIM:
   predictions, fitted sessions, rankings, forecasts and explanations. It loads each model
