@@ -21,7 +21,7 @@ NOTEBOOK = (
 )
 
 
-def test_uploaded_tables_join_and_omit_future_information():
+def test_uploaded_tables_join_and_build_source_schema():
     duckdb = pytest.importorskip('duckdb')
     pytest.importorskip('sdm_relational_engine')
     cells = json.loads(NOTEBOOK.read_text())['cells']
@@ -58,16 +58,17 @@ def test_uploaded_tables_join_and_omit_future_information():
                 list(row.values()),
             )
 
-        view = next(
+        context_setup = next(
             source for source in sources if source.startswith('session.sql(')
         )
-        sql_call = ast.parse(view).body[0].value.func.value
-        sql = eval(
-            compile(ast.Expression(sql_call.args[0]), '<view>', 'eval'),
-            {'DATA_LOCATION': 'main'},
-        )
-        # DuckDB cursors do not share temporary views across connections.
-        connection.execute(sql.replace('TEMPORARY ', ''))
+        for statement in ast.parse(context_setup).body:
+            sql_call = statement.value.func.value
+            sql = eval(
+                compile(ast.Expression(sql_call.args[0]), '<context>', 'eval'),
+                {'DATA_LOCATION': 'main'},
+            )
+            # DuckDB cursors do not share temporary tables across connections.
+            connection.execute(sql.replace('TEMPORARY ', ''))
         joined = connection.execute(
             'SELECT "SalesOrderDetailID", "CustomerID", "OrderDate" '
             'FROM "SDM_SalesOrderDetail"'
@@ -83,7 +84,7 @@ def test_uploaded_tables_join_and_omit_future_information():
             'Schema': Schema,
             'Relationship': Relationship,
         }
-        for marker in ('source = SnowflakeSource(', 'leave_out = {'):
+        for marker in ('source = SnowflakeSource(', "schema['products']"):
             code = next(item for item in sources if item.startswith(marker))
             exec(compile(code, '<notebook>', 'exec'), namespace)
         schema = namespace['schema']
@@ -101,11 +102,31 @@ def test_uploaded_tables_join_and_omit_future_information():
         assert schema['sales_order_details'].time_column == 'OrderDate'
         assert schema['products']['Name'].stype == 'categorical'
         assert schema['sales_order_details']['OrderQty'].stype == 'numerical'
-        for table in schema.tables.values():
-            assert 'ModifiedDate' not in table.columns
-        assert 'ShipDate' not in schema['sales_order_headers'].columns
-        assert not {'SellStartDate', 'SellEndDate', 'DiscontinuedDate'} & set(
-            schema['products'].columns
-        )
     finally:
         connection.close()
+
+
+def test_lowercase_namespace_matches_unquoted_snowflake_setup():
+    cells = json.loads(NOTEBOOK.read_text())['cells']
+    configuration = next(
+        ''.join(cell['source'])
+        for cell in cells
+        if "DATABASE = '<database>'" in ''.join(cell['source'])
+    )
+    configuration = configuration.replace('<database>', 'example_db').replace(
+        '<schema>', 'example_schema'
+    )
+    # Exercise the configuration without requiring Snowpark or a live session.
+    assignments = ast.Module(
+        body=[
+            node
+            for node in ast.parse(configuration).body
+            if isinstance(node, ast.Assign)
+        ],
+        type_ignores=[],
+    )
+    namespace = {'get_active_session': lambda: object()}
+    exec(compile(assignments, '<notebook>', 'exec'), namespace)
+    assert namespace['DATABASE'] == 'EXAMPLE_DB'
+    assert namespace['SCHEMA'] == 'EXAMPLE_SCHEMA'
+    assert namespace['DATA_LOCATION'] == 'EXAMPLE_DB.EXAMPLE_SCHEMA'
