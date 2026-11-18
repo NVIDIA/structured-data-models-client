@@ -36,40 +36,52 @@ final class ReaderFiles {
       return Files.newInputStream(uri.getScheme() == null ? Path.of(uri.toString()) : Path.of(uri));
     }
     com.nvidia.sdm.internal.OptionalDependency.AWS_S3.require();
-    AwsCredentialsProvider credentials = options.accessKey() != null
-        ? StaticCredentialsProvider.create(options.sessionToken() == null
-            ? AwsBasicCredentials.create(options.accessKey(), options.secretKey())
-            : AwsSessionCredentials.create(options.accessKey(), options.secretKey(), options.sessionToken()))
-        : options.profile() == null ? DefaultCredentialsProvider.builder().build()
-            : ProfileCredentialsProvider.builder().profileName(options.profile()).build();
-    S3Client client = null;
-    try {
-      var builder = S3Client.builder().credentialsProvider(credentials)
-          .httpClientBuilder(UrlConnectionHttpClient.builder());
-      if (options.region() != null) builder.region(Region.of(options.region()));
-      else if (options.profile() != null) builder.region(software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
-          .builder().profileName(options.profile()).build().getRegion());
-      client = builder.build();
-      InputStream stream = client.getObject(request -> request.bucket(uri.getHost()).key(uri.getPath().substring(1)));
-      S3Client owned = client;
-      return new FilterInputStream(stream) {
-        @Override public void close() throws IOException {
-          try { super.close(); }
-          finally {
-            try { owned.close(); }
-            finally { closeCredentials(credentials); }
-          }
-        }
-      };
-    } catch (RuntimeException failure) {
-      if (client != null) client.close();
-      closeCredentials(credentials);
-      throw new IOException("Could not open S3 input", failure);
-    }
+    return S3.open(uri, options);
   }
 
-  private static void closeCredentials(AwsCredentialsProvider credentials) {
-    if (credentials instanceof software.amazon.awssdk.utils.SdkAutoCloseable closeable) closeable.close();
+  /**
+   * S3 input, in a class of its own: the AWS SDK is an optional dependency, and the JVM loads this
+   * class (and verifies it against the SDK's classes) only once the SDK is known present.
+   */
+  private static final class S3 {
+    private S3() {}
+
+    static InputStream open(URI uri, ReadOptions options) throws IOException {
+      AwsCredentialsProvider credentials = options.accessKey() != null
+          ? StaticCredentialsProvider.create(options.sessionToken() == null
+              ? AwsBasicCredentials.create(options.accessKey(), options.secretKey())
+              : AwsSessionCredentials.create(options.accessKey(), options.secretKey(), options.sessionToken()))
+          : options.profile() == null ? DefaultCredentialsProvider.builder().build()
+              : ProfileCredentialsProvider.builder().profileName(options.profile()).build();
+      S3Client client = null;
+      try {
+        var builder = S3Client.builder().credentialsProvider(credentials)
+            .httpClientBuilder(UrlConnectionHttpClient.builder());
+        if (options.region() != null) builder.region(Region.of(options.region()));
+        else if (options.profile() != null) builder.region(software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain
+            .builder().profileName(options.profile()).build().getRegion());
+        client = builder.build();
+        InputStream stream = client.getObject(request -> request.bucket(uri.getHost()).key(uri.getPath().substring(1)));
+        S3Client owned = client;
+        return new FilterInputStream(stream) {
+          @Override public void close() throws IOException {
+            try { super.close(); }
+            finally {
+              try { owned.close(); }
+              finally { closeCredentials(credentials); }
+            }
+          }
+        };
+      } catch (RuntimeException failure) {
+        if (client != null) client.close();
+        closeCredentials(credentials);
+        throw new IOException("Could not open S3 input", failure);
+      }
+    }
+
+    private static void closeCredentials(AwsCredentialsProvider credentials) {
+      if (credentials instanceof software.amazon.awssdk.utils.SdkAutoCloseable closeable) closeable.close();
+    }
   }
 
   /** Decode to a private bounded-memory spool. The caller owns/deletes the returned file. */
@@ -81,75 +93,87 @@ final class ReaderFiles {
     if (named.endsWith(".xz")) {
       com.nvidia.sdm.internal.OptionalDependency.XZ.require();
     }
-    Path output = temporary();
-    try {
-      String lower = uri.getPath().toLowerCase(Locale.ROOT);
-      if (lower.endsWith(".zip")) {
-        Path encoded = temporary();
-        try {
-          try (InputStream input = open(uri, options)) { copy(input, encoded); }
-          try (ZipFile archive = ZipFile.builder().setPath(encoded).get()) {
-            var entries = archive.getEntries();
-            org.apache.commons.compress.archivers.zip.ZipArchiveEntry selected = null;
-            while (entries.hasMoreElements()) {
-              var entry = entries.nextElement();
-              if (entry.isDirectory()) continue;
-              int kind = entry.getUnixMode() & 0170000;
-              if (entry.isUnixSymlink() || (kind != 0 && kind != 0100000)) {
-                throw new IOException("Archive must contain exactly one regular data file");
-              }
-              if (selected != null) throw new IOException("Archive must contain exactly one data file");
-              selected = entry;
-            }
-            if (selected == null) throw new IOException("Archive contains no data file");
-            if (!archive.canReadEntryData(selected)) throw new IOException("Unsupported ZIP entry encoding");
-            try (InputStream input = archive.getInputStream(selected)) { copy(input, output); }
-          }
-        } finally { Files.deleteIfExists(encoded); }
-      } else {
-        try (InputStream input = new BufferedInputStream(open(uri, options));
-            InputStream decoded = decompress(input, lower)) {
-          String base = lower.replaceFirst("\\.(?:gz|bz2|xz)$", "");
-          if (base.endsWith(".tar")) {
-            try (TarArchiveInputStream archive = new TarArchiveInputStream(decoded)) {
-              boolean copied = false;
-              org.apache.commons.compress.archivers.tar.TarArchiveEntry entry;
-              while ((entry = archive.getNextEntry()) != null) {
+    return Archives.decode(uri, options);
+  }
+
+  /**
+   * Archive and compressed input, in a class of its own: commons-compress and xz are optional
+   * dependencies, and the JVM loads this class only once they are known present.
+   */
+  private static final class Archives {
+    private Archives() {}
+
+    static Path decode(URI uri, ReadOptions options) throws IOException {
+      Path output = temporary();
+      try {
+        String lower = uri.getPath().toLowerCase(Locale.ROOT);
+        if (lower.endsWith(".zip")) {
+          Path encoded = temporary();
+          try {
+            try (InputStream input = open(uri, options)) { copy(input, encoded); }
+            try (ZipFile archive = ZipFile.builder().setPath(encoded).get()) {
+              var entries = archive.getEntries();
+              org.apache.commons.compress.archivers.zip.ZipArchiveEntry selected = null;
+              while (entries.hasMoreElements()) {
+                var entry = entries.nextElement();
                 if (entry.isDirectory()) continue;
-                if (!entry.isFile() || copied) throw new IOException("Archive must contain exactly one regular data file");
-                copy(archive, output);
-                copied = true;
+                int kind = entry.getUnixMode() & 0170000;
+                if (entry.isUnixSymlink() || (kind != 0 && kind != 0100000)) {
+                  throw new IOException("Archive must contain exactly one regular data file");
+                }
+                if (selected != null) throw new IOException("Archive must contain exactly one data file");
+                selected = entry;
               }
-              if (!copied) throw new IOException("Archive contains no data file");
+              if (selected == null) throw new IOException("Archive contains no data file");
+              if (!archive.canReadEntryData(selected)) throw new IOException("Unsupported ZIP entry encoding");
+              try (InputStream input = archive.getInputStream(selected)) { copy(input, output); }
             }
-          } else copy(decoded, output);
+          } finally { Files.deleteIfExists(encoded); }
+        } else {
+          try (InputStream input = new BufferedInputStream(open(uri, options));
+              InputStream decoded = decompress(input, lower)) {
+            String base = lower.replaceFirst("\\.(?:gz|bz2|xz)$", "");
+            if (base.endsWith(".tar")) {
+              try (TarArchiveInputStream archive = new TarArchiveInputStream(decoded)) {
+                boolean copied = false;
+                org.apache.commons.compress.archivers.tar.TarArchiveEntry entry;
+                while ((entry = archive.getNextEntry()) != null) {
+                  if (entry.isDirectory()) continue;
+                  if (!entry.isFile() || copied) throw new IOException("Archive must contain exactly one regular data file");
+                  copy(archive, output);
+                  copied = true;
+                }
+                if (!copied) throw new IOException("Archive contains no data file");
+              }
+            } else copy(decoded, output);
+          }
         }
+        return output;
+      } catch (IOException | RuntimeException | Error failure) {
+        try { Files.deleteIfExists(output); } catch (IOException cleanup) { failure.addSuppressed(cleanup); }
+        throw failure;
       }
-      return output;
-    } catch (IOException | RuntimeException | Error failure) {
-      try { Files.deleteIfExists(output); } catch (IOException cleanup) { failure.addSuppressed(cleanup); }
-      throw failure;
     }
-  }
 
-  private static void copy(InputStream input, Path path) throws IOException {
-    // Truncate the existing private file without recreating it with broader default permissions.
-    try (var output = Files.newOutputStream(path)) { input.transferTo(output); }
-  }
+    private static void copy(InputStream input, Path path) throws IOException {
+      // Truncate the existing private file without recreating it with broader default permissions.
+      try (var output = Files.newOutputStream(path)) { input.transferTo(output); }
+    }
 
-  private static InputStream decompress(InputStream input, String lower) throws IOException {
-    if (lower.endsWith(".bz2")) return new BZip2CompressorInputStream(input, true);
-    if (lower.endsWith(".xz")) return XZCompressorInputStream.builder().setInputStream(input).setDecompressConcatenated(true).get();
-    if (lower.endsWith(".gz")) return new java.util.zip.GZIPInputStream(input);
-    return input;
-  }
+    private static InputStream decompress(InputStream input, String lower) throws IOException {
+      if (lower.endsWith(".bz2")) return new BZip2CompressorInputStream(input, true);
+      if (lower.endsWith(".xz")) return XZCompressorInputStream.builder().setInputStream(input).setDecompressConcatenated(true).get();
+      if (lower.endsWith(".gz")) return new java.util.zip.GZIPInputStream(input);
+      return input;
+    }
 
-  private static Path temporary() throws IOException {
-    try {
-      return Files.createTempFile("sdm-reader-", ".data",
-          java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
-    } catch (UnsupportedOperationException noPosix) {
-      return Files.createTempFile("sdm-reader-", ".data");
+    private static Path temporary() throws IOException {
+      try {
+        return Files.createTempFile("sdm-reader-", ".data",
+            java.nio.file.attribute.PosixFilePermissions.asFileAttribute(java.nio.file.attribute.PosixFilePermissions.fromString("rw-------")));
+      } catch (UnsupportedOperationException noPosix) {
+        return Files.createTempFile("sdm-reader-", ".data");
+      }
     }
   }
 }
