@@ -369,8 +369,8 @@ def check_repository_url() -> int:
 
 
 IN_PROCESS_REFERENCES = (
-    'skills/tabular/references/in-process.md',
-    'skills/relational/references/in-process.md',
+    'skills/sdm-tabular/references/in-process.md',
+    'skills/sdm-relational/references/in-process.md',
 )
 
 # The release that first carries `in_process()`. Until the index has it the

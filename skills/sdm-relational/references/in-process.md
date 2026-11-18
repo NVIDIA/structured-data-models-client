@@ -192,7 +192,7 @@ model already loaded with structured-data-models is used as it is:
 `sdm.models.KumoRelational`, shares its weights with every context the client
 fits, and refuses `device=` beside it, since that model is already somewhere.
 The quickstart's section on a model in this process, in
-[`docs/get-started/quickstart.md`](../../../docs/get-started/quickstart.md),
+[`docs/get-started/quickstart.md`](https://github.com/NVIDIA/structured-data-models-client/blob/main/docs/get-started/quickstart.md),
 shows it.
 
 A model loaded that way arrives in evaluation mode and loaded for both tasks,

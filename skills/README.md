@@ -7,8 +7,8 @@ Start at one of these two. Each is enough on its own to ask a first question.
 
 | Skill | Model | Load it when |
 |---|---|---|
-| [`tabular/SKILL.md`](tabular/SKILL.md) | `kumo-tabular` | The question is about rows of one table |
-| [`relational/SKILL.md`](relational/SKILL.md) | `kumo-relational` | The question is about an entity and what it is linked to |
+| [`sdm-tabular/SKILL.md`](sdm-tabular/SKILL.md) | `kumo-tabular` | The question is about rows of one table |
+| [`sdm-relational/SKILL.md`](sdm-relational/SKILL.md) | `kumo-relational` | The question is about an entity and what it is linked to |
 
 An agent answering a question about a single table does not need the
 relational material. What makes the relational model what it is, the two
@@ -20,12 +20,12 @@ be loaded without the skill it belongs to:
 
 | Reference | |
 |---|---|
-| [`relational/pql.md`](relational/pql.md) | Writing the predictive query |
-| [`tabular/references/pql.md`](tabular/references/pql.md) | The same language on one table, and what it refuses |
-| [`relational/references/warehouses.md`](relational/references/warehouses.md) | Tables that stay in a warehouse, and metric views |
-| [`relational/references/beyond-one-answer.md`](relational/references/beyond-one-answer.md) | Rankings, forecasts and explanations |
-| [`tabular/references/in-process.md`](tabular/references/in-process.md) | Running kumo-tabular in this process, with no NIM |
-| [`relational/references/in-process.md`](relational/references/in-process.md) | Running kumo-relational in this process, with no NIM |
+| [`sdm-relational/pql.md`](sdm-relational/pql.md) | Writing the predictive query |
+| [`sdm-tabular/references/pql.md`](sdm-tabular/references/pql.md) | The same language on one table, and what it refuses |
+| [`sdm-relational/references/warehouses.md`](sdm-relational/references/warehouses.md) | Tables that stay in a warehouse, and metric views |
+| [`sdm-relational/references/beyond-one-answer.md`](sdm-relational/references/beyond-one-answer.md) | Rankings, forecasts and explanations |
+| [`sdm-tabular/references/in-process.md`](sdm-tabular/references/in-process.md) | Running kumo-tabular in this process, with no NIM |
+| [`sdm-relational/references/in-process.md`](sdm-relational/references/in-process.md) | Running kumo-relational in this process, with no NIM |
 
 ## What these models are
 

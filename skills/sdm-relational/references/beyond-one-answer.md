@@ -167,4 +167,4 @@ if analysis is not None:
     cohorts[cohorts['table'] == 'orders']  # the cohorts of each column of orders
 ```
 
-See [the result contract](../../../docs/reference/prediction-output.md).
+See [the result contract](https://github.com/NVIDIA/structured-data-models-client/blob/main/docs/reference/prediction-output.md).

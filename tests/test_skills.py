@@ -51,8 +51,19 @@ PREDICTS = re.compile(r'\b\w+\.predict\(')
 LINK = re.compile(r'\]\(([^)]+)\)')
 
 
+#: Files the NVIDIA skills catalog requires beside each skill. They are written
+#: for the catalog, not for an agent. A skill links to none of them, and none
+#: holds an example. The governance card is HTML-laced markdown in the catalog's
+#: own template. NVSkills CI writes the benchmark report on each signing run.
+#: Holding either to the markdown read here would fail on a file nobody here
+#: writes by hand.
+CATALOG_FILES = frozenset({'skill-card.md', 'BENCHMARK.md'})
+
+
 def documents() -> list[Path]:
-    return sorted(SKILLS.rglob('*.md'))
+    return sorted(
+        path for path in SKILLS.rglob('*.md') if path.name not in CATALOG_FILES
+    )
 
 
 def fences(path: Path, language: str) -> list[str]:
@@ -64,8 +75,8 @@ def fences(path: Path, language: str) -> list[str]:
 
 
 def test_there_is_a_skill_for_each_model():
-    assert (SKILLS / 'tabular' / 'SKILL.md').exists()
-    assert (SKILLS / 'relational' / 'SKILL.md').exists()
+    assert (SKILLS / 'sdm-tabular' / 'SKILL.md').exists()
+    assert (SKILLS / 'sdm-relational' / 'SKILL.md').exists()
     assert (SKILLS / 'README.md').exists()
 
 
@@ -149,7 +160,7 @@ def test_an_example_that_predicts_shows_what_came_back(path):
             )
 
 
-@pytest.mark.parametrize('name', ['tabular', 'relational'])
+@pytest.mark.parametrize('name', ['sdm-tabular', 'sdm-relational'])
 def test_a_skill_shows_output_it_has_run(name):
     """Each skill has to stake something on a live endpoint.
 
@@ -162,15 +173,20 @@ def test_a_skill_shows_output_it_has_run(name):
     assert '**Verified**' in body, f'{name} marks no output as verified'
 
 
-@pytest.mark.parametrize('name', ['tabular', 'relational'])
+@pytest.mark.parametrize('name', ['sdm-tabular', 'sdm-relational'])
 def test_a_skill_announces_itself(name):
-    """An agent finds a skill by its frontmatter, so it has to be there."""
+    """An agent finds a skill by its frontmatter, so it has to be there.
+
+    The name is the directory's. The skills catalog copies each directory to
+    one named for the skill, so a skill that links to its sibling as
+    ``../<directory>/`` reaches it only where the two agree.
+    """
     yaml = pytest.importorskip('yaml')
     body = (SKILLS / name / 'SKILL.md').read_text(encoding='utf-8')
     assert body.startswith('---\n'), f'{name} opens with no frontmatter'
     front = yaml.safe_load(body[4 : body.index('\n---\n', 3)])
     assert isinstance(front, dict), f'{name} frontmatter is not a mapping'
-    assert front.get('name') == f'sdm-{name}', (
+    assert front.get('name') == name, (
         f'{name} is announced as {front.get("name")!r}'
     )
     assert 'Triggers:' in front.get('description', ''), (
@@ -178,7 +194,7 @@ def test_a_skill_announces_itself(name):
     )
 
 
-@pytest.mark.parametrize('name', ['tabular', 'relational'])
+@pytest.mark.parametrize('name', ['sdm-tabular', 'sdm-relational'])
 def test_a_skill_says_how_to_run_its_model_here(name):
     """A skill assumes a URL. Where there is none, the model runs in the
     agent's own process, and the skill has to say so where it is found: in
@@ -301,28 +317,30 @@ EVERY_TABLE = {
         (['Skill', 'Model', 'Load it when'], False),
         (['Reference', ''], False),
     ],
-    'skills/relational/SKILL.md': [
+    'skills/sdm-relational/SKILL.md': [
         (['', '`kumo-relational`'], True),
         (['Limit', 'Value'], True),
         (['Refusal', 'Cause'], False),
     ],
-    'skills/relational/references/beyond-one-answer.md': [],
-    'skills/relational/references/in-process.md': [],
-    'skills/relational/references/warehouses.md': [
+    'skills/sdm-relational/references/beyond-one-answer.md': [],
+    'skills/sdm-relational/references/in-process.md': [],
+    'skills/sdm-relational/references/warehouses.md': [
         (['Source', 'Connection it takes', 'Namespace', 'Extra'], True)
     ],
-    'skills/relational/pql.md': [
+    'skills/sdm-relational/pql.md': [
         (['Clause', 'Least', 'Most'], True),
         (['Target', 'Task', 'Calls'], True),
         (['Aggregation', ''], True),
         (['Comparison', ''], True),
     ],
-    'skills/tabular/SKILL.md': [
+    'skills/sdm-tabular/SKILL.md': [
         (['', '`kumo-tabular`'], True),
         (['Refusal', 'Cause'], False),
     ],
-    'skills/tabular/references/in-process.md': [],
-    'skills/tabular/references/pql.md': [(['Clause', 'On one table'], True)],
+    'skills/sdm-tabular/references/in-process.md': [],
+    'skills/sdm-tabular/references/pql.md': [
+        (['Clause', 'On one table'], True)
+    ],
 }
 
 
@@ -350,6 +368,26 @@ def test_every_link_resolves(path):
         assert (path.parent / target).resolve().exists(), (
             f'{path.name} links to {target}, which is not there'
         )
+
+
+@pytest.mark.parametrize(
+    'path', [p for p in documents() if p.parent != SKILLS], ids=str
+)
+def test_a_skill_links_only_to_skills(path):
+    """The skills catalog copies each skill directory and nothing around it.
+
+    A relative link out of ``skills/`` into the rest of this repository
+    resolves here and nowhere the skill is installed. Link to a sibling skill
+    by its directory, or to anything else by its URL.
+    """
+    for target in LINK.findall(path.read_text(encoding='utf-8')):
+        if target.startswith(('http://', 'https://', '#')):
+            continue
+        resolved = (path.parent / target).resolve()
+        assert any(
+            resolved.is_relative_to(skill.parent.resolve())
+            for skill in SKILLS.glob('*/SKILL.md')
+        ), f'{path.relative_to(SKILLS)} links to {target}, outside every skill'
 
 
 @pytest.mark.parametrize('path', documents(), ids=str)
@@ -649,7 +687,7 @@ def resolve(query, schema, **extra):
     )
 
 
-PQL = SKILLS / 'relational' / 'pql.md'
+PQL = SKILLS / 'sdm-relational' / 'pql.md'
 
 
 FENCED = re.compile(r'^```[a-z]*\n.*?^```$', re.DOTALL | re.MULTILINE)
@@ -1656,9 +1694,9 @@ def test_a_temporal_assumption_is_answered(schema):
     assert request.task.kind == 'regression'
 
 
-TABULAR_PQL = SKILLS / 'tabular' / 'references' / 'pql.md'
+TABULAR_PQL = SKILLS / 'sdm-tabular' / 'references' / 'pql.md'
 
-#: Each row of the clause table in tabular/references/pql.md, written as a
+#: Each row of the clause table in sdm-tabular/references/pql.md, written as a
 #: query over one table. The claim is that every one is refused there, and
 #: several of them are ordinary relational queries.
 ON_ONE_TABLE = {
@@ -1711,7 +1749,7 @@ def test_the_tabular_clause_table_is_every_clause_it_refuses(one_table):
     shown = table(TABULAR_PQL, 'Clause')
     del shown['Clause']
     assert set(shown) == set(ON_ONE_TABLE), (
-        f'tabular/references/pql.md lists {sorted(set(shown) ^ set(ON_ONE_TABLE))} '
+        f'sdm-tabular/references/pql.md lists {sorted(set(shown) ^ set(ON_ONE_TABLE))} '
         f'that this does not ask about'
     )
     assert all(cells == ['refused'] for cells in shown.values()), (
@@ -1799,7 +1837,7 @@ def test_a_plain_column_is_what_the_tabular_reference_promises(one_table):
         )
 
 
-WAREHOUSES = SKILLS / 'relational' / 'references' / 'warehouses.md'
+WAREHOUSES = SKILLS / 'sdm-relational' / 'references' / 'warehouses.md'
 
 
 def test_the_source_table_is_every_source_there_is():
@@ -2071,7 +2109,7 @@ def test_a_connector_error_is_not_a_structured_data_error():
 
 
 def test_the_tabular_model_refuses_a_second_table(schema):
-    """The sentence ``skills/tabular/SKILL.md`` quotes."""
+    """The sentence ``skills/sdm-tabular/SKILL.md`` quotes."""
     from sdm_client import KumoTabular, PredictiveQuery
     from sdm_client.errors import StructuredDataError
 
@@ -2203,7 +2241,7 @@ def test_a_quoted_refusal_from_the_endpoint_is_the_refusal(query, said, schema):
     not TABULAR_URL, reason='set SDM_TABULAR_URL to a kumo-tabular NIM'
 )
 @pytest.mark.parametrize(
-    'name', ['tabular/SKILL.md', 'tabular/references/pql.md']
+    'name', ['sdm-tabular/SKILL.md', 'sdm-tabular/references/pql.md']
 )
 def test_the_tabular_examples_print_what_the_skill_shows(name):
     assert_every_example_prints_what_it_shows(SKILLS / name, TABULAR_URL)
@@ -2216,10 +2254,10 @@ def test_the_tabular_examples_print_what_the_skill_shows(name):
 @pytest.mark.parametrize(
     'name',
     [
-        'relational/SKILL.md',
-        'relational/pql.md',
-        'relational/references/beyond-one-answer.md',
-        'relational/references/warehouses.md',
+        'sdm-relational/SKILL.md',
+        'sdm-relational/pql.md',
+        'sdm-relational/references/beyond-one-answer.md',
+        'sdm-relational/references/warehouses.md',
         'README.md',
     ],
 )
@@ -2246,7 +2284,10 @@ def installed(module: str, extra: str) -> None:
 )
 @pytest.mark.parametrize(
     'name',
-    ['tabular/references/in-process.md', 'relational/references/in-process.md'],
+    [
+        'sdm-tabular/references/in-process.md',
+        'sdm-relational/references/in-process.md',
+    ],
 )
 def test_the_in_process_examples_print_what_the_skill_shows(name):
     """These examples open no connection: they fetch the published weights
@@ -2259,7 +2300,7 @@ def test_the_in_process_examples_print_what_the_skill_shows(name):
     package even when the tables are frames already in memory.
     """
     installed('sdm', 'structured-data-models-client[in-process]')
-    if name.startswith('relational/'):
+    if name.startswith('sdm-relational/'):
         installed('sdm_connectors', 'structured-data-models-connectors')
     assert_every_example_prints_what_it_shows(SKILLS / name)
 
@@ -2269,7 +2310,7 @@ def test_the_in_process_examples_print_what_the_skill_shows(name):
 
 @pytest.mark.parametrize(
     'name, model_name',
-    [('tabular', 'KumoTabular'), ('relational', 'KumoRelational')],
+    [('sdm-tabular', 'KumoTabular'), ('sdm-relational', 'KumoRelational')],
 )
 def test_the_capability_table_is_the_clients_own(name, model_name):
     """Every row of the table both skills open with, against the client."""
@@ -2291,7 +2332,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
         'Relationships': capabilities.relationships,
         'Sessions': capabilities.sessions,
     }
-    if name == 'tabular':
+    if name == 'sdm-tabular':
         said['Explanations'] = 'explanation' in capabilities.outputs
     assert set(shown) == set(said), (
         f'{name} shows rows nothing checks: {sorted(set(shown) ^ set(said))}'
@@ -2316,7 +2357,7 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
             )
 
 
-#: Each row of the limits table in ``skills/relational/SKILL.md``, against the
+#: Each row of the limits table in ``skills/sdm-relational/SKILL.md``, against the
 #: constant it reports. Every key is spoken for in both directions: a limit the
 #: client enforces and the skill omits is a refusal an agent cannot see coming,
 #: and a row naming no limit is a number nobody is holding to anything.
@@ -2332,7 +2373,7 @@ def test_the_limits_table_is_the_shipped_limits():
     assert set(LIMIT_ROWS.values()) == set(RELATIONAL_LIMITS), (
         'the client enforces a limit this table does not account for'
     )
-    path = SKILLS / 'relational' / 'SKILL.md'
+    path = SKILLS / 'sdm-relational' / 'SKILL.md'
     assert heading(path, 'Limit') == 'Value'
     shown = table(path, 'Limit')
     shown.pop('Limit')
@@ -2437,7 +2478,7 @@ def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
     assert len(deciles) == 9, f'quantiles came back as {deciles}'
 
 
-#: The output matrix skills/relational/SKILL.md gives for the deployment:
+#: The output matrix skills/sdm-relational/SKILL.md gives for the deployment:
 #: what each task is served, and everything the client would send that it
 #: will not. Asked of the endpoint, so a deployment that gains or loses one
 #: fails here rather than making the skill quietly wrong.
@@ -2465,7 +2506,9 @@ def not_served(outputs: tuple[str, ...]) -> list[str]:
     the endpoint happens to allow.
     """
     advertised = set(
-        listed(table(SKILLS / 'relational' / 'SKILL.md', 'Tasks')['Outputs'][0])
+        listed(
+            table(SKILLS / 'sdm-relational' / 'SKILL.md', 'Tasks')['Outputs'][0]
+        )
     )
     return sorted(advertised - set(outputs))
 
