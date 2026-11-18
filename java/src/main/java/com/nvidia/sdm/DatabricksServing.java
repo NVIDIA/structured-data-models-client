@@ -81,6 +81,7 @@ public final class DatabricksServing {
    * or any other authentication method the SDK supports.
    */
   public static DatabricksServing of(String endpoint) {
+    com.nvidia.sdm.internal.OptionalDependency.DATABRICKS_SDK.require();
     String name = name(endpoint);
     try {
       return of(new WorkspaceClient(), name);

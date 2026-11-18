@@ -154,6 +154,14 @@ If a later model call fails, `exception.answered(allocator)` returns any complet
 | Natives in the JAR | Linux x86_64 and aarch64 (glibc 2.17 or later), macOS arm64 and x86_64, Windows x86_64 |
 
 The JAR depends on Arrow Java (`arrow-c-data`, `arrow-vector`, `arrow-memory-core`, and `arrow-memory-unsafe` at run time) and on the SLF4J 2 API, which it declares and does not bind: the application chooses its logger.
+Everything else is optional: add it only for the feature that needs it, or the feature refuses with `INVALID_CONFIGURATION` naming what to add.
+
+| Feature | Add |
+|---|---|
+| `s3://` files | `software.amazon.awssdk:s3`, `software.amazon.awssdk:url-connection-client` |
+| `.zip`, `.tar`, `.bz2`, `.xz` files | `org.apache.commons:commons-compress` (and `org.tukaani:xz` for `.xz`) |
+| `DatabricksServing.of(endpoint)` | `com.databricks:databricks-sdk-java` |
+| A database source | its JDBC driver (below) |
 Windows requires the Microsoft Visual C++ 2015–2022 x64 runtime.
 Windows ARM64 is deferred because the published Arrow dependency does not provide its native DLL.
 Native binary deployment targets do not establish support for older operating systems; the selected JDK, Arrow and connector drivers must also support the operating system.
@@ -237,6 +245,20 @@ A Databricks serving endpoint's refusal is a `ModelEndpointException` too, under
 A panic inside the core is contained: the call raises `INTERNAL_ERROR` with `details().get("panic") == true`, and the JVM goes on.
 
 The core's log events reach SLF4J under the loggers its crates name (`sdm_core`, `sdm_host`, `sdm_data` and their modules), and its warnings under `com.nvidia.sdm.warnings`, at `WARN`.
+
+## Your own data provider
+
+A `ProviderSource` reads data through your own code instead of a database connection.
+Implement `com.nvidia.sdm.provider.DataProvider`: the core sends it typed requests (`DataRequest`), never SQL, and it answers each with Arrow rows.
+Every provider answers `describe` and `scan`; it declares any other request it answers in its `Capabilities`, and the core answers the rest in memory from `scan` when a fallback is declared.
+
+```java
+DataProvider provider = new MyProvider();          // implements DataProvider
+Source source = ProviderSource.of(provider);
+Schema schema = Schema.fromSource(source, options);
+```
+
+With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` whose seeds, or a `scan` without a limit whose key filter, hold more than `n` keys reaches the provider in parts of at most `n` keys.
 
 ## Build
 

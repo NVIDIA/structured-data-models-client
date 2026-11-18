@@ -471,7 +471,11 @@ public final class Host {
     try {
       // A later page's step names the key sets the first took.
       if (request.get("continuation") == null) {
-        keys = keySets(run, (Map<String, Object>) request.get("plan"), allocator);
+        Map<String, Object> plan = (Map<String, Object>) request.get("plan");
+        keys =
+            plan != null && "host".equals(plan.get("plan"))
+                ? hostKeySets(run, (Map<String, Object>) request.get("request"), allocator)
+                : keySets(run, plan, allocator);
       }
       ArrowReader answer = provider.answer(request, keys, allocator);
       stream = ArrowExchange.export(allocator, answer);
@@ -558,6 +562,25 @@ public final class Host {
             byte[] ipc = ArrowData.ipc(arrow.reader(allocator));
             taken.put(id, ArrowData.reader(ipc, allocator));
           }
+        }
+      }
+    }
+    return taken;
+  }
+
+  /**
+   * The key sets a host plan's request carries ({@code seeds}, each {@code key_in} filter's {@code
+   * keys}), taken from the run by attachment id: a host plan names none of its own.
+   */
+  private static Map<Integer, ArrowReader> hostKeySets(
+      Run run, Map<String, Object> request, BufferAllocator allocator) throws NativeError {
+    Map<Integer, ArrowReader> taken = new LinkedHashMap<>();
+    for (int id : HostProviders.keySetAttachments(request)) {
+      Object value = run.takeAttachment(id);
+      if (value instanceof NativeArrow arrow) {
+        try (arrow) {
+          byte[] ipc = ArrowData.ipc(arrow.reader(allocator));
+          taken.put(id, ArrowData.reader(ipc, allocator));
         }
       }
     }

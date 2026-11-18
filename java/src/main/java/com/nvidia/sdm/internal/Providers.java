@@ -9,6 +9,7 @@ import com.nvidia.sdm.DatabricksSparkSource;
 import com.nvidia.sdm.DuckDbSource;
 import com.nvidia.sdm.JdbcSource;
 import com.nvidia.sdm.PostgresSource;
+import com.nvidia.sdm.ProviderSource;
 import com.nvidia.sdm.SnowflakeSource;
 import com.nvidia.sdm.Source;
 import com.nvidia.sdm.SqliteSource;
@@ -49,6 +50,9 @@ public final class Providers {
   }
 
   public static Chosen of(Source source) {
+    if (source instanceof ProviderSource provided) {
+      return HostProviders.chosen(provided);
+    }
     if (source instanceof DatabricksSparkSource spark) {
       Map<String, Object> choice = new LinkedHashMap<>();
       choice.put("provider", "sql");

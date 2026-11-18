@@ -35,6 +35,7 @@ final class ReaderFiles {
     if (!"s3".equalsIgnoreCase(uri.getScheme())) {
       return Files.newInputStream(uri.getScheme() == null ? Path.of(uri.toString()) : Path.of(uri));
     }
+    com.nvidia.sdm.internal.OptionalDependency.AWS_S3.require();
     AwsCredentialsProvider credentials = options.accessKey() != null
         ? StaticCredentialsProvider.create(options.sessionToken() == null
             ? AwsBasicCredentials.create(options.accessKey(), options.secretKey())
@@ -73,6 +74,13 @@ final class ReaderFiles {
 
   /** Decode to a private bounded-memory spool. The caller owns/deletes the returned file. */
   static Path decode(URI uri, ReadOptions options) throws IOException {
+    String named = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.ROOT);
+    if (!named.endsWith(".gz") || named.endsWith(".tar.gz")) {
+      com.nvidia.sdm.internal.OptionalDependency.COMMONS_COMPRESS.require();
+    }
+    if (named.endsWith(".xz")) {
+      com.nvidia.sdm.internal.OptionalDependency.XZ.require();
+    }
     Path output = temporary();
     try {
       String lower = uri.getPath().toLowerCase(Locale.ROOT);

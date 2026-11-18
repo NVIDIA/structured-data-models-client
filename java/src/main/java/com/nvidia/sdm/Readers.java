@@ -25,6 +25,9 @@ public final class Readers {
   public static Table readTable(Source source, String name, BufferAllocator allocator)
       throws Exception {
     Objects.requireNonNull(name, "table");
+    if (source instanceof ProviderSource) {
+      return readQuery(source, "", allocator);
+    }
     if (!name.contains(".")) {
       String catalog = null;
       String schema = null;
@@ -62,7 +65,12 @@ public final class Readers {
   public static Table readQuery(Source source, String sql, BufferAllocator allocator)
       throws Exception {
     Objects.requireNonNull(sql, "sql");
-    var provider = Providers.of(Objects.requireNonNull(source, "source")).provider();
+    if (Objects.requireNonNull(source, "source") instanceof ProviderSource) {
+      throw new StructuredDataException(
+          "a ProviderSource runs no SQL; read its tables through its own provider",
+          "UNSUPPORTED_REQUEST", java.util.Map.of(), null);
+    }
+    var provider = Providers.of(source).provider();
     if (provider instanceof JdbcProvider jdbc) {
       return ReadTables.collect(jdbc.readQuery(sql, allocator), allocator);
     }
