@@ -291,6 +291,38 @@ def test_from_snowflake_semantic_view_keeps_self_qualified_columns() -> None:
     assert "Failed to add column 'DC_REGION' of table 'RACKS'" in message
 
 
+def test_from_snowflake_semantic_view_unquotes_base_table_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Regression test: `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW` echoes the parts
+    # of `base_table` as they were written in the view DDL, so a quoted
+    # identifier arrives with its quotes. They must be stripped before the
+    # name is quoted again, or the lookup is for a table named `""DB""`.
+    quoted = (
+        _SEMANTIC_VIEW_YAML.replace('database: DB', 'database: \'"DB"\'')
+        .replace('schema: SCH', 'schema: \'"SCH"\'')
+        .replace('      table: DATACENTERS', '      table: \'"DATACENTERS"\'')
+        .replace('      table: RACKS', '      table: \'"RACKS"\'')
+    )
+    monkeypatch.setattr(sys.modules[__name__], '_SEMANTIC_VIEW_YAML', quoted)
+
+    graph = Graph.from_snowflake_semantic_view(
+        'GPU_FLEET_SV',
+        connection=_FakeConnection(),
+        verbose=False,
+        warn=False,
+    )
+
+    assert graph['RACKS'].source_name == 'DB.SCH.RACKS'
+    assert [(e.src_table, e.fkey, e.dst_table) for e in graph.edges] == [
+        ('RACKS', 'DATACENTER_ID', 'DATACENTERS')
+    ]
+    assert {column.name for column in graph['RACKS'].columns} >= {
+        'RACK_ID',
+        'HALL',
+    }
+
+
 def test_from_snowflake_case_insensitive_identifiers() -> None:
     # Regression test:
     # Snowflake folds unquoted identifiers to upper case, so a name typed in

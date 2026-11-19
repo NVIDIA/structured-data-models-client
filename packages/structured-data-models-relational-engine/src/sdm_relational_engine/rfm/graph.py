@@ -141,6 +141,22 @@ def _sub_outside_literals(pattern: re.Pattern[str], expr: str) -> str:
     return ''.join(out)
 
 
+def _unquote_identifier(name: str) -> str:
+    r"""Return the name that a Snowflake identifier spells.
+
+    ``SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`` echoes the parts of a base table as
+    they were written in the view's DDL, so a quoted identifier arrives with
+    its quotes and with any embedded quote doubled. Anything else is returned
+    unchanged.
+
+    Args:
+        name: The identifier, as echoed.
+    """
+    if len(name) >= 2 and name[0] == '"' and name[-1] == '"':
+        return name[1:-1].replace('""', '"')
+    return name
+
+
 def _qualifier_pattern(table_name: str) -> re.Pattern[str]:
     r"""Returns a pattern that matches a ``<table_name>.`` qualifier within a
     SQL expression, ignoring case just like SQL identifier resolution does.
@@ -2073,9 +2089,11 @@ class Graph:
         table_names = {table_cfg['name'] for table_cfg in cfg['tables']}
         for table_cfg in cfg['tables']:
             table_name = table_cfg['name']
-            source_table_name = table_cfg['base_table']['table']
-            database = table_cfg['base_table']['database']
-            schema = table_cfg['base_table']['schema']
+            source_table_name = _unquote_identifier(
+                table_cfg['base_table']['table']
+            )
+            database = _unquote_identifier(table_cfg['base_table']['database'])
+            schema = _unquote_identifier(table_cfg['base_table']['schema'])
 
             primary_key: str | None = None
             if 'primary_key' in table_cfg:
