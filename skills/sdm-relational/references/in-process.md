@@ -4,23 +4,23 @@ Nothing deployed to point at, or tables that must not leave the machine: the
 same client runs the model here instead, with the same calls. This is how a
 notebook asks with no NIM at all.
 
-It is an extra, installed with the connectors package beside it: gathering
-reaches the client's data providers, and they are read even when the tables
-are already frames in memory.
+It is an extra:
 
 ```
-pip install 'structured-data-models-client[in-process]>=2.0.0' \
-    structured-data-models-connectors
+pip install 'structured-data-models-client[in-process]>=2.0.0'
 ```
+
+Tables already in memory as frames need nothing more. Tables that stay in a
+warehouse need the connectors package, as
+[`warehouses.md`](warehouses.md) describes; that is the same with or without
+a NIM.
 
 A pip warning that the client `does not provide the extra 'in-process'`, or
 an `AttributeError` saying `SDMClient` has no attribute `in_process`, is an
 installed client older than the feature, whichever command installed it.
 
 The extra brings structured-data-models and PyTorch, and needs Python 3.11
-or later. Gathering the request happens in this client, with no model and no
-engine behind it, but it imports the connectors package the install above
-names. Without it, `SDMClient.in_process()` raises `MissingExtraError`
+or later. Without it, `SDMClient.in_process()` raises `MissingExtraError`
 naming that command; on Python 3.10 the error names the Python it needs
 instead. The first prediction fetches the published weights,
 `nvidia/Kumo-Relational` on Hugging Face, into the Hugging Face cache, and

@@ -2295,13 +2295,11 @@ def test_the_in_process_examples_print_what_the_skill_shows(name):
 
     ``SDM_IN_PROCESS`` is the reader asking for exactly this, so a missing
     piece is a broken setup and fails here rather than skipping quietly. The
-    extra is not the whole of it for the relational reference: gathering a
-    request reaches the client's data providers, which import the connectors
-    package even when the tables are frames already in memory.
+    extra is the whole of it: these examples gather from frames, which reach
+    none of the connectors package (``test_core_route_without_connectors.py``
+    holds the client to that).
     """
     installed('sdm', 'structured-data-models-client[in-process]')
-    if name.startswith('sdm-relational/'):
-        installed('sdm_connectors', 'structured-data-models-connectors')
     assert_every_example_prints_what_it_shows(SKILLS / name)
 
 

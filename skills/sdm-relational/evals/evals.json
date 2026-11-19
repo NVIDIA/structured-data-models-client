@@ -74,11 +74,12 @@
     {
       "id": "r07",
       "prompt": "We have no kumo-relational NIM, and our users and orders tables must not leave this machine. Can sdm_client still answer 'how many orders will each user place in the next 30 days'? What changes in my code and install?",
-      "expected_output": "Yes: open the client with SDMClient.in_process() in place of a URL; the schema, the query and materialize() are unchanged, and gathering still happens in this client. It needs the in-process extra and the connectors package (gathering imports it even for in-memory frames), and Python 3.11 or later; until a published release carries in_process(), both are installed from a checkout of v2-candidate as the reference describes. The first prediction fetches the published weights (nvidia/Kumo-Relational) into the Hugging Face cache with no account or token. On a CPU its numbers can differ from a GPU-hosted NIM's. Join the answer back on id or row_index, never row order.",
+      "expected_output": "Yes: open the client with SDMClient.in_process() in place of a URL; the schema, the query and materialize() are unchanged, and gathering still happens in this client. The install is the in-process extra, pip install 'structured-data-models-client[in-process]>=2.0.0', on Python 3.11 or later; frames already in memory need nothing more, and only tables read from a warehouse need the connectors package. The first prediction fetches the published weights (nvidia/Kumo-Relational) into the Hugging Face cache with no account or token. On a CPU its numbers can differ from a GPU-hosted NIM's. Join the answer back on id or row_index, never row order.",
       "assertions": [
         "Uses SDMClient.in_process() in place of SDMClient(url=...)",
         "Keeps Schema.from_data, PredictiveQuery and materialize() unchanged",
-        "Names the in-process extra and the structured-data-models-connectors package",
+        "Names the in-process extra and Python 3.11 or later",
+        "Does not require structured-data-models-connectors for tables already in memory as DataFrames",
         "Says the weights are fetched once from Hugging Face, with no token required",
         "Says CPU results can differ from a GPU-hosted NIM's",
         "Does not send the tables to any remote endpoint"
