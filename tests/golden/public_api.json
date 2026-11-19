@@ -646,7 +646,7 @@
       },
       "__version__": {
         "kind": "str",
-        "value": "2.0.0rc1"
+        "value": "2.0.0"
       },
       "build_timeseries": {
         "kind": "callable",
@@ -808,7 +808,7 @@
       },
       "__version__": {
         "kind": "str",
-        "value": "2.0.0rc1"
+        "value": "2.0.0"
       },
       "quote_ident": {
         "kind": "callable",
