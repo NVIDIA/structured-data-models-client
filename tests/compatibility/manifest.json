@@ -8302,6 +8302,11 @@
       "base_commit": "8c9d723c9f6ecff8c2f6f4d6d5357af17ea4399e",
       "record": "api_contracts/gradient-explanations",
       "reason": "The client no longer enforces the endpoint's payload size limit, so the test that client-only provenance does not count toward that limit was removed with it; the remaining gradient tests are unchanged."
+    },
+    {
+      "base_commit": "5b1eaa25c5eae86831575826dd4ee49080a2ecb1",
+      "record": "public_api_snapshot_sha256",
+      "reason": "The snapshot records the package version, which moves from 2.0.0rc1 to 2.0.0; no public name or signature changes."
     }
   ],
   "capabilities": [
