@@ -98,6 +98,19 @@ class SeriesMaterializer:
                 the caller's own refusal when it does not resolve.
             indices: The series to read, when the entity is a series key.
             inference: Options for the model, passed through to the adapter.
+
+        The language holds that an entity is a primary key. A column with one
+        value per row is the key of the row, and one that repeats is the key
+        of the series, so the query is resolved against the table read at the
+        grain the entity names. Where the entity is the row's key, the
+        table's own key is a second name for the same row and is left out
+        rather than read as a reading.
+
+        The rows are picked and put in time order, so where an anomaly score
+        falls in the answer is not where its row was. Each score names its
+        row by the table's key. A table with no key, or a composite one that
+        an answer cannot carry back, names it by the row's place in the
+        caller's table.
         """
         name, table = self._the_one_table(spec)
         key = self._entity_column(text, name)
@@ -108,10 +121,6 @@ class SeriesMaterializer:
             or bool(table.data[key].is_unique)
         )
         if key is not None and key != table.primary_key:
-            # The language holds that an entity is a primary key. A column
-            # with one value per row is the key of the row, and one that
-            # repeats is the key of the series, so the query is resolved
-            # against the table read at the grain the entity names.
             definition.tables[name].pkey = key
 
         asked = resolve(spec.profile, definition)
@@ -124,15 +133,25 @@ class SeriesMaterializer:
                 details={'model': spec.model_id},
             )
 
+        if asked.get_rfm_entity_id_list():
+            column = key or '<key>'
+            raise StructuredDataError(
+                f'{text!r} names its series with FOR, and a series is named '
+                f'by indices. Write FOR EACH {name}.{column} and pass '
+                f'indices=[<{column}>]',
+                code='INVALID_REQUEST',
+                details={'model': spec.model_id},
+            )
+
         position = _a_name_not_among('row', table.data.columns)
         frame = table.data.assign(**{position: np.arange(len(table.data))})
         if whole_table:
             if indices is not None:
                 raise StructuredDataError(
                     f'{name}.{key} names a row, so the whole of {name!r} is '
-                    f'the series and there is nothing for indices to choose. '
-                    f'Name the column that says which series a row belongs '
-                    f'to in FOR EACH to pick one of several',
+                    f'the series and there is no series to choose. Name the '
+                    f'column that says which series a row belongs to in FOR '
+                    f'EACH to pick one of several',
                     code='INVALID_REQUEST',
                 )
         else:
@@ -154,9 +173,6 @@ class SeriesMaterializer:
             ),
             None,
         )
-        # One key names a row. Where the entity is that key, the table's own
-        # key is a second name for the same row and says nothing about it,
-        # so it is left out rather than read as a reading.
         displaced = [
             column
             for column in _as_key_tuple(table.primary_key)
@@ -178,10 +194,6 @@ class SeriesMaterializer:
             if row_key is not None:
                 frame = frame.drop(columns=[position])
             else:
-                # The rows were picked and put in time order, so where a
-                # score falls in the answer is not where its row was. With
-                # no key to name the row by, its place in the caller's
-                # table is the name.
                 row_key = position
             request = Request.anomaly(
                 frame,
@@ -205,7 +217,8 @@ class SeriesMaterializer:
         what it is: a reading that never repeats within the series looks like
         a key. So the key and each column's meaning are carried over from the
         schema the query was written against, and only the target is settled
-        here, as the number being forecast.
+        here, as the number being forecast. A column empty within the series
+        has no type of its own, so it takes the one the table gave it.
         """
         schema = Schema.from_data({name: frame}, time_columns={name: None})
         built, given = schema[name], self.schema[name]
@@ -217,6 +230,8 @@ class SeriesMaterializer:
             else None
         )
         for column in frame.columns:
+            if built[column].untyped and column in given.columns:
+                built[column].dtype = given[column].dtype
             if column == target:
                 built[column].stype = 'numerical'
             elif column != built.primary_key and column in given.columns:
@@ -296,6 +311,12 @@ class SeriesMaterializer:
             raise StructuredDataError(
                 f'indices names {len(indices)} series, and one request reads '
                 f'one. Materialize once for each {key}',
+                code='INVALID_REQUEST',
+            )
+        if not pd.api.types.is_scalar(indices[0]):
+            raise StructuredDataError(
+                f'indices names a series by one {key}, and its one entry is '
+                f'a {type(indices[0]).__name__}',
                 code='INVALID_REQUEST',
             )
         rows = frame[frame[key] == indices[0]]

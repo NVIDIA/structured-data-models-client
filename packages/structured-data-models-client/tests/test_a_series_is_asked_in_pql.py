@@ -241,7 +241,7 @@ def test_an_entity_that_names_the_row_makes_the_table_the_series():
     scored = request.predict.instance_table
     assert list(scored.columns) == ['reading_id', 'flow', 'temp']
     assert request.schema['readings'].primary_key == 'reading_id'
-    assert 'nothing for indices to choose' in refusal(
+    assert 'there is no series to choose' in refusal(
         text, frame, indices=[3], model=KumoAnomaly()
     )
 
@@ -373,6 +373,38 @@ def test_a_series_that_is_not_there_is_said_to_be_missing():
     said = refusal(FORECAST, readings(), indices=['s-9'], model=KumoForecast())
 
     assert "no row of 'readings' has sensor_id 's-9'" in said
+
+
+def test_a_series_named_in_the_query_is_refused_for_indices():
+    """The language can name one entity with FOR, but a series is named by
+    indices, so the query's own choice is refused rather than overruled."""
+    text = (
+        'PREDICT readings.flow FORECAST 6 TIMEFRAMES '
+        "FOR readings.sensor_id = 's-2'"
+    )
+
+    said = refusal(text, readings(), indices=['s-1'], model=KumoForecast())
+
+    assert 'Write FOR EACH readings.sensor_id' in said
+
+
+def test_an_index_names_one_series_by_one_value():
+    picks = [['s-1', 's-2'] * 120]
+
+    said = refusal(FORECAST, readings(), indices=picks, model=KumoForecast())
+
+    assert 'its one entry is a list' in said
+
+
+def test_a_column_empty_in_the_series_keeps_the_type_the_table_gave_it():
+    """`pressure` is measured on one sensor only. Read from that slice
+    alone, the other sensor's empty column has no type to infer."""
+    frame = readings()
+    frame['pressure'] = pd.Series([None] * 120 + list(range(120)), dtype=object)
+
+    request = gathered(FORECAST, frame, indices=['s-1'], model=KumoForecast())
+
+    assert request.schema['readings']['pressure'].stype == 'numerical'
 
 
 @pytest.mark.parametrize(

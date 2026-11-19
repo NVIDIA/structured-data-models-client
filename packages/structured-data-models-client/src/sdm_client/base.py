@@ -212,11 +212,12 @@ def required_capabilities(request: Request) -> Capabilities:
 
     Built with :meth:`Capabilities.nothing` and switched on, so a flag this
     request does not need stays off and cannot cause a spurious rejection.
+
+    A series continued from its own history has a bare column for a target.
+    It is a forecast with no window, which is the static shape, and only a
+    model that forecasts a series as given answers it.
     """
     kind = request.task.kind
-    # A series continued from its own history has a bare column for a target:
-    # it is a forecast with no window, which is the static shape, and only a
-    # model that forecasts a series as given answers it.
     series = kind == 'forecasting' and request.horizon is not None
     temporal = not series and (
         bool(request.task.options.get('anchor_time_column'))
