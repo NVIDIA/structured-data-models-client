@@ -9,7 +9,7 @@ An entity, and the records linked to it. The question is written as a
 predictive query, the client gathers each entity's neighbourhood, and the model
 reads that neighbourhood in one pass.
 
-Load [`../tabular/SKILL.md`](../tabular/SKILL.md) instead when the question is
+Load [`../sdm-tabular/SKILL.md`](../sdm-tabular/SKILL.md) instead when the question is
 about rows of one table with no links.
 
 Writing the query itself is in [`pql.md`](pql.md).

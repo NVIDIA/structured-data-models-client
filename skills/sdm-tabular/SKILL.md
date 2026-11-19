@@ -9,7 +9,7 @@ One table. You hold rows whose answer is known and rows whose answer you want.
 Both go in one request, the model reads them together, and the answer comes
 back a row at a time.
 
-Load [`../relational/SKILL.md`](../relational/SKILL.md) instead when the
+Load [`../sdm-relational/SKILL.md`](../sdm-relational/SKILL.md) instead when the
 question is about an entity and the records linked to it. The two models share
 this client's objects -- `Schema`, `PredictiveQuery`, `Request` -- and the
 language. What differs is almost everything that can be asked in it.
@@ -52,7 +52,7 @@ Keys are unique entity IDs, or `row_index` when IDs are missing or repeated.
 The client imposes no separate explanation row limit; the endpoint must support gradients.
 The optional Python model runtime also supports them.
 `EXPLAIN` adds explanation output without dropping ordinary outputs; `outputs=[]` remains invalid.
-See [the result contract](../../docs/reference/prediction-output.md).
+See [the result contract](https://github.com/NVIDIA/structured-data-models-client/blob/main/docs/reference/prediction-output.md).
 
 ```python
 # With missing or repeated IDs, keys are row_index values.
@@ -256,4 +256,4 @@ Catch `StructuredDataError` to catch all of them.
 
 - [`references/pql.md`](references/pql.md) — the query language on one table
 - [`references/in-process.md`](references/in-process.md) — the model in this process, with no NIM
-- [`../relational/SKILL.md`](../relational/SKILL.md) — when the question is about an entity and what it links to
+- [`../sdm-relational/SKILL.md`](../sdm-relational/SKILL.md) — when the question is about an entity and what it links to
