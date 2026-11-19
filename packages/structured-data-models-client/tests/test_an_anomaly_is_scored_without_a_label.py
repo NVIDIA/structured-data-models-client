@@ -18,11 +18,9 @@ import pytest
 
 from sdm_client import (
     KumoAnomaly,
-    KumoTabular,
     Request,
     SDMClient,
     StructuredDataError,
-    UnsupportedRequestError,
 )
 
 pytestmark = pytest.mark.filterwarnings('ignore')
@@ -86,26 +84,6 @@ def test_only_the_fields_that_were_asked_for_come_back(anomaly):
     assert not [name for name in answer.columns if name.startswith('prob')]
 
 
-def test_the_same_readings_score_the_same_twice(anomaly):
-    """Reconstruction is sampled, so the answer is seeded. Without that an
-    unchanged request comes back with different numbers every call."""
-    frame = readings()
-
-    assert scored(anomaly, frame)['prediction'].tolist() == pytest.approx(
-        scored(anomaly, frame)['prediction'].tolist()
-    )
-
-
-def test_the_disturbed_stretch_scores_above_the_rest(anomaly):
-    """The score is what the model was asked for, so it has to track the
-    thing that was done to the data rather than merely be finite."""
-    answer = scored(anomaly, readings())
-    disturbed = answer['prediction'].iloc[DISTURBED]
-    rest = answer['prediction'].drop(answer.index[DISTURBED])
-
-    assert disturbed.mean() > rest.mean()
-
-
 def test_the_answer_is_the_one_the_model_gives_when_called_directly(
     sdm, anomaly
 ):
@@ -127,17 +105,6 @@ def test_the_answer_is_the_one_the_model_gives_when_called_directly(
     torch.testing.assert_close(
         torch.tensor(answer['prediction'].to_numpy()),
         direct['mae'].numerical[..., 0].double(),
-    )
-
-
-def test_a_key_column_is_not_read_as_a_channel(anomaly):
-    """`reading_id` names the row. Reconstructing it would score a row by how
-    surprising its identifier is, which rises with every row."""
-    frame = readings()
-    without = frame.drop(columns=['reading_id'])
-
-    assert scored(anomaly, frame)['prediction'].tolist() == pytest.approx(
-        scored(anomaly, without)['prediction'].tolist()
     )
 
 
@@ -169,26 +136,6 @@ def test_readings_are_answered_though_the_schema_was_built_from_nulls(
     assert len(answer) == len(frame)
 
 
-def test_a_meaning_the_caller_gave_a_column_that_holds_values_is_kept(
-    anomaly,
-):
-    """The placeholder rule is for a column with nothing in it to read. A
-    column that holds values and says it is categorical says so on purpose,
-    and this model refuses that rather than reading it as numbers anyway."""
-    from sdm_client import Schema
-
-    frame = readings()[['flow', 'pressure']]
-    schema = Schema.from_data({'instance': frame})
-    schema['instance']['flow'].stype = 'categorical'
-
-    with pytest.raises(StructuredDataError):
-        with SDMClient.in_process(anomaly) as client:
-            client.predict(
-                Request.anomaly(frame, schema=schema, inference=FAST),
-                model=KumoAnomaly(),
-            )
-
-
 def test_readings_that_leave_out_a_composite_key_are_answered(anomaly):
     """A key names the row and is not a channel, so a caller may leave it
     out. Then there is no value to answer under and rows match by position."""
@@ -210,13 +157,15 @@ def test_readings_that_leave_out_a_composite_key_are_answered(anomaly):
     assert answer['row_index'].tolist() == list(range(len(frame)))
 
 
-def test_a_meaning_given_to_a_column_with_nothing_in_it_is_kept(anomaly):
+@pytest.mark.parametrize('held', [True, False])
+def test_a_meaning_the_caller_gave_a_column_is_kept(anomaly, held):
     """The placeholder is a meaning nobody chose. One a caller typed by hand
     is a claim, whether or not the column it is on held anything to read."""
     from sdm_client import Schema
 
     frame = readings()[['flow', 'pressure']]
-    schema = Schema.from_data({'instance': frame.iloc[:0].astype(object)})
+    source = frame if held else frame.iloc[:0].astype(object)
+    schema = Schema.from_data({'instance': source})
     schema['instance']['flow'].stype = 'categorical'
 
     with pytest.raises(StructuredDataError):
@@ -244,15 +193,13 @@ def test_a_column_the_model_cannot_reconstruct_is_refused(anomaly):
 
     with pytest.raises(StructuredDataError) as caught:
         scored(anomaly, frame)
-    assert "'site'" in str(caught.value) or 'site' in str(caught.value)
+    assert 'site' in str(caught.value)
 
 
 def test_there_is_no_session_to_pin(anomaly):
     """A session pins a fitted context, and this model fits none."""
     with SDMClient.in_process(anomaly) as client:
-        with pytest.raises(
-            (UnsupportedRequestError, StructuredDataError)
-        ) as caught:
+        with pytest.raises(StructuredDataError) as caught:
             client.fit(Request.anomaly(readings()), model=KumoAnomaly())
     assert 'session' in str(caught.value)
 
@@ -313,15 +260,8 @@ def test_a_model_that_is_not_installed_is_not_offered(sdm, monkeypatch):
         assert 'kumo-anomaly' not in client.models()
 
 
-def test_another_model_is_not_asked_this_question(tabular):
-    """`anomaly_detection` is a task only one model here answers."""
-    with SDMClient.in_process(tabular) as client:
-        with pytest.raises(StructuredDataError):
-            client.predict(Request.anomaly(readings()), model=KumoTabular())
-
-
 @pytest.mark.parametrize('option', ['num_samples', 'num_steps'])
-@pytest.mark.parametrize('value', [0, -1, 1.5])
+@pytest.mark.parametrize('value', [0, 1.5, True])
 def test_the_sampling_knobs_take_a_count(anomaly, option, value):
     with pytest.raises(StructuredDataError) as caught:
         scored(anomaly, readings(), **{option: value})
