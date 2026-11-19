@@ -24,6 +24,7 @@ ignore = [
     # one thread.
     { id = "RUSTSEC-2026-0176", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; nth/nth_back on list and tuple iterators unused" },
     { id = "RUSTSEC-2026-0177", reason = "pyo3 0.28 pinned by arrow-pyarrow 58; PyCFunction::new_closure unused" },
+    { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained, not vulnerable; only Arrow 58 depends on it, and no first-party crate does" },
 ]
 
 [licenses]
