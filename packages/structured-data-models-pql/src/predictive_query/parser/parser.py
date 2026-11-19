@@ -335,8 +335,11 @@ class PQLParser:
                 or ast_dict['problem_type'] is None
             )
             problem_type = ast_dict['problem_type']
+        has_detect_clause = bool(ast_dict.get('detect'))
         if has_forecast_clause and problem_type is None:
             problem_type = ProblemType.FORECAST
+        if has_detect_clause and problem_type is None:
+            problem_type = ProblemType.ANOMALY
         for_each: str = str(ast_dict['for_each'])
         rfm_entity_ids: Condition | None = None
         if 'rfm_entity_ids' in ast_dict:

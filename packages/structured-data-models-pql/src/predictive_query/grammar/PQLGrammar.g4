@@ -12,6 +12,7 @@ prog:
 
 problem_spec:
 	forecast
+	| detect
 	| problem_type top_k
 	| top_k  // top_k alone is not valid - validation happens in problem_type_validator
 	| problem_type
@@ -22,6 +23,8 @@ problem_type: (RANK | CLASSIFY);
 top_k: (TOP INT);
 
 forecast: (FORECAST INT TIMEFRAMES);
+
+detect: (DETECT ANOMALY);
 
 target: condition | aggregation | column;
 
@@ -92,6 +95,10 @@ TOP: 'top' | 'TOP';
 FORECAST: 'forecast' | 'FORECAST';
 
 TIMEFRAMES: 'timeframes' | 'TIMEFRAMES';
+
+DETECT: 'detect' | 'DETECT';
+
+ANOMALY: 'anomaly' | 'ANOMALY';
 
 FOR_EACH: 'for each' | 'FOR EACH';
 
