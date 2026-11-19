@@ -5,11 +5,9 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. The three Python distributions share one version.
 
-## Unreleased
+## 2.0.0
 
-The release candidate version is `2.0.0rc1`, spelled `2.0.0-rc.1` in Rust's `Cargo.toml`.
 The Java library is built and tested in CI but is not released.
-The public API snapshot records this version update; publication remains pending.
 
 ### Added
 

@@ -4,32 +4,12 @@ Nothing deployed to point at, or tables that must not leave the machine: the
 same client runs the model here instead, with the same calls. This is how a
 notebook asks with no NIM at all.
 
-It is an extra, but no published release carries `in_process()` yet, so the
-plain install gets a client without it. Until one does, install from a
-checkout of `v2-candidate`, the branch the release is cut from. That build
-compiles the client's native extension, so it needs rustup and the toolchain
-`rust/rust-toolchain.toml` pins; pip runs the build from the client's own
-directory, where rustup does not read that pin, which is what the variable
-names. The client pins the API package to a version that is not published
-either, so install that from the checkout too, and the connectors package
-beside it: gathering reaches the client's data providers, and they are read
-even when the tables are already frames in memory.
+It is an extra, installed with the connectors package beside it: gathering
+reaches the client's data providers, and they are read even when the tables
+are already frames in memory.
 
 ```
-git clone -b v2-candidate \
-    https://github.com/NVIDIA/structured-data-models-client
-cd structured-data-models-client
-RUSTUP_TOOLCHAIN=1.97.0 pip install \
-    -e './packages/structured-data-models-api' \
-    -e './packages/structured-data-models-connectors' \
-    -e './packages/structured-data-models-client[in-process]'
-```
-
-Once a release carries it, that build goes away, but the connectors package
-does not: gathering imports it whatever the client was installed from.
-
-```
-pip install 'structured-data-models-client[in-process]' \
+pip install 'structured-data-models-client[in-process]>=2.0.0' \
     structured-data-models-connectors
 ```
 
