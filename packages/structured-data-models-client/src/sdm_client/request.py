@@ -335,6 +335,10 @@ class Request:
 
     query: str | None = None
 
+    #: How many steps a series is continued for, on the one request that asks
+    #: that, and ``None`` on every other.
+    horizon: int | None = None
+
     # How this question was rewritten, when it had to be: the kind of question
     # that was asked, what each part asks after (a candidate or a step) as the
     # caller gave it, and how many candidates a ranking keeps. Re-deriving any

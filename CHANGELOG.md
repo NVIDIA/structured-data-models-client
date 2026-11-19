@@ -76,6 +76,17 @@ these packages. All five distributions share one version and one entry.
   each of them, and what it read reading by reading. The last is asked for
   with the `integrated_gradients` inference option and the rest with
   `feature_axis`.
+- A query that asks for a forecast or an anomaly score is answered by the
+  model it names: `PredictiveQuery(...).materialize(model=KumoForecast())`
+  reads `PREDICT readings.value FORECAST 72 TIMEFRAMES FOR EACH
+  readings.reading_id`, and `materialize(model=KumoAnomaly())` reads
+  `PREDICT readings.* DETECT ANOMALY FOR EACH readings.reading_id`. `FOR
+  EACH` names the series: a column with one value per row makes the table
+  the series, and a column that repeats names the series a row belongs to,
+  with `indices` picking one. Rows are sent in time order, and an anomaly
+  score names its row by the table's key, or by where the caller had the
+  row when the table has none. `Request.horizon` holds how many steps a
+  series is continued for, and is `None` on every other request.
 
 ### Changed
 
