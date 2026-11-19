@@ -26,23 +26,19 @@ class _Cohorts:
     cohorts: list[str]
     shares: np.ndarray  # [cohorts]
     means: np.ndarray  # [cohorts, outputs]
-    score: float
 
 
 class ColumnExplanations:
     r"""Per-column cohort statistics over a request's labelled rows.
 
-    Says which columns the outcome moves with, and how: the more a column's
-    cohorts differ in mean outcome, the higher its score.
+    Says which columns the outcome moves with, and how, cohort by cohort.
 
     Each analysed column is split into cohorts: numerical values and
     ``COUNT(*)`` (rows linked to an entity) into quantile bins, categories into
     one cohort each, timestamps into time-before-anchor buckets. Each cohort
     carries its population share and its mean outcome: one mean per class for
     classification (classes ordered by frequency in the context labels),
-    the plain mean for regression. A column's score is the population-weighted
-    standard deviation of its cohort means, averaged over classes, then
-    normalized so all scores sum to 1.
+    the plain mean for regression.
 
     Relational columns are analysed per entity: an entity's related rows at one
     hop are averaged first, then entities are grouped. The task table itself is
@@ -94,21 +90,13 @@ class ColumnExplanations:
             self._relational(payload, instance, outcome)
         else:
             self._tabular(payload, instance, outcome)
-        total = sum(column.score for column in self._columns)
-        if total > 0:
-            self._columns = [
-                _Cohorts(**{**vars(column), 'score': column.score / total})
-                for column in self._columns
-            ]
-        self._columns.sort(key=lambda column: column.score, reverse=True)
 
     def to_pandas(self) -> pd.DataFrame:
         r"""One row per (table, hop, column, cohort, class).
 
-        Columns by normalized score, highest first (ties keep context order:
-        tables as sent, hops ascending, ``COUNT(*)`` then columns as sent);
-        cohorts in their own order; classes by frequency. ``class`` is
-        ``None`` for regression.
+        Columns in context order (tables as sent, hops ascending, ``COUNT(*)``
+        then columns as sent); cohorts in their own order; classes by
+        frequency. ``class`` is ``None`` for regression.
         """
         classes = self._classes if self._classes is not None else [None]
         rows = [
@@ -121,7 +109,6 @@ class ColumnExplanations:
                 label,
                 float(column.shares[at]),
                 float(column.means[at, k]),
-                column.score,
             )
             for column in self._columns
             for at, cohort in enumerate(column.cohorts)
@@ -138,7 +125,6 @@ class ColumnExplanations:
                 'class',
                 'share',
                 'mean',
-                'score',
             ],
         )
 
@@ -279,7 +265,7 @@ class ColumnExplanations:
                     assert anchor is not None
                     result = self._times(data[at], linked, anchor, outcome)
                 else:
-                    index, labels, other = data
+                    index, labels = data
                     if kind == 'categorical':
                         pairs = (linked, index[at])
                     else:
@@ -288,15 +274,15 @@ class ColumnExplanations:
                         position = np.searchsorted(rows, index[0][keep])
                         pairs = (linked[position], index[1][keep])
                     shares = self._shares(pairs, linked, len(labels))
-                    result = self._categories(shares, labels, other, outcome)
+                    result = self._categories(shares, labels, outcome)
                 self._add(name, hop, column, stypes[column], result)
 
     def _prepare(self, values: pd.Series, stype: str) -> tuple[str, Any] | None:
         r"""A column's per-row data, or ``None`` when it holds nothing to group.
 
-        A categorical becomes ``(index, labels, other)``: each row's cohort,
-        the cohort labels (N/A last) and which label is the merged tail. A
-        multicategorical's index is ``(row, cohort)`` pairs.
+        A categorical becomes ``(index, labels)``: each row's cohort and the
+        cohort labels (N/A last). A multicategorical's index is
+        ``(row, cohort)`` pairs.
         """
         if stype == 'numerical':
             numbers = pd.to_numeric(values, errors='coerce').to_numpy(float)
@@ -318,14 +304,11 @@ class ColumnExplanations:
             return None
         mapping = self._by_frequency(present)
         labels = [str(value) for value in mapping]
-        other = np.zeros(len(labels) + 1, dtype=bool)
         tail = None
         if len(mapping) > self.MAX_CATEGORIES:
             mapping = mapping[: self.MAX_CATEGORIES - 1]
             labels = [*labels[: self.MAX_CATEGORIES - 1], self.OTHER]
             tail = self.MAX_CATEGORIES - 1
-            other = np.zeros(self.MAX_CATEGORIES + 1, dtype=bool)
-            other[tail] = True
         labels.append(self.NA)
         position = {value: at for at, value in enumerate(mapping)}
         index = np.array(
@@ -335,7 +318,7 @@ class ColumnExplanations:
             ],
             dtype=int,
         )
-        return 'categorical', (index, labels, other)
+        return 'categorical', (index, labels)
 
     @staticmethod
     def _category(
@@ -361,11 +344,9 @@ class ColumnExplanations:
         rows = [at for at, cell in enumerate(cells) for _ in cell]
         index = [position[item] for cell in cells for item in cell]
         labels = [str(value) for value in mapping]
-        other = np.zeros(len(labels), dtype=bool)
         return 'multicategorical', (
             (np.array(rows, dtype=int), np.array(index, dtype=int)),
             labels,
-            other,
         )
 
     @staticmethod
@@ -434,7 +415,7 @@ class ColumnExplanations:
         entity: np.ndarray,
         anchor: np.ndarray,
         outcome: np.ndarray,
-    ) -> tuple[list[str], np.ndarray, np.ndarray, float] | None:
+    ) -> tuple[list[str], np.ndarray, np.ndarray] | None:
         r"""Time before the entity's anchor, in ``NUM_COHORTS`` buckets."""
         seconds = anchor[entity] - times
         valid = seconds >= 0  # NaN and future-looking rows drop out.
@@ -451,9 +432,7 @@ class ColumnExplanations:
             for start, end in zip(edges[:-2], edges[1:-1], strict=True)
         ]
         labels.append(f'[{edges[-2]} {unit}, {edges[-1]} {unit}]')
-        return self._categories(
-            shares, labels, np.zeros(len(labels), dtype=bool), outcome
-        )
+        return self._categories(shares, labels, outcome)
 
     @classmethod
     def _time_window(cls, seconds: int) -> tuple[int, str]:
@@ -479,8 +458,8 @@ class ColumnExplanations:
 
     def _ranges(
         self, values: np.ndarray, is_count: bool, outcome: np.ndarray
-    ) -> tuple[list[str], np.ndarray, np.ndarray, float] | None:
-        r"""Entities in quantile bins: labels, shares, means and raw score."""
+    ) -> tuple[list[str], np.ndarray, np.ndarray] | None:
+        r"""Entities in quantile bins: labels, shares and means."""
         values = values.astype(float)
         valid = ~np.isnan(values)
         values, outcome = values[valid], outcome[valid]
@@ -506,7 +485,7 @@ class ColumnExplanations:
         edges = np.concatenate(
             [bins[:1], (bins if zero_bin else bins[1:])[keep]]
         )
-        text = [f'{value:.2f}'.removesuffix('.00') for value in edges.tolist()]
+        text = self._edge_labels(edges.tolist())
         cohorts = []
         for at, (start, end) in enumerate(
             zip(text[:-1], text[1:], strict=True)
@@ -516,46 +495,58 @@ class ColumnExplanations:
             cohorts.append(
                 f'[{start} - {end}]' if at == 0 else f'({start} - {end}]'
             )
-        return cohorts, counts / counts.sum(), means, self._score(means, counts)
+        return cohorts, counts / counts.sum(), means
+
+    @staticmethod
+    def _edge_labels(edges: list[float]) -> list[str]:
+        r"""Edges at the fewest decimals, from 2, that keep adjacent distinct
+        edges apart; an all-zero fraction is dropped."""
+        for digits in range(2, 7):
+            text = [f'{value:.{digits}f}' for value in edges]
+            if all(
+                a != b or x == y
+                for a, b, x, y in zip(
+                    text[:-1], text[1:], edges[:-1], edges[1:], strict=True
+                )
+            ):
+                break
+        return [label.removesuffix('.' + '0' * digits) for label in text]
 
     def _categories(
         self,
         shares: np.ndarray,
         labels: list[str],
-        other: np.ndarray,
         outcome: np.ndarray,
-    ) -> tuple[list[str], np.ndarray, np.ndarray, float] | None:
+    ) -> tuple[list[str], np.ndarray, np.ndarray] | None:
         r"""Category cohorts, each entity weighted by its share in them."""
         counts = shares.sum(axis=0)
         keep = counts > 0
         if not keep.any():
             return None
         sums = shares.T @ outcome
-        counts, other = counts[keep], other[keep]
+        counts = counts[keep]
         means = sums[keep] / counts[:, None]
         cohorts = [
             label for label, kept in zip(labels, keep, strict=True) if kept
         ]
-        score = self._score(means[~other], counts[~other])
         if len(cohorts) > self.NUM_COHORTS:
-            split = self.NUM_COHORTS - 1
-            weight = counts[split:, None] / counts[split:].sum()
-            cohorts = [*cohorts[:split], self.OTHER]
+            # Missing values keep a row of their own, outside the merge.
+            na = 1 if cohorts[-1] == self.NA else 0
+            split = self.NUM_COHORTS - 1 - na
+            end = len(cohorts) - na
+            weight = counts[split:end, None] / counts[split:end].sum()
+            cohorts = [*cohorts[:split], self.OTHER, *cohorts[end:]]
             means = np.concatenate(
-                [means[:split], (weight * means[split:]).sum(0, keepdims=True)]
+                [
+                    means[:split],
+                    (weight * means[split:end]).sum(0, keepdims=True),
+                    means[end:],
+                ]
             )
-            counts = np.concatenate([counts[:split], [counts[split:].sum()]])
-        return cohorts, counts / counts.sum(), means, score
-
-    @staticmethod
-    def _score(means: np.ndarray, counts: np.ndarray) -> float:
-        r"""Population-weighted std (Bessel) of cohort means, class-averaged."""
-        total = counts.sum()
-        if total <= 1:
-            return 0.0
-        center = (means * counts[:, None]).sum(0) / total
-        spread = (counts[:, None] * (means - center) ** 2).sum(0) / (total - 1)
-        return float(np.sqrt(spread).mean())
+            counts = np.concatenate(
+                [counts[:split], [counts[split:end].sum()], counts[end:]]
+            )
+        return cohorts, counts / counts.sum(), means
 
     def _add(
         self,
@@ -563,14 +554,11 @@ class ColumnExplanations:
         hop: int,
         column: str,
         stype: str | None,
-        result: tuple[list[str], np.ndarray, np.ndarray, float] | None,
+        result: tuple[list[str], np.ndarray, np.ndarray] | None,
     ) -> None:
         if result is None:
             return
-        cohorts, shares, means, score = result
-        self._columns.append(
-            _Cohorts(table, hop, column, stype, cohorts, shares, means, score)
-        )
+        self._columns.append(_Cohorts(table, hop, column, stype, *result))
 
     # Values ###################################################################
 

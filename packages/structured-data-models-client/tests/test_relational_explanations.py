@@ -927,6 +927,48 @@ def test_forecast_names_an_unexplained_step(monkeypatch, relational_endpoint):
     assert any('step 2 carries none' in message for message in said), said
 
 
+def test_a_forecast_keeps_every_steps_request_id(
+    monkeypatch, gradient_explanation
+):
+    """A forecast's result records each step's request id under its step.
+
+    Rules out the old behavior, where only the first step's id survived.
+
+    Assumptions:
+    - Three steps, built by the real ``materialize()``; gathering is stood
+      in for, each step one call over users 5 and 7.
+    - The endpoint stamps call ``n`` (from 0) with the id ``call-n``.
+    """
+
+    class Stamping(RelationalEndpoint):
+        def predict(self, payload: dict) -> dict:
+            answer = super().predict(payload)
+            answer['id'] = f'call-{len(self.sent) - 1}'
+            return answer
+
+    client = SDMClient(url='http://localhost:8000')
+    client._backend = NimBackend(Stamping(gradient_explanation, frozenset()))
+    query = FORECAST.removeprefix('EXPLAIN ').replace(
+        'FORECAST 2', 'FORECAST 3'
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            relational_asked(monkeypatch, query, kind='regression'),
+            model=KumoRelational(),
+            outputs=['prediction'],
+        )
+
+    assert result.metadata['steps'] == [1, 2, 3]
+    assert result.metadata['step_request_ids'] == [
+        ['call-0'],
+        ['call-1'],
+        ['call-2'],
+    ]
+    assert result.request_id == 'call-0'
+
+
 def test_one_class_refusal_names_the_column(monkeypatch, relational_endpoint):
     """A one-class context is refused naming the predicted column, not the
     wire's ``TARGET``, when the query starts with `EXPLAIN`.
@@ -1250,18 +1292,21 @@ def test_a_relational_session_keeps_its_fit_time_analysis(
     assert label_means(other) == pytest.approx({'no': 1 / 2, 'yes': 1 / 2})
 
 
-def test_a_split_request_analyses_its_context_before_the_drop(
+#: Five labelled entities, two of them the scored users 5 and 7.
+GATHERED_AS = [(1, 'no'), (5, 'yes'), (7, 'no'), (2, 'yes'), (3, 'no')]
+
+
+def test_a_split_request_analyses_the_rows_it_sends(
     monkeypatch, relational_endpoint
 ):
-    """A request gathered as two calls is analysed once, over the context as
-    gathered, before the scored entities' own rows were dropped from it.
+    """A request gathered as two calls is analysed once, over the labelled
+    rows it sends, after the scored entities' rows were dropped.
 
     Assumptions:
-    - Both calls share one context of five entities, two of them the scored
-      users 5 and 7: yes 2/5 as gathered, 1/3 once they are dropped.
+    - Both calls share one context object, ``GATHERED_AS``; the leak check
+      drops 5 and 7 from it, leaving 1, 2, 3 in both: no 2/3, yes 1/3.
     """
-    gathered_as = [(1, 'no'), (5, 'yes'), (7, 'no'), (2, 'yes'), (3, 'no')]
-    first = labelled(gathered(5), gathered_as)
+    first = labelled(gathered(5), GATHERED_AS)
     second = gathered(7)
     second['context'] = first['context']
     gathering(monkeypatch, (first, second))
@@ -1279,6 +1324,39 @@ def test_a_split_request_analyses_its_context_before_the_drop(
         [row[1] for row in sent['context']['instance_table']['rows']]
         for sent in endpoint.sent
     ] == [[1, 2, 3], [1, 2, 3]]
+    assert label_means(result) == pytest.approx({'no': 2 / 3, 'yes': 1 / 3})
+
+
+def test_a_split_request_analyses_each_sent_instance_once(
+    monkeypatch, relational_endpoint
+):
+    """Calls carrying their own copies of one labelled draw are analysed over
+    the union of what they send, each instance counted once.
+
+    Assumptions:
+    - Each call gets its own copy of ``GATHERED_AS`` under the same instance
+      ids, as the engine sends it; each loses only its own scored entity.
+    - Sent: call 1 has 1, 7, 2, 3 and call 2 has 1, 5, 2, 3. The union
+      1, 5, 7, 2, 3 gives no 3/5, yes 2/5. Counting overlaps twice would
+      give yes 3/8; reading call 1 alone, 1/4.
+    """
+    first = labelled(gathered(5), GATHERED_AS)
+    second = labelled(gathered(7), GATHERED_AS)
+    gathering(monkeypatch, (first, second))
+    client, endpoint = relational_endpoint()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        result = client.predict(
+            materialized(TIER),
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation'],
+        )
+
+    assert [
+        [row[1] for row in sent['context']['instance_table']['rows']]
+        for sent in endpoint.sent
+    ] == [[1, 7, 2, 3], [1, 5, 2, 3]]
     assert label_means(result) == pytest.approx({'no': 3 / 5, 'yes': 2 / 5})
 
 
@@ -1534,6 +1612,129 @@ def test_fractional_edges_keep_two_decimals():
 
     labels = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
     assert labels == ['[0 - 23.71]', '(23.71 - 237.14]']
+
+
+def test_tiny_edges_gain_decimals_until_distinct():
+    """Cohort edges too close for two decimals print with more, so every
+    cohort label is distinct and none is in scientific notation.
+
+    Assumptions:
+    - Ten entities with ``tenure_days`` 0, 0.0001, ..., 0.0009, one row each.
+    - Hand-computed: the deciles step by 0.00009, so at two decimals every
+      edge would print as ``0``; each of the ten bins holds an entity.
+    """
+    frame = numbered([0.0001 * at for at in range(10)])
+
+    labels = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
+    assert len(labels) == 10
+    assert all('e+' not in label and 'e-' not in label for label in labels)
+
+
+def test_single_value_edges_keep_two_decimals():
+    """A one-value column, whose two edges are equal, prints them at two
+    decimals rather than escalating.
+
+    Assumptions:
+    - Two entities with ``tenure_days`` 0.3 each.
+    - Hand-computed: every decile is 0.3, so the column is one cohort.
+    """
+    frame = numbered([0.3, 0.3])
+
+    labels = list(frame[frame['column'] == 'tenure_days']['cohort'].unique())
+    assert labels == ['[0.30 - 0.30]']
+
+
+def categorised(kinds: int) -> pd.DataFrame:
+    """The ``cat`` cohorts of a 300-row regression table: every fifth row
+    has no ``cat`` and outcome 1, the rest cycle ``c0``.. over ``kinds``
+    categories with outcome 0."""
+    cat = [f'c{i % kinds}' if i % 5 else None for i in range(300)]
+    payload = {
+        'task': {'kind': 'regression', 'target': {'column_name': 'y'}},
+        'schema': {
+            'instance_table': {
+                'primary_key': 'pk',
+                'columns': {
+                    'pk': {'stype': 'ID'},
+                    'cat': {'stype': 'categorical'},
+                    'y': {'stype': 'numerical'},
+                },
+            }
+        },
+        'context': {
+            'instance_table': {
+                'columns': ['pk', 'cat', 'y'],
+                'rows': [
+                    [i, value, 1.0 if value is None else 0.0]
+                    for i, value in enumerate(cat)
+                ],
+            }
+        },
+    }
+    frame = ColumnExplanations(payload).to_pandas()
+    return frame[frame['column'] == 'cat']
+
+
+def test_missing_values_keep_their_own_cohort_past_the_merge():
+    """A categorical column with more cohorts than fit keeps its missing
+    values as an ``N/A`` row of their own, after ``OTHER(*)``, which merges
+    only rare categories.
+
+    Assumptions:
+    - Twelve categories plus missing values: 13 cohorts, past the 10 shown.
+    - Hand-computed: missing rows are 60 of 300 (share 0.2), all with
+      outcome 1; every categorised row has outcome 0.
+    """
+    cohorts = categorised(12)
+
+    assert len(cohorts) == ColumnExplanations.NUM_COHORTS
+    assert list(cohorts['cohort'])[-2:] == ['OTHER(*)', 'N/A']
+    na = cohorts[cohorts['cohort'] == 'N/A']
+    assert na['share'].item() == pytest.approx(0.2)
+    assert na['mean'].item() == pytest.approx(1.0)
+    other = cohorts[cohorts['cohort'] == 'OTHER(*)']
+    assert other['mean'].item() == pytest.approx(0.0)
+
+
+def test_a_narrow_column_shows_missing_values_without_a_merge():
+    """A categorical column within the cohorts shown lists every category
+    and ``N/A``, with no ``OTHER(*)``.
+
+    Assumptions:
+    - Three categories plus missing values: 4 cohorts.
+    """
+    cohorts = categorised(3)
+
+    assert list(cohorts['cohort']) == ['c0', 'c1', 'c2', 'N/A']
+    assert cohorts['mean'].iloc[-1] == pytest.approx(1.0)
+
+
+def test_a_forecast_is_validated_before_it_is_analysed(
+    monkeypatch, relational_endpoint
+):
+    """An explained forecast asking for an output no model gives is refused
+    before any column analysis starts.
+
+    Assumptions:
+    - Two steps over users 5 and 7, gathering stood in for.
+    - The analysis is replaced by a spy that records each start.
+    """
+    started: list[Any] = []
+    monkeypatch.setattr(
+        'sdm_client.client.ColumnExplanations',
+        lambda *args, **kwargs: started.append(args),
+    )
+    client, _ = relational_endpoint()
+    request = relational_asked(monkeypatch, FORECAST, kind='regression')
+
+    with pytest.raises(StructuredDataError):
+        client.predict(
+            request,
+            model=KumoRelational(),
+            outputs=['prediction', 'explanation', 'bogus'],
+        )
+
+    assert started == []
 
 
 def test_a_forecast_not_explained_is_not_analysed(
