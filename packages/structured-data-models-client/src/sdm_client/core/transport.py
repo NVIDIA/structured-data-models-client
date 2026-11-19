@@ -49,6 +49,36 @@ _RESPONSE_CHUNK_BYTES = 1024 * 1024
 # The full request timeout would let an unreachable endpoint stall a teardown.
 _DELETE_TIMEOUT_SECONDS = 10.0
 _USERINFO_RE = re.compile(r'(?<=//)[^/@\s]+@')
+# The NVIDIA API catalog's hosted relational model: an exact predictions URL,
+# not a base, that takes its key as a bearer token and serves no other route.
+_HOSTED_HOST = 'ai.api.nvidia.com'
+_HOSTED_PATH = '/v1/structured-data/nvidia/kumo-relational/predictions'
+
+
+def _is_hosted_predictions(url: str) -> bool:
+    r"""Whether ``url`` is the API catalog's hosted relational model.
+
+    Narrow on purpose: https, the catalog's host with no port or userinfo,
+    exactly its predictions path (a trailing slash tolerated) and no query or
+    fragment. Every other URL is a base the routes are appended to.
+    """
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url)
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() == 'https'
+        and (parsed.hostname or '') == _HOSTED_HOST
+        and port is None
+        and parsed.username is None
+        and parsed.password is None
+        and not parsed.query
+        and not parsed.fragment
+        and parsed.path.rstrip('/') == _HOSTED_PATH
+    )
 
 
 def redact_url(url: str | None) -> str | None:
@@ -230,6 +260,8 @@ class _Session(requests.Session):
             and prepared_request.url
             and self.should_strip_auth(previous_url, prepared_request.url)
         ):
+            # The bearer token, as ``Authorization``, is the one
+            # ``super().rebuild_auth`` has already stripped.
             prepared_request.headers.pop('X-API-Key', None)
         if prepared_request.url:
             _validate_tls_verification(prepared_request.url, self._verify_ssl)
@@ -442,6 +474,8 @@ def _build_session(
     verify_ssl: bool,
     max_retries: int,
     backoff_factor: float,
+    *,
+    bearer: bool = False,
 ) -> requests.Session:
     r"""The pooled session, with ``POST /v1/sessions`` held out of the retries.
 
@@ -456,9 +490,14 @@ def _build_session(
     stricter policy is mounted on the exact create-session URL and the ordinary
     one re-mounted on the routes below it: scoring against a pinned context and
     releasing one are both replayable and keep the full policy.
+
+    ``bearer`` sends the key as ``Authorization: Bearer``, as the API catalog
+    reads it, rather than as ``X-API-Key``.
     """
     session = _Session(verify_ssl=verify_ssl)
-    if api_key:
+    if api_key and bearer:
+        session.headers['Authorization'] = f'Bearer {api_key}'
+    elif api_key:
         session.headers['X-API-Key'] = api_key
     adapter = HTTPAdapter(max_retries=_build_retry(max_retries, backoff_factor))
     session.mount('http://', adapter)
@@ -539,6 +578,11 @@ class Transport:
     ``timeout`` bounds each individual attempt, not the call as a whole: a
     request that exhausts ``max_retries`` can take up to
     ``(max_retries + 1) * timeout`` plus backoff.
+
+    The NVIDIA API catalog's hosted relational model is the one URL taken as
+    it is rather than as a base: predictions are posted to that URL, the key
+    sent as ``Authorization: Bearer``, and it serves no sessions, model list
+    or readiness route.
     """
 
     serves_sessions = True
@@ -562,8 +606,17 @@ class Transport:
         self._timeout = timeout
         self._closed = False
         self._max_retries = max_retries
+        # An exact predictions URL rather than a base.
+        self._exact = _is_hosted_predictions(url)
+        if self._exact:
+            self.serves_sessions = False
         self._session = _build_session(
-            self._url, api_key, verify_ssl, max_retries, backoff_factor
+            self._url,
+            api_key,
+            verify_ssl,
+            max_retries,
+            backoff_factor,
+            bearer=self._exact,
         )
 
     @property
@@ -597,6 +650,29 @@ class Transport:
                 code='INVALID_CONFIGURATION',
             )
 
+    def _require_route(self, path: str) -> None:
+        r"""Refuse, by name, a route an exact predictions URL does not serve,
+        rather than calling a URL made up from it."""
+        if not self._exact or path == _PREDICTIONS_PATH:
+            return
+        if path.startswith(_SESSIONS_PATH):
+            raise StructuredDataError(
+                f'{self._url} cannot pin a context: it answers one request '
+                f'at a time. Use predict(), which sends the context with '
+                f'every call',
+                code='SESSIONS_UNSUPPORTED',
+            )
+        what = 'model list' if path == _MODELS_PATH else 'readiness route'
+        raise StructuredDataError(
+            f'{self._url} serves predictions only; it has no {what}',
+            code='UNSUPPORTED_REQUEST',
+        )
+
+    def _address(self, path: str) -> str:
+        r"""Where ``path`` is called: the exact URL for a prediction to the
+        API catalog, the base URL and ``path`` otherwise."""
+        return self._url if self._exact else self._url + path
+
     def health_ready(
         self,
         *,
@@ -605,6 +681,7 @@ class Transport:
         raise_on_not_ready: bool = False,
     ) -> bool:
         self._require_open()
+        self._require_route(_HEALTH_READY_PATH)
         request_timeout = self._timeout if timeout is None else timeout
         _validate_limits(request_timeout, 0)
         url = self._url + _HEALTH_READY_PATH
@@ -666,6 +743,7 @@ class Transport:
         endpoint did not serve.
         """
         self._require_open()
+        self._require_route(_MODELS_PATH)
         request_timeout = self._timeout if timeout is None else timeout
         _validate_limits(request_timeout, 0)
         url = self._url + _MODELS_PATH
@@ -714,7 +792,7 @@ class Transport:
         refuse as too deep (B-22); an empty one is given as
         ``{}``, as:meth:`predict` reads it.
         """
-        url = self._url + _PREDICTIONS_PATH
+        url = self._address(_PREDICTIONS_PATH)
         content = self._post_raw(_PREDICTIONS_PATH, body) or b'{}'
         try:
             _decoded_object(content, url)
@@ -746,6 +824,7 @@ class Transport:
         204 whether or not the session is still there.
         """
         self._require_open()
+        self._require_route(_SESSIONS_PATH)
         url = f'{self._url}{_SESSIONS_PATH}/{_path_segment(session_id)}'
         request_timeout = min(self._timeout, _DELETE_TIMEOUT_SECONDS)
         try:
@@ -788,13 +867,14 @@ class Transport:
         return self._post_body(path, body.encode('utf-8'))
 
     def _post_body(self, path: str, body: bytes) -> dict[str, Any]:
-        return _decoded_object(self._post_raw(path, body), self._url + path)
+        return _decoded_object(self._post_raw(path, body), self._address(path))
 
     def _post_raw(self, path: str, body: bytes) -> bytes:
         r"""Posts ``body`` and gives back the answer's bytes, a status of
         400 or more raised as the endpoint's refusal."""
         self._require_open()
-        url = self._url + path
+        self._require_route(path)
+        url = self._address(path)
         try:
             with self._session.post(
                 url,

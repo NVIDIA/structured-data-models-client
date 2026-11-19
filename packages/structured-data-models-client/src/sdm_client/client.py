@@ -278,10 +278,14 @@ class SDMClient:
         :meth:`health_ready`,:meth:`models`, or a prediction.
 
         Args:
-            url: Base URL of the NIM, e.g. ``'http://localhost:8000'``.
+            url: Base URL of the NIM, e.g. ``'http://localhost:8000'``, or
+                the NVIDIA API catalog's predictions URL for the hosted
+                relational model, which is called as it is and serves no
+                sessions, model list or readiness route.
             api_key: Sent as ``X-API-Key`` when an authenticating gateway
-                fronts the NIM. Refused over plaintext ``http://`` to a
-                non-local host.
+                fronts the NIM, and as ``Authorization: Bearer`` to the API
+                catalog. Refused over plaintext ``http://`` to a non-local
+                host.
             verify_ssl: Whether to verify the server's TLS certificate.
             timeout: Seconds to wait for each individual attempt, not for the
                 call as a whole.

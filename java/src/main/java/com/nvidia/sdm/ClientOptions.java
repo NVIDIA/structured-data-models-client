@@ -9,8 +9,9 @@ import java.util.Objects;
 
 /**
  * How {@link SdmClient#connect(String, ClientOptions)} reaches the endpoint, as Python's {@code
- * SDMClient(url, api_key, timeout=, max_retries=)}: an API key sent as {@code X-API-Key} (refused
- * over plaintext {@code http://} to a host other than this one), how long each attempt may take
+ * SDMClient(url, api_key, timeout=, max_retries=)}: an API key sent as {@code X-API-Key}, or as
+ * {@code Authorization: Bearer} to the NVIDIA API catalog's predictions URL (refused over
+ * plaintext {@code http://} to a host other than this one), how long each attempt may take
  * (60 seconds), and how many times a transient failure is tried again (3).
  */
 public final class ClientOptions {

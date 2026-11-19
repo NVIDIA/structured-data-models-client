@@ -21,6 +21,10 @@ Use either option:
 
 **A hosted endpoint.** Find the model in the NVIDIA API catalog, generate a
 key, and pass the endpoint and key to `SDMClient`.
+For Kumo Relational the endpoint is
+`https://ai.api.nvidia.com/v1/structured-data/nvidia/kumo-relational/predictions`, passed as it is.
+The client posts predictions to that URL and sends the key as a bearer token.
+The hosted endpoint answers one request at a time, so `fit` sessions, `models()` and `health_ready()` are not available on it.
 
 **The container, run yourself.** Pull the NIM and run it on your own GPU host,
 then point the client at it. Use this when the data cannot leave your
