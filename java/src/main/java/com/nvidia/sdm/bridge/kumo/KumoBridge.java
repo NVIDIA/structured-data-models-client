@@ -21,15 +21,31 @@ import java.util.Objects;
  * <pre>{@code
  * ProviderSource source = KumoBridge.source(graph, dataAccess);
  * Schema schema = Schema.fromSource(source, KumoBridge.options(graph));
+ * Request request = dataAccess.snapshot(() -> query.materialize(schema, options));
  * }</pre>
  *
- * <p>Each request the core sends becomes one or more prototype {@link ai.kumo.data.Query}s with
- * only these parts: a projection of plain columns, {@code COUNT()} or {@code MIN}/{@code MAX} of
- * {@code TIME_MICROS(column)}; a predicate of {@code AND}, {@code OR}, {@code IN}, {@code EQ},
- * {@code IS_NOT null}, and {@code TIME_MICROS(column)} compared with a micros literal; and a
- * limit. No joins, scalar subqueries or text matching. Keys are batched into one {@code IN} per
+ * <p>The bridge answers each of the core's requests on its own, so it cannot open one snapshot
+ * for a whole prediction. Wrap the call that reads (here {@code materialize}) in {@link
+ * DataAccess#snapshot}, as the prototype wraps its own prepare, so a {@code DataAccess} that reads
+ * one consistent snapshot, or caches per snapshot, does so across all of the bridge's queries.
+ *
+ * <p>Each request the core sends becomes one or more prototype {@link ai.kumo.data.Query}s, each
+ * in a shape the prototype itself sends, with no alias and no order:
+ *
+ * <ul>
+ *   <li>rows: {@code Query.scan}'s shape (an empty projection, so every column) with a limit or
+ *       none;
+ *   <li>aggregates: one per query, {@code COUNT()}, or {@code MIN} or {@code MAX} of {@code
+ *       TIME_MICROS(column)};
+ *   <li>predicates: none, or an {@code AND} of terms: {@code IN}, an {@code OR} of {@code AND}s of
+ *       {@code EQ} (keys of several columns), {@code IS_NOT null}, and {@code TIME_MICROS(column)}
+ *       {@code GT} or {@code LE} a micros literal.
+ * </ul>
+ *
+ * <p>No joins, scalar subqueries or text matching. Keys are batched into one {@code IN} per
  * request (at most {@link BridgeOptions#maxKeysPerQuery} keys each), and per-key windows, order and
- * limits are applied in Java.
+ * limits are applied in Java. A column type the bridge does not know (one a modified prototype
+ * adds) is read as text.
  *
  * <p>The prototype jar is not bundled: the caller already has it on the class path.
  */

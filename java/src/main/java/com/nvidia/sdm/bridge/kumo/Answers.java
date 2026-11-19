@@ -20,6 +20,7 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.BaseIntVector;
 import org.apache.arrow.vector.BigIntVector;
@@ -47,16 +48,34 @@ import org.apache.arrow.vector.util.Text;
 final class Answers {
   private Answers() {}
 
-  /** The Arrow field of a prototype column. */
+  /** The column types of the stock prototype; a modified copy may add others. */
+  private static final Set<String> KNOWN_TYPES =
+      Set.of("STRING", "INT64", "FLOAT64", "BOOL", "TIMESTAMP", "STRINGLIST");
+
+  /**
+   * The type the bridge reads a column as: its own type when the stock prototype has it, else
+   * {@code STRING}. A caller's copy of the prototype may add types (an id type, say) that this
+   * code cannot name; their values are read and compared as text.
+   */
+  static Column.Type readAs(Column.Type type) {
+    return Column.Type.valueOf(readAs(type.name()));
+  }
+
+  /** {@link #readAs(Column.Type)} by type name. */
+  static String readAs(String typeName) {
+    return KNOWN_TYPES.contains(typeName) ? typeName : "STRING";
+  }
+
+  /** The Arrow field of a prototype column; any type the bridge does not know is text. */
   static Field field(String name, Column.Type type) {
     ArrowType arrow =
         switch (type) {
-          case STRING -> ArrowType.Utf8.INSTANCE;
           case INT64 -> new ArrowType.Int(64, true);
           case FLOAT64 -> new ArrowType.FloatingPoint(FloatingPointPrecision.DOUBLE);
           case BOOL -> ArrowType.Bool.INSTANCE;
           case TIMESTAMP -> new ArrowType.Timestamp(TimeUnit.MICROSECOND, null);
           case STRINGLIST -> ArrowType.List.INSTANCE;
+          default -> ArrowType.Utf8.INSTANCE;
         };
     List<Field> children =
         type == Column.Type.STRINGLIST

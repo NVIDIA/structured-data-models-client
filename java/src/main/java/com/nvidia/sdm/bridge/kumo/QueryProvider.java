@@ -37,7 +37,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 
 /**
  * Answers the core's requests through a prototype {@link DataAccess}: one {@link Query} per
- * request (one per column for {@code time_bounds}), and per-seed windows, order and limits in
+ * request (two per column for {@code time_bounds}), and per-seed windows, order and limits in
  * Java, as the core's own in-memory provider applies them.
  */
 public final class QueryProvider implements DataProvider {
@@ -109,7 +109,7 @@ public final class QueryProvider implements DataProvider {
             rows.add(
                 new Object[] {
                   column.name(),
-                  ai.kumo.graph.Values.dtype(column.type()),
+                  ai.kumo.graph.Values.dtype(Answers.readAs(column.type())),
                   false,
                   table.primaryKey().contains(column.name())
                 });
@@ -148,7 +148,7 @@ public final class QueryProvider implements DataProvider {
     if (predicate == null) {
       return Answers.reader(schema, List.of(), allocator);
     }
-    Rows read = execute(query(purpose, table, columns, predicate.orElse(null), limit));
+    Rows read = execute(query(purpose, table, predicate.orElse(null), limit));
     List<Object[]> rows = new ArrayList<>();
     for (Map<String, Object> row : read.values()) {
       Object[] values = new Object[columns.size()];
@@ -167,12 +167,11 @@ public final class QueryProvider implements DataProvider {
     Optional<Expr> predicate = predicate(table, count.filters());
     long counted = 0;
     if (predicate != null) {
-      Map<String, Expr> projection = new LinkedHashMap<>();
-      projection.put("rows", new Expr.Call(Expr.Function.COUNT, List.of()));
-      Rows read =
-          execute(new Query(purpose("count_rows"), table.name(), null, projection, List.of(), predicate.orElse(null), List.of(), null));
-      if (!read.values().isEmpty() && read.values().get(0).get("rows") != null) {
-        counted = ((Number) read.values().get(0).get("rows")).longValue();
+      // One top-level aggregate, as the prototype sends MIN and MAX of a time column.
+      Rows read = execute(aggregate("count_rows", table, new Expr.Call(Expr.Function.COUNT, List.of()), predicate.orElse(null)));
+      Object value = single(read);
+      if (value != null) {
+        counted = ((Number) value).longValue();
       }
     }
     List<Object[]> rows = new ArrayList<>();
@@ -186,14 +185,11 @@ public final class QueryProvider implements DataProvider {
     for (int position = 0; position < bounds.columns().size(); position++) {
       DataRequest.TableColumn column = bounds.columns().get(position);
       Table table = table(column.table());
-      Expr micros = new Expr.Call(Expr.Function.TIME_MICROS, List.of(new Expr.Field(column.column())));
-      Map<String, Expr> projection = new LinkedHashMap<>();
-      projection.put("min", new Expr.Call(Expr.Function.MIN, List.of(micros)));
-      projection.put("max", new Expr.Call(Expr.Function.MAX, List.of(micros)));
-      Rows read =
-          execute(new Query(purpose("time_bounds"), table.name(), null, projection, List.of(), null, List.of(), null));
-      Map<String, Object> row = read.values().isEmpty() ? Map.of() : read.values().get(0);
-      rows.add(new Object[] {position, row.get("min"), row.get("max")});
+      Expr micros = micros(column.column());
+      // One aggregate per query, as the prototype reads a history start and a maximum timestamp.
+      Object min = single(execute(aggregate("time_bounds", table, new Expr.Call(Expr.Function.MIN, List.of(micros)), null)));
+      Object max = single(execute(aggregate("time_bounds", table, new Expr.Call(Expr.Function.MAX, List.of(micros)), null)));
+      rows.add(new Object[] {position, min, max});
     }
     return Answers.reader(schema, rows, allocator);
   }
@@ -224,20 +220,16 @@ public final class QueryProvider implements DataProvider {
     }
 
     // One query: the seeds' keys, within the widest window any seed asks.
-    Set<String> asked = new LinkedHashSet<>(request.key());
-    asked.addAll(request.columns());
-    window.ifPresent(w -> asked.add(w.column()));
-    request.order().forEach(term -> asked.add(term.column()));
     List<Expr> terms = new ArrayList<>();
     terms.add(keysIn(table, request.key(), seeds.stream().map(Seed::key).toList()));
     if (window.isPresent()) {
       Expr time = micros(window.get().column());
       window.get().lower().ifPresent(bound -> widest(seeds, Seed::lower, true)
-          .ifPresent(at -> terms.add(new Expr.Compare(time, bound.inclusive() ? Expr.Op.GE : Expr.Op.GT, new Expr.Literal(at)))));
+          .ifPresent(at -> terms.add(after(time, at, bound.inclusive()))));
       window.get().upper().ifPresent(bound -> widest(seeds, Seed::upper, false)
-          .ifPresent(at -> terms.add(new Expr.Compare(time, bound.inclusive() ? Expr.Op.LE : Expr.Op.LT, new Expr.Literal(at)))));
+          .ifPresent(at -> terms.add(until(time, at, bound.inclusive()))));
     }
-    Rows read = execute(query("neighbors", table, new ArrayList<>(asked), new Expr.And(terms), null));
+    Rows read = execute(query("neighbors", table, new Expr.And(terms), null));
     Map<List<String>, List<Map<String, Object>>> byKey = byKey(read, request.key());
 
     Long limit = null;
@@ -283,10 +275,8 @@ public final class QueryProvider implements DataProvider {
     if (seeds.isEmpty()) {
       return Answers.reader(schema, List.of(), allocator);
     }
-    Set<String> asked = new LinkedHashSet<>(request.key());
-    asked.addAll(request.columns());
     Rows read =
-        execute(query("lookup", table, new ArrayList<>(asked), keysIn(table, request.key(), seeds.stream().map(Seed::key).toList()), null));
+        execute(query("lookup", table, new Expr.And(List.of(keysIn(table, request.key(), seeds.stream().map(Seed::key).toList()))), null));
     Map<List<String>, List<Map<String, Object>>> byKey = byKey(read, request.key());
     // One row per batch holding a match, in the order batches first match, with its count.
     Map<String, Object[]> perBatch = new LinkedHashMap<>();
@@ -481,7 +471,10 @@ public final class QueryProvider implements DataProvider {
 
   // --- predicates and queries ----------------------------------------------------------------
 
-  /** The filters as one predicate; empty for none; {@code null} when no row can match. */
+  /**
+   * The filters as one {@code AND} of terms, as every prototype predicate is; empty for none;
+   * {@code null} when no row can match.
+   */
   private Optional<Expr> predicate(Table table, List<DataRequest.Filter> filters) throws Exception {
     List<Expr> terms = new ArrayList<>();
     for (DataRequest.Filter filter : filters) {
@@ -495,8 +488,8 @@ public final class QueryProvider implements DataProvider {
         }
         case DataRequest.TimeRange range -> {
           Expr time = micros(range.column());
-          range.lower().ifPresent(bound -> terms.add(new Expr.Compare(time, bound.inclusive() ? Expr.Op.GE : Expr.Op.GT, new Expr.Literal(Answers.micros(bound.value())))));
-          range.upper().ifPresent(bound -> terms.add(new Expr.Compare(time, bound.inclusive() ? Expr.Op.LE : Expr.Op.LT, new Expr.Literal(Answers.micros(bound.value())))));
+          range.lower().ifPresent(bound -> terms.add(after(time, Answers.micros(bound.value()), bound.inclusive())));
+          range.upper().ifPresent(bound -> terms.add(until(time, Answers.micros(bound.value()), bound.inclusive())));
         }
         case DataRequest.NotNull notNull -> terms.add(
             new Expr.Compare(new Expr.Field(notNull.column()), Expr.Op.IS_NOT, new Expr.Literal(null)));
@@ -505,7 +498,7 @@ public final class QueryProvider implements DataProvider {
     if (terms.isEmpty()) {
       return Optional.empty();
     }
-    return Optional.of(terms.size() == 1 ? terms.get(0) : new Expr.And(terms));
+    return Optional.of(new Expr.And(terms));
   }
 
   private static List<List<Object>> keyRows(DataRequest.KeySet keys) throws Exception {
@@ -552,7 +545,7 @@ public final class QueryProvider implements DataProvider {
     return new Expr.Or(any);
   }
 
-  /** A key value as the prototype's literals carry it for the column's type. */
+  /** A key value as the prototype's literals carry it for the column's type; unknown types as text. */
   private static Object literal(Object value, Column.Type type) {
     if (value == null) {
       return null;
@@ -560,10 +553,10 @@ public final class QueryProvider implements DataProvider {
     return switch (type) {
       case INT64 -> value instanceof Number number ? (Object) number.longValue() : (Object) Long.parseLong(value.toString());
       case FLOAT64 -> value instanceof Number number ? number.doubleValue() : Double.parseDouble(value.toString());
-      case STRING -> value instanceof Number number && !(value instanceof Double || value instanceof Float)
-          ? new BigDecimal(number.toString()).toPlainString() : value.toString();
       case TIMESTAMP -> Answers.micros(value);
-      default -> value;
+      case BOOL, STRINGLIST -> value;
+      default -> value instanceof Number number && !(value instanceof Double || value instanceof Float)
+          ? new BigDecimal(number.toString()).toPlainString() : value.toString();
     };
   }
 
@@ -571,12 +564,35 @@ public final class QueryProvider implements DataProvider {
     return new Expr.Call(Expr.Function.TIME_MICROS, List.of(new Expr.Field(column)));
   }
 
-  private Query query(String purpose, Table table, List<String> columns, Expr predicate, Integer limit) {
-    Map<String, Expr> projection = new LinkedHashMap<>();
-    for (String column : columns) {
-      projection.put(column, new Expr.Field(column));
-    }
-    return new Query(purpose(purpose), table.name(), null, projection, List.of(), predicate, List.of(), limit);
+  /**
+   * {@code time > at}, or {@code time >= at} as {@code time > at - 1}: the prototype bounds
+   * {@code TIME_MICROS} only with {@code GT} and {@code LE}, and micros are whole numbers.
+   */
+  static Expr after(Expr time, long at, boolean inclusive) {
+    return new Expr.Compare(time, Expr.Op.GT, new Expr.Literal(inclusive ? Math.subtractExact(at, 1L) : at));
+  }
+
+  /** {@code time <= at}, or {@code time < at} as {@code time <= at - 1}; see {@link #after}. */
+  static Expr until(Expr time, long at, boolean inclusive) {
+    return new Expr.Compare(time, Expr.Op.LE, new Expr.Literal(inclusive ? at : Math.subtractExact(at, 1L)));
+  }
+
+  /**
+   * A row read in the prototype's {@code Query.scan} shape: every column (an empty projection),
+   * no alias; the caller picks the columns it needs from the rows.
+   */
+  private Query query(String purpose, Table table, Expr predicate, Integer limit) {
+    return Query.scan(purpose(purpose), table.name(), predicate, List.of(), limit);
+  }
+
+  /** One top-level aggregate named {@code value}, with no alias, as the prototype sends them. */
+  private Query aggregate(String purpose, Table table, Expr aggregate, Expr predicate) {
+    return new Query(purpose(purpose), table.name(), null, Map.of("value", aggregate), List.of(), predicate, List.of(), null);
+  }
+
+  /** The {@code value} of an aggregate's one row, or {@code null}. */
+  private static Object single(Rows read) {
+    return read.values().isEmpty() ? null : read.values().get(0).get("value");
   }
 
   private String purpose(String request) {
@@ -598,7 +614,7 @@ public final class QueryProvider implements DataProvider {
   private static Column.Type type(Table table, String column) {
     for (Column found : table.columns()) {
       if (found.name().equals(column)) {
-        return found.type();
+        return Answers.readAs(found.type());
       }
     }
     throw new IllegalArgumentException("no column " + table.name() + "." + column + " in the graph");

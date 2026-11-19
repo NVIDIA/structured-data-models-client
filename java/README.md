@@ -260,6 +260,17 @@ Schema schema = Schema.fromSource(source, options);
 
 With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` whose seeds, or a `scan` without a limit whose key filter, hold more than `n` keys reaches the provider in parts of at most `n` keys.
 
+### Code written for the prototype Java SDK
+
+`com.nvidia.sdm.bridge.kumo.KumoBridge` answers the core's requests through the prototype SDK's `Graph` and `DataAccess` (the prototype JAR stays on your class path).
+Each request becomes prototype `Query`s in shapes the prototype itself sends; windows, order and limits are applied in Java.
+The bridge answers requests one at a time, so wrap the reading call in `DataAccess.snapshot`, as the prototype wraps its own prepare:
+
+```java
+Schema schema = Schema.fromSource(KumoBridge.source(graph, access), KumoBridge.options(graph));
+Request request = access.snapshot(() -> query.materialize(schema, options));
+```
+
 ## Build
 
 The natives are built by cargo and copied into `target/natives/<platform>/` before Maven packages the JAR (`<platform>` is `linux-x86_64`, `linux-aarch64`, `macos-aarch64`, `macos-x86_64` or `windows-x86_64`):

@@ -5,9 +5,13 @@
 package com.nvidia.sdm.bridge.kumo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import ai.kumo.data.DataAccess;
+import ai.kumo.data.Expr;
 import ai.kumo.data.Query;
 import ai.kumo.data.Rows;
 import ai.kumo.graph.Graph;
@@ -21,12 +25,19 @@ import com.nvidia.sdm.PredictiveQuery;
 import com.nvidia.sdm.Request;
 import com.nvidia.sdm.Schema;
 import com.nvidia.sdm.SqliteSource;
+import com.nvidia.sdm.provider.DataRequest;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.Statement;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import org.apache.arrow.memory.BufferAllocator;
+import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.ipc.ArrowReader;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -144,12 +155,100 @@ class BridgeEndToEndTest {
       }
       assertEquals(withoutNodeIds(sqlitePayload.get("predict")), withoutNodeIds(bridgePayload.get("predict")));
 
-      assertTrue(!access.queries.isEmpty());
+      // The materialize above does not count rows; count with every filter kind, at day bounds.
+      DataRequest.Bound from = new DataRequest.Bound(Instant.parse("2025-01-01T00:00:00Z"), true);
+      DataRequest.Bound to = new DataRequest.Bound(Instant.parse("2025-02-01T00:00:00Z"), false);
+      DataRequest.CountRows count =
+          new DataRequest.CountRows(
+              new DataRequest.Relation(List.of("orders")),
+              List.of(
+                  new DataRequest.TimeRange("ts", Optional.of(from), Optional.of(to)),
+                  new DataRequest.NotNull("amount")));
+      long expected;
+      try (Statement s = con.createStatement();
+          ResultSet r = s.executeQuery(
+              "SELECT COUNT(*) FROM orders WHERE amount IS NOT NULL"
+                  + " AND ts >= '2025-01-01T00:00:00Z' AND ts < '2025-02-01T00:00:00Z'")) {
+        r.next();
+        expected = r.getLong(1);
+      }
+      try (BufferAllocator allocator = new RootAllocator();
+          ArrowReader counted =
+              new QueryProvider(graph, access, BridgeOptions.defaults()).answer(count, Optional.empty(), allocator)) {
+        assertTrue(counted.loadNextBatch());
+        assertEquals(expected, counted.getVectorSchemaRoot().getVector("rows").getObject(0));
+      }
+
+      java.util.Set<String> purposes = new java.util.TreeSet<>();
+      access.queries.forEach(sent -> purposes.add(sent.purpose()));
+      assertEquals(
+          java.util.Set.of("sdm:count_rows", "sdm:lookup", "sdm:neighbors", "sdm:preview", "sdm:scan", "sdm:time_bounds"),
+          purposes);
       for (Query sent : access.queries) {
-        assertTrue(sent.joins().isEmpty(), "no joins");
-        assertTrue(sent.order().isEmpty(), "no order");
-        assertTrue(!sent.toString().contains("Scalar["), "no scalar subqueries");
+        assertPrototypeShape(sent);
       }
     }
+  }
+
+  /** {@code sent} has a shape the prototype itself sends; see {@link KumoBridge}. */
+  private static void assertPrototypeShape(Query sent) {
+    assertTrue(sent.joins().isEmpty(), "no joins: " + sent);
+    assertTrue(sent.order().isEmpty(), "no order: " + sent);
+    assertNull(sent.alias(), "no alias: " + sent);
+    if (!sent.projection().isEmpty()) {
+      assertEquals(1, sent.projection().size(), "one aggregate per query: " + sent);
+      assertNull(sent.limit(), "no limit on an aggregate: " + sent);
+      Expr.Call call = assertInstanceOf(Expr.Call.class, sent.projection().get("value"), sent.toString());
+      if (call.function() == Expr.Function.COUNT) {
+        assertTrue(call.arguments().isEmpty(), sent.toString());
+      } else {
+        assertTrue(call.function() == Expr.Function.MIN || call.function() == Expr.Function.MAX, sent.toString());
+        assertTimeMicros(assertInstanceOf(Expr.Call.class, call.arguments().get(0)));
+      }
+    }
+    if (sent.predicate() != null) {
+      Expr.And and = assertInstanceOf(Expr.And.class, sent.predicate(), "an AND predicate: " + sent);
+      for (Expr term : and.terms()) {
+        assertTerm(term, sent);
+      }
+    }
+  }
+
+  private static void assertTerm(Expr term, Query sent) {
+    switch (term) {
+      case Expr.In in -> {
+        assertUnqualified(in.term());
+        in.values().forEach(value -> assertInstanceOf(Expr.Literal.class, value));
+      }
+      case Expr.Or or -> {
+        for (Expr alternative : or.terms()) {
+          for (Expr equal : assertInstanceOf(Expr.And.class, alternative).terms()) {
+            Expr.Compare compare = assertInstanceOf(Expr.Compare.class, equal);
+            assertEquals(Expr.Op.EQ, compare.op(), sent.toString());
+            assertUnqualified(compare.left());
+          }
+        }
+      }
+      case Expr.Compare compare when compare.op() == Expr.Op.IS_NOT -> {
+        assertUnqualified(compare.left());
+        assertNull(assertInstanceOf(Expr.Literal.class, compare.right()).value());
+      }
+      case Expr.Compare compare -> {
+        assertTrue(compare.op() == Expr.Op.GT || compare.op() == Expr.Op.LE, "GT or LE on time: " + sent);
+        assertTimeMicros(assertInstanceOf(Expr.Call.class, compare.left()));
+        assertInstanceOf(Long.class, assertInstanceOf(Expr.Literal.class, compare.right()).value());
+      }
+      default -> fail("a term the prototype does not send: " + term + " in " + sent);
+    }
+  }
+
+  private static void assertTimeMicros(Expr.Call call) {
+    assertEquals(Expr.Function.TIME_MICROS, call.function());
+    assertEquals(1, call.arguments().size());
+    assertUnqualified(call.arguments().get(0));
+  }
+
+  private static void assertUnqualified(Expr field) {
+    assertNull(assertInstanceOf(Expr.Field.class, field).qualifier());
   }
 }
