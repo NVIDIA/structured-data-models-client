@@ -17,3 +17,10 @@ def test_contains_timestamp() -> None:
     assert not contains_timestamp(invalid_ser, 'datetime', dtype=Dtype.string)
     assert contains_timestamp(valid_ser, 'test', dtype=Dtype.string)
     assert not contains_timestamp(invalid_ser, 'test', dtype=Dtype.string)
+
+
+def test_times_of_day_are_no_timestamp() -> None:
+    ser = pd.Series(['08:30:15', '23:59:59.123456', None, '00:00:00'])
+
+    assert not contains_timestamp(ser, 'opens_at', dtype=Dtype.string)
+    assert not contains_timestamp(ser, 'time', dtype=Dtype.string)

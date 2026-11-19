@@ -9,6 +9,7 @@ import warnings
 
 import pandas as pd
 import pytest
+from predictive_query.schema.typing import Dtype, Stype
 from sdm_relational_engine.exceptions import GraphConstructionError
 from sdm_relational_engine.rfm import Graph
 from sdm_relational_engine.rfm.base import KeyCount, count_keys
@@ -712,3 +713,62 @@ def test_semantic_view_refuses_an_edit_stamp_on_a_table_it_relates_to(
     choice = graph['DATACENTERS'].time_column_choice
     assert choice is not None and choice.fallback == 'LAST_LOGIN'
     assert graph['DATACENTERS'].time_column is None
+
+
+@pytest.mark.parametrize(
+    ('arrow_type', 'expected'),
+    [
+        (pa.time64('ns'), '08:30:15.123456789'),
+        (pa.time64('us'), '08:30:15.123456'),
+        (pa.time32('ms'), '08:30:15.123'),
+        (pa.time32('s'), '08:30:15'),
+    ],
+)
+def test_time_columns_are_kept_as_text_not_dropped(
+    monkeypatch: pytest.MonkeyPatch, arrow_type: 'pa.DataType', expected: str
+) -> None:
+    r"""A `TIME` column was read as a timestamp, which turned every value
+    into `NaT`. It is read as ISO text, exact to the column's precision, and
+    a null stays null.
+    """
+    from sdm_relational_engine.rfm import KumoRelational
+
+    ticks = 10 ** {'s': 0, 'ms': 3, 'us': 6, 'ns': 9}[arrow_type.unit]
+    value = (8 * 3600 + 30 * 60 + 15) * ticks + int(
+        expected.partition('.')[2].ljust(9, '0')[: len(str(ticks)) - 1] or 0
+    )
+    opens = pd.Series(
+        [None if i % 3 == 0 else value for i in range(12)],
+        dtype=pd.ArrowDtype(arrow_type),
+    )
+    monkeypatch.setitem(_DATA, 'RACKS', _DATA['RACKS'].assign(OPENS_AT=opens))
+    monkeypatch.setitem(
+        _COLUMN_TYPES,
+        'RACKS',
+        {**_COLUMN_TYPES['RACKS'], 'OPENS_AT': 'TIME(9)'},
+    )
+
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', UserWarning)
+        warnings.filterwarnings(
+            'ignore', message='.*does not support seeded random sampling'
+        )
+        graph = Graph.from_snowflake(
+            connection=_FakeConnection(),
+            database=_DATABASE,
+            schema=_SCHEMA,
+            tables=[dict(name='RACKS', primary_key='RACK_ID')],
+            infer_metadata=True,
+            verbose=False,
+        )
+        assert graph['RACKS']['OPENS_AT'].dtype == Dtype.string
+        assert graph['RACKS']['OPENS_AT'].stype != Stype.timestamp
+
+        sampler = KumoRelational(graph, verbose=False)._sampler
+        df = sampler._sample_entity_table('RACKS', {'RACK_ID', 'OPENS_AT'}, 12)
+
+    got = df.set_index('RACK_ID')['OPENS_AT']
+    for i in range(12):
+        want = None if i % 3 == 0 else expected
+        have = got[f'rack_{i}']
+        assert pd.isna(have) if want is None else have == want, (i, have)
