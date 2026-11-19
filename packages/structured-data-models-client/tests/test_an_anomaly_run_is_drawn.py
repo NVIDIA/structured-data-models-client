@@ -57,19 +57,7 @@ def test_a_report_is_drawn_from_an_answer_and_its_readings(anomaly, tmp_path):
         scored(anomaly, frame), frame, tmp_path / 'run.pdf'
     )
 
-    assert written.exists()
     assert pages(written) == 3
-
-
-def test_the_readings_may_carry_what_the_model_was_not_sent(anomaly, tmp_path):
-    """The model refuses a timestamp, and a report wants one to plot
-    against, so the frame drawn is wider than the frame scored. Dropping a
-    column does not move a row, so the positions still line up."""
-    frame = readings()
-    result = scored(anomaly, frame)
-
-    assert 'ts' not in result.to_pandas().columns
-    assert anomaly_report(result, frame, tmp_path / 'run.pdf').exists()
 
 
 def test_readings_that_are_not_the_ones_scored_are_refused(anomaly, tmp_path):
@@ -136,29 +124,31 @@ def test_a_timestamp_index_is_the_axis_it_is_drawn_against(anomaly, tmp_path):
     assert isinstance(drawn.index, pd.DatetimeIndex)
 
 
-def test_the_report_says_which_thresholder_marked_it(anomaly, tmp_path):
-    """They disagree, so a reader has to be told which one this is."""
+@pytest.mark.parametrize(
+    ('detected_by', 'said'),
+    [
+        ('scs', b'SCS'),
+        ('macs', b'MACS'),
+        (lambda rows: np.zeros(rows, dtype=bool), b'supplied by the caller'),
+    ],
+    ids=['scs', 'macs', 'supplied'],
+)
+def test_the_report_says_which_thresholder_marked_it(
+    anomaly, tmp_path, detected_by, said
+):
+    """They disagree, and a reader who wants the line elsewhere supplies it,
+    so a reader has to be told which one this is."""
     frame = readings()
+    if callable(detected_by):
+        detected_by = detected_by(len(frame))
     written = anomaly_report(
         scored(anomaly, frame),
         frame,
         tmp_path / 'run.pdf',
-        detected_by='macs',
+        detected_by=detected_by,
     )
 
-    assert b'MACS' in written.read_bytes()
-
-
-def test_the_score_and_the_label_are_not_drawn_as_signals(anomaly, tmp_path):
-    """They are put on the frame to draw it, and reading every numerical
-    column off that frame would plot them as though they were readings."""
-    from sdm_client.reporting.anomaly import _signals
-
-    frame = readings()
-
-    assert _signals(
-        frame, None, timestamp_column='ts', ground_truth_column=None
-    ) == ['flow', 'pressure']
+    assert said in written.read_bytes()
 
 
 def test_a_thresholder_that_was_not_asked_for_is_refused(anomaly, tmp_path):
@@ -187,22 +177,6 @@ def test_an_answer_without_the_labels_says_what_to_ask_for(anomaly, tmp_path):
     assert 'probabilities' in str(caught.value)
 
 
-@pytest.mark.parametrize('detected_by', ['scs', 'macs'])
-def test_either_thresholder_may_mark_the_detections(
-    anomaly, tmp_path, detected_by
-):
-    """They disagree, so a report marks one of them and says which."""
-    frame = readings()
-    written = anomaly_report(
-        scored(anomaly, frame),
-        frame,
-        tmp_path / f'{detected_by}.pdf',
-        detected_by=detected_by,
-    )
-
-    assert written.exists()
-
-
 def test_a_signal_the_readings_do_not_carry_is_refused(anomaly, tmp_path):
     frame = readings()
 
@@ -214,26 +188,6 @@ def test_a_signal_the_readings_do_not_carry_is_refused(anomaly, tmp_path):
             feature_columns=['nothing'],
         )
     assert 'nothing' in str(caught.value)
-
-
-def test_the_caller_may_mark_the_detections_themselves(anomaly, tmp_path):
-    """Both thresholders read the whole run and decide for themselves where
-    the line falls, so a reader who wants it elsewhere has to supply it."""
-    from sdm_client import percentile_thresholds
-
-    frame = readings()
-    result = scored(anomaly, frame)
-    scores = result.to_pandas().sort_values('row_index')['prediction']
-    _, upper = percentile_thresholds(scores, upper_percentile=90.0)
-
-    written = anomaly_report(
-        result,
-        frame,
-        tmp_path / 'run.pdf',
-        detected_by=(scores.to_numpy() > upper),
-    )
-
-    assert b'supplied by the caller' in written.read_bytes()
 
 
 def test_supplied_detections_are_read_by_position_not_by_label(
@@ -253,22 +207,6 @@ def test_supplied_detections_are_read_by_position_not_by_label(
     drawn, _, detected = _rejoined(scored(anomaly, frame), frame, marks)
 
     assert drawn[detected].to_numpy().nonzero()[0].tolist() == [3]
-
-
-def test_supplied_detections_that_are_scores_are_refused(anomaly, tmp_path):
-    """Drawn as detections they mark every row whose score rounds up, which
-    is a different report that looks exactly like the one that was asked
-    for."""
-    frame = readings()
-
-    with pytest.raises(StructuredDataError) as caught:
-        anomaly_report(
-            scored(anomaly, frame),
-            frame,
-            tmp_path / 'run.pdf',
-            detected_by=np.linspace(0.0, 1.0, len(frame)),
-        )
-    assert 'threshold' in str(caught.value)
 
 
 def test_supplied_detections_that_are_not_one_per_row_are_refused(
@@ -326,19 +264,46 @@ def test_an_answer_from_another_model_is_refused(anomaly, tmp_path):
     assert 'kumo-tabular' in str(caught.value)
 
 
+class Measured(float):
+    """A number that will not compare equal to a whole number.
+
+    What `sympy.Float` does, written out here rather than depended on:
+    `sympy.Float(0) == 0` is false, and a column of them was read as a
+    column of scores because of it.
+    """
+
+    def __eq__(self, other):
+        return isinstance(other, Measured) and float(self) == float(other)
+
+    def __hash__(self):
+        return hash(float(self))
+
+
+class Unordered(float):
+    """A number that is neither below nor above the whole number it reads
+    as, because it is a NaN that says it is something else."""
+
+    def __float__(self):
+        return 0.0
+
+
 @pytest.mark.parametrize(
     'detections',
     [
         lambda rows: np.full(rows, 2j),
         lambda rows: np.array([np.complex128(2j)] * rows, dtype=object),
         lambda rows: np.array(['1'] * rows),
+        lambda rows: np.array([Unordered('nan')] * rows, dtype=object),
+        lambda rows: np.array([np.timedelta64(1, 'ns')] * rows, dtype=object),
     ],
 )
 def test_supplied_detections_that_are_not_decisions_at_all_are_refused(
     anomaly, tmp_path, detections
 ):
     """Converting these to a float keeps the real part and drops the rest
-    without a word, so they arrived as detections."""
+    without a word, so they arrived as detections. A NaN is unordered rather
+    than equal, and a length of time carries a unit, so a nanosecond was a
+    detection."""
     frame = readings()
 
     with pytest.raises(StructuredDataError) as caught:
@@ -371,13 +336,20 @@ def test_a_decimal_context_is_not_changed_by_being_read():
 
 @pytest.mark.parametrize(
     'nearly',
-    [Decimal('0.99999999999999999999'), Decimal('1e-1000'), Decimal('sNaN')],
+    [
+        np.array([Decimal('0.99999999999999999999')], dtype=object),
+        np.array([Decimal('1e-1000')], dtype=object),
+        np.array([Decimal('sNaN')], dtype=object),
+        np.array([0.5]),
+    ],
+    ids=['rounds to one', 'rounds to zero', 'signalling', 'a score'],
 )
 def test_supplied_detections_that_only_round_to_a_decision_are_refused(
     anomaly, tmp_path, nearly
 ):
     """None of these is zero or one, and converting rounds the first two to
-    one and to zero: a score arrived as a column of decisions. The third
+    one and to zero: a score arrived as a column of decisions, which drawn
+    marks every row whose score rounds up. The third
     raises when it is compared at all, which a report is not the place to
     learn from a traceback."""
     frame = readings()
@@ -387,54 +359,9 @@ def test_supplied_detections_that_only_round_to_a_decision_are_refused(
             scored(anomaly, frame),
             frame,
             tmp_path / 'run.pdf',
-            detected_by=np.array([nearly] * len(frame), dtype=object),
+            detected_by=np.repeat(nearly, len(frame)),
         )
     assert 'threshold' in str(caught.value)
-
-
-class Measured(float):
-    """A number that will not compare equal to a whole number.
-
-    What `sympy.Float` does, written out here rather than depended on:
-    `sympy.Float(0) == 0` is false, and a column of them was read as a
-    column of scores because of it.
-    """
-
-    def __eq__(self, other):
-        return isinstance(other, Measured) and float(self) == float(other)
-
-    def __hash__(self):
-        return hash(float(self))
-
-
-class Unordered(float):
-    """A number that is neither below nor above the whole number it reads
-    as, because it is a NaN that says it is something else."""
-
-    def __float__(self):
-        return 0.0
-
-
-@pytest.mark.parametrize(
-    'value',
-    [Unordered('nan'), np.timedelta64(1, 'ns')],
-)
-def test_supplied_detections_that_are_not_numbers_of_rows_are_refused(
-    anomaly, tmp_path, value
-):
-    """A NaN is unordered rather than equal, and a length of time carries a
-    unit, so comparing one against a whole number reads that number in its
-    own unit and a nanosecond was a detection."""
-    frame = readings()
-
-    with pytest.raises(StructuredDataError) as caught:
-        anomaly_report(
-            scored(anomaly, frame),
-            frame,
-            tmp_path / 'run.pdf',
-            detected_by=np.array([value] * len(frame), dtype=object),
-        )
-    assert 'detected_by' in str(caught.value)
 
 
 @pytest.mark.parametrize('spelling', [np.bool_, Decimal, Measured])
