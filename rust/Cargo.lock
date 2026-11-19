@@ -1621,7 +1621,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "sdm-contract"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -1637,7 +1637,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-core"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -1664,7 +1664,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-data"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-cast",
@@ -1677,7 +1677,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-engine"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -1691,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-host"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -1712,7 +1712,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-jni"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -1725,7 +1725,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-pql"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "jiff",
  "serde_json",
@@ -1733,7 +1733,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-py"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-data",
@@ -1746,7 +1746,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-request"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -1760,7 +1760,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-schema"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -1772,7 +1772,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-testkit"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "arrow-array",
@@ -1792,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "sdm-wire"
-version = "2.0.0-rc.1"
+version = "2.0.0"
 dependencies = [
  "schemars",
  "sdm-contract",
