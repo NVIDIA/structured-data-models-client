@@ -345,7 +345,7 @@ ASSUMING users.segment = 'a'
 
 The same language, cut down to a column of one table as the target. Every
 clause above is refused there. It has its own reference:
-[`../tabular/references/pql.md`](../tabular/references/pql.md).
+[`../sdm-tabular/references/pql.md`](../sdm-tabular/references/pql.md).
 
 ## When it will not parse
 

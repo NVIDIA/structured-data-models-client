@@ -1,0 +1,75 @@
+{
+  "skill_name": "sdm-relational",
+  "evals": [
+    {
+      "id": "r01",
+      "prompt": "I have three pandas DataFrames: users(user_id, segment), orders(order_id, user_id, item, price, ordered_at) and items(item, kind). Using sdm_client and kumo-relational at http://localhost:8000, predict how many orders users 1, 2 and 3 will place in the next 30 days. Include anything I need to install.",
+      "expected_output": "Installs structured-data-models-client[relational]. Builds Schema.from_data with primary_keys for all three tables, time_columns={'orders': 'ordered_at'}, and relationships from the many side to the one side: Relationship('orders', 'user_id', 'users', 'user_id') and Relationship('orders', 'item', 'items', 'item'). Asks PredictiveQuery('PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id', schema).materialize(indices=[1, 2, 3], model=KumoRelational()) and calls client.predict(request, model=KumoRelational()) with a generous timeout. Joins on id (the entity), else row_index, never row order.",
+      "assertions": [
+        "Mentions installing the relational extra (structured-data-models-client[relational]) or MissingExtraError without it",
+        "Uses Schema.from_data with primary keys and time_columns={'orders': 'ordered_at'}",
+        "Declares relationships from orders to users and orders to items (many side first)",
+        "Writes the target as COUNT(orders.*, 0, 30, days) FOR EACH users.user_id",
+        "Calls materialize(indices=[1, 2, 3], model=KumoRelational()) and client.predict(..., model=KumoRelational())",
+        "Says to join results on id (or row_index), not on row order",
+        "Does not pass a task= argument; the task follows from the query"
+      ]
+    },
+    {
+      "id": "r02",
+      "prompt": "My kumo-relational schema has `Relationship('users', 'user_id', 'orders', 'user_id')` because each user has many orders. Predictions look wrong. Is that relationship right?",
+      "expected_output": "No. Relationship(from_table, from_column, to_table, to_column) points from the many side to the one side: an order names a user, so it should be Relationship('orders', 'user_id', 'users', 'user_id').",
+      "assertions": [
+        "Says the relationship is reversed",
+        "Explains a Relationship points from the many side to the one side",
+        "Gives the corrected Relationship('orders', 'user_id', 'users', 'user_id')"
+      ]
+    },
+    {
+      "id": "r03",
+      "prompt": "I want per-entity explanations from kumo-relational for a regression. I added outputs=['prediction', 'explanation'] and our deployment returned `422 UNSUPPORTED_OUTPUT`. Is my code wrong? How should I write this so it works on our deployment and on others?",
+      "expected_output": "The code is not wrong: the client will send explanation, but outputs narrow at the endpoint by task, and the shipping deployment serves only prediction and quantiles on a regression. Another relational deployment, and SDMClient.in_process(), do serve explanation. So ask for it, catch the refusal (a StructuredDataError), and fall back to prediction only, without assuming an explanation always or never arrives. When one does arrive it is on result.explanations.gradients, not in to_pandas().",
+      "assertions": [
+        "Explains the refusal comes from the deployment, not from a bug in the request",
+        "Says the shipping deployment serves prediction and quantiles on a regression",
+        "Recommends requesting explanation, catching the refusal, and falling back",
+        "Does not claim explanations are never available from kumo-relational (another deployment or SDMClient.in_process() serves them)",
+        "Says explanations, when returned, are on result.explanations rather than in to_pandas()"
+      ]
+    },
+    {
+      "id": "r04",
+      "prompt": "I'm predicting next-quarter revenue per customer with kumo-relational and then summing the predictions to get a company-wide forecast. Anything wrong with that?",
+      "expected_output": "A regression's prediction is the median of the predicted distribution, not the mean, and medians do not add up. Ask for the mean with materialize(..., prediction_statistic='mean') when predictions will be summed across entities.",
+      "assertions": [
+        "States that a regression prediction is the median by default",
+        "Explains that medians cannot be summed to a meaningful total",
+        "Recommends prediction_statistic='mean' in materialize()"
+      ]
+    },
+    {
+      "id": "r05",
+      "prompt": "I need kumo-relational scores for 50,000 users, and I'd like to pin the context in a session so later calls are cheaper. How does sdm_client handle that many rows, and how do I combine it with fit()?",
+      "expected_output": "materialize() does not refuse 50,000 entities: it builds batches of at most 10,000 rows per call (the deployment's limit; rows_per_call= only lowers it), and predict() sends one call per batch and returns one result numbered across the whole request. One materialize() gathers at most 100,000 entities in at most 100 calls. fit() takes a request of one call, so fit a one-call request and pass the batched request to the handle's predict(). Pass holdout= with every id the session will score, because the context is fixed once pinned and a later-scored row would otherwise sit in it with its answer.",
+      "assertions": [
+        "Says the client batches automatically rather than refusing 50,000 entities",
+        "States the per-call limit of 10,000 scored rows",
+        "Says rows_per_call can only lower the batch size",
+        "Says fit() refuses a request gathered in several batches, and to fit a one-call request and send the batched request to the handle's predict()",
+        "Recommends holdout= with the ids to be scored later, because the pinned context cannot be changed"
+      ]
+    },
+    {
+      "id": "r06",
+      "prompt": "Our users and orders tables are in a warehouse and are far too big to pull into pandas. How do I point kumo-relational at them with sdm_client without exporting the tables?",
+      "expected_output": "Uses a connector source from sdm_connectors (e.g. SnowflakeSource, DatabricksSource, PostgresSource, DuckDBSource) wrapping the driver's own connection, then Schema.from_source(source, {name: table}, primary_keys=..., time_columns=..., relationships=...). materialize() then samples with SQL so only a bounded sample leaves: up to a thousand rows of each table to read its columns, then only the rows a prediction needs. Everything after the schema is the same as with from_data. Installs the relational extra plus the connector extra.",
+      "assertions": [
+        "Uses Schema.from_source rather than Schema.from_data",
+        "Builds a source from sdm_connectors around a warehouse connection",
+        "Explains that only a bounded sample leaves the warehouse, not the whole table",
+        "Keeps the PredictiveQuery / materialize / predict flow the same as with in-memory data",
+        "Does not export the full tables to pandas as the recommended approach"
+      ]
+    }
+  ]
+}

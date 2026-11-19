@@ -1,6 +1,6 @@
 # Writing a query for kumo-tabular
 
-The same language as [`../../relational/pql.md`](../../relational/pql.md), cut
+The same language as [`../../sdm-relational/pql.md`](../../sdm-relational/pql.md), cut
 down to what one table can answer. Read this one when the schema has a single
 table; almost every clause the relational reference describes is refused here,
 and the refusals say so.
@@ -63,7 +63,7 @@ name rows already in the table or `predict=` to pass rows you hold.
 
 Every one of them is the tabular profile of the language refusing, not the
 grammar: the relational model takes all seven, within the bounds
-[`../../relational/pql.md`](../../relational/pql.md) gives each of them.
+[`../../sdm-relational/pql.md`](../../sdm-relational/pql.md) gives each of them.
 Three are worth seeing here, because all three are queries somebody would
 reasonably write.
 
@@ -108,4 +108,4 @@ Pass model=KumoRelational() to gather them as a graph
 
 If the question really is about one table, build the schema from that table
 alone. If it is about an entity and the records linked to it, it belongs to
-`kumo-relational` and [`../../relational/SKILL.md`](../../relational/SKILL.md).
+`kumo-relational` and [`../../sdm-relational/SKILL.md`](../../sdm-relational/SKILL.md).

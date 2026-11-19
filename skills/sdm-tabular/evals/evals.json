@@ -1,0 +1,90 @@
+{
+  "skill_name": "sdm-tabular",
+  "evals": [
+    {
+      "id": "t01",
+      "prompt": "I have a pandas DataFrame `labelled` of past customers with columns age, spend and churn (0/1), and another DataFrame `to_score` of new customers with just age and spend. Using the structured-data-models client and the kumo-tabular model at http://localhost:8000, write Python that predicts churn for the new customers with class probabilities, and tell me how to line the answers back up with my rows.",
+      "expected_output": "Builds Request(context=labelled, predict=to_score, target='churn', task='classification') and calls client.predict(request, model=KumoTabular(), outputs=['prediction', 'probabilities']) inside `with SDMClient(url='http://localhost:8000') as client:`, then answer.to_pandas(). Explains that row_index is the position in the predict frame and is what to join on, and that probability columns are named for the class (probability_0, probability_1) rather than by position.",
+      "assertions": [
+        "Imports Request, SDMClient and KumoTabular from sdm_client",
+        "Builds a Request with context=labelled, predict=to_score and target='churn'",
+        "States task='classification' explicitly",
+        "Calls client.predict with model=KumoTabular() and outputs including 'prediction' and 'probabilities'",
+        "Says to join results back on row_index (the position in the predict frame), not on row order",
+        "Says probability columns are named for the class they belong to (e.g. probability_1), not numbered by position",
+        "Does not train, fit a scikit-learn model, or call any training API"
+      ]
+    },
+    {
+      "id": "t02",
+      "prompt": "My target column `visits` holds only 0 and 1 -- it's how many times a user came back last week, and next week it could be higher. I'm using kumo-tabular through sdm_client. How should I set up the request, and can I get a prediction interval rather than just a point estimate?",
+      "expected_output": "Explains that a target of two whole numbers is read as a classification unless told otherwise, and that this one is a quantity, so pass task='regression'. For an interval, ask for outputs=['prediction', 'quantiles'], which gives quantile_0.1 through quantile_0.9 beside the point prediction. Notes that probabilities belong to classification, and asking for them on a regression comes back as 422 UNSUPPORTED_OUTPUT.",
+      "assertions": [
+        "Recommends task='regression' because visits is a quantity, not a label",
+        "Explains that without task= a target of two whole numbers would be read as a classification",
+        "Recommends the 'quantiles' output for an interval",
+        "Says quantiles come back as per-decile columns such as quantile_0.1 through quantile_0.9",
+        "Does not recommend the 'probabilities' output for this regression, or warns it is refused (422 UNSUPPORTED_OUTPUT)"
+      ]
+    },
+    {
+      "id": "t03",
+      "prompt": "I'm sending kumo-tabular a Request with a context DataFrame of 15,000 labelled rows and it errors before anything is sent. What's going on and how do I fix it without writing my own sampling code?",
+      "expected_output": "Explains that a direct Request has a 10,000-row context cap, and that the client refuses a larger context with the count and the cap rather than dropping rows. The fix without hand-written sampling is to describe the frame with Schema.from_data and ask a PredictiveQuery, whose materialize(indices=..., model=KumoTabular()) samples the context down to the 10,000-row cap.",
+      "assertions": [
+        "Identifies the 10,000-row context limit as the cause",
+        "Says the client refuses rather than silently trimming the context",
+        "Recommends PredictiveQuery(...).materialize(...) as the way to have the context sampled down to the cap",
+        "Uses Schema.from_data to describe the frame for the predictive query",
+        "Does not claim the endpoint or client silently truncates the context"
+      ]
+    },
+    {
+      "id": "t04",
+      "prompt": "I have one DataFrame `customers` with customer_id, age, spend and churn for every customer. I want kumo-tabular to score customers 7, 12 and 3 using the rest of the table as context. Write the code with sdm_client.",
+      "expected_output": "Builds Schema.from_data({'customers': customers}, primary_keys={'customers': 'customer_id'}), then PredictiveQuery('PREDICT customers.churn FOR EACH customers.customer_id', schema).materialize(indices=[7, 12, 3], model=KumoTabular()), and calls client.predict(request, model=KumoTabular(), ...). Explains that the named rows are held out of their own context, so request.context_rows is the table minus the scored rows, and that the answer carries an id column for the entity.",
+      "assertions": [
+        "Uses Schema.from_data with primary_keys={'customers': 'customer_id'}",
+        "Writes the query as PREDICT customers.churn FOR EACH customers.customer_id",
+        "Calls materialize(indices=[7, 12, 3], model=KumoTabular())",
+        "Explains that the scored rows are held out of the context",
+        "Does not split the DataFrame into two Request frames by hand as the primary approach"
+      ]
+    },
+    {
+      "id": "t05",
+      "prompt": "Same labelled context every time, but rows to score arrive in batches all day from our kumo-tabular service. Re-sending 9,000 labelled rows on every call seems wasteful. Is there a better pattern in sdm_client, and anything to watch for in deployment?",
+      "expected_output": "Recommends a session: fitted = client.fit(request, model=KumoTabular()), then fitted.predict(next_request) for each batch, then fitted.close(). Notes that the handle's predict() takes a Request, not a bare DataFrame, that fit() is the only way to build one (FittedModel(...) raises), and that the session lives in one process's memory on the endpoint, so a deployment with several replicas needs session affinity.",
+      "assertions": [
+        "Recommends client.fit(...) to pin the context once",
+        "Calls predict on the fitted handle for each new batch",
+        "Says the fitted handle's predict() takes a Request rather than a bare DataFrame",
+        "Closes the session (fitted.close()) when done",
+        "Warns that a session lives in one replica's memory, so requests for one session must reach the same replica"
+      ]
+    },
+    {
+      "id": "t06",
+      "prompt": "For each customer kumo-tabular scored, I want to know which input columns pushed the churn prediction up or down. How do I get that from sdm_client, and how should I read the numbers?",
+      "expected_output": "Adds 'explanation' to outputs (or writes EXPLAIN PREDICT in a query). Explanations are not in to_pandas(); they are on result.explanations.gradients, keyed by the row's id when the request has one, otherwise its row_index, and result.explanations.gradients.to_pandas() gives one line per (row, output, column). Cautions that a gradient is the change in the output score per unit change in the column -- a diagnostic, not a causal effect or a feature-importance ranking -- and that columns are as the model preprocessed them, not as sent.",
+      "assertions": [
+        "Requests the 'explanation' output (or uses EXPLAIN PREDICT)",
+        "Reads explanations from result.explanations.gradients rather than from to_pandas()",
+        "Says entries are keyed by id when present, otherwise by row_index",
+        "States that a gradient is not a causal effect or a feature-importance ranking",
+        "Notes the explained columns are the model's preprocessed columns, which may differ from the columns sent"
+      ]
+    },
+    {
+      "id": "t07",
+      "prompt": "I have a customers table and an orders table that references customers by customer_id. I want to predict how many orders each customer places next month. Can I do this with KumoTabular in sdm_client?",
+      "expected_output": "Says no: kumo-tabular reads one table with no relationships and no time windows, and refuses forecasts, aggregations and a schema with a second table, naming the model that can answer. The question is about an entity and the records linked to it, so it belongs to kumo-relational (KumoRelational) and its skill.",
+      "assertions": [
+        "Says kumo-tabular cannot answer this",
+        "Gives the reason: one table only, no relationships, no aggregation or time window",
+        "Directs the user to kumo-relational / KumoRelational",
+        "Does not produce KumoTabular code that joins or aggregates the orders table into a feature and presents that as the supported approach"
+      ]
+    }
+  ]
+}

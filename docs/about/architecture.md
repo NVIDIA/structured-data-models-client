@@ -577,7 +577,7 @@ is assembled here rather than asked for.
 served either — a forecast is sent as a regression per step, and a bare
 `LIST_DISTINCT` is refused outright.
 
-`skills/relational/SKILL.md` carries the same matrix for an agent, and
+`skills/sdm-relational/SKILL.md` carries the same matrix for an agent, and
 `tests/test_skills.py` asks the endpoint for every one of these on every task,
 so a deployment that gains or loses an output fails the suite rather than
 leaving the document wrong.
