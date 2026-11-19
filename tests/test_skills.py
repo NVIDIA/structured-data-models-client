@@ -1506,7 +1506,7 @@ def test_a_forecast_takes_only_a_numerical_forward_target(schema):
             'FOR EACH users.user_id',
             schema,
         )
-    with pytest.raises(StructuredDataError, match='forward-looking'):
+    with pytest.raises(StructuredDataError, match="column's own next values"):
         resolve(
             'PREDICT users.segment FORECAST 2 TIMEFRAMES FOR EACH '
             'users.user_id',
