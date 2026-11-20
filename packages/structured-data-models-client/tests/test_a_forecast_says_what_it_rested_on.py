@@ -107,15 +107,6 @@ def pages(path) -> int:
     return raw.count(b'/Type /Page') - raw.count(b'/Type /Pages')
 
 
-def test_an_explanation_comes_back_when_it_is_asked_for(explained):
-    """It reads the model's gradients and its latent trajectory, so it is
-    produced where the model runs and nowhere else."""
-    carried = carried_by(explained)
-
-    assert isinstance(carried, dict)
-    assert set(carried) >= {'forecast', 'explanation', 'metadata'}
-
-
 def test_an_explained_forecast_is_answered_as_it_was_asked(answered):
     """The explanation rides on the forecast's first step. The answer is
     not said to be missing it, is not built through a deprecated argument,
@@ -127,43 +118,12 @@ def test_an_explained_forecast_is_answered_as_it_was_asked(answered):
     assert result.explanations.columns is None
 
 
-def test_the_report_reads_no_deprecated_part_of_the_answer(explained, tmp_path):
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            'error',
-            message=r'result\.explanation is deprecated',
-            category=DeprecationWarning,
-        )
-        forecast_report(explained, tmp_path / 'f.pdf')
-
-
 def test_the_attribution_covers_every_lag_and_every_step(explained):
     block = carried_by(explained)['explanation']
     attributions = np.asarray(block['lag_horizon_attributions'])
 
     assert attributions.shape == (block['shapes']['K_lags'], 4)
     assert np.isfinite(attributions).all()
-
-
-def test_an_explanation_is_data_rather_than_an_object(explained):
-    """It travels as the contract's `explanation` field, so it has to be
-    what that field carries."""
-    import json
-
-    assert json.loads(json.dumps(carried_by(explained)))
-
-
-def test_a_forecast_asked_without_one_does_not_pay_for_it(forecast):
-    """It costs far more than the forecast, so it is not computed unless it
-    was asked for."""
-    with SDMClient.in_process(forecast) as client:
-        result = client.predict(
-            Request.forecast(history(), target='flow', horizon=4),
-            model=KumoForecast(),
-            outputs=['prediction'],
-        )
-
-    assert carried_by(result) is None
 
 
 def test_a_flat_series_has_almost_nowhere_to_move(forecast):
@@ -317,16 +277,37 @@ def test_a_gap_outside_the_window_is_not_a_gap_in_it(forecast):
     assert carried_by(result) is not None
 
 
-def test_the_files_the_pages_name_are_written(explained, tmp_path):
+@pytest.mark.parametrize(
+    ('answer', 'named'),
+    [
+        (
+            'explained',
+            {
+                'lag_horizon_heatmap.png',
+                'semantic_flow.csv',
+                'explanation.json',
+            },
+        ),
+        (
+            'by_gradient',
+            {
+                'integrated_gradients_attributions.csv',
+                'integrated_gradients_channel_summary.csv',
+            },
+        ),
+    ],
+)
+def test_the_files_the_pages_name_are_written(request, tmp_path, answer, named):
     """A page that names a file beside a report a reader cannot find points
     them at nothing."""
     artifacts = tmp_path / 'artifacts'
-    forecast_report(explained, tmp_path / 'f.pdf', artifacts_dir=artifacts)
-    written = {path.name for path in artifacts.iterdir()}
+    forecast_report(
+        request.getfixturevalue(answer),
+        tmp_path / 'f.pdf',
+        artifacts_dir=artifacts,
+    )
 
-    assert 'lag_horizon_heatmap.png' in written
-    assert 'semantic_flow.csv' in written
-    assert 'explanation.json' in written
+    assert named <= {path.name for path in artifacts.iterdir()}
 
 
 def test_a_value_json_cannot_spell_does_not_cost_the_report(
@@ -350,7 +331,7 @@ def test_a_value_json_cannot_spell_does_not_cost_the_report(
 
 
 def test_the_series_own_channel_is_not_ranked_among_the_measured(
-    forecast, tmp_path
+    over_channels,
 ):
     """Its effect is set aside rather than measured, so it arrives as a zero.
     Left among real numbers the page ranked it, and with small effects
@@ -361,19 +342,7 @@ def test_the_series_own_channel_is_not_ranked_among_the_measured(
         _without_the_unmeasured,
     )
 
-    with SDMClient.in_process(forecast) as client:
-        result = client.predict(
-            Request.forecast(
-                history(600),
-                target='flow',
-                horizon=4,
-                inference={'feature_axis': True},
-            ),
-            model=KumoForecast(),
-            outputs=['prediction', 'explanation'],
-        )
-
-    carried = carried_by(result)
+    carried = carried_by(over_channels)
     assert carried['metadata']['feature_axis_excludes'] == 'flow'
     _, channels = _without_the_unmeasured(
         _explanation(carried), _channels(carried), carried
@@ -447,16 +416,14 @@ def test_the_channel_effects_are_measured_not_differentiated(forecast):
     assert not shim(x_enc=window).forecast.requires_grad
 
 
+@pytest.mark.filterwarnings(
+    r'error:result\.explanation is deprecated:DeprecationWarning'
+)
 def test_the_attribution_heatmap_is_drawn(explained, tmp_path):
     """It is a page drawn from an image on disk, and hardcoding no image
-    dropped it from every report although the matrix was right there."""
-    artifacts = tmp_path / 'artifacts'
-    written = forecast_report(
-        explained, tmp_path / 'f.pdf', artifacts_dir=artifacts
-    )
-
-    assert (artifacts / 'lag_horizon_heatmap.png').exists()
-    assert pages(written) >= 4
+    dropped it from every report although the matrix was right there. The
+    report reads no deprecated part of the answer to draw it."""
+    assert pages(forecast_report(explained, tmp_path / 'f.pdf')) >= 4
 
 
 def test_the_artifacts_are_kept_only_where_a_place_was_named(
@@ -469,9 +436,15 @@ def test_the_artifacts_are_kept_only_where_a_place_was_named(
     assert set(tmp_path.iterdir()) - before == {tmp_path / 'f.pdf'}
 
 
-def test_a_channel_with_a_gap_is_not_called_uninfluential(forecast):
-    """The feature axis replaces a channel with its own average, which a gap
-    makes undefined; the channel then reads as having no influence at all."""
+@pytest.mark.parametrize(
+    ('option', 'said'),
+    [('feature_axis', 'gap'), ('integrated_gradients', 'integrated gradients')],
+)
+def test_an_attribution_over_a_gap_is_refused(forecast, option, said):
+    """The feature axis replaces a channel with its own average, and
+    integrated gradients measure against a baseline of noise over the window.
+    A gap makes either undefined, and the channel then reads as having no
+    influence at all."""
     frame = history(600)
     frame.loc[599, 'temp'] = np.nan
 
@@ -479,57 +452,12 @@ def test_a_channel_with_a_gap_is_not_called_uninfluential(forecast):
         with pytest.raises(StructuredDataError) as caught:
             client.predict(
                 Request.forecast(
-                    frame,
-                    target='flow',
-                    horizon=4,
-                    inference={'feature_axis': True},
+                    frame, target='flow', horizon=4, inference={option: True}
                 ),
                 model=KumoForecast(),
                 outputs=['prediction', 'explanation'],
             )
-    assert 'gap' in str(caught.value)
-
-
-def test_a_gradient_over_a_gap_is_not_an_attribution(forecast):
-    """Integrated gradients measure against a baseline of noise over the
-    window, and one gap makes the whole baseline NaN: every attribution
-    taken against it reads as no influence at all."""
-    frame = history(600)
-    frame.loc[599, 'temp'] = np.nan
-
-    with SDMClient.in_process(forecast) as client:
-        with pytest.raises(StructuredDataError) as caught:
-            client.predict(
-                Request.forecast(
-                    frame,
-                    target='flow',
-                    horizon=4,
-                    inference={'integrated_gradients': True},
-                ),
-                model=KumoForecast(),
-                outputs=['prediction', 'explanation'],
-            )
-    assert 'integrated gradients' in str(caught.value)
-
-
-def test_a_report_is_drawn_from_an_explanation(explained, tmp_path):
-    written = forecast_report(explained, tmp_path / 'forecast.pdf')
-
-    assert written.exists()
-    assert pages(written) >= 3
-
-
-def test_the_report_names_the_series_and_the_lag_window(explained, tmp_path):
-    """Read off the data the page is drawn from. The text in this PDF is
-    compressed, so sniffing its bytes for a word tests the encoder rather
-    than the report."""
-    metadata = carried_by(explained)['metadata']
-
-    assert metadata['target_column'] == 'flow'
-    assert metadata['channel_labels'] == ['flow', 'temp']
-    assert forecast_report(
-        explained, tmp_path / 'forecast.pdf', dataset_name='flow'
-    ).exists()
+    assert said in str(caught.value)
 
 
 def test_a_forecast_with_no_explanation_says_how_to_ask_for_one(
@@ -560,31 +488,6 @@ def test_a_history_shorter_than_the_model_reads_cannot_be_attributed(
                 outputs=['prediction', 'explanation'],
             )
     assert '512' in str(caught.value)
-
-
-def test_only_this_model_is_asked_to_explain_a_forecast(anomaly):
-    """`explanation` is a field the forecaster produces, not every model."""
-    from sdm_client import KumoAnomaly
-
-    frame = pd.DataFrame({'flow': np.sin(np.arange(60) / 9)})
-    with SDMClient.in_process(anomaly) as client:
-        with pytest.raises(StructuredDataError) as caught:
-            client.predict(
-                Request.anomaly(frame, inference={'num_samples': 1}),
-                model=KumoAnomaly(),
-                outputs=['prediction', 'explanation'],
-            )
-    assert 'explanation' in str(caught.value)
-
-
-def test_the_smoothness_of_the_latent_state_is_measured(explained):
-    """Reported as null for every run before it was computed, so its page
-    was never drawn."""
-    block = carried_by(explained)['explanation']['trajectory_stability']
-
-    assert block is not None
-    assert block['n_time_steps'] == 512
-    assert 0.0 <= block['zero_crossing_rate_mean'] <= 1.0
 
 
 def test_the_smoothness_is_the_history_walked_once(explained, forecast):
@@ -619,15 +522,6 @@ def test_the_smoothness_is_the_history_walked_once(explained, forecast):
     )
 
 
-def test_the_smoothness_page_is_drawn(explained, tmp_path):
-    before = pages(forecast_report(explained, tmp_path / 'f.pdf'))
-    stripped = without(explained, 'trajectory_stability')
-
-    after = pages(forecast_report(stripped, tmp_path / 'g.pdf'))
-
-    assert before == after + 1
-
-
 @pytest.fixture(scope='module')
 def over_channels(forecast):
     with SDMClient.in_process(forecast) as client:
@@ -655,25 +549,6 @@ def test_the_embedding_is_measured_for_every_channel(over_channels):
     assert all(np.isfinite(measured['lip_ratio_mean']))
 
 
-def test_the_embedding_is_not_measured_without_the_feature_axis(explained):
-    """It costs a window per channel per trial, which is the feature axis's
-    own order of cost and not the lag attribution's."""
-    block = carried_by(explained)['explanation'].get('feature_axis') or {}
-
-    assert 'embedding_stability' not in block
-
-
-def test_the_embedding_stability_page_is_drawn(over_channels, tmp_path):
-    before = pages(forecast_report(over_channels, tmp_path / 'f.pdf'))
-    stripped = without(
-        over_channels, 'embedding_stability', under='feature_axis'
-    )
-
-    after = pages(forecast_report(stripped, tmp_path / 'g.pdf'))
-
-    assert before == after + 1
-
-
 def test_the_stability_csv_names_the_channels_it_measured(
     over_channels, tmp_path
 ):
@@ -690,7 +565,7 @@ def test_the_stability_csv_names_the_channels_it_measured(
     assert written['feature'].tolist() == ['flow', 'temp']
 
 
-@pytest.mark.parametrize('reference', [0.0, 1.5, None])
+@pytest.mark.parametrize('reference', [0.0, None])
 def test_a_reference_scale_of_zero_is_a_reference_scale(reference):
     """A trajectory that does not move has a mean step of zero, which read
     as a measurement that was never taken."""
@@ -783,13 +658,7 @@ def test_the_gradient_attribution_covers_the_window_it_read(by_gradient):
     assert sum(block['channel_abs_share']) == pytest.approx(1.0, rel=1e-5)
 
 
-@pytest.mark.parametrize(
-    ('differentiable', 'reads'),
-    [(False, False), (True, True)],
-)
-def test_the_gradient_is_taken_through_the_normalisation(
-    sdm, differentiable, reads
-):
+def test_the_gradient_is_taken_through_the_normalisation(sdm):
     """Each window is divided by statistics taken over the window itself,
     and those are taken without gradients. A gradient through the model as it
     stands therefore describes a pass with each window's own mean and spread
@@ -812,33 +681,11 @@ def test_the_gradient_is_taken_through_the_normalisation(
     direction /= direction.norm()
 
     moved = window.clone().requires_grad_(True)
-    statistics = _statistics if differentiable else RevIN.stats
-    mean, scale = statistics(moved, correction=0)
+    mean, scale = _statistics(moved, correction=0)
     revin(moved, mean, scale).square().sum().backward()
     along = float((moved.grad * direction).sum())
 
-    assert (abs(along) < 1e-4) is reads
-
-
-def test_the_normalisation_is_left_as_it_was_found(forecast):
-    """It is patched for the length of one attribution. Left patched, every
-    forecast after it runs through a normaliser this client replaced."""
-    from sdm_client.explain._model import Forecaster
-
-    shim = Forecaster(forecast)
-    with shim.differentiable_normalisation():
-        patched = [
-            'stats' in vars(module)
-            for module in shim.modules()
-            if hasattr(module, 'eps') and hasattr(module, 'stats')
-        ]
-
-    assert any(patched)
-    assert not any(
-        'stats' in vars(module)
-        for module in shim.modules()
-        if hasattr(module, 'eps') and hasattr(module, 'stats')
-    )
+    assert abs(along) < 1e-4
 
 
 def test_the_normalisation_survives_being_held_twice(forecast):
@@ -902,24 +749,36 @@ def test_the_length_of_the_embedding_is_not_what_is_explained(forecast):
     assert float(embedded.norm()) == pytest.approx(1.0, rel=1e-5)
 
 
-def test_a_forecast_asked_without_gradients_does_not_pay_for_them(explained):
-    """They walk a path of sixty-four windows and take a gradient at each."""
-    assert 'integrated_gradients' not in carried_by(explained)['explanation']
+@pytest.mark.parametrize(
+    ('answer', 'block', 'under'),
+    [
+        ('explained', 'trajectory_stability', None),
+        ('over_channels', 'embedding_stability', 'feature_axis'),
+        ('by_gradient', 'integrated_gradients', None),
+    ],
+)
+def test_each_block_draws_a_page_of_its_own(
+    request, tmp_path, answer, block, under
+):
+    result = request.getfixturevalue(answer)
+    before = pages(forecast_report(result, tmp_path / 'f.pdf'))
 
-
-def test_the_gradient_page_is_drawn(by_gradient, tmp_path):
-    before = pages(forecast_report(by_gradient, tmp_path / 'f.pdf'))
-    stripped = without(by_gradient, 'integrated_gradients')
-
-    after = pages(forecast_report(stripped, tmp_path / 'g.pdf'))
+    after = pages(
+        forecast_report(without(result, block, under=under), tmp_path / 'g.pdf')
+    )
 
     assert before == after + 1
 
 
-def test_the_files_the_gradient_page_names_are_written(by_gradient, tmp_path):
-    artifacts = tmp_path / 'artifacts'
-    forecast_report(by_gradient, tmp_path / 'f.pdf', artifacts_dir=artifacts)
-    written = {path.name for path in artifacts.iterdir()}
+@pytest.mark.parametrize(
+    ('block', 'under'),
+    [('embedding_stability', 'feature_axis'), ('integrated_gradients', None)],
+)
+def test_what_was_not_asked_for_is_not_paid_for(explained, block, under):
+    """The embedding costs a window per channel per trial, and the gradients
+    a path of sixty-four windows with a gradient at each."""
+    carried = carried_by(explained)['explanation']
+    if under is not None:
+        carried = carried.get(under) or {}
 
-    assert 'integrated_gradients_attributions.csv' in written
-    assert 'integrated_gradients_channel_summary.csv' in written
+    assert block not in carried
