@@ -88,12 +88,15 @@ def test_the_answer_is_the_one_the_model_gives_when_called_directly(
     sdm, anomaly
 ):
     """Nothing is computed on the way through: the client shapes the request
-    and reads the answer back, and the numbers are the model's own."""
+    and reads the answer back, and the numbers are the model's own, with or
+    without a key beside the readings. They track the stretch that was
+    disturbed rather than merely being finite."""
     import torch
 
     frame = readings()
     answer = scored(anomaly, frame)
     channels = frame[['flow', 'pressure']]
+    keyless = scored(anomaly, channels)
     direct = anomaly(
         sdm.TableTensor.from_pandas(
             channels, dict.fromkeys(channels.columns, 'numerical')
@@ -102,10 +105,13 @@ def test_the_answer_is_the_one_the_model_gives_when_called_directly(
         **FAST,
     )
 
-    torch.testing.assert_close(
-        torch.tensor(answer['prediction'].to_numpy()),
-        direct['mae'].numerical[..., 0].double(),
-    )
+    for each in (answer, keyless):
+        torch.testing.assert_close(
+            torch.tensor(each['prediction'].to_numpy()),
+            direct['mae'].numerical[..., 0].double(),
+        )
+    disturbed = answer['prediction'].iloc[DISTURBED]
+    assert disturbed.mean() > answer['prediction'].drop(disturbed.index).mean()
 
 
 def test_each_answer_comes_back_under_the_row_s_own_key(anomaly):
@@ -261,7 +267,7 @@ def test_a_model_that_is_not_installed_is_not_offered(sdm, monkeypatch):
 
 
 @pytest.mark.parametrize('option', ['num_samples', 'num_steps'])
-@pytest.mark.parametrize('value', [0, 1.5, True])
+@pytest.mark.parametrize('value', [0, -1, 1.5, True])
 def test_the_sampling_knobs_take_a_count(anomaly, option, value):
     with pytest.raises(StructuredDataError) as caught:
         scored(anomaly, readings(), **{option: value})

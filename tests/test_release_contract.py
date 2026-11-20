@@ -850,16 +850,28 @@ class TestTheRequestBodiesAreContractual:
     @pytest.mark.parametrize(
         ('mutate', 'said'),
         [
+            (lambda body: body.update(invented_key=1), 'invented_key'),
             (
                 lambda body: body['output'].update(fields=['predcition']),
                 'predcition',
             ),
+            (lambda body: body.pop('schema'), "'schema'"),
             (
                 lambda body: body['task'].update(kind='anomaly_detectoin'),
                 'anomaly_detectoin',
             ),
+            (
+                lambda body: body.update(model='kumo-anomoly'),
+                'kumo-anomoly',
+            ),
         ],
-        ids=['a field off the enum', 'a misspelt task kind'],
+        ids=[
+            'an invented top-level key',
+            'a field off the enum',
+            'a dropped section',
+            'a misspelt task kind',
+            'a misspelt model id',
+        ],
     )
     def test_a_model_the_contract_has_not_heard_of_is_policed_elsewhere(
         self, tmp_path, mutate, said
