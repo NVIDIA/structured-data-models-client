@@ -1235,8 +1235,9 @@ class TestDistributionCoherence:
         one of the few it does not.
 
         databricks-sdk and structured-data-models are imported by the
-        client's own transports, and matplotlib by the one module that draws
-        an answer, so the client is the distribution that declares them.
+        client's own transports, and matplotlib and torch by the modules
+        that draw an answer, so the client is the distribution that declares
+        them.
         """
         client = _pyproject('structured-data-models-client')['project']
         known = set(_distributions())
@@ -1253,6 +1254,7 @@ class TestDistributionCoherence:
                     'requests-mock',
                     'databricks-sdk',
                     'matplotlib',
+                    'torch',
                     'structured-data-models',
                 }, (
                     f'extra {extra!r} requires {name!r}, which is not one of '

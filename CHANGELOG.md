@@ -67,6 +67,15 @@ these packages. All five distributions share one version and one entry.
   `sdm_client.percentile_thresholds()` draws one such line from the scores
   alone, by percentile, widened by how scattered the scores are. Install the
   drawing with the `report` extra.
+- `sdm_client.reporting.forecast_report()` draws why a `kumo-forecast`
+  answer is the forecast it is, from the explanation the answer carries: how
+  far back in the window each forecast step rests, how the model's latent
+  state moved over the history and how smoothly, and, asked for separately
+  because each costs several times the forecast, how much each channel
+  measured alongside the series contributed, how steadily the model reads
+  each of them, and what it read reading by reading. The last is asked for
+  with the `integrated_gradients` inference option and the rest with
+  `feature_axis`.
 
 ### Changed
 

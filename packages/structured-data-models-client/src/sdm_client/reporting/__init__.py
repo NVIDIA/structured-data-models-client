@@ -10,5 +10,6 @@ not want a plotting stack does not get one.
 """
 
 from sdm_client.reporting.anomaly import anomaly_report
+from sdm_client.reporting.forecast import forecast_report
 
-__all__ = ['anomaly_report']
+__all__ = ['anomaly_report', 'forecast_report']

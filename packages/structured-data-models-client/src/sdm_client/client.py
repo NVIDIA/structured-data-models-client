@@ -25,6 +25,8 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from types import TracebackType
 from typing import Any
 
+from predictive_query import RELATIONAL, TABULAR
+
 from sdm_client.base import (
     ModelAdapter,
     ModelCapabilities,
@@ -558,7 +560,9 @@ class SDMClient:
             _analysed_or_warned(
                 lambda: ColumnExplanations(_LabelledRows.of(request, calls[0]))
             )
-            if analysed and 'explanation' in fields
+            if analysed
+            and 'explanation' in fields
+            and _learns_from_labels(adapter.spec)
             else None
         )
         # Every call's rows are kept. A request past the endpoint's per-call
@@ -1292,6 +1296,17 @@ def _pinned_dtypes(pinned: Mapping[str, Any]) -> dict[str, str] | None:
         for name, described in columns.items()
         if isinstance(described, Mapping) and described.get('dtype')
     }
+
+
+def _learns_from_labels(spec: ModelSpec) -> bool:
+    r"""Whether ``spec``'s model is shown labelled rows to learn from.
+
+    A column analysis reads those rows, so it is computed only for a model
+    that has them. A forecast's context is a history rather than labelled
+    examples. Read as though it were one, each reading of the series was
+    taken for a class.
+    """
+    return spec.profile in (TABULAR, RELATIONAL)
 
 
 def _analysed_or_warned(

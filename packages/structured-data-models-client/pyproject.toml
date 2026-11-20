@@ -93,7 +93,11 @@ in-process = ["structured-data-models>=0.2.1,<0.3; python_version >= '3.11'"]
 # not given one. `all` does not carry it for the same reason it does not carry
 # `databricks-serving`: it is a thing to do with an answer rather than a
 # backend to read.
-report = ["matplotlib>=3.8,<4"]
+# Drawing a forecast explanation reads the attribution's own tensors, so this
+# brings torch as well as matplotlib. structured-data-models brings torch too,
+# and a forecast explanation needs that package anyway; this is so that asking
+# for `[report]` alone is enough to draw what you were given.
+report = ["matplotlib>=3.8,<4", "torch>=2.7"]
 all = [
     "structured-data-models-client[relational,sqlite,duckdb,postgres,snowflake,databricks,lakebase,s3]",
 ]

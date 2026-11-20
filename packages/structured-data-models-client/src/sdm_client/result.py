@@ -158,7 +158,9 @@ class PredictionResult:
         was refused before the request was sent.
         """
         if name == 'explanation':
-            return bool(self._explanations.gradients)
+            return bool(self._explanations.gradients) or any(
+                getattr(item, 'explanation', None) for item in self.items
+            )
         if name not in _ITEM_FIELDS:
             return True
         return any(
