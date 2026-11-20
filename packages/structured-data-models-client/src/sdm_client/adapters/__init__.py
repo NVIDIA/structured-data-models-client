@@ -4,6 +4,7 @@
 
 """Per-model adapters. One module per model."""
 
+from sdm_client.adapters.anomaly import AnomalyAdapter
 from sdm_client.adapters.tabular import TabularAdapter
 
-__all__ = ['TabularAdapter']
+__all__ = ['AnomalyAdapter', 'TabularAdapter']

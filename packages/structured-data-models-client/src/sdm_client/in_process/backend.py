@@ -22,10 +22,11 @@ import threading
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from sdm_client.errors import MissingExtraError, StructuredDataError
 from sdm_client.explanations import GradientConverter
+from sdm_client.in_process.anomaly import Anomaly
 from sdm_client.in_process.answers import (
     QUANTILE_LEVELS,
     class_order,
@@ -46,11 +47,53 @@ if TYPE_CHECKING:  # pragma: no cover - imported for typing only.
 _SEED = 42
 _ESTIMATORS = 1
 
-_SERVED = {served.model_id: served for served in (Tabular(), Relational())}
+_SERVED = {
+    served.model_id: served for served in (Tabular(), Relational(), Anomaly())
+}
+
+#: What reads a request for one model.
+Served = Tabular | Relational | Anomaly
+
+
+@runtime_checkable
+class ScoresRowsAlone(Protocol):
+    r"""A model shown no labelled rows, which therefore fits no context.
+
+    It answers from the rows it is given and nothing carries over, so there
+    is no fitted context to pin and no session to hold. Declaring that as a
+    protocol rather than a flag is what lets the two shapes be told apart
+    where it matters, by what a reader actually has to offer.
+    """
+
+    def row_ids(
+        self, table: Mapping[str, Any], spec: Mapping[str, Any]
+    ) -> list[str | None]: ...
+
+    def check_inference(
+        self,
+        options: Mapping[str, Any],
+        task: Mapping[str, Any],
+        settled: bool = False,
+    ) -> None: ...
+
+    def answer(
+        self,
+        model: Any,
+        payload: Mapping[str, Any],
+        ids: Sequence[Any],
+        fields: Sequence[str],
+        generator: Any = None,
+    ) -> list[Any]: ...
 
 
 @dataclass
 class _Session:
+    r"""A fitted context, pinned.
+
+    Only a model that fits one reaches here: :meth:`create_session` refuses
+    a model that does not, because there would be nothing to pin.
+    """
+
     served: Tabular | Relational
     task: Mapping[str, Any]
     schema: Mapping[str, Any]
@@ -127,8 +170,9 @@ class InProcessBackend:
             self._require_open()
             return [
                 model_id
-                for model_id in _SERVED
-                if self._loads or model_id in self._models
+                for model_id, served in _SERVED.items()
+                if (self._loads or model_id in self._models)
+                and served.installed()
             ]
 
     def predict(
@@ -145,23 +189,32 @@ class InProcessBackend:
             )
             served, model = self._serving(payload['model'])
             _check_loaded_for(served, model, task['kind'])
-            context = served.context(payload)
-            query = served.query(context, payload, payload['schema'])
-            fitted = _fit(model, context)
-            answer = _run(fitted, query)
-            items = _items(
-                served,
-                task,
-                payload['schema'],
-                context,
-                payload,
-                answer,
-                fields,
-            )
-            if 'explanation' in fields:
-                items = _explained(
-                    items, fitted, query, context, task['kind'], payload, fields
+            if isinstance(served, ScoresRowsAlone):
+                items = _scored(served, model, payload, fields)
+            else:
+                context = served.context(payload)
+                query = served.query(context, payload, payload['schema'])
+                fitted = _fit(model, context)
+                answer = _run(fitted, query)
+                items = _items(
+                    served,
+                    task,
+                    payload['schema'],
+                    context,
+                    payload,
+                    answer,
+                    fields,
                 )
+                if 'explanation' in fields:
+                    items = _explained(
+                        items,
+                        fitted,
+                        query,
+                        context,
+                        task['kind'],
+                        payload,
+                        fields,
+                    )
         return adapter.answered(
             items,
             outputs,
@@ -176,8 +229,16 @@ class InProcessBackend:
         r"""Fit the context once, to be scored against until released."""
         with self._running():
             kind = payload['task']['kind']
-            _fields(self._reader(payload['model']), kind, payload)
-            served, model = self._serving(payload['model'])
+            served = self._reader(payload['model'])
+            if isinstance(served, ScoresRowsAlone):
+                raise StructuredDataError(
+                    f'{served.model_id} holds no session: it is shown no '
+                    f'labelled rows, so there is no fitted context to pin. '
+                    f'Call predict() instead',
+                    code='SESSIONS_UNSUPPORTED',
+                )
+            _fields(served, kind, payload)
+            _, model = self._serving(payload['model'])
             _check_loaded_for(served, model, kind)
             context = served.context(payload)
             fitted = _fit(model, context)
@@ -250,7 +311,7 @@ class InProcessBackend:
             self._require_open()
             self._sessions.pop(session_id, None)
 
-    def _reader(self, model_id: str) -> Tabular | Relational:
+    def _reader(self, model_id: str) -> Served:
         r"""What reads requests for ``model_id``, known without loading it."""
         served = _SERVED.get(model_id)
         if served is None:
@@ -264,7 +325,7 @@ class InProcessBackend:
             code='INVALID_CONFIGURATION',
         )
 
-    def _serving(self, model_id: str) -> tuple[Tabular | Relational, Any]:
+    def _serving(self, model_id: str) -> tuple[Served, Any]:
         r"""What reads requests for ``model_id``, and the model it runs.
 
         Runs are serialized, so a model is loaded once. The load is not held
@@ -347,7 +408,7 @@ def _require_sdm() -> Any:
     return torch
 
 
-def _served_by(model: Any) -> Tabular | Relational:
+def _served_by(model: Any) -> Served:
     for served in _SERVED.values():
         if served.accepts(model):
             return served
@@ -371,7 +432,7 @@ def _device(device: Any, torch: Any) -> Any:
         ) from error
 
 
-def _loaded(served: Tabular | Relational, device: Any) -> Any:
+def _loaded(served: Served, device: Any) -> Any:
     try:
         return served.load(device)
     except Exception as error:
@@ -387,7 +448,7 @@ def _request_id(payload: Mapping[str, Any]) -> str:
     return str((payload.get('metadata') or {}).get('request_id') or '')
 
 
-def _check_task(served: Tabular | Relational, kind: str) -> None:
+def _check_task(served: Served, kind: str) -> None:
     r"""Refuse a task this model does not answer."""
     if kind not in served.outputs:
         raise StructuredDataError(
@@ -397,14 +458,18 @@ def _check_task(served: Tabular | Relational, kind: str) -> None:
         )
 
 
-def _check_loaded_for(
-    served: Tabular | Relational, model: Any, kind: str
-) -> None:
+def _check_loaded_for(served: Served, model: Any, kind: str) -> None:
     r"""Refuse a task this model was loaded without.
 
     A model can be loaded for classification or regression alone, which a
     NIM's never is, so that is asked of the model rather than of its kind.
+    Not of a model that fits nothing: what was asked of the others is which
+    heads a checkpoint was packaged with, and a model that fits nothing has
+    no head to package. It answers the one task it is for or it is not that
+    model.
     """
+    if isinstance(served, ScoresRowsAlone):
+        return
     needed = 'regression' if kind == 'regression' else 'classification'
     loaded = sorted(str(task) for task in model.tasks)
     if needed not in loaded:
@@ -417,7 +482,7 @@ def _check_loaded_for(
 
 
 def _fields(
-    served: Tabular | Relational,
+    served: Served,
     kind: str,
     payload: Mapping[str, Any],
 ) -> list[str]:
@@ -518,8 +583,33 @@ def _autocast(device: Any) -> Any:
     return torch.autocast(device_type='cuda', dtype=dtype)
 
 
+def _scored(
+    served: ScoresRowsAlone,
+    model: Any,
+    payload: Mapping[str, Any],
+    fields: list[str],
+) -> list[Any]:
+    r"""One answer per row, from a model with no context to fit."""
+    import torch
+
+    ids = served.row_ids(
+        payload['predict']['instance_table'],
+        payload['schema']['instance_table'],
+    )
+    served.check_inference(payload.get('inference') or {}, payload['task'])
+    device = _placement(model)
+    with _autocast(device):
+        return served.answer(
+            model,
+            payload,
+            ids,
+            fields,
+            torch.Generator(device=device).manual_seed(_SEED),
+        )
+
+
 def _items(
-    served: Tabular | Relational,
+    served: Served,
     task: Mapping[str, Any],
     schema: Mapping[str, Any],
     context: Context,

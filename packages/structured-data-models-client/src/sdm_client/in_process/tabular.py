@@ -34,6 +34,15 @@ class Tabular:
     }
 
     @staticmethod
+    def installed() -> bool:
+        r"""Whether the structured-data-models here carries this model.
+
+        Every release does; `kumo-anomaly` is the one that may not, and
+        `list_models` asks this of each rather than of that one.
+        """
+        return True
+
+    @staticmethod
     def load(device: Any) -> Any:
         from sdm.models import KumoTabular
 

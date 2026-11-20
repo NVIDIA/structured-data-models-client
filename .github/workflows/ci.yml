@@ -166,9 +166,23 @@ jobs:
       # index, since the default one resolves to a far larger CUDA build.
       - run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e './packages/structured-data-models-client[test,in-process]'
+          pip install -e './packages/structured-data-models-client[test]'
+          pip install "structured-data-models @ git+https://github.com/NVIDIA/structured-data-models.git@${SDM_REF}"
           python -m pytest packages/structured-data-models-client/tests -q \
             -m 'not live_nim and not live_warehouse'
+        env:
+          # The time-series models are on structured-data-models' main and in
+          # no release of it, so the `in-process` extra cannot reach them: its
+          # range names published versions, and main's own version string is
+          # below the floor of that range. This commit is installed instead,
+          # which is why the extra is not asked for here.
+          #
+          # It is pinned here rather than in the package's metadata on
+          # purpose. A direct URL in `optional-dependencies` is rejected at
+          # upload, so declaring it there would trade a test that runs for a
+          # release that cannot be published. Move the extra's range forward
+          # and delete this once a release carries the models.
+          SDM_REF: b5c36413dd30bcb93b39bfed2afdccf3e509781d
       # And the root suite, which holds the relational wire snapshots. They
       # only exercise anything with an engine installed, so running them in
       # the test job would prove nothing.

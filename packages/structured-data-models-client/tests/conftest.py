@@ -33,6 +33,14 @@ def tabular(sdm):
 
 
 @pytest.fixture(scope='module')
+def anomaly(sdm):
+    import torch
+
+    torch.manual_seed(0)
+    return sdm.models.KumoAnomaly(pretrained=False, device='cpu')
+
+
+@pytest.fixture(scope='module')
 def relational(sdm):
     pytest.importorskip('sdm_relational_engine', reason='needs [relational]')
     import torch

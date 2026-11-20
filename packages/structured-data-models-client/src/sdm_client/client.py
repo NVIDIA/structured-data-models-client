@@ -82,6 +82,10 @@ def _adapter_for(spec: ModelSpec) -> ModelAdapter:
         from sdm_client.adapters.relational import RelationalAdapter
 
         return RelationalAdapter()
+    if spec.model_id == 'kumo-anomaly':
+        from sdm_client.adapters.anomaly import AnomalyAdapter
+
+        return AnomalyAdapter()
     raise UnknownModelError(spec.model_id, list(MODELS))
 
 

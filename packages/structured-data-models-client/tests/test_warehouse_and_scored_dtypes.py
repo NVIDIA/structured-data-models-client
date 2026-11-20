@@ -524,19 +524,19 @@ def test_the_fallback_leaves_a_declared_meaning_alone():
     declared meaning that contradicts its values is refused before a request
     gets this far. The guard is what keeps the rewrite safe to have at all: it
     may correct a placeholder and must never overrule a caller."""
-    from sdm_client.adapters.tabular import _coherent_stype
+    from sdm_client.adapters.single_table import coherent_stype
     from sdm_client.schema import Column
 
     column = Column(name='c', dtype='string', stype='categorical')
     object.__setattr__(column, 'untyped', True)
 
-    assert _coherent_stype('categorical', 'timestamp[us]', column) == (
+    assert coherent_stype('categorical', 'timestamp[us]', column) == (
         'timestamp'
     )
 
     object.__setattr__(column, 'stype_declared', True)
 
-    assert _coherent_stype('categorical', 'timestamp[us]', column) == (
+    assert coherent_stype('categorical', 'timestamp[us]', column) == (
         'categorical'
     )
 
