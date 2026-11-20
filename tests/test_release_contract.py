@@ -850,26 +850,42 @@ class TestTheRequestBodiesAreContractual:
     @pytest.mark.parametrize(
         ('mutate', 'said'),
         [
+            (lambda body: body.update(invented_key=1), 'invented_key'),
             (
                 lambda body: body['output'].update(fields=['predcition']),
                 'predcition',
             ),
+            (lambda body: body.pop('schema'), "'schema'"),
             (
-                lambda body: body['task'].update(kind='anomaly_detectoin'),
-                'anomaly_detectoin',
+                lambda body: body['task'].update(kind='forecastign'),
+                'forecastign',
+            ),
+            (
+                lambda body: body.update(model=body['model'] + 'x'),
+                'x',
             ),
         ],
-        ids=['a field off the enum', 'a misspelt task kind'],
+        ids=[
+            'an invented top-level key',
+            'a field off the enum',
+            'a dropped section',
+            'a misspelt task kind',
+            'a misspelt model id',
+        ],
+    )
+    @pytest.mark.parametrize(
+        'case',
+        ['anomaly/direct-readings', 'forecast/direct-history'],
+        ids=['anomaly', 'forecast'],
     )
     def test_a_model_the_contract_has_not_heard_of_is_policed_elsewhere(
-        self, tmp_path, mutate, said
+        self, tmp_path, mutate, said, case
     ):
         """`kumo-anomaly` is off the contract's model enum on purpose, and
         that is the only thing forgiven. A body wrong in any other way still
         fails, or the exemption would be a hole rather than a note."""
         recorded = json.loads((GOLDEN / 'wire_payloads.json').read_text())
-        body = json.loads(json.dumps(recorded['anomaly/direct-readings'][0]))
-        assert body['model'] == 'kumo-anomaly'
+        body = json.loads(json.dumps(recorded[case][0]))
         mutate(body)
 
         written = tmp_path / 'wire_payloads.json'
