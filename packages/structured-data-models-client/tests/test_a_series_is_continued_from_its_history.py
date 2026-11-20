@@ -205,7 +205,7 @@ def test_a_key_column_is_not_read_as_history(forecast):
     )
 
 
-@pytest.mark.parametrize('horizon', [0, 1.5, True, 10_001])
+@pytest.mark.parametrize('horizon', [0, -1, 1.5, True, 10_001])
 def test_a_horizon_that_is_not_a_count_of_steps_is_refused(forecast, horizon):
     """The upper bound is the contract's: `num_forecasts`, `forecast_step`
     and the number of predictions are each capped at ten thousand, so a
