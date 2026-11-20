@@ -32,7 +32,7 @@ deployment can answer would be worse than letting the other say no.
 
 from __future__ import annotations
 
-from predictive_query import ANOMALY, RELATIONAL, TABULAR
+from predictive_query import ANOMALY, RELATIONAL, TABULAR, TIMESERIES
 from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 
 from sdm_client.base import ModelSpec, RuntimeContract
@@ -185,6 +185,25 @@ KUMO_ANOMALY = ModelSpec(
 )
 
 
+TFM_MODEL_KUMO_FORECAST = 'kumo-forecast'
+
+#: The model that continues a series beyond its history.
+#:
+#: It holds no session: every call carries the history, the horizon and
+#: nothing held over, because the model fits no context and there is none to
+#: pin.
+KUMO_FORECAST = ModelSpec(
+    model_id=TFM_MODEL_KUMO_FORECAST,
+    profile=TIMESERIES,
+    runtime=RuntimeContract(
+        tasks=frozenset({'forecasting'}),
+        outputs=frozenset({'prediction'}),
+        sessions=False,
+        inference_options=frozenset({'alpha', 'k', 'temperature'}),
+    ),
+)
+
+
 class Model:
     r"""Base for the model handles. Not useful on its own."""
 
@@ -254,11 +273,32 @@ class KumoAnomaly(Model):
     _spec = KUMO_ANOMALY
 
 
+class KumoForecast(Model):
+    r"""A history in, the next steps of it out.
+
+    Takes ``forecasting`` only, and produces ``prediction``, one row per step
+    with the step named. Built with
+    :meth:`Request.forecast <sdm_client.Request.forecast>`, which takes the
+    history and how many steps to continue it for. It holds no session,
+    because it fits nothing.
+
+    Served in this process only, through
+    :meth:`SDMClient.in_process <sdm_client.SDMClient.in_process>`: no
+    deployment answers for this id yet.
+
+    Needs a structured-data-models that carries ``KumoForecast``, which no
+    release does yet.
+    """
+
+    _spec = KUMO_FORECAST
+
+
 #: Every model this client can send to, by id.
 MODELS = {
     KUMO_TABULAR.model_id: KUMO_TABULAR,
     KUMO_RELATIONAL.model_id: KUMO_RELATIONAL,
     KUMO_ANOMALY.model_id: KUMO_ANOMALY,
+    KUMO_FORECAST.model_id: KUMO_FORECAST,
 }
 
 

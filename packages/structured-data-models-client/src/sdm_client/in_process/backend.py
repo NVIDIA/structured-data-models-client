@@ -36,6 +36,7 @@ from sdm_client.in_process.answers import (
     regressed,
 )
 from sdm_client.in_process.columns import Context
+from sdm_client.in_process.forecast import Forecast
 from sdm_client.in_process.relational import Relational
 from sdm_client.in_process.tabular import Tabular
 
@@ -48,21 +49,23 @@ _SEED = 42
 _ESTIMATORS = 1
 
 _SERVED = {
-    served.model_id: served for served in (Tabular(), Relational(), Anomaly())
+    served.model_id: served
+    for served in (Tabular(), Relational(), Anomaly(), Forecast())
 }
 
 #: What reads a request for one model.
-Served = Tabular | Relational | Anomaly
+Served = Tabular | Relational | Anomaly | Forecast
 
 
 @runtime_checkable
-class ScoresRowsAlone(Protocol):
-    r"""A model shown no labelled rows, which therefore fits no context.
+class AnswersWithoutFitting(Protocol):
+    r"""A model that answers a request in one pass, fitting nothing.
 
-    It answers from the rows it is given and nothing carries over, so there
-    is no fitted context to pin and no session to hold. Declaring that as a
-    protocol rather than a flag is what lets the two shapes be told apart
-    where it matters, by what a reader actually has to offer.
+    One is shown no labelled rows at all; another reads a history and a
+    horizon and continues the series from them. Neither holds anything
+    afterwards, so neither has a fitted context to pin or a session over it.
+    Declaring that as a protocol rather than a flag is what lets the two
+    shapes be told apart where it matters, by what a reader has to offer.
     """
 
     def row_ids(
@@ -189,7 +192,7 @@ class InProcessBackend:
             )
             served, model = self._serving(payload['model'])
             _check_loaded_for(served, model, task['kind'])
-            if isinstance(served, ScoresRowsAlone):
+            if isinstance(served, AnswersWithoutFitting):
                 items = _scored(served, model, payload, fields)
             else:
                 context = served.context(payload)
@@ -230,11 +233,11 @@ class InProcessBackend:
         with self._running():
             kind = payload['task']['kind']
             served = self._reader(payload['model'])
-            if isinstance(served, ScoresRowsAlone):
+            if isinstance(served, AnswersWithoutFitting):
                 raise StructuredDataError(
-                    f'{served.model_id} holds no session: it is shown no '
-                    f'labelled rows, so there is no fitted context to pin. '
-                    f'Call predict() instead',
+                    f'{served.model_id} holds no session: it fits nothing, '
+                    f'so there is no fitted context to pin. Call predict() '
+                    f'instead, which sends the whole question every time',
                     code='SESSIONS_UNSUPPORTED',
                 )
             _fields(served, kind, payload)
@@ -412,10 +415,10 @@ def _served_by(model: Any) -> Served:
     for served in _SERVED.values():
         if served.accepts(model):
             return served
+    taken = ', '.join(sorted(served.model_id for served in _SERVED.values()))
     raise StructuredDataError(
-        f'in_process() takes the KumoTabular and KumoRelational models of '
-        f'structured-data-models, and got a {type(model).__name__}; the '
-        f'client asks no other model',
+        f'in_process() takes the structured-data-models behind {taken}, and '
+        f'got a {type(model).__name__}; the client asks no other model',
         code='INVALID_CONFIGURATION',
     )
 
@@ -468,7 +471,7 @@ def _check_loaded_for(served: Served, model: Any, kind: str) -> None:
     no head to package. It answers the one task it is for or it is not that
     model.
     """
-    if isinstance(served, ScoresRowsAlone):
+    if isinstance(served, AnswersWithoutFitting):
         return
     needed = 'regression' if kind == 'regression' else 'classification'
     loaded = sorted(str(task) for task in model.tasks)
@@ -584,7 +587,7 @@ def _autocast(device: Any) -> Any:
 
 
 def _scored(
-    served: ScoresRowsAlone,
+    served: AnswersWithoutFitting,
     model: Any,
     payload: Mapping[str, Any],
     fields: list[str],

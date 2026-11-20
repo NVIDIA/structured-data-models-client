@@ -20,6 +20,7 @@ from typing import Any
 import pandas as pd
 from sdm_client import PredictiveQuery, Request, Schema
 from sdm_client.adapters.anomaly import AnomalyAdapter
+from sdm_client.adapters.forecast import ForecastAdapter
 from sdm_client.adapters.relational import RelationalAdapter
 from sdm_client.adapters.tabular import TabularAdapter
 
@@ -138,6 +139,19 @@ def _anomaly_cases() -> dict[str, list[dict[str, Any]]]:
     return recorded
 
 
+def _forecast_cases() -> dict[str, list[dict[str, Any]]]:
+    history = _people()[['user_id', 'age', 'churn']]
+    adapter = ForecastAdapter()
+    request = Request.forecast(history, target='age', horizon=3)
+    recorded: dict[str, list[dict[str, Any]]] = {}
+    for label, outputs in _output_sets(adapter, request):
+        recorded[f'forecast/direct-history{label}'] = [
+            _normalize(payload)
+            for payload in adapter.prediction_plan(request, outputs)
+        ]
+    return recorded
+
+
 def _relational_cases() -> dict[str, list[dict[str, Any]]]:
     schema = Schema.from_data({'people': _people(), 'orders': _orders()})
     request = PredictiveQuery(
@@ -165,6 +179,7 @@ def _relational_available() -> bool:
 def collect() -> dict[str, Any]:
     recorded: dict[str, Any] = dict(_tabular_cases())
     recorded.update(_anomaly_cases())
+    recorded.update(_forecast_cases())
     if _relational_available():
         recorded.update(_relational_cases())
     return recorded

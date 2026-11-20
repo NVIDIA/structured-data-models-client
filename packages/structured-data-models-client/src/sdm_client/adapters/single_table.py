@@ -223,3 +223,21 @@ def coherent_stype(stype: str, dtype: str, column: Column) -> str:
     if dtype.startswith('timestamp'):
         return 'timestamp'
     return MEANING_OF.get(dtype, 'categorical')
+
+
+def meaning_a_single_meaning_model_reads(column: Column, dtype: str) -> str:
+    r"""What to declare a column as, for a model that reads one meaning.
+
+    `coherent_stype` holds a placeholder meaning only where the dtype cannot
+    carry it, and a float can be categorical, so a column with nothing in it
+    to read stays categorical and a model that reads only numbers then
+    refuses it. There the meaning follows the dtype instead.
+
+    Only that column, and only where nothing was said about it either. A
+    column that holds values carries a claim, and so does one a caller typed
+    by hand though it held none; both are left alone to be refused on their
+    own terms.
+    """
+    if not column.untyped or column.stype_declared:
+        return coherent_stype(column.stype, dtype, column)
+    return MEANING_OF.get(dtype) or coherent_stype(column.stype, dtype, column)

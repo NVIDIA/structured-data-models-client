@@ -41,6 +41,14 @@ def anomaly(sdm):
 
 
 @pytest.fixture(scope='module')
+def forecast(sdm):
+    import torch
+
+    torch.manual_seed(0)
+    return sdm.models.KumoForecast(pretrained=False, device='cpu')
+
+
+@pytest.fixture(scope='module')
 def relational(sdm):
     pytest.importorskip('sdm_relational_engine', reason='needs [relational]')
     import torch

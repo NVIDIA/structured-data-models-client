@@ -37,6 +37,7 @@ from sdm_client.explanations import (
 )
 from sdm_client.models import (
     KumoAnomaly,
+    KumoForecast,
     KumoRelational,
     KumoTabular,
     Model,
@@ -60,6 +61,7 @@ __all__ = [
     'FittedModel',
     'GradientExplanations',
     'KumoAnomaly',
+    'KumoForecast',
     'KumoRelational',
     'KumoTabular',
     'MissingExtraError',
