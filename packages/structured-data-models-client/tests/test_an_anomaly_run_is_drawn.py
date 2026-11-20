@@ -124,12 +124,21 @@ def test_a_timestamp_index_is_the_axis_it_is_drawn_against(anomaly, tmp_path):
     assert isinstance(drawn.index, pd.DatetimeIndex)
 
 
+def above_the_90th_percentile(result) -> np.ndarray:
+    """A caller's own line, drawn where both thresholders would not."""
+    from sdm_client import percentile_thresholds
+
+    scores = result.to_pandas().sort_values('row_index')['prediction']
+    _, upper = percentile_thresholds(scores, upper_percentile=90.0)
+    return scores.to_numpy() > upper
+
+
 @pytest.mark.parametrize(
     ('detected_by', 'said'),
     [
         ('scs', b'SCS'),
         ('macs', b'MACS'),
-        (lambda rows: np.zeros(rows, dtype=bool), b'supplied by the caller'),
+        (above_the_90th_percentile, b'supplied by the caller'),
     ],
     ids=['scs', 'macs', 'supplied'],
 )
@@ -139,16 +148,27 @@ def test_the_report_says_which_thresholder_marked_it(
     """They disagree, and a reader who wants the line elsewhere supplies it,
     so a reader has to be told which one this is."""
     frame = readings()
+    result = scored(anomaly, frame)
     if callable(detected_by):
-        detected_by = detected_by(len(frame))
+        detected_by = detected_by(result)
     written = anomaly_report(
-        scored(anomaly, frame),
+        result,
         frame,
         tmp_path / 'run.pdf',
         detected_by=detected_by,
     )
 
     assert said in written.read_bytes()
+
+
+def test_the_score_and_the_label_are_not_drawn_as_signals():
+    """Every numerical reading is a signal, and the time it was taken at is
+    not one."""
+    from sdm_client.reporting.anomaly import _signals
+
+    assert _signals(
+        readings(), None, timestamp_column='ts', ground_truth_column=None
+    ) == ['flow', 'pressure']
 
 
 def test_a_thresholder_that_was_not_asked_for_is_refused(anomaly, tmp_path):
@@ -340,7 +360,7 @@ def test_a_decimal_context_is_not_changed_by_being_read():
         np.array([Decimal('0.99999999999999999999')], dtype=object),
         np.array([Decimal('1e-1000')], dtype=object),
         np.array([Decimal('sNaN')], dtype=object),
-        np.array([0.5]),
+        np.array([0.0, 0.5]),
     ],
     ids=['rounds to one', 'rounds to zero', 'signalling', 'a score'],
 )
@@ -359,7 +379,7 @@ def test_supplied_detections_that_only_round_to_a_decision_are_refused(
             scored(anomaly, frame),
             frame,
             tmp_path / 'run.pdf',
-            detected_by=np.repeat(nearly, len(frame)),
+            detected_by=np.resize(nearly, len(frame)),
         )
     assert 'threshold' in str(caught.value)
 
