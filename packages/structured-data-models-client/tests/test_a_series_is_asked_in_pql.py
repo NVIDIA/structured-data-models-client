@@ -27,6 +27,7 @@ from sdm_client import (
     StructuredDataError,
     UnsupportedRequestError,
 )
+from sdm_client.base import required_capabilities
 from sdm_client.core.warnings import SDMWarning
 from sdm_client.models import spec_for
 
@@ -423,6 +424,8 @@ def test_a_series_forecast_is_a_question_only_its_model_answers(forecast):
     request = gathered(
         FORECAST, readings(), indices=['s-1'], model=KumoForecast()
     )
+
+    assert required_capabilities(request).static
 
     with SDMClient.in_process(forecast) as client:
         with pytest.raises(UnsupportedRequestError) as caught:
