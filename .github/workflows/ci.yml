@@ -166,7 +166,7 @@ jobs:
       # index, since the default one resolves to a far larger CUDA build.
       - run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install -e './packages/structured-data-models-client[test]'
+          pip install -e './packages/structured-data-models-client[test,report]'
           pip install "structured-data-models @ git+https://github.com/NVIDIA/structured-data-models.git@${SDM_REF}"
           python -m pytest packages/structured-data-models-client/tests -q \
             -m 'not live_nim and not live_warehouse'

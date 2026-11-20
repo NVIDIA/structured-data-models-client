@@ -59,6 +59,14 @@ these packages. All five distributions share one version and one entry.
   `EXPLAIN`. It is `None` when explanations were not asked for.
 - The `EXPLAIN` query prefix: `EXPLAIN PREDICT …` adds `'explanation'` to the
   call's outputs. A ranking refuses it; a forecast explains each step.
+- `sdm_client.reporting.anomaly_report()` draws a `kumo-anomaly` answer over
+  the readings it scored, as a PDF: the score, the signals it was computed
+  from, and which rows a thresholder marked. Rows are matched to their scores
+  by position in the frame that was sent. Detections are marked by whichever
+  thresholder the answer carries, or by the caller's own, one per row.
+  `sdm_client.percentile_thresholds()` draws one such line from the scores
+  alone, by percentile, widened by how scattered the scores are. Install the
+  drawing with the `report` extra.
 
 ### Changed
 

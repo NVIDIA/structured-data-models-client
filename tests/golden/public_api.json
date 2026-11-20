@@ -139,7 +139,8 @@
       "Task",
       "UnknownModelError",
       "UnsupportedRequestError",
-      "__version__"
+      "__version__",
+      "percentile_thresholds"
     ],
     "members": {
       "Column": {
@@ -463,6 +464,10 @@
       "__version__": {
         "kind": "str",
         "value": "1.0.0"
+      },
+      "percentile_thresholds": {
+        "kind": "callable",
+        "signature": "(scores: 'Sequence[float] | np.ndarray', *, lower_percentile: 'float' = 0.5, upper_percentile: 'float' = 99.0) -> 'tuple[float, float]'"
       }
     }
   },
