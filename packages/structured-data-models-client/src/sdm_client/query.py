@@ -39,12 +39,17 @@ from sdm_client.decompose import (
     refuse_a_part_that_would_take_several_calls,
 )
 from sdm_client.errors import MissingExtraError, StructuredDataError
-from sdm_client.materializers import RelationalMaterializer, TabularMaterializer
+from sdm_client.materializers import (
+    RelationalMaterializer,
+    SeriesMaterializer,
+    TabularMaterializer,
+)
 from sdm_client.materializers.relational import (
     refuse_more_entities_than_fit_in_memory,
     rows_one_call_scores,
     rows_per_call_asked_for,
 )
+from sdm_client.materializers.series import reads_a_series
 from sdm_client.models import RELATIONAL_LIMITS, Model, spec_for
 from sdm_client.request import Request
 from sdm_client.schema import _MAX_CATEGORICAL_CARDINALITY as _MAX_CATEGORICAL
@@ -52,6 +57,8 @@ from sdm_client.schema import Schema
 
 if TYPE_CHECKING:
     from predictive_query import Profile, ValidatedPredictiveQuery
+
+    from sdm_client.base import ModelSpec
 
 
 class PredictiveQuery:
@@ -83,6 +90,7 @@ class PredictiveQuery:
         )
         self._tabular_materializer = TabularMaterializer(self.schema)
         self._relational_materializer = RelationalMaterializer(self.schema)
+        self._series_materializer = SeriesMaterializer(self.schema)
 
     def materialize(
         self,
@@ -157,6 +165,16 @@ class PredictiveQuery:
                 ``model`` cannot answer a schema of this shape.
         """
         spec = spec_for(model) if model is not None else None
+        if spec is not None and reads_a_series(spec):
+            return self._a_series(
+                spec,
+                indices=indices,
+                predict=predict,
+                num_context_samples=num_context_samples,
+                candidates=candidates,
+                task=task,
+                options=options,
+            )
         in_place = self.schema.source is not None
         relational = (
             spec.profile == RELATIONAL
@@ -391,6 +409,50 @@ class PredictiveQuery:
                     code='INVALID_REQUEST',
                 )
 
+    def _a_series(
+        self,
+        spec: ModelSpec,
+        *,
+        indices: Sequence[Any] | None,
+        predict: pd.DataFrame | None,
+        num_context_samples: int | None,
+        candidates: Sequence[Any] | None,
+        task: str | None,
+        options: dict[str, Any],
+    ) -> Request:
+        r"""Gather the one series a time-series model is asked about.
+
+        Such a model is handed a history and scores no rows of the caller's
+        choosing, so every argument that chooses rows or says how to learn
+        from them is refused by name rather than ignored. What is left over
+        is passed to the model as its own options.
+        """
+        given = {
+            'predict': predict,
+            'num_context_samples': num_context_samples,
+            'candidates': candidates,
+            'task': task,
+        }
+        unread = sorted(
+            name for name, value in given.items() if value is not None
+        )
+        if unread:
+            raise StructuredDataError(
+                f'{spec.model_id} reads a whole series and nothing chooses '
+                f'rows of it or labels to learn from, so it has no use for '
+                f'{unread}. Say which series with indices=[...] when the '
+                f'table holds several',
+                code='INVALID_REQUEST',
+                details={'model': spec.model_id, 'unread': unread},
+            )
+        return self._series_materializer.materialize(
+            text=self.text,
+            spec=spec,
+            resolve=self._resolve,
+            indices=indices,
+            inference=options,
+        )
+
     def _in_parts(self, rewritten: Decomposition, **how: Any) -> Request:
         r"""Gather the questions this one is asked as, and keep them together.
 
@@ -433,15 +495,21 @@ class PredictiveQuery:
         whole._asked = self.text
         return whole
 
-    def _resolve(self, profile: Profile) -> ValidatedPredictiveQuery:
-        r"""Parse and validate the query."""
+    def _resolve(
+        self, profile: Profile, definition: Any = None
+    ) -> ValidatedPredictiveQuery:
+        r"""Parse and validate the query.
+
+        Against ``definition`` when one is given, for the route that reads
+        the table at another grain than its rows; the schema's own otherwise.
+        """
         from predictive_query import validate
 
         from sdm_client.schema import to_schema_definition
 
-        resolved, response = validate(
-            self.text, to_schema_definition(self.schema), profile
-        )
+        if definition is None:
+            definition = to_schema_definition(self.schema)
+        resolved, response = validate(self.text, definition, profile)
         if resolved is None or not response.ok:
             reasons = (
                 '; '.join(

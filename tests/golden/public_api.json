@@ -323,6 +323,7 @@
           "asked",
           "context",
           "context_rows",
+          "horizon",
           "is_relational",
           "nothing_to_score",
           "parts",

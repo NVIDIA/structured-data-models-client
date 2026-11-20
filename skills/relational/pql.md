@@ -88,7 +88,9 @@ forecast:
 
 ```
 FORECAST is only supported for numerical targets.
-FORECAST can only be used with targets that have a forward-looking time range
+Forecasting a column's own next values is not something a relational model
+does; it forecasts an aggregate over a time window. Give the target a window,
+such as SUM(table.col, 0, 30, days), or ask a time-series model.
 ```
 
 A ranking asks which candidates an entity reaches, so its target is a

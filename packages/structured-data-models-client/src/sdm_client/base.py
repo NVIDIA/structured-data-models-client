@@ -46,6 +46,7 @@ SHAPE_CAPABILITIES = (
     'multiple_tables',
     'link_prediction',
     'forecasting',
+    'series_forecasting',
     'static',
     'temporal',
 )
@@ -211,17 +212,23 @@ def required_capabilities(request: Request) -> Capabilities:
 
     Built with :meth:`Capabilities.nothing` and switched on, so a flag this
     request does not need stays off and cannot cause a spurious rejection.
+
+    A series continued from its own history has a bare column for a target.
+    It is a forecast with no window, which is the static shape, and only a
+    model that forecasts a series as given answers it.
     """
     kind = request.task.kind
-    temporal = bool(request.task.options.get('anchor_time_column')) or kind in {
-        'forecasting',
-        'temporal_link_prediction',
-    }
+    series = kind == 'forecasting' and request.horizon is not None
+    temporal = not series and (
+        bool(request.task.options.get('anchor_time_column'))
+        or kind in {'forecasting', 'temporal_link_prediction'}
+    )
     return Capabilities.nothing('this request').also(
         relationships=bool(request.schema.relationships),
         multiple_tables=len(request.schema) > 1,
         link_prediction=kind == 'temporal_link_prediction',
         forecasting=kind == 'forecasting',
+        series_forecasting=series,
         temporal=temporal,
         static=not temporal,
     )
@@ -242,6 +249,17 @@ def check_request_against_model(
     """
     required = required_capabilities(request)
     supported = spec.profile.capabilities
+    if (
+        required.forecasting
+        and supported.series_forecasting
+        and not required.series_forecasting
+    ):
+        raise UnsupportedRequestError(
+            f'{spec.model_id} forecasts from a history and a number of '
+            f'steps, and reads nothing about the steps themselves. Build the '
+            f'request with Request.forecast(history, target=..., horizon=...)',
+            details={'model': spec.model_id},
+        )
     unsupported = [
         name
         for name in SHAPE_CAPABILITIES
