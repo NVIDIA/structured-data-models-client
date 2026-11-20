@@ -247,7 +247,7 @@ def test_rows_already_in_order_are_read_without_a_word():
 def test_times_written_across_a_clock_change_are_still_times():
     """Local times carry a different offset either side of a clock change,
     and one writer may give seconds where another gives fractions. They are
-    all moments, and moments order."""
+    all moments, and moments in order are read without a word."""
     from sdm_client import Schema
 
     in_order = one_series('s-1').drop(columns='sensor_id').head(40)
@@ -262,7 +262,11 @@ def test_times_written_across_a_clock_change_are_still_times():
     )
     text = 'PREDICT readings.flow FORECAST 4 TIMEFRAMES FOR EACH readings.at'
 
-    request = PredictiveQuery(text, schema).materialize(model=KumoForecast())
+    with warnings.catch_warnings():
+        warnings.simplefilter('error', SDMWarning)
+        request = PredictiveQuery(text, schema).materialize(
+            model=KumoForecast()
+        )
 
     assert request.context.instance_table['flow'].tolist() == pytest.approx(
         in_order['flow'].tolist()
