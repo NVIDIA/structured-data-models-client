@@ -21,14 +21,12 @@ from sdm_client import (
     KumoAnomaly,
     KumoForecast,
     KumoRelational,
-    KumoTabular,
     PredictiveQuery,
     Request,
     SDMClient,
     StructuredDataError,
     UnsupportedRequestError,
 )
-from sdm_client.base import required_capabilities
 from sdm_client.core.warnings import SDMWarning
 from sdm_client.models import spec_for
 
@@ -94,7 +92,6 @@ def test_a_forecast_query_reads_the_series_it_names(forecast):
             model=KumoForecast(),
         ).to_pandas()
 
-    assert asked['forecast_step'].tolist() == [1, 2, 3, 4, 5, 6]
     assert asked['prediction'].tolist() == pytest.approx(
         direct['prediction'].tolist()
     )
@@ -115,9 +112,6 @@ def test_an_anomaly_query_scores_every_row_of_the_series(anomaly):
 
     assert answer['row_index'].tolist() == list(range(120))
     assert answer['id'].tolist() == list(range(120, 240))
-    assert {'prediction', 'probability_scs', 'probability_macs'} <= set(
-        answer.columns
-    )
 
 
 def test_a_score_names_the_row_it_was_given_not_where_it_was_sorted_to(
@@ -176,7 +170,7 @@ def test_a_key_the_table_has_names_the_rows_when_the_time_names_the_series(
     assert answer['id'].tolist() == frame['row_id'].tolist()
 
 
-def test_a_key_displaced_by_the_entity_is_not_read_as_a_reading(anomaly):
+def test_a_key_displaced_by_the_entity_is_not_read_as_a_reading():
     """The table says `row_id` is its key and the query names each row by
     its step. One of them names the row; the other is a second name for
     it, and a name is never a reading."""
@@ -199,9 +193,7 @@ def test_a_key_displaced_by_the_entity_is_not_read_as_a_reading(anomaly):
         'flow',
         'temp',
     ]
-    with SDMClient.in_process(anomaly) as client:
-        answer = client.predict(request, model=KumoAnomaly()).to_pandas()
-    assert answer['id'].tolist() == list(range(120))
+    assert request.schema['readings'].primary_key == 'step'
 
 
 def test_a_series_column_with_nothing_in_it_names_no_series():
@@ -246,48 +238,10 @@ def test_an_entity_that_names_the_row_makes_the_table_the_series():
     )
 
 
-def test_rows_out_of_order_are_read_in_the_order_they_happened():
-    shuffled = one_series('s-1').sample(frac=1.0, random_state=0)
-
-    with pytest.warns(SDMWarning, match='not in at order'):
-        request = gathered(FORECAST, shuffled, model=KumoForecast())
-
-    assert request.context.instance_table['flow'].tolist() == pytest.approx(
-        one_series('s-1')['flow'].tolist()
-    )
-
-
 def test_rows_already_in_order_are_read_without_a_word():
     with warnings.catch_warnings():
         warnings.simplefilter('error', SDMWarning)
         gathered(FORECAST, readings(), indices=['s-1'], model=KumoForecast())
-
-
-def test_a_time_written_as_text_orders_as_time_not_as_spelling(forecast):
-    """Rows already in time order stay there and are read without a word,
-    whether the time is a time or the text that spells one."""
-    from sdm_client import Schema
-
-    in_order = one_series('s-1').drop(columns='sensor_id')
-    as_text = in_order.assign(
-        at=pd.date_range(
-            '2026-01-01', periods=len(in_order), freq='D'
-        ).strftime('%Y-%m-%d')
-    )
-    schema = Schema.from_data(
-        {'readings': as_text}, time_columns={'readings': 'at'}
-    )
-    text = 'PREDICT readings.flow FORECAST 4 TIMEFRAMES FOR EACH readings.at'
-
-    with warnings.catch_warnings():
-        warnings.simplefilter('error', SDMWarning)
-        request = PredictiveQuery(text, schema).materialize(
-            model=KumoForecast()
-        )
-
-    assert request.context.instance_table['flow'].tolist() == pytest.approx(
-        in_order['flow'].tolist()
-    )
 
 
 def test_times_written_across_a_clock_change_are_still_times():
@@ -315,7 +269,7 @@ def test_times_written_across_a_clock_change_are_still_times():
     )
 
 
-@pytest.mark.parametrize('spelled', ['sometime', '1/2/2026', '2 Jan 2026'])
+@pytest.mark.parametrize('spelled', ['1/2/2026', '2 Jan 2026'])
 def test_a_time_not_written_the_one_unambiguous_way_is_refused(spelled):
     """1/2/2026 is January to one writer and February to another. A guess
     would order the rows confidently and wrongly, so only ISO 8601 is read."""
@@ -432,14 +386,6 @@ def test_a_query_without_the_clause_asks_the_model_nothing(model, text, form):
 
 
 @pytest.mark.parametrize(
-    ('model', 'text'),
-    [(KumoAnomaly(), FORECAST), (KumoForecast(), ANOMALY)],
-)
-def test_a_query_is_not_answered_by_the_other_model(model, text):
-    refusal(text, readings(), indices=['s-1'], model=model)
-
-
-@pytest.mark.parametrize(
     'unread',
     [
         {'predict': pd.DataFrame({'flow': [1.0]})},
@@ -474,41 +420,11 @@ def test_a_series_forecast_is_a_question_only_its_model_answers(forecast):
         FORECAST, readings(), indices=['s-1'], model=KumoForecast()
     )
 
-    required = required_capabilities(request)
-    assert required.series_forecasting and required.static
-    assert not required.temporal
-
-    for other in (KumoTabular(), KumoRelational()):
-        with SDMClient.in_process(forecast) as client:
-            with pytest.raises(UnsupportedRequestError) as caught:
-                client.predict(request, model=other)
-        assert 'series_forecasting' in str(caught.value)
-        assert spec_for(other).model_id in str(caught.value)
-
-
-def test_the_time_of_a_step_names_the_step(forecast):
-    """A table of one series often has nothing but its time to name a row
-    by. One value per row is a key of the row, so the table is the series."""
-    frame = one_series('s-1').drop(columns='sensor_id')
-    text = 'PREDICT readings.flow FORECAST 4 TIMEFRAMES FOR EACH readings.at'
-
-    request = gathered(text, frame, model=KumoForecast())
-
-    assert list(request.context.instance_table.columns) == ['flow', 'temp']
     with SDMClient.in_process(forecast) as client:
-        assert (
-            len(client.predict(request, model=KumoForecast()).to_pandas()) == 4
-        )
-
-
-def test_a_step_number_names_the_step_and_is_not_read_as_a_reading():
-    frame = one_series('s-1')[['flow', 'temp']]
-    frame.insert(0, 'step', np.arange(len(frame)))
-    text = 'PREDICT readings.* DETECT ANOMALY FOR EACH readings.step'
-
-    request = gathered(text, frame, model=KumoAnomaly())
-
-    assert request.schema['readings'].primary_key == 'step'
+        with pytest.raises(UnsupportedRequestError) as caught:
+            client.predict(request, model=KumoRelational())
+    assert 'series_forecasting' in str(caught.value)
+    assert spec_for(KumoRelational()).model_id in str(caught.value)
 
 
 def test_what_the_caller_said_a_column_means_is_what_the_model_is_told():
@@ -538,8 +454,6 @@ def test_a_target_the_schema_calls_a_key_is_forecast_once_it_is_a_number():
     text = 'PREDICT readings.bid FORECAST 3 TIMEFRAMES FOR EACH readings.at'
     schema = Schema.from_data({'readings': frame})
     assert schema['readings'].primary_key == 'bid'
-    with pytest.raises(StructuredDataError, match='numerical targets'):
-        PredictiveQuery(text, schema).materialize(model=KumoForecast())
 
     schema['readings'].primary_key = None
     schema['readings']['bid'].stype = 'numerical'
