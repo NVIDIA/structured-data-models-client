@@ -119,11 +119,18 @@ def test_an_explained_forecast_is_answered_as_it_was_asked(answered):
 
 
 def test_the_attribution_covers_every_lag_and_every_step(explained):
-    block = carried_by(explained)['explanation']
+    """It travels as the contract's `explanation` field, so it has to be
+    what that field carries, and it names the channels it read."""
+    import json
+
+    carried = carried_by(explained)
+    block = carried['explanation']
     attributions = np.asarray(block['lag_horizon_attributions'])
 
     assert attributions.shape == (block['shapes']['K_lags'], 4)
     assert np.isfinite(attributions).all()
+    assert carried['metadata']['channel_labels'] == ['flow', 'temp']
+    assert json.loads(json.dumps(carried, allow_nan=False))
 
 
 def test_a_flat_series_has_almost_nowhere_to_move(forecast):
@@ -416,14 +423,21 @@ def test_the_channel_effects_are_measured_not_differentiated(forecast):
     assert not shim(x_enc=window).forecast.requires_grad
 
 
-@pytest.mark.filterwarnings(
-    r'error:result\.explanation is deprecated:DeprecationWarning'
-)
 def test_the_attribution_heatmap_is_drawn(explained, tmp_path):
     """It is a page drawn from an image on disk, and hardcoding no image
     dropped it from every report although the matrix was right there. The
     report reads no deprecated part of the answer to draw it."""
-    assert pages(forecast_report(explained, tmp_path / 'f.pdf')) >= 4
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'error',
+            message=r'result\.explanation is deprecated',
+            category=DeprecationWarning,
+        )
+        written = forecast_report(
+            explained, tmp_path / 'f.pdf', dataset_name='flow'
+        )
+
+    assert pages(written) >= 4
 
 
 def test_the_artifacts_are_kept_only_where_a_place_was_named(
@@ -514,6 +528,8 @@ def test_the_smoothness_is_the_history_walked_once(explained, forecast):
     )
 
     read = carried['explanation']['trajectory_stability']
+    assert read['n_time_steps'] == 512
+    assert 0.0 <= read['zero_crossing_rate_mean'] <= 1.0
     assert read['relative_jitter_mean'] == pytest.approx(
         walked.relative_jitter_mean, rel=1e-5
     )
@@ -565,7 +581,7 @@ def test_the_stability_csv_names_the_channels_it_measured(
     assert written['feature'].tolist() == ['flow', 'temp']
 
 
-@pytest.mark.parametrize('reference', [0.0, None])
+@pytest.mark.parametrize('reference', [0.0, 1.5, None])
 def test_a_reference_scale_of_zero_is_a_reference_scale(reference):
     """A trajectory that does not move has a mean step of zero, which read
     as a measurement that was never taken."""
