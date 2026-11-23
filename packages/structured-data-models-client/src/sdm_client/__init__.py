@@ -22,6 +22,7 @@ defaults to what the schema's shape implies.
 from sdm_client._version import __version__
 from sdm_client.base import ModelCapabilities
 from sdm_client.client import FittedModel, SDMClient
+from sdm_client.context_report import ContextDraw, ContextReport
 from sdm_client.core.warnings import SDMWarning
 from sdm_client.errors import (
     MissingExtraError,
@@ -94,6 +95,8 @@ __all__ = [
     'RelationshipOrigin',
     'Request',
     'Schema',
+    'ContextDraw',
+    'ContextReport',
     'SanitizationReport',
     'TableSanitizationReport',
     'Split',

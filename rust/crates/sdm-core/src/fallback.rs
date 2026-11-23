@@ -396,9 +396,23 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                     refused(request, "seed", "a sample's seed is a non-negative integer")
                 })?;
             let projected = unique(columns);
-            let scanned = held
-                .scan(table, projected.clone(), filters.clone(), None)
-                .await?;
+            // The value filters the provider applies go with the scan; the
+            // rest are applied here, before the draw, so the sample is of
+            // the rows that may meet them all.
+            let declared = &held.asker.capabilities()?.filters;
+            let (sent, kept): (Vec<Filter>, Vec<Filter>) =
+                filters.iter().cloned().partition(|f| f.taken_by(declared));
+            let mut read = projected.clone();
+            for filter in &kept {
+                read.extend(filter.columns().into_iter().map(str::to_owned));
+            }
+            let mut scanned = held.scan(table, unique(&read), sent, None).await?;
+            if !kept.is_empty() {
+                let mask = crate::value_filter::may_hold(&scanned.batch, &kept)?;
+                scanned.batch =
+                    arrow_select::filter::filter_record_batch(&scanned.batch, &mask.into())
+                        .map_err(|_| internal("the fallback's value filters do not apply"))?;
+            }
             // A defined ordering of the same data: every projected column,
             // by the row format's order, so equal rows are equal in all.
             let rows = ordered_rows(request, "columns", &scanned.columns(&projected)?)?;
@@ -504,12 +518,7 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             // first: a scan names some.
             let mut columns: Vec<String> = vec![];
             for filter in filters {
-                match filter {
-                    Filter::KeyIn { columns: named, .. } => columns.extend(named.iter().cloned()),
-                    Filter::TimeRange { column, .. } | Filter::NotNull { column } => {
-                        columns.push(column.clone())
-                    }
-                }
+                columns.extend(filter.columns().into_iter().map(str::to_owned));
             }
             if columns.is_empty() {
                 columns.push(first_column(held, table).await?);

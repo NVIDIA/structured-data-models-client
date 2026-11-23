@@ -45,6 +45,7 @@ fn provider_choices_round_trip() {
                 key_enforcement: false,
                 sample_rows: false,
                 optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
+                filters: Default::default(),
                 max_keys_per_request: Some(10_000),
                 max_seed: u64::MAX,
                 text_times: None,

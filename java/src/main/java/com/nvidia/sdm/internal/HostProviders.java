@@ -79,6 +79,11 @@ public final class HostProviders {
         "sampling",
         capabilities.sampling() == Capabilities.Sampling.SEEDED_STABLE ? "seeded_stable" : "unseeded");
     wire.put("max_seed", capabilities.maxSeed());
+    if (!capabilities.filters().isEmpty()) {
+      wire.put(
+          "filters",
+          capabilities.filters().stream().map(DataRequest.FilterKind::wireName).sorted().toList());
+    }
     wire.put("text_times", null);
     wire.put(
         "null_order",
@@ -360,6 +365,28 @@ public final class HostProviders {
                   Optional.ofNullable((Map<String, Object>) filter.get("lower")).map(Requests::bound),
                   Optional.ofNullable((Map<String, Object>) filter.get("upper")).map(Requests::bound)));
           case "not_null" -> list.add(new DataRequest.NotNull((String) filter.get("column")));
+          case "compare" -> list.add(
+              new DataRequest.Compare(
+                  (String) filter.get("column"),
+                  DataRequest.CompareOp.valueOf(((String) filter.get("op")).toUpperCase(java.util.Locale.ROOT)),
+                  value((Map<String, Object>) filter.get("value"))));
+          case "in" -> {
+            List<Object> values = new ArrayList<>();
+            for (Object value : (List<Object>) filter.get("values")) {
+              values.add(value((Map<String, Object>) value));
+            }
+            list.add(new DataRequest.In((String) filter.get("column"), values));
+          }
+          case "is_null" -> list.add(new DataRequest.IsNull((String) filter.get("column")));
+          case "any_of" -> list.add(new DataRequest.AnyOf(filters(filter.get("filters"), keys)));
+          case "all_of" -> list.add(new DataRequest.AllOf(filters(filter.get("filters"), keys)));
+          case "has_rows" -> list.add(
+              new DataRequest.HasRows(
+                  (String) filter.get("column"),
+                  relation(filter.get("table")),
+                  (String) filter.get("key"),
+                  filters(filter.get("filters"), keys),
+                  ((Number) filter.get("at_least")).longValue()));
           default -> throw Messages.internal("the core sent a filter this host does not know");
         }
       }

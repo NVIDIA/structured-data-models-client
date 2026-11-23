@@ -324,6 +324,7 @@ fn fetching_run() -> Run {
             key_enforcement: false,
             sample_rows: false,
             optional: Default::default(),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,
@@ -636,6 +637,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
                 ranking: None,
             },
             query: None,
+            context: Vec::new(),
         }))
     }));
     let Step::Done {

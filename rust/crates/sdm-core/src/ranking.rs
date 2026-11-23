@@ -230,8 +230,8 @@ pub(crate) async fn materialize(
             Gathered::Done(result) => return Ok(result),
             // A question scores no more rows than one call (refused above),
             // so it is gathered as one call.
-            Gathered::Request(calls, query) => match <[Call; 1]>::try_from(calls) {
-                Ok([(payload, _)]) => gathered.push((position, named, payload, query)),
+            Gathered::Request(calls, query, report) => match <[Call; 1]>::try_from(calls) {
+                Ok([(payload, _)]) => gathered.push((position, named, payload, query, report)),
                 Err(_) => {
                     return Err(crate::run::internal(
                         "a ranking's question gathered as several calls",
@@ -241,7 +241,9 @@ pub(crate) async fn materialize(
         }
     }
     let mut attached = Vec::with_capacity(gathered.len());
-    for (position, named, payload, query) in gathered {
+    let mut context = Vec::with_capacity(gathered.len());
+    for (position, named, payload, query, report) in gathered {
+        context.push(report);
         let (payload, query) = attach_request(&asker, payload, &query)?;
         attached.push(RankingPart {
             candidate: position,
@@ -268,6 +270,7 @@ pub(crate) async fn materialize(
             }),
         },
         query: facts,
+        context,
     }))
 }
 

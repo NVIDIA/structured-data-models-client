@@ -197,6 +197,7 @@ impl SqlDialect for Plain {
             key_enforcement: false,
             sample_rows: false,
             optional: Default::default(),
+            filters: Default::default(),
             max_keys_per_request: None,
             sampling: Determinism::SeededStable,
             max_seed: u64::MAX,

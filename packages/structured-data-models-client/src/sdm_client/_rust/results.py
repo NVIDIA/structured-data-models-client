@@ -25,6 +25,7 @@ from collections.abc import Mapping
 from typing import Any, TypeVar
 
 from sdm_client._rust.codec import CodecError
+from sdm_client.context_report import ContextDraw
 from sdm_client.errors import StructuredDataError
 from sdm_client.sanitization import SanitizationReport, TableSanitizationReport
 
@@ -448,6 +449,7 @@ class Gathered:
     state: GatheredState
     query: QueryFacts | None
     examples: ExampleFacts | None = None
+    context: tuple[ContextDraw, ...] = ()
 
 
 def _state(value: Any) -> GatheredState:
@@ -691,6 +693,40 @@ def _prepared_frame_graph(read: Mapping[str, Any]) -> PreparedFrameGraph:
     )
 
 
+_CONTEXT_COUNTS = ('draws', 'rows_drawn', 'candidates', 'kept', 'asked')
+
+
+def _context(value: Any) -> tuple[ContextDraw, ...]:
+    """Each part's context draw, as the core reports it; none where the
+    core says nothing."""
+    if value is None:
+        return ()
+    parts = []
+    for each in _list(value, 'context'):
+        read = _fields(
+            each,
+            'a context draw',
+            (*_CONTEXT_COUNTS, 'stopped', 'filtered_at_source'),
+            (),
+        )
+        filtered = read['filtered_at_source']
+        if type(filtered) is not bool:
+            raise CodecError('invalid context draw filter flag')
+        try:
+            parts.append(
+                ContextDraw(
+                    **{
+                        name: _int(read[name], name) for name in _CONTEXT_COUNTS
+                    },
+                    stopped=_text(read['stopped'], 'stopped'),  # type: ignore[arg-type]
+                    filtered_at_source=filtered,
+                )
+            )
+        except ValueError as invalid:
+            raise CodecError(str(invalid)) from None
+    return tuple(parts)
+
+
 _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'request_split': (('instance', 'related_tables'), (), _request_split),
     'result_items': (('segments',), (), _result_items),
@@ -704,7 +740,7 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
     'edit_schema': (('schema',), ('declared',), _edited),
     'materialize': (
         ('state',),
-        ('query', 'examples'),
+        ('query', 'examples', 'context'),
         lambda read: Gathered(
             examples=None
             if read['examples'] is None
@@ -715,6 +751,7 @@ _RESULTS: dict[str, tuple[tuple[str, ...], tuple[str, ...], Any]] = {
                 if read['query'] is None
                 else QueryFacts.from_contract(read['query'])
             ),
+            context=_context(read['context']),
         ),
     ),
     'direct_value': (

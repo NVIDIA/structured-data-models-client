@@ -114,6 +114,8 @@
       "Column",
       "ColumnExplanations",
       "ColumnMetadata",
+      "ContextDraw",
+      "ContextReport",
       "ExplanationSummarizer",
       "ExplanationView",
       "Explanations",
@@ -191,6 +193,22 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": "(name: 'str', dtype: 'str', stype: 'str') -> None"
+      },
+      "ContextDraw": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(draws: int, rows_drawn: int, candidates: int, kept: int, asked: int, stopped: Literal['full', 'source_exhausted', 'row_budget'], filtered_at_source: bool) -> None"
+      },
+      "ContextReport": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "parts"
+        ],
+        "public_methods": {},
+        "signature": "(status: Literal['available', 'unavailable'], parts: tuple[sdm_client.context_report.ContextDraw, ...] = ()) -> None"
       },
       "ExplanationSummarizer": {
         "bases": [],
@@ -450,6 +468,7 @@
         "public_attributes": [
           "asked",
           "context",
+          "context_report",
           "context_rows",
           "is_relational",
           "nothing_to_score",

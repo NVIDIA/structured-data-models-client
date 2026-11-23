@@ -111,6 +111,21 @@ pub(crate) trait SqlDialect: Sync {
     /// What a source of this dialect answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities;
 
+    /// `value` as a literal a value filter compares with, or none where
+    /// the dialect does not write it (the comparison is then left out,
+    /// [`value_condition`]): by default [`plain_literal`] with text quoted
+    /// as DuckDB and SQLite read it ([`quote::text`]).
+    fn value_literal(&self, value: &Scalar) -> Option<String> {
+        plain_literal(value, quote::text)
+    }
+
+    /// A time bound a `has_rows` filter compares a time column with, or
+    /// none where the dialect writes none (the filter is then left out):
+    /// by default a `TIMESTAMP` literal ([`timestamp_literal`]).
+    fn time_literal(&self, value: &Scalar) -> Option<String> {
+        timestamp_literal(value)
+    }
+
     // --- quoting, depths and namespace -------------------------------------
 
     /// The most name parts a relation takes.
@@ -609,6 +624,10 @@ pub(crate) struct Sample<'a> {
     pub seed: i128,
     pub projected: String,
     pub filtered: String,
+    /// Whether the filters hold a value filter, which thins the rows more
+    /// than a not-null filter of the key or time does: a dialect sampling
+    /// before its `WHERE` then filters first.
+    pub value_filtered: bool,
     pub key_dtype: Option<Dtype>,
     /// The table's rows, where the core counted them for a dialect sizing
     /// its draw by them (`ProviderCapabilities::sample_rows`).
@@ -866,6 +885,7 @@ pub(crate) fn plan_projected(
                 seed,
                 projected: transferred_columns(d, columns, conversions),
                 filtered: conditions(d, request, filters, "\n")?,
+                value_filtered: filters.iter().any(|f| f.kind().is_some()),
                 key_dtype: *key_dtype,
                 rows: *rows,
             });
@@ -1027,9 +1047,9 @@ fn identifiers(d: &dyn SqlDialect, names: &[String]) -> String {
 }
 
 /// The `WHERE` clause of `filters`, opened by `lead` (a space or a line
-/// break), or nothing for none: each a not-null filter, as the reference's
-/// sampler writes one, joined by `AND`; another kind of filter is not
-/// taken.
+/// break), or nothing for none: each not-null filter as the reference's
+/// sampler writes one, and each value filter ([`value_condition`]), joined
+/// by `AND`; a key or time filter is not taken.
 pub(crate) fn conditions(
     d: &dyn SqlDialect,
     request: &DataRequest,
@@ -1038,19 +1058,218 @@ pub(crate) fn conditions(
 ) -> Result<String, CoreError> {
     let mut conditions = Vec::with_capacity(filters.len());
     for filter in filters {
-        let Filter::NotNull { column } = filter else {
-            return Err(not_taken(
-                request,
-                "filters",
-                "this rendering takes not-null filters only",
-            ));
-        };
-        conditions.push(format!("{} IS NOT NULL", d.identifier(column)));
+        match filter {
+            Filter::NotNull { column } => {
+                conditions.push(format!("{} IS NOT NULL", d.identifier(column)));
+            }
+            Filter::KeyIn { .. } | Filter::TimeRange { .. } => {
+                return Err(not_taken(
+                    request,
+                    "filters",
+                    "this rendering takes not-null and value filters only",
+                ));
+            }
+            _ => {
+                if let Some(condition) = value_condition(d, request, filter) {
+                    conditions.push(condition);
+                }
+            }
+        }
     }
     if conditions.is_empty() {
         return Ok(String::new());
     }
     Ok(format!("{lead}WHERE {}", conditions.join(" AND ")))
+}
+
+/// A value filter as a SQL condition, or none where it holds for every
+/// row as written here. A value the dialect cannot write as a literal
+/// ([`SqlDialect::value_literal`]) leaves its comparison out, which only
+/// widens what the read returns: a value filter may return more rows,
+/// never fewer ([`sdm_contract::data::FilterKind`]). So an `AnyOf` with a
+/// part left out is left out whole, and an `AllOf` keeps the parts it
+/// writes.
+pub(crate) fn value_condition(
+    d: &dyn SqlDialect,
+    request: &DataRequest,
+    filter: &Filter,
+) -> Option<String> {
+    match filter {
+        Filter::NotNull { column } => Some(format!("{} IS NOT NULL", d.identifier(column))),
+        Filter::IsNull { column } => Some(format!("{} IS NULL", d.identifier(column))),
+        Filter::Compare { column, op, value } => Some(format!(
+            "{} {} {}",
+            d.identifier(column),
+            op.sql(),
+            d.value_literal(value)?
+        )),
+        Filter::In { column, values } => {
+            if values.is_empty() {
+                // Equal to none of no values: no row.
+                return Some("1 = 0".to_owned());
+            }
+            let literals = values
+                .iter()
+                .map(|v| d.value_literal(v))
+                .collect::<Option<Vec<_>>>()?;
+            Some(format!(
+                "{} IN ({})",
+                d.identifier(column),
+                literals.join(", ")
+            ))
+        }
+        Filter::AnyOf { filters } => {
+            if filters.is_empty() {
+                return Some("1 = 0".to_owned());
+            }
+            let parts = filters
+                .iter()
+                .map(|f| value_condition(d, request, f))
+                .collect::<Option<Vec<_>>>()?;
+            Some(format!("({})", parts.join(" OR ")))
+        }
+        Filter::AllOf { filters } => {
+            let parts: Vec<String> = filters
+                .iter()
+                .filter_map(|f| value_condition(d, request, f))
+                .collect();
+            if parts.is_empty() {
+                return None;
+            }
+            Some(format!("({})", parts.join(" AND ")))
+        }
+        Filter::HasRows {
+            column,
+            table,
+            key,
+            filters,
+            at_least,
+        } => {
+            // Referred to by no row is no condition: every row meets it.
+            if *at_least == 0 {
+                return None;
+            }
+            let referring = d.identifier(key);
+            let mut within = vec![format!("{referring} IS NOT NULL")];
+            within.extend(
+                filters
+                    .iter()
+                    .filter_map(|f| value_condition(d, request, f)),
+            );
+            let counted = if *at_least > 1 {
+                format!("\n  GROUP BY {referring}\n  HAVING COUNT(*) >= {at_least}")
+            } else {
+                String::new()
+            };
+            Some(format!(
+                "{} IN (\n  SELECT {referring}\n  FROM {}\n  WHERE {}{counted})",
+                d.identifier(column),
+                from(d, request, "filters", table).ok()?,
+                within.join("\n    AND "),
+            ))
+        }
+        // A time range, written only inside `has_rows`: each bound the
+        // dialect writes a literal of ([`SqlDialect::time_literal`]); one it
+        // does not is left out, widening the range.
+        Filter::TimeRange {
+            column,
+            lower,
+            upper,
+        } => {
+            let at = d.as_time(&d.identifier(column));
+            let mut bounds = Vec::new();
+            for (bound, below) in [(lower, true), (upper, false)] {
+                let Some(bound) = bound else { continue };
+                let Some(literal) = d.time_literal(&bound.value) else {
+                    continue;
+                };
+                let op = match (below, bound.inclusive) {
+                    (true, true) => ">=",
+                    (true, false) => ">",
+                    (false, true) => "<=",
+                    (false, false) => "<",
+                };
+                bounds.push(format!("{at} {op} {literal}"));
+            }
+            (!bounds.is_empty()).then(|| bounds.join(" AND "))
+        }
+        Filter::KeyIn { .. } => None,
+    }
+}
+
+/// A zone-less timestamp, of microseconds or nanoseconds since the
+/// epoch, as a `TIMESTAMP 'YYYY-MM-DD HH:MM:SS.ffffff'` literal, the
+/// microsecond rounded down (a window's bounds are widened past it); none
+/// for another value, or a zoned one.
+pub(crate) fn timestamp_literal(value: &Scalar) -> Option<String> {
+    let Scalar::Timestamp {
+        unit,
+        zone: None,
+        value,
+    } = value
+    else {
+        return None;
+    };
+    let micros = match unit {
+        sdm_contract::Unit::Us => i128::from(*value),
+        sdm_contract::Unit::Ns => i128::from(*value).div_euclid(1_000),
+    };
+    let days = micros.div_euclid(86_400_000_000);
+    let of_day = micros.rem_euclid(86_400_000_000);
+    // Howard Hinnant's civil_from_days.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i128::from(month <= 2);
+    if !(1..=9999).contains(&year) {
+        return None;
+    }
+    let seconds = of_day / 1_000_000;
+    Some(format!(
+        "TIMESTAMP '{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02}.{:06}'",
+        seconds / 3_600,
+        seconds / 60 % 60,
+        seconds % 60,
+        of_day % 1_000_000
+    ))
+}
+
+/// `value` as a literal every dialect reads alike, or none: a boolean, an
+/// integer, a finite double written with a fraction or an exponent so it
+/// reads as a double, or text in single quotes ([`quote::text`]) holding no
+/// NUL. Any other value is not written.
+pub(crate) fn plain_literal(value: &Scalar, text: impl Fn(&str) -> String) -> Option<String> {
+    Some(match value {
+        Scalar::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_owned(),
+        Scalar::Int8(v) => v.to_string(),
+        Scalar::Int16(v) => v.to_string(),
+        Scalar::Int32(v) => v.to_string(),
+        Scalar::Int64(v) => v.to_string(),
+        Scalar::UInt8(v) => v.to_string(),
+        Scalar::UInt16(v) => v.to_string(),
+        Scalar::UInt32(v) => v.to_string(),
+        Scalar::UInt64(v) => v.to_string(),
+        Scalar::Float32(v) if v.is_finite() => double_text(f64::from(*v)),
+        Scalar::Float64(v) if v.is_finite() => double_text(*v),
+        Scalar::Utf8(s) if !s.contains('\0') => text(s),
+        _ => return None,
+    })
+}
+
+/// A finite double as the shortest text that reads back as it, with a
+/// fraction or an exponent so no dialect reads an integer.
+fn double_text(value: f64) -> String {
+    let text = format!("{value:?}");
+    if text.contains(['.', 'e', 'E']) {
+        text
+    } else {
+        format!("{text}.0")
+    }
 }
 
 /// One `SELECT` per key, in order, labelled by its label or position: the

@@ -26,6 +26,9 @@ import java.util.Set;
  *     asks it for rows in an order
  * @param fallback the limits within which the core answers undeclared optional requests in
  *     memory; empty declares no fallback
+ * @param filters the value filters the provider applies to a sample or scan; the core sends it no
+ *     other kind, and checks every row it keeps itself, so a provider may return more rows than a
+ *     value filter holds for but never fewer
  */
 public record Capabilities(
     Set<OptionalRequest> optional,
@@ -33,10 +36,12 @@ public record Capabilities(
     Sampling sampling,
     long maxSeed,
     java.util.Optional<NullOrder> nullOrder,
-    java.util.Optional<Fallback> fallback) {
+    java.util.Optional<Fallback> fallback,
+    Set<DataRequest.FilterKind> filters) {
 
   public Capabilities {
     optional = Set.copyOf(optional);
+    filters = Set.copyOf(filters);
     Objects.requireNonNull(maxKeysPerRequest, "maxKeysPerRequest");
     Objects.requireNonNull(sampling, "sampling");
     Objects.requireNonNull(nullOrder, "nullOrder");
@@ -47,6 +52,17 @@ public record Capabilities(
     if (maxSeed < 0) {
       throw new IllegalArgumentException("maxSeed must not be negative");
     }
+  }
+
+  /** Capabilities applying no value filter, as declared before value filters existed. */
+  public Capabilities(
+      Set<OptionalRequest> optional,
+      OptionalLong maxKeysPerRequest,
+      Sampling sampling,
+      long maxSeed,
+      java.util.Optional<NullOrder> nullOrder,
+      java.util.Optional<Fallback> fallback) {
+    this(optional, maxKeysPerRequest, sampling, maxSeed, nullOrder, fallback, Set.of());
   }
 
   /** Whether a sample drawn with the same seed is the same rows every time. */
@@ -76,7 +92,7 @@ public record Capabilities(
 
   /**
    * Starts from: no optional requests, no key limit, seeded-stable sampling, any non-negative
-   * {@code long} seed, nulls last, no fallback.
+   * {@code long} seed, nulls last, no fallback, no value filters.
    */
   public static final class Builder {
     private final Set<OptionalRequest> optional = EnumSet.noneOf(OptionalRequest.class);
@@ -85,8 +101,15 @@ public record Capabilities(
     private long maxSeed = Long.MAX_VALUE;
     private java.util.Optional<NullOrder> nullOrder = java.util.Optional.of(NullOrder.LAST);
     private java.util.Optional<Fallback> fallback = java.util.Optional.empty();
+    private final Set<DataRequest.FilterKind> filters = EnumSet.noneOf(DataRequest.FilterKind.class);
 
     private Builder() {}
+
+    /** Declares the value filters the provider applies to a sample or scan. */
+    public Builder filters(DataRequest.FilterKind... kinds) {
+      filters.addAll(java.util.List.of(kinds));
+      return this;
+    }
 
     public Builder answers(OptionalRequest... requests) {
       optional.addAll(java.util.List.of(requests));
@@ -119,7 +142,7 @@ public record Capabilities(
     }
 
     public Capabilities build() {
-      return new Capabilities(optional, maxKeys, sampling, maxSeed, nullOrder, fallback);
+      return new Capabilities(optional, maxKeys, sampling, maxSeed, nullOrder, fallback, filters);
     }
   }
 }

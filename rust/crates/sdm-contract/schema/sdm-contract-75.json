@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/74",
+  "$id": "sdm-contract/75",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -14715,6 +14715,14 @@
             "$ref": "#/$defs/OptionalRequest"
           }
         },
+        "filters": {
+          "description": "The value filters the provider applies to a `sample_entities` or\n`scan` ([`FilterKind`]). Left out, none: the core sends it no value\nfilter and checks every row itself.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/FilterKind"
+          }
+        },
         "max_keys_per_request": {
           "description": "The most keys one request may carry; `None` is no limit.",
           "type": [
@@ -14848,6 +14856,18 @@
         "sample_entities",
         "neighbors",
         "lookup"
+      ]
+    },
+    "FilterKind": {
+      "description": "A kind of value filter a provider may declare\n([`ProviderCapabilities::filters`]). The core sends a provider only the\nkinds it declares, and only to choose which rows a sample or scan may\nreturn.\n\nValue filters narrow a read; they never decide a result. A provider may\nreturn rows a value filter does not hold for, but never leave out one it\nholds for: the core checks every row it keeps by the query's own rules,\nso a source whose null, type or collation rules differ costs rows read,\nnever a wrong answer.",
+      "type": "string",
+      "enum": [
+        "compare",
+        "in",
+        "is_null",
+        "any_of",
+        "all_of",
+        "has_rows"
       ]
     },
     "Determinism": {
@@ -16290,6 +16310,156 @@
             "filter",
             "column"
           ]
+        },
+        {
+          "description": "The row's `column` compared with `value` by `op`. A null meets no\ncomparison. A value filter ([`FilterKind`]).",
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "op": {
+              "$ref": "#/$defs/CompareOp"
+            },
+            "value": {
+              "$ref": "#/$defs/Scalar"
+            },
+            "filter": {
+              "type": "string",
+              "const": "compare"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column",
+            "op",
+            "value"
+          ]
+        },
+        {
+          "description": "The row's `column` equals one of `values`; a null equals none. A\nvalue filter.",
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Scalar"
+              }
+            },
+            "filter": {
+              "type": "string",
+              "const": "in"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column",
+            "values"
+          ]
+        },
+        {
+          "description": "The row's `column` is null. A value filter.",
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "filter": {
+              "type": "string",
+              "const": "is_null"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column"
+          ]
+        },
+        {
+          "description": "At least one of `filters` holds. A value filter.",
+          "type": "object",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "filter": {
+              "type": "string",
+              "const": "any_of"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "filters"
+          ]
+        },
+        {
+          "description": "Every one of `filters` holds, for a conjunction inside\n[`Filter::AnyOf`]. A value filter.",
+          "type": "object",
+          "properties": {
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "filter": {
+              "type": "string",
+              "const": "all_of"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "filters"
+          ]
+        },
+        {
+          "description": "The row's `column` is referred to by at least `at_least` rows of\n`table` through its column `key` that meet `filters`: a time range,\nnot-null and value filters on `table`'s rows. A value filter.",
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "table": {
+              "$ref": "#/$defs/Relation"
+            },
+            "key": {
+              "type": "string"
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "at_least": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "filter": {
+              "type": "string",
+              "const": "has_rows"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column",
+            "table",
+            "key",
+            "filters",
+            "at_least"
+          ]
         }
       ]
     },
@@ -16328,6 +16498,18 @@
       "required": [
         "value",
         "inclusive"
+      ]
+    },
+    "CompareOp": {
+      "description": "How a [`Filter::Compare`] compares a column with its value.",
+      "type": "string",
+      "enum": [
+        "eq",
+        "ne",
+        "lt",
+        "le",
+        "gt",
+        "ge"
       ]
     },
     "TableKey": {
@@ -17041,6 +17223,13 @@
                   "type": "null"
                 }
               ]
+            },
+            "context": {
+              "description": "How each part's context examples were drawn, in the parts' order:\none for a request, one per step of a forecast and per question of a\nranking. Empty for context the caller gave, and from a core that\ndoes not say.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContextReport"
+              }
             },
             "op": {
               "type": "string",
@@ -17924,6 +18113,80 @@
         "kind",
         "windowed",
         "num_forecasts"
+      ]
+    },
+    "ContextReport": {
+      "description": "How one part's context examples were drawn from the source.",
+      "type": "object",
+      "properties": {
+        "draws": {
+          "description": "The draws of the entity table: more than one where the first kept\ntoo few examples.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "rows_drawn": {
+          "description": "The rows those draws read, together.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "candidates": {
+          "description": "The examples of the last draw labelled: its entities at their\nanchors.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kept": {
+          "description": "The candidates with an answer that the query's conditions keep,\nbefore the context is cut to the size asked for.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "asked": {
+          "description": "The context examples asked for.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stopped": {
+          "description": "Why drawing stopped.",
+          "$ref": "#/$defs/ContextStop"
+        },
+        "filtered_at_source": {
+          "description": "Whether any of the query's conditions went to the source with the\ndraw (value filters).",
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "draws",
+        "rows_drawn",
+        "candidates",
+        "kept",
+        "asked",
+        "stopped",
+        "filtered_at_source"
+      ]
+    },
+    "ContextStop": {
+      "description": "Why a part's context stopped drawing.",
+      "oneOf": [
+        {
+          "description": "As many examples as asked for were kept.",
+          "type": "string",
+          "const": "full"
+        },
+        {
+          "description": "The last draw held every row the source had to give.",
+          "type": "string",
+          "const": "source_exhausted"
+        },
+        {
+          "description": "Another draw would have read more rows than one request may.",
+          "type": "string",
+          "const": "row_budget"
+        }
       ]
     },
     "CoreError": {

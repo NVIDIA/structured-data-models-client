@@ -179,6 +179,7 @@ fn host() -> ProviderChoice {
                 OptionalRequest::Neighbors,
                 OptionalRequest::Lookup,
             ]),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,

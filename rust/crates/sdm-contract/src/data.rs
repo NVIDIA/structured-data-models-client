@@ -479,6 +479,150 @@ pub enum Filter {
     NotNull {
         column: String,
     },
+    /// The row's `column` compared with `value` by `op`. A null meets no
+    /// comparison. A value filter ([`FilterKind`]).
+    Compare {
+        column: String,
+        op: CompareOp,
+        value: Scalar,
+    },
+    /// The row's `column` equals one of `values`; a null equals none. A
+    /// value filter.
+    In {
+        column: String,
+        values: Vec<Scalar>,
+    },
+    /// The row's `column` is null. A value filter.
+    IsNull {
+        column: String,
+    },
+    /// At least one of `filters` holds. A value filter.
+    AnyOf {
+        filters: Vec<Filter>,
+    },
+    /// Every one of `filters` holds, for a conjunction inside
+    /// [`Filter::AnyOf`]. A value filter.
+    AllOf {
+        filters: Vec<Filter>,
+    },
+    /// The row's `column` is referred to by at least `at_least` rows of
+    /// `table` through its column `key` that meet `filters`: a time range,
+    /// not-null and value filters on `table`'s rows. A value filter.
+    HasRows {
+        column: String,
+        table: Relation,
+        key: String,
+        filters: Vec<Filter>,
+        at_least: u64,
+    },
+}
+
+/// How a [`Filter::Compare`] compares a column with its value.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CompareOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl CompareOp {
+    /// The operator as SQL writes it.
+    pub fn sql(self) -> &'static str {
+        match self {
+            CompareOp::Eq => "=",
+            CompareOp::Ne => "<>",
+            CompareOp::Lt => "<",
+            CompareOp::Le => "<=",
+            CompareOp::Gt => ">",
+            CompareOp::Ge => ">=",
+        }
+    }
+}
+
+/// A kind of value filter a provider may declare
+/// ([`ProviderCapabilities::filters`]). The core sends a provider only the
+/// kinds it declares, and only to choose which rows a sample or scan may
+/// return.
+///
+/// Value filters narrow a read; they never decide a result. A provider may
+/// return rows a value filter does not hold for, but never leave out one it
+/// holds for: the core checks every row it keeps by the query's own rules,
+/// so a source whose null, type or collation rules differ costs rows read,
+/// never a wrong answer.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum FilterKind {
+    Compare,
+    In,
+    IsNull,
+    AnyOf,
+    AllOf,
+    HasRows,
+}
+
+impl FilterKind {
+    /// Every kind, as a source that renders them all declares them.
+    pub const ALL: [FilterKind; 6] = [
+        FilterKind::Compare,
+        FilterKind::In,
+        FilterKind::IsNull,
+        FilterKind::AnyOf,
+        FilterKind::AllOf,
+        FilterKind::HasRows,
+    ];
+}
+
+impl Filter {
+    /// The value filter kind of this filter, none for a key, time or
+    /// not-null filter, which every provider takes.
+    pub fn kind(&self) -> Option<FilterKind> {
+        match self {
+            Filter::KeyIn { .. } | Filter::TimeRange { .. } | Filter::NotNull { .. } => None,
+            Filter::Compare { .. } => Some(FilterKind::Compare),
+            Filter::In { .. } => Some(FilterKind::In),
+            Filter::IsNull { .. } => Some(FilterKind::IsNull),
+            Filter::AnyOf { .. } => Some(FilterKind::AnyOf),
+            Filter::AllOf { .. } => Some(FilterKind::AllOf),
+            Filter::HasRows { .. } => Some(FilterKind::HasRows),
+        }
+    }
+
+    /// Whether a provider declaring `kinds` takes this filter, nested
+    /// filters included.
+    pub fn taken_by(&self, kinds: &BTreeSet<FilterKind>) -> bool {
+        self.kind().is_none_or(|kind| kinds.contains(&kind))
+            && match self {
+                Filter::AnyOf { filters }
+                | Filter::AllOf { filters }
+                | Filter::HasRows { filters, .. } => filters.iter().all(|f| f.taken_by(kinds)),
+                _ => true,
+            }
+    }
+
+    /// The columns the filter reads, nested filters included, in order.
+    pub fn columns(&self) -> Vec<&str> {
+        match self {
+            Filter::KeyIn { columns, .. } => columns.iter().map(String::as_str).collect(),
+            Filter::TimeRange { column, .. }
+            | Filter::NotNull { column }
+            | Filter::Compare { column, .. }
+            | Filter::In { column, .. }
+            | Filter::IsNull { column }
+            // The rows referring to it are another table's.
+            | Filter::HasRows { column, .. } => vec![column.as_str()],
+            Filter::AnyOf { filters } | Filter::AllOf { filters } => {
+                filters.iter().flat_map(Filter::columns).collect()
+            }
+        }
+    }
 }
 
 /// Which part of the catalog a `describe` reads.
@@ -1100,6 +1244,11 @@ pub enum IndexAdvice {
 #[serde(deny_unknown_fields)]
 pub struct ProviderCapabilities {
     pub optional: BTreeSet<OptionalRequest>,
+    /// The value filters the provider applies to a `sample_entities` or
+    /// `scan` ([`FilterKind`]). Left out, none: the core sends it no value
+    /// filter and checks every row itself.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub filters: BTreeSet<FilterKind>,
     /// The most keys one request may carry; `None` is no limit.
     pub max_keys_per_request: Option<u64>,
     pub sampling: Determinism,

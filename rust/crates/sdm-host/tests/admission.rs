@@ -753,6 +753,7 @@ fn through_host_run(data: ArrowData) -> ArrowData {
             key_enforcement: false,
             sample_rows: false,
             optional: BTreeSet::new(),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,

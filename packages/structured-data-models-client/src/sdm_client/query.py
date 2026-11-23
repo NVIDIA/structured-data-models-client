@@ -531,6 +531,7 @@ class PredictiveQuery:
                 requested_inference=whole.requested_inference,
             )
             part._sanitization_report = whole.sanitization_report
+            part._context_report = whole.context_report
             part._core = CoreRequest(version=version)
             gathered.append((part, query, position, named))
         carrier = copy.copy(gathered[0][0])
@@ -589,6 +590,7 @@ class PredictiveQuery:
                 requested_inference=whole.requested_inference,
             )
             part._sanitization_report = whole.sanitization_report
+            part._context_report = whole.context_report
             part._core = CoreRequest(version=version)
             gathered.append((part, query, step))
         carrier = copy.copy(gathered[0][0])

@@ -406,6 +406,7 @@ fn a_host_provider_is_handed_the_core_s_key_set_as_it_was_made() {
             key_enforcement: false,
             sample_rows: false,
             optional: BTreeSet::from([OptionalRequest::Lookup]),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,

@@ -22,6 +22,7 @@ from sdm_client._rust import codec, errors, providers, results
 from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
 from sdm_client._rust.run import run
 from sdm_client._rust.spec import held_schema
+from sdm_client.context_report import ContextReport
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
@@ -271,7 +272,7 @@ def gather(
     num_context_samples: int | None,
     options: dict[str, Any],
     candidates: Sequence[Any] | None = None,
-) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
+) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest, ContextReport]:
     r"""The payloads of the request, gathered on the core; what the core
     resolved of the query; and what the request keeps for predict on the
     core (class:`~sdm_client._rust.results.CoreRequest`), with the parts of
@@ -367,8 +368,9 @@ def gather(
 
 def unpack(
     finished: Any,
-) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
-    """Present an existing core materialization result, for either data source."""
+) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest, ContextReport]:
+    """Present an existing core materialization result, for either data
+    source, with how its context was drawn."""
     gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state
     if gathered.query is None:
@@ -377,7 +379,12 @@ def unpack(
             code='INTERNAL_ERROR',
         )
     payloads, retained = unpack_state(finished, state)
-    return payloads, gathered.query, retained
+    report = (
+        ContextReport('available', gathered.context)
+        if gathered.context
+        else ContextReport('unavailable')
+    )
+    return payloads, gathered.query, retained, report
 
 
 def unpack_state(

@@ -80,7 +80,8 @@ public final class RelationalMaterializer implements AutoCloseable {
       @SuppressWarnings("unchecked") Map<String, Object> state = (Map<String, Object>) finished.result().get("state");
       MaterializedRequest retained = new MaterializedRequest(state, finished);
       return new Request(schema, retained, query.text(), gathered.query(),
-          PredictiveQuery.inferenceAsked(options.options().get("inference_config"))).withSanitizationReport(sanitizationReport);
+          PredictiveQuery.inferenceAsked(options.options().get("inference_config"))).withSanitizationReport(sanitizationReport)
+          .withContextReport(ContextReport.reported(finished.result().get("context")));
     }
   }
 

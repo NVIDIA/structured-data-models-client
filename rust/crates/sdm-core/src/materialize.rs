@@ -59,6 +59,7 @@
 pub(crate) mod examples;
 pub(crate) mod frames;
 pub(crate) mod label_query;
+mod pushdown;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -83,6 +84,7 @@ use sdm_contract::ops::{
     ProfileName, ProfileSpec, QueryColumn, QueryFacts, QuerySchema, QueryTable, RequestBatch,
     RequestState, SamplerMemo, Seed, SourceDescription,
 };
+use sdm_contract::ops::{ContextReport, ContextStop};
 use sdm_contract::ops::{Dtype, Stype};
 use sdm_contract::pql::{Aggregation, ConditionOp, NodeKind, PqlLiteral, PqlNode, ValidatedQuery};
 use sdm_contract::{
@@ -1923,6 +1925,103 @@ async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError>
     Ok(())
 }
 
+/// The most rows the draws of one request's context read, together: the
+/// limit the in-memory fallback reads a table within by default.
+const MOST_DRAWN: u64 = 5_000_000;
+
+/// The size of the next draw, or why there is none: the labels keep as
+/// many examples as the context asks for, the last draw held fewer rows
+/// than were asked for (the source holds no more), or a larger draw would
+/// pass [`MOST_DRAWN`]. Otherwise sized by the share of the rows drawn that
+/// gave an example, a fifth again over, or twice the last where none did;
+/// always larger than the last.
+fn next_draw(
+    asked: usize,
+    drawn: usize,
+    gathered: usize,
+    context_examples: usize,
+    drawn_rows: u64,
+) -> Result<usize, ContextStop> {
+    if gathered >= context_examples {
+        return Err(ContextStop::Full);
+    }
+    if drawn < asked {
+        return Err(ContextStop::SourceExhausted);
+    }
+    let sized = if gathered == 0 {
+        asked.saturating_mul(2)
+    } else {
+        let wanted = context_examples as f64 * 1.2 * drawn as f64 / gathered as f64;
+        wanted.ceil() as usize
+    };
+    let left = usize::try_from(MOST_DRAWN.saturating_sub(drawn_rows)).unwrap_or(usize::MAX);
+    let larger = sized.max(asked + 1).min(left);
+    if larger > asked {
+        Ok(larger)
+    } else {
+        Err(ContextStop::RowBudget)
+    }
+}
+
+/// A seeded sample of `n` entities of `entity`, `columns` in order, from
+/// the rows meeting every filter: sized, for a provider sizing its draw by
+/// the table's rows, by `rows`, or with `count`, by the rows the filters
+/// keep, counted first.
+#[allow(clippy::too_many_arguments, reason = "one sample request's fields")]
+async fn drawn(
+    asker: &Asker,
+    times: &Times,
+    entity: &Table,
+    key: &str,
+    columns: Vec<String>,
+    n: usize,
+    seed: Scalar,
+    filters: Vec<Filter>,
+    rows: Option<u64>,
+    count: bool,
+) -> Result<RecordBatch, CoreError> {
+    let rows = if count {
+        Some(row_count(
+            &ask(
+                asker,
+                DataRequest::CountRows {
+                    table: entity.source.clone(),
+                    filters: filters.clone(),
+                },
+            )
+            .await?,
+        )?)
+    } else {
+        rows
+    };
+    times.read(
+        asker,
+        entity,
+        one_batch(
+            &ask(
+                asker,
+                DataRequest::SampleEntities {
+                    table: entity.source.clone(),
+                    key: vec![key.to_owned()],
+                    n: n as u64,
+                    seed,
+                    columns,
+                    filters,
+                    // The schema's type of the key, for a provider that
+                    // orders the draw by it (SQLite's, which reads the
+                    // type the key's declaration fixes first).
+                    key_dtype: asker
+                        .samples_by_key_dtype()
+                        .then(|| entity.column(key).map(|c| c.dtype))
+                        .flatten(),
+                    rows,
+                },
+            )
+            .await?,
+        )?,
+    )
+}
+
 /// One aggregate row whose first column holds a nonnegative integer count.
 fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
     let batch = one_batch(answer)?;
@@ -2760,7 +2859,7 @@ pub(crate) type Call = (Vec<u8>, u64);
 /// for a request of no more rows than one call scores), and its query's
 /// text; or, for the test-only `labels` operation, its result.
 pub(crate) enum Gathered {
-    Request(Vec<Call>, String),
+    Request(Vec<Call>, String, ContextReport),
     #[cfg_attr(not(feature = "test-ops"), allow(dead_code))]
     Done(OperationResult),
 }
@@ -2797,7 +2896,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
     let Some(steps) = steps else {
         return match one(&asker, inputs).await? {
             Gathered::Done(result) => Ok(result),
-            Gathered::Request(calls, query) => {
+            Gathered::Request(calls, query, report) => {
                 // The first call's payload is the state's, and each later
                 // call's a batch of it, in order (`main`'s multi-call
                 // `predict`): `predict` sends them one after another.
@@ -2825,6 +2924,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
                         ranking: None,
                     },
                     query: facts,
+                    context: vec![report],
                 }))
             }
         };
@@ -2903,14 +3003,16 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             Gathered::Done(result) => return Ok(result),
             // A step scores no more rows than one call (refused above), so
             // it is gathered as one call.
-            Gathered::Request(calls, query) => match <[Call; 1]>::try_from(calls) {
-                Ok([(payload, _)]) => gathered.push((step, payload, query)),
+            Gathered::Request(calls, query, report) => match <[Call; 1]>::try_from(calls) {
+                Ok([(payload, _)]) => gathered.push((step, payload, query, report)),
                 Err(_) => return Err(internal("a forecast's step gathered as several calls")),
             },
         }
     }
     let mut attached = Vec::with_capacity(gathered.len());
-    for (step, payload, query) in gathered {
+    let mut context = Vec::with_capacity(gathered.len());
+    for (step, payload, query, report) in gathered {
+        context.push(report);
         let (payload, query) = attach_request(&asker, payload, &query)?;
         attached.push(ForecastStep {
             step,
@@ -2931,6 +3033,7 @@ pub(crate) async fn run(asker: Asker, inputs: Inputs) -> Result<OperationResult,
             ranking: None,
         },
         query: facts,
+        context,
     }))
 }
 
@@ -3510,158 +3613,315 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             column: time.clone(),
         });
     }
-    // Seeds are optional. An unseeded provider warns only of a seed the
-    // caller named, above, not of the default one.
-    let sampled = if let Some(frames) = &frames {
-        frames.entities(entity, &entity.ordered(&entity_columns), trials, &seed)?
-    } else {
-        read_times.read(
-            asker,
-            entity,
-            one_batch(
-                &ask(
-                    asker,
-                    DataRequest::SampleEntities {
-                        table: entity.source.clone(),
-                        key: vec![key.clone()],
-                        n: trials as u64,
-                        seed: seed_value,
-                        columns: entity.ordered(&entity_columns),
-                        filters,
-                        // The schema's type of the key, for a provider that
-                        // orders the draw by it (SQLite's, which reads the
-                        // type the key's declaration fixes first).
-                        key_dtype: asker
-                            .samples_by_key_dtype()
-                            .then(|| entity.column(&key).map(|c| c.dtype))
-                            .flatten(),
-                        // The table's rows, for a provider sizing its draw by
-                        // them (the reference's sampled percentage).
-                        rows: if asker.capabilities()?.sample_rows {
-                            rows_of(&memo.memo, &entity.name)
-                        } else {
-                            None
-                        },
-                    },
-                )
-                .await?,
-            )?,
-        )?
-    };
-    if sampled.num_rows() == 0 {
-        return Err(invalid(
-            Sentence::EntityTableEmpty,
-            "the entity table holds no row to sample",
-            "query",
-        )
-        .with_field("table", Detail::text(&entity.name)));
-    }
-    // One entity per key value: `1.0` and `1.00` of a column of numbers
-    // handed over as their text are one key (`subgraph::key_values`).
-    let sampled_keys = crate::subgraph::key_values(entity, &key, named(&sampled, &key)?)?;
-    let mut seen = BTreeSet::new();
-    let kept: Vec<usize> = (0..sampled_keys.len())
-        .filter(|&row| seen.insert(sampled_keys[row].clone()))
-        .collect();
-    let entity_key = take(named(&sampled, &key)?, &kept)?;
-    let entity_time = match &entity.time_column {
-        Some(time) => {
-            let column = named(&sampled, time)?;
-            // A time of day holds no instant: the reference's engine reads
-            // each as none (`to_datetime`, see `times_of_day_unread`), so no
-            // entity is valid at any anchor and a temporal query collects no
-            // context example, the caller's error below. A
-            // static query never gets here with one: its time bounds read
-            // every time column first and fail on it (register DT-12).
-            let all = if matches!(
-                column.data_type(),
-                DataType::Time32(_) | DataType::Time64(_)
-            ) {
-                vec![None; column.len()]
-            } else {
-                times_ns(column, time)?
-            };
-            Some(kept.iter().map(|&r| all[r]).collect::<Vec<_>>())
-        }
-        None => None,
-    };
-    // The entities, cast to the sampled key's type under the core's rule
-    // table, where the reference casts them, after its sample
-    // (`pd.Series(indices, dtype=train_pkey.dtype)`): an entity that does
-    // not cast is the caller's error, never the core's.
-    let indices = keys::cast(&indices, entity_key.data_type())?;
-    let entity_end = entity
-        .end_time_column
-        .as_ref()
-        .map(|end| {
-            let values = times_ns(named(&sampled, end)?, end)?;
-            Ok::<_, CoreError>(kept.iter().map(|&i| values[i]).collect::<Vec<_>>())
-        })
-        .transpose()?;
-    let validity = sample::Validity {
-        start: entity_time.as_deref(),
-        end: entity_end.as_deref(),
-    };
-    let mut rng = default_rng(&entropy);
-    let examples = match &span {
-        Some((start, end)) => sample::temporal_examples_with_validity(
-            &mut rng,
-            kept.len(),
-            validity,
-            context_anchor,
-            timeframe(*start, *end, "anchor_time")?,
-            earliest.unwrap_or(TIME_MAX),
-            trials,
-        )?,
-        None if anchor_entity => sample::entity_examples(
-            &mut rng,
-            kept.len(),
-            entity_time.as_deref().unwrap_or_default(),
-            sample::MISSING_ANCHOR,
-        ),
-        None => {
-            sample::static_examples_with_validity(&mut rng, kept.len(), validity, context_anchor)?
-        }
-    };
-
-    // A NaN key a source hands over, which the reference reads as missing
-    // where it reads floats into NumPy-backed pandas (Postgres's rows), is
-    // a missing key its sampler cannot coerce (`_coerce_id`'s `int` or
-    // `float` of `NA`) where an example's key seeds the read of a windowed
-    // target's rows (`_by_time`): refused as the caller's error before that
-    // read. A static target reads no rows by the key, and such an example
-    // is left out once labelled, below.
-    let nan_key = nan_rows(&entity_key);
-    if asker.reads_nan_as_missing()
-        && !labelled_fetches.is_empty()
-        && examples.index.iter().any(|i| nan_key.contains(i))
+    // The query's conditions on the entity's own row, and its static
+    // target's column holding a value, so the draw is of the rows that may
+    // give an example rather than of every row; the labels below still
+    // check each example by the query's own rules. Only the kinds the
+    // provider applies, or, where the in-memory fallback answers the
+    // sample, every kind (it applies the rest itself).
+    // Frames are sampled in memory and hold no provider: no filter is sent.
+    let taken = if frames.is_some() {
+        BTreeSet::new()
+    } else if asker
+        .capabilities()?
+        .optional
+        .contains(&OptionalRequest::SampleEntities)
     {
-        return Err(invalid(
-            Sentence::EntityKeyMissing,
-            "an entity sampled has no value for its table's primary key",
-            "query",
-        )
-        .with_field("table", Detail::text(&entity.name))
-        .with_field("column", Detail::text(&key)));
-    }
-    // Their labels, as the reference's executor computes them over the
-    // rows read for them.
-    let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
-    let labelling = Labelling {
-        asker,
-        times: &read_times,
-        sampled: &sampled,
-        entity_rows: &entity_rows,
-        entity_key: &entity_key,
-        examples: &examples,
+        asker.capabilities()?.filters.clone()
+    } else {
+        sdm_contract::data::FilterKind::ALL.into()
     };
-    let fetched = labelling.read(&labelled_fetches).await?;
+    for filter in pushdown::entity_filters(&asked, entity) {
+        if filter.taken_by(&taken) && !filters.contains(&filter) {
+            filters.push(filter);
+        }
+    }
+    let filtered = filters.iter().any(|f| f.kind().is_some());
+    // A temporal query's windowed conditions, and an aggregated target that
+    // has no answer over a window of no rows, as `has_rows` filters at each
+    // anchor, for a provider applying them: the entity table is then drawn
+    // from at one anchor at a time, newest first, as the walk below takes
+    // the anchors, each draw of the entities that may give an example
+    // there. Where no check can be written, one draw of every anchor.
+    let checks = match &span {
+        Some(_) if !anchor_entity && taken.contains(&sdm_contract::data::FilterKind::HasRows) => {
+            pushdown::window_checks(&asked, &graph)
+        }
+        _ => Vec::new(),
+    };
+    let windowed_at = |at: i64| -> Vec<Filter> {
+        checks
+            .iter()
+            .filter_map(|check| pushdown::has_rows(check, &graph, entity, &key, at))
+            .collect()
+    };
+    let per_anchor = !windowed_at(context_anchor).is_empty();
+    // A provider sizing its draw by the table's rows draws a share of them
+    // before its value filters thin it: sized instead by the rows the
+    // filters keep, counted with them, the draw keeps about as many as
+    // were asked for.
+    let sizes_by_rows = frames.is_none() && asker.capabilities()?.sample_rows;
+    let table_rows = if sizes_by_rows {
+        rows_of(&memo.memo, &entity.name)
+    } else {
+        None
+    };
+    let columns = entity.ordered(&entity_columns);
+    // The draw, its examples and their labels; drawn again, larger, while
+    // the labels keep fewer than the context asks for and the source has
+    // more rows than were drawn, within the rows a request may draw
+    // ([`MOST_DRAWN`]). Each draw replaces the one before: a larger seeded
+    // sample is still a sample of the same rows.
+    let mut draw_size = trials;
+    let mut drawn_rows: u64 = 0;
+    let mut draws: u32 = 0;
+    let (kept, entity_key, indices, examples, labelled, labelled_rows, report) = loop {
+        // Seeds are optional. An unseeded provider warns only of a seed the
+        // caller named, above, not of the default one.
+        let (sampled, row_anchors) = if let Some(frames) = &frames {
+            (frames.entities(entity, &columns, draw_size, &seed)?, None)
+        } else if let (true, Some((start, end))) = (per_anchor, &span) {
+            let step = timeframe(*start, *end, "anchor_time")?;
+            let floor = earliest.unwrap_or(TIME_MAX);
+            let mut batches = Vec::new();
+            let mut anchors: Vec<i64> = Vec::new();
+            let mut at = context_anchor;
+            loop {
+                let mut at_anchor = filters.clone();
+                at_anchor.extend(windowed_at(at));
+                let batch = drawn(
+                    asker,
+                    &read_times,
+                    entity,
+                    &key,
+                    columns.clone(),
+                    draw_size.saturating_sub(anchors.len()),
+                    seed_value.clone(),
+                    at_anchor,
+                    table_rows,
+                    sizes_by_rows,
+                )
+                .await?;
+                anchors.extend(std::iter::repeat_n(at, batch.num_rows()));
+                batches.push(batch);
+                if anchors.len() >= draw_size {
+                    break;
+                }
+                at = sample::shift(at, -step, "anchor_time")?;
+                if at < floor {
+                    break;
+                }
+            }
+            let schema = batches[0].schema();
+            let sampled = arrow_select::concat::concat_batches(&schema, &batches)
+                .map_err(|_| internal("the draws at each anchor do not make one batch"))?;
+            (sampled, Some(anchors))
+        } else {
+            let sampled = drawn(
+                asker,
+                &read_times,
+                entity,
+                &key,
+                columns.clone(),
+                draw_size,
+                seed_value.clone(),
+                filters.clone(),
+                table_rows,
+                sizes_by_rows && filtered,
+            )
+            .await?;
+            (sampled, None)
+        };
+        // With value filters, no row drawn is no entity passing them: the
+        // labels below find no example and say so.
+        if sampled.num_rows() == 0 && !filtered && !per_anchor {
+            return Err(invalid(
+                Sentence::EntityTableEmpty,
+                "the entity table holds no row to sample",
+                "query",
+            )
+            .with_field("table", Detail::text(&entity.name)));
+        }
+        // One entity per key value: `1.0` and `1.00` of a column of numbers
+        // handed over as their text are one key (`subgraph::key_values`).
+        let sampled_keys = crate::subgraph::key_values(entity, &key, named(&sampled, &key)?)?;
+        // Drawn at each anchor, one entity per key value at each.
+        let mut seen = BTreeSet::new();
+        let kept: Vec<usize> = (0..sampled_keys.len())
+            .filter(|&row| {
+                seen.insert((
+                    sampled_keys[row].clone(),
+                    row_anchors.as_ref().map(|anchors| anchors[row]),
+                ))
+            })
+            .collect();
+        let entity_key = take(named(&sampled, &key)?, &kept)?;
+        let entity_time = match &entity.time_column {
+            Some(time) => {
+                let column = named(&sampled, time)?;
+                // A time of day holds no instant: the reference's engine reads
+                // each as none (`to_datetime`, see `times_of_day_unread`), so no
+                // entity is valid at any anchor and a temporal query collects no
+                // context example, the caller's error below. A
+                // static query never gets here with one: its time bounds read
+                // every time column first and fail on it (register DT-12).
+                let all = if matches!(
+                    column.data_type(),
+                    DataType::Time32(_) | DataType::Time64(_)
+                ) {
+                    vec![None; column.len()]
+                } else {
+                    times_ns(column, time)?
+                };
+                Some(kept.iter().map(|&r| all[r]).collect::<Vec<_>>())
+            }
+            None => None,
+        };
+        // The entities, cast to the sampled key's type under the core's rule
+        // table, where the reference casts them, after its sample
+        // (`pd.Series(indices, dtype=train_pkey.dtype)`): an entity that does
+        // not cast is the caller's error, never the core's.
+        let indices = keys::cast(&indices, entity_key.data_type())?;
+        let entity_end = entity
+            .end_time_column
+            .as_ref()
+            .map(|end| {
+                let values = times_ns(named(&sampled, end)?, end)?;
+                Ok::<_, CoreError>(kept.iter().map(|&i| values[i]).collect::<Vec<_>>())
+            })
+            .transpose()?;
+        let validity = sample::Validity {
+            start: entity_time.as_deref(),
+            end: entity_end.as_deref(),
+        };
+        let mut rng = default_rng(&entropy);
+        let examples = if let Some(row_anchors) = &row_anchors {
+            // Each anchor's draw, in the order drawn, the entities valid at
+            // the anchor (all of them, or those whose time is not after it and
+            // whose end is), shuffled as the walk shuffles them, then cut to
+            // the draw's size.
+            let valid = |at: usize, anchor: i64| {
+                validity
+                    .start
+                    .is_none_or(|v| v[at].is_some_and(|t| t <= anchor))
+                    && validity
+                        .end
+                        .is_none_or(|v| v[at].is_none_or(|t| t > anchor))
+            };
+            let mut index = Vec::new();
+            let mut anchors = Vec::new();
+            let mut from = 0;
+            while from < kept.len() {
+                let anchor = row_anchors[kept[from]];
+                let to = (from..kept.len())
+                    .find(|&i| row_anchors[kept[i]] != anchor)
+                    .unwrap_or(kept.len());
+                let mut group: Vec<usize> = (from..to).filter(|&i| valid(i, anchor)).collect();
+                rng.shuffle(&mut group);
+                anchors.extend(std::iter::repeat_n(anchor, group.len()));
+                index.extend(group);
+                from = to;
+            }
+            index.truncate(draw_size);
+            anchors.truncate(draw_size);
+            sample::Examples { index, anchors }
+        } else {
+            match &span {
+                Some((start, end)) => sample::temporal_examples_with_validity(
+                    &mut rng,
+                    kept.len(),
+                    validity,
+                    context_anchor,
+                    timeframe(*start, *end, "anchor_time")?,
+                    earliest.unwrap_or(TIME_MAX),
+                    draw_size,
+                )?,
+                None if anchor_entity => sample::entity_examples(
+                    &mut rng,
+                    kept.len(),
+                    entity_time.as_deref().unwrap_or_default(),
+                    sample::MISSING_ANCHOR,
+                ),
+                None => sample::static_examples_with_validity(
+                    &mut rng,
+                    kept.len(),
+                    validity,
+                    context_anchor,
+                )?,
+            }
+        };
 
-    let labelled = label_examples(&asked, &labelling, fetched, &examples, &nan_key)?;
-    // The examples with a label, in order, the first a context holds.
-    let labelled_rows: Vec<usize> = (0..labelled.mask.len())
-        .filter(|&row| labelled.mask[row])
-        .collect();
+        // A NaN key a source hands over, which the reference reads as missing
+        // where it reads floats into NumPy-backed pandas (Postgres's rows), is
+        // a missing key its sampler cannot coerce (`_coerce_id`'s `int` or
+        // `float` of `NA`) where an example's key seeds the read of a windowed
+        // target's rows (`_by_time`): refused as the caller's error before that
+        // read. A static target reads no rows by the key, and such an example
+        // is left out once labelled, below.
+        let nan_key = nan_rows(&entity_key);
+        if asker.reads_nan_as_missing()
+            && !labelled_fetches.is_empty()
+            && examples.index.iter().any(|i| nan_key.contains(i))
+        {
+            return Err(invalid(
+                Sentence::EntityKeyMissing,
+                "an entity sampled has no value for its table's primary key",
+                "query",
+            )
+            .with_field("table", Detail::text(&entity.name))
+            .with_field("column", Detail::text(&key)));
+        }
+        // Their labels, as the reference's executor computes them over the
+        // rows read for them.
+        let entity_rows: Vec<usize> = examples.index.iter().map(|&i| kept[i]).collect();
+        let labelling = Labelling {
+            asker,
+            times: &read_times,
+            sampled: &sampled,
+            entity_rows: &entity_rows,
+            entity_key: &entity_key,
+            examples: &examples,
+        };
+        let fetched = labelling.read(&labelled_fetches).await?;
+
+        let labelled = label_examples(&asked, &labelling, fetched, &examples, &nan_key)?;
+        // The examples with a label, in order, the first a context holds.
+        let labelled_rows: Vec<usize> = (0..labelled.mask.len())
+            .filter(|&row| labelled.mask[row])
+            .collect();
+        draws += 1;
+        drawn_rows = drawn_rows.saturating_add(sampled.num_rows() as u64);
+        let next = next_draw(
+            draw_size,
+            sampled.num_rows(),
+            labelled_rows.len(),
+            context_examples,
+            drawn_rows,
+        );
+        match next {
+            Ok(larger) => draw_size = larger,
+            Err(stopped) => {
+                let report = ContextReport {
+                    draws,
+                    rows_drawn: drawn_rows,
+                    candidates: examples.index.len() as u64,
+                    kept: labelled_rows.len() as u64,
+                    asked: context_examples as u64,
+                    stopped,
+                    filtered_at_source: filtered || per_anchor,
+                };
+                break (
+                    kept,
+                    entity_key,
+                    indices,
+                    examples,
+                    labelled,
+                    labelled_rows,
+                    report,
+                );
+            }
+        }
+    };
     let gathered = labelled_rows.len().min(context_examples);
     if gathered == 0 {
         let ends: Vec<Offset> = windows.iter().map(|w| w.end).collect();
@@ -3683,14 +3943,16 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         )
         .await);
     }
-    if kept.len() >= trials && gathered < context_examples / 2 {
+    // A first draw as large as asked for (the table holds more), which
+    // still gave too few: drawn again or not.
+    if (report.draws > 1 || kept.len() >= draw_size) && gathered < context_examples / 2 {
         // The reference warns of it once in a process: given on every run
         // that meets it, and once in a process by the host
         // ([`ONCE_PER_PROCESS`]).
         asker.warn(CoreWarning {
             fields: [
                 ("examples".to_owned(), count(context_examples)),
-                ("candidates".to_owned(), count(trials)),
+                ("candidates".to_owned(), count(draw_size)),
             ]
             .into(),
             ..CoreWarning::new(
@@ -4181,7 +4443,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         answering,
         asked.range.is_some(),
     );
-    Ok(Gathered::Request(gathered, source_query))
+    Ok(Gathered::Request(gathered, source_query, report))
 }
 
 /// The refusal of a query that does not resolve against the schema, with
@@ -5276,6 +5538,38 @@ mod tests {
     /// An aggregate count is one row of one integer: a second row is the
     /// provider's answer not reading, never its first row taken (
     /// round 1; a catalog listing's first row is its dialect's to read).
+    #[test]
+    fn a_short_draw_is_drawn_again_sized_by_its_share_that_passed() {
+        // 100 of 10,000 passed: 1,000 wanted at that share, a fifth over.
+        assert_eq!(next_draw(10_000, 10_000, 100, 1_000, 10_000), Ok(120_000));
+        // None passed: twice the last.
+        assert_eq!(next_draw(10_000, 10_000, 0, 1_000, 10_000), Ok(20_000));
+        // Always larger than the last, even where the share says less.
+        assert_eq!(next_draw(10_000, 10_000, 999, 1_000, 10_000), Ok(12_013));
+    }
+
+    #[test]
+    fn drawing_stops_full_exhausted_or_at_the_budget() {
+        assert_eq!(
+            next_draw(10_000, 10_000, 1_000, 1_000, 10_000),
+            Err(ContextStop::Full)
+        );
+        assert_eq!(
+            next_draw(10_000, 9_999, 10, 1_000, 9_999),
+            Err(ContextStop::SourceExhausted)
+        );
+        // The next draw is cut to what the budget leaves, and none once it
+        // leaves no more than the last.
+        assert_eq!(
+            next_draw(10_000, 10_000, 1, 1_000, MOST_DRAWN - 50_000),
+            Ok(50_000)
+        );
+        assert_eq!(
+            next_draw(10_000, 10_000, 1, 1_000, MOST_DRAWN - 5_000),
+            Err(ContextStop::RowBudget)
+        );
+    }
+
     #[test]
     fn an_aggregate_count_is_exactly_one_row() {
         use arrow_array::Int64Array;

@@ -65,6 +65,7 @@ use std::collections::BTreeMap;
 
 use crate::json;
 use crate::key_text;
+use crate::quote;
 use crate::read::{text, text_at};
 use crate::sql::{self, NameCase, Sample, SeedRead, SqlDialect, not_taken};
 
@@ -113,6 +114,12 @@ impl SqlDialect for Databricks {
     }
 
     /// What a Databricks source answers through this layer.
+    /// A value filter's literal, its text with each backslash and quote
+    /// escaped by a backslash, as Spark SQL reads a quoted string.
+    fn value_literal(&self, value: &Scalar) -> Option<String> {
+        sql::plain_literal(value, quote::backslashed_text)
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             opaque_vendor: None,
@@ -120,6 +127,7 @@ impl SqlDialect for Databricks {
             samples_by_key_dtype: false,
             reads_nan_as_missing: false,
             optional: sql::rendered(),
+            filters: sdm_contract::data::FilterKind::ALL.into(),
             // A key set past the warehouse's parameter size is split into
             // several fetches, as the reference's `_chunk_rows` splits it
             // ([`crate::key_text`]), so the core sends any number.
