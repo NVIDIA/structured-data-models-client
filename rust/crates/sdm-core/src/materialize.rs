@@ -3805,10 +3805,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         };
         let mut rng = default_rng(&entropy);
         let examples = if let Some(row_anchors) = &row_anchors {
-            // Each anchor's draw, in the order drawn, the entities valid at
-            // the anchor (all of them, or those whose time is not after it and
-            // whose end is), shuffled as the walk shuffles them, then cut to
-            // the draw's size.
+            // Each anchor's draw, the entities valid at the anchor (all of
+            // them, or those whose time is not after it and whose end is),
+            // put in their keys' order and shuffled as the walk shuffles
+            // them, then cut to the draw's size. A source may hand the same
+            // rows over in any order (Snowflake's sample has none), and the
+            // seed then still chooses the same examples.
             let valid = |at: usize, anchor: i64| {
                 validity
                     .start
@@ -3826,6 +3828,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                     .find(|&i| row_anchors[kept[i]] != anchor)
                     .unwrap_or(kept.len());
                 let mut group: Vec<usize> = (from..to).filter(|&i| valid(i, anchor)).collect();
+                group.sort_by(|&a, &b| sampled_keys[kept[a]].cmp(&sampled_keys[kept[b]]));
                 rng.shuffle(&mut group);
                 anchors.extend(std::iter::repeat_n(anchor, group.len()));
                 index.extend(group);

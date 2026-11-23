@@ -264,3 +264,39 @@ def test_the_hosts_clock_past_the_default_five_minutes_stops_drawing(
     [part] = request.context_report.parts
     assert (part.draws, part.stopped) == (1, 'time_limit')
     assert request.context_rows == part.kept < ASKED
+
+
+def test_a_window_draw_chooses_the_same_examples_in_any_row_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A source may hand a sample's rows over in any order (Snowflake's has
+    # none): the same rows, reversed, give the same context.
+    from sdm_client._rust.providers import duckdb as provider
+
+    answer = provider.DuckDBProvider.__call__
+
+    def context(reverse: bool) -> Any:
+        def reversed_samples(self: Any, step: Any, keys: Any = None) -> Any:
+            table = answer(self, step, keys)
+            if reverse and step['request']['request'] == 'sample_entities':
+                return table.take(list(range(table.num_rows))[::-1])
+            return table
+
+        monkeypatch.setattr(
+            provider.DuckDBProvider, '__call__', reversed_samples
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(DuckDBSource(_shop()))
+            request = PredictiveQuery(
+                'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.id '
+                'WHERE COUNT(orders.*, -30, 0, days) > 1',
+                schema,
+            ).materialize(
+                indices=[0, 60],
+                anchor_time=pd.Timestamp('2024-12-01'),
+                num_context_samples=50,
+            )
+        return request.context.instance_table
+
+    assert context(reverse=True).equals(context(reverse=False))
