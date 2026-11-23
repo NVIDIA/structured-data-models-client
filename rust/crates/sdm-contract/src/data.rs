@@ -607,6 +607,43 @@ impl Filter {
             }
     }
 
+    /// The tables the filter reads rows of (`has_rows`), nested filters
+    /// included, in order, each named `filters`.
+    fn read_relations<'a>(&'a self, into: &mut Vec<(&'static str, &'a Relation)>) {
+        match self {
+            Filter::HasRows { table, filters, .. } => {
+                into.push(("filters", table));
+                for filter in filters {
+                    filter.read_relations(into);
+                }
+            }
+            Filter::AnyOf { filters } | Filter::AllOf { filters } => {
+                for filter in filters {
+                    filter.read_relations(into);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// [`Filter::read_relations`], to change in place.
+    fn read_relations_mut<'a>(&'a mut self, into: &mut Vec<&'a mut Relation>) {
+        match self {
+            Filter::HasRows { table, filters, .. } => {
+                into.push(table);
+                for filter in filters {
+                    filter.read_relations_mut(into);
+                }
+            }
+            Filter::AnyOf { filters } | Filter::AllOf { filters } => {
+                for filter in filters {
+                    filter.read_relations_mut(into);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// The columns the filter reads, nested filters included, in order.
     pub fn columns(&self) -> Vec<&str> {
         match self {
@@ -947,8 +984,27 @@ pub enum DataRequest {
 }
 
 impl DataRequest {
-    /// Each relation the request reads, with the field naming it.
+    /// Each relation the request reads, with the field naming it: the
+    /// tables its filters read (`has_rows`) after its own, named `filters`.
     pub fn relations(&self) -> Vec<(&'static str, &Relation)> {
+        let mut relations = self.own_relations();
+        for filter in self.filters() {
+            filter.read_relations(&mut relations);
+        }
+        relations
+    }
+
+    /// The filters the request carries, none for a request taking none.
+    fn filters(&self) -> &[Filter] {
+        match self {
+            DataRequest::Scan { filters, .. }
+            | DataRequest::CountRows { filters, .. }
+            | DataRequest::SampleEntities { filters, .. } => filters,
+            _ => &[],
+        }
+    }
+
+    fn own_relations(&self) -> Vec<(&'static str, &Relation)> {
         match self {
             DataRequest::Describe { tables, .. } => tables.iter().map(|t| ("tables", t)).collect(),
             DataRequest::KeyCounts { keys } => keys.iter().map(|k| ("keys", &k.table)).collect(),
@@ -966,8 +1022,23 @@ impl DataRequest {
         }
     }
 
-    /// Each relation the request reads, to change in place.
+    /// Each relation the request reads, to change in place: the tables its
+    /// filters read (`has_rows`) after its own, so a relation read where
+    /// the run reads it is read there inside a filter too.
     pub fn relations_mut(&mut self) -> Vec<&mut Relation> {
+        let (mut relations, filters) = match self {
+            DataRequest::Scan { table, filters, .. }
+            | DataRequest::CountRows { table, filters, .. }
+            | DataRequest::SampleEntities { table, filters, .. } => (vec![table], filters),
+            other => return other.own_relations_mut(),
+        };
+        for filter in filters.iter_mut() {
+            filter.read_relations_mut(&mut relations);
+        }
+        relations
+    }
+
+    fn own_relations_mut(&mut self) -> Vec<&mut Relation> {
         match self {
             DataRequest::Describe { tables, .. } => tables.iter_mut().collect(),
             DataRequest::KeyCounts { keys } => keys.iter_mut().map(|k| &mut k.table).collect(),
