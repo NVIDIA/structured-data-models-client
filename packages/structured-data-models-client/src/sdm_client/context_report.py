@@ -6,7 +6,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
-ContextStop = Literal['full', 'source_exhausted', 'row_budget']
+ContextStop = Literal['full', 'source_exhausted', 'row_budget', 'time_limit']
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,9 @@ class ContextDraw:
     #: The context examples asked for.
     asked: int
     #: Why drawing stopped: enough were kept, the source had no more rows,
-    #: or another draw would have read more rows than one request may.
+    #: another draw would have read more rows than one request may, or the
+    #: draws had taken the time one request's context may
+    #: (``context_time_limit``).
     stopped: ContextStop
     #: Whether any of the query's conditions went to the source with the
     #: draw.
@@ -46,7 +48,12 @@ class ContextDraw:
         )
         if any(type(value) is not int or value < 0 for value in counts):
             raise ValueError('invalid context draw count')
-        if self.stopped not in ('full', 'source_exhausted', 'row_budget'):
+        if self.stopped not in (
+            'full',
+            'source_exhausted',
+            'row_budget',
+            'time_limit',
+        ):
             raise ValueError('invalid context draw stop')
         if type(self.filtered_at_source) is not bool:
             raise ValueError('invalid context draw filter flag')

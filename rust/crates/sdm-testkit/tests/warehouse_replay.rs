@@ -130,6 +130,7 @@ fn recording(leg: &str, core: &Value) -> Value {
                "error": &failure}));
             run.reply(
                 &encode(&ControlMessage::FetchReply(FetchReply {
+                    elapsed_ns: None,
                     id: step.id,
                     outcome: FetchOutcome::Error {
                         error: failure.clone(),

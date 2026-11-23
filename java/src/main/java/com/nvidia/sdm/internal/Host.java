@@ -378,6 +378,9 @@ public final class Host {
   /** The run's steps, each answered, to its result. */
   @SuppressWarnings("unchecked")
   private static Finished steps(Run run, Call call) {
+    // The core reads no clock: each fetch reply tells it the time since the run started, by
+    // which its time limits are measured.
+    long started = System.nanoTime();
     List<Map<String, Object>> warnings = new ArrayList<>();
     String driverClass = null;
     Refused refused = null;
@@ -451,7 +454,7 @@ public final class Host {
       driverClass = null;
       for (Object item : (List<Object>) read.get("requests")) {
         Map<String, Object> request = (Map<String, Object>) item;
-        String failedClass = fetch(run, request, call.provider());
+        String failedClass = fetch(run, request, call.provider(), started);
         if (failedClass != null) {
           driverClass = failedClass;
         }
@@ -461,7 +464,8 @@ public final class Host {
 
   /** Answers one fetch request; the class of the driver's exception when it failed, else null. */
   @SuppressWarnings("unchecked")
-  private static String fetch(Run run, Map<String, Object> request, Provider provider) {
+  private static String fetch(
+      Run run, Map<String, Object> request, Provider provider, long started) {
     Map<String, Object> outcome = new LinkedHashMap<>();
     Map<Integer, Object> attached = new LinkedHashMap<>();
     String driverClass = null;
@@ -516,6 +520,7 @@ public final class Host {
     reply.put("message", "fetch_reply");
     reply.put("id", request.get("id"));
     reply.put("outcome", outcome);
+    reply.put("elapsed_ns", System.nanoTime() - started);
     try {
       run.reply(fetchControl(reply), attached);
     } catch (NativeError e) {

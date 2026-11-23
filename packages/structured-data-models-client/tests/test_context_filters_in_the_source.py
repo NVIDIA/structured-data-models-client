@@ -15,6 +15,7 @@ entities that may qualify.
 
 from __future__ import annotations
 
+import datetime
 import warnings
 from typing import Any
 
@@ -23,7 +24,13 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import ContextDraw, ContextReport, PredictiveQuery, Schema
+from sdm_client import (
+    ContextDraw,
+    ContextReport,
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 
 USERS = 120_000
 ASKED = 1_000
@@ -204,3 +211,56 @@ def test_a_source_holding_too_few_says_so() -> None:
     [part] = request.context_report.parts
     assert part.stopped == 'source_exhausted'
     assert part.kept == request.context_rows == 120
+
+
+def _seen_after_february(**options: Any) -> Any:
+    # One user in sixty was seen after 28 February 2023: the first draw
+    # of 10,000 rows keeps about 166 of the 1,000 asked for.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(_connection()))
+        return PredictiveQuery(
+            'PREDICT users.churned FOR EACH users.id '
+            'WHERE users.seen > 2023-02-28',
+            schema,
+        ).materialize(
+            indices=[1, 2],
+            anchor_time=pd.Timestamp('2024-03-01'),
+            num_context_samples=ASKED,
+            **options,
+        )
+
+
+@pytest.mark.parametrize(
+    'limit', [0, datetime.timedelta(0)], ids=['seconds', 'timedelta']
+)
+def test_drawing_stops_at_the_time_limit_with_the_examples_kept(
+    limit: Any,
+) -> None:
+    request = _seen_after_february(context_time_limit=limit)
+    [part] = request.context_report.parts
+    assert (part.draws, part.stopped) == (1, 'time_limit')
+    assert 0 < part.kept < ASKED
+    assert request.context_rows == part.kept
+
+
+def test_a_time_limit_that_is_not_seconds_is_refused() -> None:
+    with pytest.raises(StructuredDataError) as raised:
+        _seen_after_february(context_time_limit=-1)
+    assert 'context_time_limit' in str(raised.value)
+
+
+def test_the_hosts_clock_past_the_default_five_minutes_stops_drawing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The host reads its clock for each reply; ten minutes pass between
+    # every two readings, so the first draw already took longer than the
+    # default limit.
+    from sdm_client._rust import run
+
+    ticks = iter(range(0, 10**15, 600 * 10**9))
+    monkeypatch.setattr(run.time, 'monotonic_ns', lambda: next(ticks))
+    request = _seen_after_february()
+    [part] = request.context_report.parts
+    assert (part.draws, part.stopped) == (1, 'time_limit')
+    assert request.context_rows == part.kept < ASKED

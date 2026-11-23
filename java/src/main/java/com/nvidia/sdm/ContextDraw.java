@@ -15,7 +15,8 @@ import java.util.List;
  * @param kept the candidates with an answer the query's conditions keep, before the context is cut
  *     to the size asked for
  * @param asked the context examples asked for
- * @param stopped why drawing stopped: {@code full}, {@code source_exhausted} or {@code row_budget}
+ * @param stopped why drawing stopped: {@code full}, {@code source_exhausted}, {@code row_budget}
+ *     or {@code time_limit}
  * @param filteredAtSource whether any of the query's conditions went to the source with the draw
  */
 public record ContextDraw(
@@ -30,7 +31,7 @@ public record ContextDraw(
     if (draws < 0 || rowsDrawn < 0 || candidates < 0 || kept < 0 || asked < 0) {
       throw new IllegalArgumentException("invalid context draw count");
     }
-    if (!List.of("full", "source_exhausted", "row_budget").contains(stopped)) {
+    if (!List.of("full", "source_exhausted", "row_budget", "time_limit").contains(stopped)) {
       throw new IllegalArgumentException("invalid context draw stop");
     }
   }

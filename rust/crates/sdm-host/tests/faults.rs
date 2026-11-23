@@ -112,6 +112,7 @@ fn fetching(expect: ExpectedSchema) -> HostRun {
 fn reply(run: &HostRun, data: ArrowData) -> Result<(), CoreError> {
     run.reply(
         &encode(&ControlMessage::FetchReply(FetchReply {
+            elapsed_ns: None,
             id: ReplyId(1),
             outcome: FetchOutcome::Data {
                 data: AttachmentId(1),
@@ -339,6 +340,7 @@ fn data_that_does_not_match_its_request_is_refused_by_check_b() {
 
 fn fetch_reply(id: u32, data: u32) -> Vec<u8> {
     encode(&ControlMessage::FetchReply(FetchReply {
+        elapsed_ns: None,
         id: ReplyId(id),
         outcome: FetchOutcome::Data {
             data: AttachmentId(data),

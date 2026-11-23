@@ -39,6 +39,7 @@ and class), and names.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -291,6 +292,9 @@ def _steps(
     model_endpoints: ModelEndpoints | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
+    # The core reads no clock: each fetch reply tells it the time since
+    # the run started, by which its time limits are measured.
+    started = time.monotonic_ns()
     driver_class: str | None = None
     refused: Refused | None = None
     cleanup_refusal = False
@@ -397,6 +401,7 @@ def _steps(
                     'message': 'fetch_reply',
                     'id': request['id'],
                     'outcome': outcome,
+                    'elapsed_ns': time.monotonic_ns() - started,
                 }
             )
             try:

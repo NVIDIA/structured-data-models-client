@@ -373,6 +373,7 @@ pub fn messages() -> Vec<ControlMessage> {
             ],
         }),
         ControlMessage::FetchReply(FetchReply {
+            elapsed_ns: None,
             id: ReplyId(1),
             outcome: FetchOutcome::Data {
                 data: AttachmentId(4),
@@ -380,6 +381,7 @@ pub fn messages() -> Vec<ControlMessage> {
             },
         }),
         ControlMessage::FetchReply(FetchReply {
+            elapsed_ns: None,
             id: ReplyId(2),
             outcome: FetchOutcome::Error {
                 error: ProviderError {

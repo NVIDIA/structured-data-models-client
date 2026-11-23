@@ -40,6 +40,7 @@ class RelationalMaterializer:
             'top_k',
             'prediction_statistic',
             'rows_per_call',
+            'context_time_limit',
         }
     )
 

@@ -1590,6 +1590,9 @@ pub enum ContextStop {
     SourceExhausted,
     /// Another draw would have read more rows than one request may.
     RowBudget,
+    /// The draws had taken the time one request's context may
+    /// (`context_time_limit`): the examples kept so far are the context.
+    TimeLimit,
 }
 
 /// The facts of a resolved query a host reads: plain values, no tree. Its

@@ -198,6 +198,7 @@ fn answered(connection: &Connection, request: DataRequest, seeds: RecordBatch) -
     let fetched = duck::answer_with(connection, step, &sets).unwrap();
     run.reply(
         &encode(&ControlMessage::FetchReply(FetchReply {
+            elapsed_ns: None,
             id: step.id,
             outcome: FetchOutcome::Data {
                 data: AttachmentId(1),

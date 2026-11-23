@@ -3132,6 +3132,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // faults may be refused here for another of them than the client
     // names, which the core does not claim to match ((iii)).
     let asked_values = options::values(inputs.values.as_ref())?;
+    let time_limit = options::context_time_limit(&asked_values)?;
     let mode = options::run_mode(
         asked_values.num_context_samples,
         asked_values.num_context_samples_given.as_deref(),
@@ -3679,6 +3680,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let mut draw_size = trials;
     let mut drawn_rows: u64 = 0;
     let mut draws: u32 = 0;
+    // A draw is not started once the draws have taken the time the
+    // request allows (`context_time_limit`); one already reading runs on.
+    // The time is the host's, told with its replies.
+    let drawing_since = asker.elapsed();
     let (kept, entity_key, indices, examples, labelled, labelled_rows, report) = loop {
         // Seeds are optional. An unseeded provider warns only of a seed the
         // caller named, above, not of the default one.
@@ -3901,7 +3906,14 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             labelled_rows.len(),
             wanted_examples,
             drawn_rows,
-        );
+        )
+        .and_then(|larger| {
+            if asker.elapsed().saturating_sub(drawing_since) >= time_limit {
+                Err(ContextStop::TimeLimit)
+            } else {
+                Ok(larger)
+            }
+        });
         match next {
             Ok(larger) => draw_size = larger,
             Err(stopped) => {

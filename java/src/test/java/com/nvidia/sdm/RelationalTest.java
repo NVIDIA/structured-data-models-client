@@ -246,6 +246,19 @@ class RelationalTest {
     }
   }
 
+  @Test void theContextTimeLimitReachesTheCoreAsSeconds() throws Exception {
+    Schema schema = fixture(false, false);
+    PredictiveQuery query = PredictiveQuery.parse(SCALAR);
+    Request request = query.materialize(schema,
+        options(1L, 2L).contextTimeLimit(java.time.Duration.ofMillis(1500)).build());
+    assertEquals(2, request.predictRows());
+    assertThrows(IllegalArgumentException.class,
+        () -> MaterializeOptions.builder().contextTimeLimit(java.time.Duration.ofSeconds(-1)));
+    StructuredDataException refused = assertThrows(StructuredDataException.class,
+        () -> query.materialize(schema, options(1L, 2L).option("context_time_limit", "60").build()));
+    assertTrue(refused.getMessage().contains("context_time_limit"), refused.getMessage());
+  }
+
   @Test void schemaSnapshotIgnoresCallerMutationBeforeFirstMaterialization() throws Exception {
     Schema schema;
     try (RootAllocator allocator = new RootAllocator(); Table users = users(allocator)) {

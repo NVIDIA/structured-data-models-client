@@ -97,6 +97,7 @@ fn description_recording(case: &Case, extra_fetch: bool) -> Recording {
                     handle
                         .reply(
                             &encode(&ControlMessage::FetchReply(FetchReply {
+                                elapsed_ns: None,
                                 id: step.id,
                                 outcome: FetchOutcome::Data {
                                     data: AttachmentId(1),

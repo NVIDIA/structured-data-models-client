@@ -17,6 +17,10 @@ A deployment that raises them is not held back. Requests above an endpoint's con
 | context rows | tabular | sampled to 10,000, with a warning | as many as `num_context_samples` asks for; a direct `Request` is sent as given |
 | rows scored per call | relational | 10,000 | as many as `rows_per_call` asks for |
 | hops | relational | 2, or as `num_hops` / `num_neighbors` ask | at most 6, including the length of an explicit `num_neighbors` list |
+| time drawing context examples | relational | 5 minutes | as long as `context_time_limit` asks, in seconds (Java `contextTimeLimit`) |
+
+A context that keeps too few examples is drawn again, larger, until it has as many as were asked for, the source has no more rows, the draws would read more than 5,000,000 rows, or `context_time_limit` has passed.
+A draw already reading when the time passes runs on; then the examples kept so far are the context, and `Request.context_report` says why drawing stopped.
 
 A relational request for more entities than one call scores is gathered as several calls, each with a context of its own, and `predict()` sends one call per batch and returns one result.
 Its `row_index` counts across the whole request, so `to_pandas()` gives the rows back in the order they were asked for.

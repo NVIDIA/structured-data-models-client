@@ -175,6 +175,9 @@ struct Shared {
     located: Option<sdm_contract::ops::SourceDescription>,
     /// Why the run asks its fetches now ([`Asker::asking_for`]).
     purpose: Option<sdm_contract::run::FetchPurpose>,
+    /// The time since the run started as the host last told it
+    /// ([`Run::tell_elapsed`]); the core reads no clock of its own.
+    elapsed: std::time::Duration,
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -635,6 +638,12 @@ impl Asker {
     pub fn attach(&self, attachment: Attachment) -> Result<AttachmentId, CoreError> {
         let mut shared = lock(&self.shared);
         attach(&mut shared, attachment)
+    }
+
+    /// The time since the run started, as the host last told it with a
+    /// reply ([`Run::tell_elapsed`]); none told is none taken.
+    pub fn elapsed(&self) -> std::time::Duration {
+        lock(&self.shared).elapsed
     }
 
     /// Gives a warning, after every warning given before it.
@@ -1277,6 +1286,16 @@ impl Run {
     /// does; nothing is dropped, relabelled or filled. Each page of a paged
     /// answer is held to it as it arrives, as a whole answer is. A
     /// discovery request takes the schema the data declares.
+    /// The time since the run started, by the host's monotonic clock, as
+    /// a reply tells it (`elapsed_ns`). A time earlier than one told
+    /// before leaves it as it was.
+    pub fn tell_elapsed(&mut self, elapsed_ns: Option<u64>) {
+        if let Some(ns) = elapsed_ns {
+            let mut shared = lock(&self.shared);
+            shared.elapsed = shared.elapsed.max(std::time::Duration::from_nanos(ns));
+        }
+    }
+
     pub fn submit_fetch(&mut self, id: ReplyId, result: FetchResult) -> Result<(), CoreError> {
         if let Some(err) = self.terminal() {
             return Err(err);

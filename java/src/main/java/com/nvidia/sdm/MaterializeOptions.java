@@ -207,6 +207,19 @@ public final class MaterializeOptions {
       return option("rows_per_call", rows);
     }
 
+    /**
+     * How long the context's draws may take ({@code context_time_limit}), five minutes where not
+     * set. A draw that keeps too few examples is drawn again, larger, only while this time has not
+     * passed; then the examples kept so far are the context. A draw already reading runs on. Zero
+     * draws once.
+     */
+    public Builder contextTimeLimit(java.time.Duration limit) {
+      if (Objects.requireNonNull(limit, "limit").isNegative())
+        throw new IllegalArgumentException("contextTimeLimit must not be negative");
+      return option(
+          "context_time_limit", limit.getSeconds() + limit.getNano() / 1_000_000_000.0);
+    }
+
     public MaterializeOptions build() {
       return new MaterializeOptions(this);
     }

@@ -468,6 +468,7 @@ fn drive(
             }
             let (outcome, attachments) = path.answer(step, &keys)?;
             let reply = encode(&ControlMessage::FetchReply(FetchReply {
+                elapsed_ns: None,
                 id: step.id,
                 outcome,
             }))

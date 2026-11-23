@@ -1028,6 +1028,7 @@ sentences! {
     TopKNotWhole = "top_k_not_whole", E::InvalidRequest;
     TopKOutOfRange = "top_k_out_of_range", E::InvalidRequest;
     RowsPerCall = "rows_per_call", E::InvalidRequest;
+    ContextTimeLimit = "context_time_limit", E::InvalidRequest;
     MaxPqIterationsNotAWholeNumber = "max_pq_iterations_not_a_whole_number", E::InvalidRequest;
     IterationsBelowOne = "iterations_below_one", E::InvalidRequest;
     OptionNotWhole = "option_not_whole", E::InvalidRequest;

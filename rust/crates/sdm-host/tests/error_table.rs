@@ -202,6 +202,7 @@ fn a_provider_s_kind_outside_its_code_s_set_ends_the_fetch_as_internal() {
     for kind in ErrorKind::ALL {
         let run = fetch_run();
         let reply = encode(&ControlMessage::FetchReply(FetchReply {
+            elapsed_ns: None,
             id: ReplyId(1),
             outcome: FetchOutcome::Error {
                 error: ProviderError {

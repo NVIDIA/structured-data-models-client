@@ -364,6 +364,7 @@ impl HostRun {
             let mut attachments = with_stand_ins(attachments, unreadable);
             match decode(message)? {
                 ControlMessage::FetchReply(reply) => {
+                    run.tell_elapsed(reply.elapsed_ns);
                     let result = match reply.outcome {
                         FetchOutcome::Data { data, continuation } => {
                             check_attachments(&[(data, AttachmentKind::Arrow)], &attachments)?;

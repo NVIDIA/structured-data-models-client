@@ -791,6 +791,7 @@ fn through_host_run(data: ArrowData) -> ArrowData {
         panic!("the run fetches");
     };
     let reply = ControlMessage::FetchReply(FetchReply {
+        elapsed_ns: None,
         id: requests[0].id,
         outcome: FetchOutcome::Data {
             data: AttachmentId(1),

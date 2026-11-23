@@ -108,6 +108,7 @@ fn admitted(
     let fetched = answer(&requests[0]);
     run.reply(
         &encode(&ControlMessage::FetchReply(FetchReply {
+            elapsed_ns: None,
             id: requests[0].id,
             outcome: FetchOutcome::Data {
                 data: AttachmentId(1),
@@ -840,6 +841,7 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
     let fetched = duck::answer_with(connection, step, &sets).unwrap();
     run.reply(
         &encode(&ControlMessage::FetchReply(FetchReply {
+            elapsed_ns: None,
             id: step.id,
             outcome: FetchOutcome::Data {
                 data: AttachmentId(1),

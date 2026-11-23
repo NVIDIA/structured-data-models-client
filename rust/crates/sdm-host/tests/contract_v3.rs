@@ -299,6 +299,7 @@ fn a_fetch_step_with_a_wide_plan_arrives_whole_either_side_of_the_cap() {
         .unwrap();
         run.reply(
             &encode(&ControlMessage::FetchReply(FetchReply {
+                elapsed_ns: None,
                 id: ReplyId(1),
                 outcome: FetchOutcome::Data {
                     data: AttachmentId(1),
@@ -480,6 +481,7 @@ fn a_provider_error_s_retryability_and_codes_reach_the_core_error() {
         run.next().unwrap();
         run.reply(
             &encode(&ControlMessage::FetchReply(FetchReply {
+                elapsed_ns: None,
                 id: ReplyId(1),
                 outcome: FetchOutcome::Error {
                     error: ProviderError {

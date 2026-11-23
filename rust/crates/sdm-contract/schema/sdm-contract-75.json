@@ -43,6 +43,15 @@
         "outcome": {
           "$ref": "#/$defs/FetchOutcome"
         },
+        "elapsed_ns": {
+          "description": "The time since the run started, by the host's monotonic clock, as\nthe host sends this reply, in nanoseconds. The core reads no clock:\na request's time limits (`context_time_limit`) are measured by\nthese. A host that sends none is taken never to have taken any time.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
         "message": {
           "type": "string",
           "const": "fetch_reply"
@@ -17874,6 +17883,7 @@
         "top_k_not_whole",
         "top_k_out_of_range",
         "rows_per_call",
+        "context_time_limit",
         "max_pq_iterations_not_a_whole_number",
         "iterations_below_one",
         "option_not_whole",
@@ -18186,6 +18196,11 @@
           "description": "Another draw would have read more rows than one request may.",
           "type": "string",
           "const": "row_budget"
+        },
+        {
+          "description": "The draws had taken the time one request's context may\n(`context_time_limit`): the examples kept so far are the context.",
+          "type": "string",
+          "const": "time_limit"
         }
       ]
     },

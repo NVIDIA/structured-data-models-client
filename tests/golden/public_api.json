@@ -199,7 +199,7 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {},
-        "signature": "(draws: int, rows_drawn: int, candidates: int, kept: int, asked: int, stopped: Literal['full', 'source_exhausted', 'row_budget'], filtered_at_source: bool) -> None"
+        "signature": "(draws: int, rows_drawn: int, candidates: int, kept: int, asked: int, stopped: Literal['full', 'source_exhausted', 'row_budget', 'time_limit'], filtered_at_source: bool) -> None"
       },
       "ContextReport": {
         "bases": [],

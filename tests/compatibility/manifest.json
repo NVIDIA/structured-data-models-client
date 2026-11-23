@@ -5259,18 +5259,24 @@
         "java": [
           "Request.contextReport",
           "ContextReport",
-          "ContextDraw"
+          "ContextDraw",
+          "MaterializeOptions.Builder.contextTimeLimit"
         ]
       },
       "tests": {
         "python": [
           "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_the_report_says_the_filter_went_to_the_source_and_one_draw_did",
           "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_condition_the_source_is_not_sent_is_drawn_again_larger",
-          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_source_holding_too_few_says_so"
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_source_holding_too_few_says_so",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_smaller_context_asked_for_is_not_drawn_again_for_more",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_drawing_stops_at_the_time_limit_with_the_examples_kept",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_time_limit_that_is_not_seconds_is_refused",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_the_hosts_clock_past_the_default_five_minutes_stops_drawing"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
-          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling"
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#theContextTimeLimitReachesTheCoreAsSeconds"
         ]
       },
       "gate": "local",
@@ -5967,7 +5973,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "1c686e7e1ec844abec7e04edceb61c532c86fb9bd418ea73d0ca56da30ad6bb2",
+  "public_api_snapshot_sha256": "2bc0e5ba6a7129582056178efdd1ae646ae8aa01d7aef0207f68a7db3165227e",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -9559,6 +9565,15 @@
             "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
           }
         ]
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder contextTimeLimit(java.time.Duration);": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#theContextTimeLimitReachesTheCoreAsSeconds",
+            "behavior": "The time limit reaches the core as seconds; a negative duration is refused by the builder, and a value that is not seconds by the core, naming context_time_limit."
+          }
+        ]
       }
     }
   },
@@ -9825,12 +9840,82 @@
     {
       "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
       "record": "api_inventory",
-      "reason": "Adds the context report types and accessors in both languages, and maps ProviderSource's existing declarations to java-data-providers."
+      "reason": "Adds the context report types and accessors and MaterializeOptions.Builder.contextTimeLimit, and maps ProviderSource's existing declarations to java-data-providers."
     },
     {
       "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
       "record": "public_api_snapshot_sha256",
-      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report."
+      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report, whose stop reasons include time_limit."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "api_contracts/relational-materialization",
+      "reason": "Links the context draw scenarios, which materialize relational requests over the sparse context fixture."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "capabilities/context.filtered-draws",
+      "reason": "Filtered context draws are required on every relational connector in both languages, live: the examples kept, the stop reason and filtering at the source."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.anchor-time-window",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.forecast-where",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.no-where",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.ranking-where",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.static-exhausted",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.target-average",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.target-maximum-where",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.temporal-exhausted",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.where-count-window",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.where-entity",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.where-in-or",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.where-not-and",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
     }
   ],
   "capabilities": [
