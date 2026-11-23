@@ -4,6 +4,7 @@
 
 package com.nvidia.sdm.provider;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -262,6 +263,70 @@ public sealed interface DataRequest {
 
   /** The row's {@code column} is not null. */
   record NotNull(String column) implements Filter {}
+
+  /**
+   * A value filter: the row's {@code column} compared with {@code value} by {@code op}; a null
+   * meets no comparison. Sent only to a provider declaring {@link FilterKind#COMPARE}.
+   *
+   * <p>A value filter narrows what a read returns and never decides a result: a provider may
+   * return rows it does not hold for, but must never leave out a row it holds for. The library
+   * checks every row it keeps by the query's own rules.
+   */
+  record Compare(String column, CompareOp op, Object value) implements Filter {}
+
+  /** A value filter: the row's {@code column} equals one of {@code values}; a null equals none. */
+  record In(String column, List<Object> values) implements Filter {
+    public In {
+      values = java.util.Collections.unmodifiableList(new ArrayList<>(values));
+    }
+  }
+
+  /** A value filter: the row's {@code column} is null. */
+  record IsNull(String column) implements Filter {}
+
+  /** A value filter: at least one of {@code filters} holds. */
+  record AnyOf(List<Filter> filters) implements Filter {
+    public AnyOf {
+      filters = List.copyOf(filters);
+    }
+  }
+
+  /** A value filter: every one of {@code filters} holds. */
+  record AllOf(List<Filter> filters) implements Filter {
+    public AllOf {
+      filters = List.copyOf(filters);
+    }
+  }
+
+  /** How a {@link Compare} compares. */
+  enum CompareOp {
+    EQ,
+    NE,
+    LT,
+    LE,
+    GT,
+    GE
+  }
+
+  /** A kind of value filter a provider may declare it applies ({@code Capabilities.filters}). */
+  enum FilterKind {
+    COMPARE("compare"),
+    IN("in"),
+    IS_NULL("is_null"),
+    ANY_OF("any_of"),
+    ALL_OF("all_of");
+
+    private final String wireName;
+
+    FilterKind(String wireName) {
+      this.wireName = wireName;
+    }
+
+    /** The kind's name on the wire. */
+    public String wireName() {
+      return wireName;
+    }
+  }
 
   /** A bound on a value. */
   record Bound(Object value, boolean inclusive) {}

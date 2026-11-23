@@ -324,6 +324,7 @@ fn fetching_run() -> Run {
             key_enforcement: false,
             sample_rows: false,
             optional: Default::default(),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,

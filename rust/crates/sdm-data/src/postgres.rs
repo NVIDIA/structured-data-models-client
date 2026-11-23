@@ -141,6 +141,12 @@ impl SqlDialect for Postgres {
     }
 
     /// What a Postgres source answers through this layer.
+    /// A value filter's literal, its text written as an escape string
+    /// where it holds a backslash ([`text`]).
+    fn value_literal(&self, value: &Scalar) -> Option<String> {
+        sql::plain_literal(value, text)
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             compares_stored_times: false,
@@ -152,6 +158,7 @@ impl SqlDialect for Postgres {
             key_enforcement: false,
             sample_rows: false,
             optional: sql::rendered(),
+            filters: sdm_contract::data::FilterKind::ALL.into(),
             max_keys_per_request: None,
             // `setseed` before `ORDER BY random` repeats the draw on one
             // server (register entry RS-6).

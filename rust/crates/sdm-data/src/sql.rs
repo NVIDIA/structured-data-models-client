@@ -111,6 +111,14 @@ pub(crate) trait SqlDialect: Sync {
     /// What a source of this dialect answers through this layer.
     fn capabilities(&self) -> ProviderCapabilities;
 
+    /// `value` as a literal a value filter compares with, or none where
+    /// the dialect does not write it (the comparison is then left out,
+    /// [`value_condition`]): by default [`plain_literal`] with text quoted
+    /// as DuckDB and SQLite read it ([`quote::text`]).
+    fn value_literal(&self, value: &Scalar) -> Option<String> {
+        plain_literal(value, quote::text)
+    }
+
     // --- quoting, depths and namespace -------------------------------------
 
     /// The most name parts a relation takes.
@@ -609,6 +617,10 @@ pub(crate) struct Sample<'a> {
     pub seed: i128,
     pub projected: String,
     pub filtered: String,
+    /// Whether the filters hold a value filter, which thins the rows more
+    /// than a not-null filter of the key or time does: a dialect sampling
+    /// before its `WHERE` then filters first.
+    pub value_filtered: bool,
     pub key_dtype: Option<Dtype>,
     /// The table's rows, where the core counted them for a dialect sizing
     /// its draw by them (`ProviderCapabilities::sample_rows`).
@@ -866,6 +878,7 @@ pub(crate) fn plan_projected(
                 seed,
                 projected: transferred_columns(d, columns, conversions),
                 filtered: conditions(d, request, filters, "\n")?,
+                value_filtered: filters.iter().any(|f| f.kind().is_some()),
                 key_dtype: *key_dtype,
                 rows: *rows,
             });
@@ -1027,9 +1040,9 @@ fn identifiers(d: &dyn SqlDialect, names: &[String]) -> String {
 }
 
 /// The `WHERE` clause of `filters`, opened by `lead` (a space or a line
-/// break), or nothing for none: each a not-null filter, as the reference's
-/// sampler writes one, joined by `AND`; another kind of filter is not
-/// taken.
+/// break), or nothing for none: each not-null filter as the reference's
+/// sampler writes one, and each value filter ([`value_condition`]), joined
+/// by `AND`; a key or time filter is not taken.
 pub(crate) fn conditions(
     d: &dyn SqlDialect,
     request: &DataRequest,
@@ -1038,19 +1051,117 @@ pub(crate) fn conditions(
 ) -> Result<String, CoreError> {
     let mut conditions = Vec::with_capacity(filters.len());
     for filter in filters {
-        let Filter::NotNull { column } = filter else {
-            return Err(not_taken(
-                request,
-                "filters",
-                "this rendering takes not-null filters only",
-            ));
-        };
-        conditions.push(format!("{} IS NOT NULL", d.identifier(column)));
+        match filter {
+            Filter::NotNull { column } => {
+                conditions.push(format!("{} IS NOT NULL", d.identifier(column)));
+            }
+            Filter::KeyIn { .. } | Filter::TimeRange { .. } => {
+                return Err(not_taken(
+                    request,
+                    "filters",
+                    "this rendering takes not-null and value filters only",
+                ));
+            }
+            _ => {
+                if let Some(condition) = value_condition(d, filter) {
+                    conditions.push(condition);
+                }
+            }
+        }
     }
     if conditions.is_empty() {
         return Ok(String::new());
     }
     Ok(format!("{lead}WHERE {}", conditions.join(" AND ")))
+}
+
+/// A value filter as a SQL condition, or none where it holds for every
+/// row as written here. A value the dialect cannot write as a literal
+/// ([`SqlDialect::value_literal`]) leaves its comparison out, which only
+/// widens what the read returns: a value filter may return more rows,
+/// never fewer ([`sdm_contract::data::FilterKind`]). So an `AnyOf` with a
+/// part left out is left out whole, and an `AllOf` keeps the parts it
+/// writes.
+pub(crate) fn value_condition(d: &dyn SqlDialect, filter: &Filter) -> Option<String> {
+    match filter {
+        Filter::NotNull { column } => Some(format!("{} IS NOT NULL", d.identifier(column))),
+        Filter::IsNull { column } => Some(format!("{} IS NULL", d.identifier(column))),
+        Filter::Compare { column, op, value } => Some(format!(
+            "{} {} {}",
+            d.identifier(column),
+            op.sql(),
+            d.value_literal(value)?
+        )),
+        Filter::In { column, values } => {
+            if values.is_empty() {
+                // Equal to none of no values: no row.
+                return Some("1 = 0".to_owned());
+            }
+            let literals = values
+                .iter()
+                .map(|v| d.value_literal(v))
+                .collect::<Option<Vec<_>>>()?;
+            Some(format!(
+                "{} IN ({})",
+                d.identifier(column),
+                literals.join(", ")
+            ))
+        }
+        Filter::AnyOf { filters } => {
+            if filters.is_empty() {
+                return Some("1 = 0".to_owned());
+            }
+            let parts = filters
+                .iter()
+                .map(|f| value_condition(d, f))
+                .collect::<Option<Vec<_>>>()?;
+            Some(format!("({})", parts.join(" OR ")))
+        }
+        Filter::AllOf { filters } => {
+            let parts: Vec<String> = filters
+                .iter()
+                .filter_map(|f| value_condition(d, f))
+                .collect();
+            if parts.is_empty() {
+                return None;
+            }
+            Some(format!("({})", parts.join(" AND ")))
+        }
+        Filter::KeyIn { .. } | Filter::TimeRange { .. } => None,
+    }
+}
+
+/// `value` as a literal every dialect reads alike, or none: a boolean, an
+/// integer, a finite double written with a fraction or an exponent so it
+/// reads as a double, or text in single quotes ([`quote::text`]) holding no
+/// NUL. Any other value is not written.
+pub(crate) fn plain_literal(value: &Scalar, text: impl Fn(&str) -> String) -> Option<String> {
+    Some(match value {
+        Scalar::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_owned(),
+        Scalar::Int8(v) => v.to_string(),
+        Scalar::Int16(v) => v.to_string(),
+        Scalar::Int32(v) => v.to_string(),
+        Scalar::Int64(v) => v.to_string(),
+        Scalar::UInt8(v) => v.to_string(),
+        Scalar::UInt16(v) => v.to_string(),
+        Scalar::UInt32(v) => v.to_string(),
+        Scalar::UInt64(v) => v.to_string(),
+        Scalar::Float32(v) if v.is_finite() => double_text(f64::from(*v)),
+        Scalar::Float64(v) if v.is_finite() => double_text(*v),
+        Scalar::Utf8(s) if !s.contains('\0') => text(s),
+        _ => return None,
+    })
+}
+
+/// A finite double as the shortest text that reads back as it, with a
+/// fraction or an exponent so no dialect reads an integer.
+fn double_text(value: f64) -> String {
+    let text = format!("{value:?}");
+    if text.contains(['.', 'e', 'E']) {
+        text
+    } else {
+        format!("{text}.0")
+    }
 }
 
 /// One `SELECT` per key, in order, labelled by its label or position: the

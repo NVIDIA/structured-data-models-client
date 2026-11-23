@@ -65,6 +65,7 @@ use sdm_contract::view::ViewKind;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::key_text;
+use crate::quote;
 use crate::read::{text, text_at};
 use crate::sql::{self, Batches, Sample, SeedRead, SqlDialect, not_taken};
 
@@ -102,6 +103,12 @@ impl SqlDialect for Snowflake {
     }
 
     /// What a Snowflake source answers through this layer.
+    /// A value filter's literal, its text with each backslash and quote
+    /// escaped by a backslash, as Snowflake reads a quoted string.
+    fn value_literal(&self, value: &Scalar) -> Option<String> {
+        sql::plain_literal(value, quote::backslashed_text)
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             opaque_vendor: None,
@@ -109,6 +116,7 @@ impl SqlDialect for Snowflake {
             samples_by_key_dtype: false,
             reads_nan_as_missing: false,
             optional: sql::rendered(),
+            filters: sdm_contract::data::FilterKind::ALL.into(),
             max_keys_per_request: None,
             // `SAMPLE ROW (n ROWS)` takes no seed (owner option C).
             // A seed the caller names is said to be ignored.
@@ -312,13 +320,25 @@ impl SqlDialect for Snowflake {
     /// the columns asked for, from `SAMPLE ROW (<n> ROWS)`, `n` at most
     /// Snowflake's limit, then each not-null filter (`SAMPLE` before
     /// `WHERE`, so the filters thin the sample, as they do the reference's).
+    /// With a value filter, which may keep few rows, the filters come
+    /// first, in a subquery, and the sample is of the rows they keep; a
+    /// subquery's sample takes no seed, as this dialect's takes none.
     fn sample(&self, sample: &Sample<'_>) -> Vec<String> {
+        if !sample.value_filtered {
+            return vec![format!(
+                "SELECT {}\nFROM {}\nSAMPLE ROW ({} ROWS){}",
+                sample.projected,
+                sample.table,
+                sample.n.min(MOST_SAMPLED),
+                sample.filtered
+            )];
+        }
         vec![format!(
-            "SELECT {}\nFROM {}\nSAMPLE ROW ({} ROWS){}",
+            "SELECT {}\nFROM (SELECT *\nFROM {}{}) t\nSAMPLE ROW ({} ROWS)",
             sample.projected,
             sample.table,
+            sample.filtered,
             sample.n.min(MOST_SAMPLED),
-            sample.filtered
         )]
     }
 

@@ -222,6 +222,7 @@ impl SqlDialect for Sqlite {
             key_enforcement: false,
             sample_rows: false,
             optional: sql::rendered(),
+            filters: sdm_contract::data::FilterKind::ALL.into(),
             max_keys_per_request: None,
             // The seeded draw of RS-2 repeats under a seed.
             sampling: Determinism::SeededStable,

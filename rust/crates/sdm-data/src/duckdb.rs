@@ -301,6 +301,7 @@ impl SqlDialect for Duckdb {
             key_enforcement: false,
             sample_rows: false,
             optional: sql::rendered(),
+            filters: sdm_contract::data::FilterKind::ALL.into(),
             max_keys_per_request: None,
             // DuckDB's reservoir sampling repeats under a seed (REPEATABLE).
             sampling: Determinism::SeededStable,
