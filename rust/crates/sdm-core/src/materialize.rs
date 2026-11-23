@@ -59,6 +59,7 @@
 pub(crate) mod examples;
 pub(crate) mod frames;
 pub(crate) mod label_query;
+mod pushdown;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -3510,6 +3511,50 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             column: time.clone(),
         });
     }
+    // The query's conditions on the entity's own row, and its static
+    // target's column holding a value, so the draw is of the rows that may
+    // give an example rather than of every row; the labels below still
+    // check each example by the query's own rules. Only the kinds the
+    // provider applies, or, where the in-memory fallback answers the
+    // sample, every kind (it applies the rest itself).
+    // Frames are sampled in memory and hold no provider: no filter is sent.
+    let taken = if frames.is_some() {
+        BTreeSet::new()
+    } else if asker
+        .capabilities()?
+        .optional
+        .contains(&OptionalRequest::SampleEntities)
+    {
+        asker.capabilities()?.filters.clone()
+    } else {
+        sdm_contract::data::FilterKind::ALL.into()
+    };
+    for filter in pushdown::entity_filters(&asked, entity) {
+        if filter.taken_by(&taken) && !filters.contains(&filter) {
+            filters.push(filter);
+        }
+    }
+    let filtered = filters.iter().any(|f| f.kind().is_some());
+    // A provider sizing its draw by the table's rows draws a share of them
+    // before its value filters thin it: sized instead by the rows the
+    // filters keep, counted with them, the draw keeps about as many as
+    // were asked for.
+    let sample_rows = if frames.is_some() || !asker.capabilities()?.sample_rows {
+        None
+    } else if filtered {
+        Some(row_count(
+            &ask(
+                asker,
+                DataRequest::CountRows {
+                    table: entity.source.clone(),
+                    filters: filters.clone(),
+                },
+            )
+            .await?,
+        )?)
+    } else {
+        rows_of(&memo.memo, &entity.name)
+    };
     // Seeds are optional. An unseeded provider warns only of a seed the
     // caller named, above, not of the default one.
     let sampled = if let Some(frames) = &frames {
@@ -3537,18 +3582,16 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                             .flatten(),
                         // The table's rows, for a provider sizing its draw by
                         // them (the reference's sampled percentage).
-                        rows: if asker.capabilities()?.sample_rows {
-                            rows_of(&memo.memo, &entity.name)
-                        } else {
-                            None
-                        },
+                        rows: sample_rows,
                     },
                 )
                 .await?,
             )?,
         )?
     };
-    if sampled.num_rows() == 0 {
+    // With value filters, no row drawn is no entity passing them: the
+    // labels below find no example and say so.
+    if sampled.num_rows() == 0 && !filtered {
         return Err(invalid(
             Sentence::EntityTableEmpty,
             "the entity table holds no row to sample",

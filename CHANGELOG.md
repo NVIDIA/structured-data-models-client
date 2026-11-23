@@ -13,6 +13,8 @@ The public API snapshot records this version update; publication remains pending
 
 ### Added
 
+- Java `DataProvider`s can declare the value filters they apply (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf` and `AllOf` on samples and scans.
+  A provider that declares none receives none, as before.
 - Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned
   RelBench datasets with verified caches, offline mode and declared schema metadata.
 - Python and Java requests and fitted handles expose immutable sanitization reports for in-memory relational preparation, with per-table row exclusions and explicit unavailable/not-applicable states.
@@ -158,6 +160,12 @@ The public API snapshot records this version update; publication remains pending
 
 ### Fixed
 
+- A query whose `WHERE` keeps few entities, or whose static target most entities lack, gathers the context it asks for.
+  The conditions on the entity's own columns, and the static target's column holding a value, go to the source with the context sample, so the sample is drawn from the entities that may qualify instead of from every entity.
+  Before, a `WHERE` keeping one entity in sixty gathered about a sixtieth of the context asked for, or none.
+  Every example is still checked by the query's own rules, so a source's null, type or collation rules cannot change which examples are used.
+  A source the client samples in memory filters there before drawing; Snowflake samples after filtering, and Databricks sizes its sample by the rows the filters keep.
+  For a filtered query, the same seed draws different entities than 1.0 did, from the same entities that qualify.
 - The client wheel's notices name the IANA Time Zone Database that its native module embeds, with the release and the tz project's LICENSE.
   The installation docs say that the `postgres` and `lakebase` extras install LGPL-3.0-only psycopg, which the wheels do not bundle.
 - Explicit empty outputs remain invalid with `EXPLAIN`; unsupported local-runtime outputs are refused before model weights load.
