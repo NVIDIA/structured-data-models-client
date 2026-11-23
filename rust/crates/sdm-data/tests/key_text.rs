@@ -811,13 +811,5 @@ fn a_request_binding_no_key_set_is_its_plan() {
             reference_float,
         )
         .unwrap();
-    assert_eq!(
-        bound,
-        BoundRequest {
-            fetches: vec![BoundFetch {
-                plan,
-                batches: BTreeMap::new()
-            }]
-        }
-    );
+    assert_eq!(bound, BoundRequest::whole(plan, &request));
 }

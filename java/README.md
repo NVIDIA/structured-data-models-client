@@ -258,7 +258,8 @@ Source source = ProviderSource.of(provider);
 Schema schema = Schema.fromSource(source, options);
 ```
 
-With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` whose seeds, or a `scan` without a limit whose key filter, hold more than `n` keys reaches the provider in parts of at most `n` keys.
+With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` with more than `n` seeds reaches the provider as several requests of at most `n` seeds each, whose answers the core joins.
+Python takes the same provider; [Your own data provider](../docs/reference/data-providers.md) covers both languages.
 
 ## Build
 

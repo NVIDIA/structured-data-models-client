@@ -446,6 +446,7 @@ fn a_duckdb_plan_and_a_host_plan_expect_different_catalog_shapes() {
         assert_eq!(
             host,
             FetchPlan::Host {
+                key_sets: Vec::new(),
                 expect: request.expected()
             }
         );

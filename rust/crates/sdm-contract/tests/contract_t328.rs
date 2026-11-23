@@ -73,12 +73,14 @@ fn each_attachment_a_plan_binds_is_renamed_where_the_map_names_it() {
 #[test]
 fn a_host_plan_binds_nothing_to_rename() {
     let mut host = FetchPlan::Host {
+        key_sets: Vec::new(),
         expect: ExpectedSchema::Discover {},
     };
     host.rename_attachments(&BTreeMap::from([(AttachmentId(1), AttachmentId(2))]));
     assert_eq!(
         host,
         FetchPlan::Host {
+            key_sets: Vec::new(),
             expect: ExpectedSchema::Discover {}
         }
     );

@@ -472,10 +472,7 @@ public final class Host {
       // A later page's step names the key sets the first took.
       if (request.get("continuation") == null) {
         Map<String, Object> plan = (Map<String, Object>) request.get("plan");
-        keys =
-            plan != null && "host".equals(plan.get("plan"))
-                ? hostKeySets(run, (Map<String, Object>) request.get("request"), allocator)
-                : keySets(run, plan, allocator);
+        keys = keySets(run, plan, allocator);
       }
       ArrowReader answer = provider.answer(request, keys, allocator);
       stream = ArrowExchange.export(allocator, answer);
@@ -530,52 +527,33 @@ public final class Host {
   }
 
   /**
-   * The key sets a request's plan names, taken from the run by attachment id: each
-   * a key set's Arrow, or the one text its dialect wrote of it.
+   * The key sets a request's plan names, taken from the run by attachment id: each a key set's
+   * Arrow, or the one text its dialect wrote of it; a host plan names its request's key sets.
    */
   @SuppressWarnings("unchecked")
   private static Map<Integer, ArrowReader> keySets(
       Run run, Map<String, Object> plan, BufferAllocator allocator) throws NativeError {
-    Map<Integer, ArrowReader> taken = new LinkedHashMap<>();
-    Object statements = plan == null ? null : plan.get("statements");
-    if (!(statements instanceof List<?> list)) {
-      return taken;
+    List<Integer> named = new ArrayList<>();
+    if (plan != null && plan.get("key_sets") instanceof List<?> hosted) {
+      for (Object id : hosted) named.add(((Number) id).intValue());
     }
-    for (Object statement : list) {
-      for (Object param : (List<Object>) ((Map<String, Object>) statement).get("params")) {
-        Map<String, Object> read = (Map<String, Object>) param;
-        Object named;
-        if ("key_set".equals(read.get("param"))) {
-          named = ((Map<String, Object>) read.get("keys")).get("attachment");
-        } else if ("text".equals(read.get("param"))) {
-          named = read.get("attachment");
-        } else {
-          continue;
-        }
-        int id = ((Number) named).intValue();
-        if (taken.containsKey(id)) {
-          continue;
-        }
-        Object value = run.takeAttachment(id);
-        if (value instanceof NativeArrow arrow) {
-          try (arrow) {
-            byte[] ipc = ArrowData.ipc(arrow.reader(allocator));
-            taken.put(id, ArrowData.reader(ipc, allocator));
+    if (plan != null && plan.get("statements") instanceof List<?> statements) {
+      for (Object statement : statements) {
+        for (Object param : (List<Object>) ((Map<String, Object>) statement).get("params")) {
+          Map<String, Object> read = (Map<String, Object>) param;
+          if ("key_set".equals(read.get("param"))) {
+            named.add(((Number) ((Map<String, Object>) read.get("keys")).get("attachment")).intValue());
+          } else if ("text".equals(read.get("param"))) {
+            named.add(((Number) read.get("attachment")).intValue());
           }
         }
       }
     }
-    return taken;
-  }
-
-  /**
-   * The key sets a host plan's request carries ({@code seeds}, each {@code key_in} filter's {@code
-   * keys}), taken from the run by attachment id: a host plan names none of its own.
-   */
-  private static Map<Integer, ArrowReader> hostKeySets(
-      Run run, Map<String, Object> request, BufferAllocator allocator) throws NativeError {
     Map<Integer, ArrowReader> taken = new LinkedHashMap<>();
-    for (int id : HostProviders.keySetAttachments(request)) {
+    for (int id : named) {
+      if (taken.containsKey(id)) {
+        continue;
+      }
       Object value = run.takeAttachment(id);
       if (value instanceof NativeArrow arrow) {
         try (arrow) {

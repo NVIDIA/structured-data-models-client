@@ -148,12 +148,7 @@ pub(crate) fn bind(
     float_text: fn(f64) -> String,
     render: &dyn Fn(usize) -> Result<FetchPlan, CoreError>,
 ) -> Result<BoundRequest, CoreError> {
-    let as_it_is = |plan| BoundRequest {
-        fetches: vec![BoundFetch {
-            plan,
-            batches: BTreeMap::new(),
-        }],
-    };
+    let as_it_is = |plan| BoundRequest::whole(plan, request);
     let FetchPlan::Sql {
         statements,
         expect,
@@ -224,6 +219,7 @@ pub(crate) fn bind(
                 expect: expect.clone(),
             },
             batches: BTreeMap::from([(TEXT, cell(format!("[{}]", chunk.join(separator)))?)]),
+            request: request.clone(),
         });
         offset += chunk.len();
     }

@@ -322,7 +322,7 @@ impl Asker {
             Route::Plan(plan) => {
                 if let Some(metadata) = data.result_metadata(&request, &plan)? {
                     let plans = self.bind_with(data, &request, metadata, true)?;
-                    let metadata = Box::new(self.ask_bound(request.clone(), plans));
+                    let metadata = Box::new(self.ask_bound(plans));
                     return Ok(Ask {
                         shared: Arc::clone(&self.shared),
                         state: AskState::Projection(Box::new(ProjectionAsk {
@@ -337,7 +337,7 @@ impl Asker {
                     });
                 }
                 let plans = self.bind(data, &request, plan)?;
-                return Ok(self.ask_bound(request, plans));
+                return Ok(self.ask_bound(plans));
             }
             Route::Fallback(limits) => limits,
         };
@@ -399,7 +399,7 @@ impl Asker {
         data: &DataAccess,
         request: &DataRequest,
         plan: FetchPlan,
-    ) -> Result<Vec<FetchPlan>, CoreError> {
+    ) -> Result<Vec<PlannedFetch>, CoreError> {
         self.bind_with(data, request, plan, false)
     }
 
@@ -412,7 +412,7 @@ impl Asker {
         request: &DataRequest,
         plan: FetchPlan,
         metadata: bool,
-    ) -> Result<Vec<FetchPlan>, CoreError> {
+    ) -> Result<Vec<PlannedFetch>, CoreError> {
         let named: BTreeSet<AttachmentId> = plan.key_sets().into_iter().collect();
         let keys: BTreeMap<AttachmentId, KeyData> = {
             let shared = lock(&self.shared);
@@ -448,14 +448,22 @@ impl Asker {
             }
             let mut plan = fetch.plan;
             plan.rename_attachments(&installed);
+            let mut asked = fetch.request;
+            asked.rename_attachments(&installed);
             let known =
                 |id: &AttachmentId| named.contains(id) || installed.values().any(|made| made == id);
             if !plan.key_sets().iter().all(known) {
                 return Err(internal("a bound fetch binds a batch it does not hold"));
             }
-            plans.push(plan);
+            plans.push(PlannedFetch {
+                plan,
+                request: asked,
+            });
         }
-        let still: BTreeSet<AttachmentId> = plans.iter().flat_map(FetchPlan::key_sets).collect();
+        let still: BTreeSet<AttachmentId> = plans
+            .iter()
+            .flat_map(|fetch| fetch.plan.key_sets())
+            .collect();
         if !metadata {
             for id in named.difference(&still) {
                 shared.attachments.remove(id);
@@ -581,19 +589,19 @@ impl Asker {
     /// The answer to `request`, asked as the fetches `plans` bind it into,
     /// in one step: their answers joined in order, and the first that
     /// failed, in order, failing it.
-    fn ask_bound(&self, request: DataRequest, mut plans: Vec<FetchPlan>) -> Ask {
+    fn ask_bound(&self, mut plans: Vec<PlannedFetch>) -> Ask {
         if plans.len() == 1
-            && let Some(plan) = plans.pop()
+            && let Some(fetch) = plans.pop()
         {
-            return self.ask_planned(request, plan);
+            return self.ask_planned(fetch.request, fetch.plan);
         }
-        let expect = plans
-            .first()
-            .map_or(ExpectedSchema::Discover {}, |plan| plan.expect().clone());
+        let expect = plans.first().map_or(ExpectedSchema::Discover {}, |fetch| {
+            fetch.plan.expect().clone()
+        });
         let parts = plans
             .into_iter()
-            .map(|plan| {
-                let mut part = self.ask_planned(request.clone(), plan);
+            .map(|fetch| {
+                let mut part = self.ask_planned(fetch.request, fetch.plan);
                 part.raw = true;
                 Part::Asking(Box::new(part))
             })
@@ -761,6 +769,14 @@ enum Part {
     Answered(Reply),
 }
 
+/// One fetch of a bound request ([`Asker::bind`]): its plan, and the
+/// request it asks, the request bound or one part of it (a host provider's
+/// request for some of its seeds).
+struct PlannedFetch {
+    plan: FetchPlan,
+    request: DataRequest,
+}
+
 /// A request asked as several fetches ([`AskState::Chunks`]).
 struct Chunked {
     parts: Vec<Part>,
@@ -827,7 +843,7 @@ fn poll_projection(
                 return Poll::Pending;
             }
         };
-        let mut actual = projected.asker.ask_bound(projected.request.clone(), plans);
+        let mut actual = projected.asker.ask_bound(plans);
         actual.budget = budget.take();
         actual.raw = raw;
         projected.actual = Some(Box::new(actual));
@@ -1545,6 +1561,7 @@ mod tests {
     fn running_out_of_reply_ids_is_an_internal_error() {
         let mut run = Run::new(|asker| async move {
             let plan = FetchPlan::Host {
+                key_sets: Vec::new(),
                 expect: ExpectedSchema::Discover {},
             };
             asker.ask_planned(describe(), plan).await;
@@ -1605,6 +1622,7 @@ mod tests {
         for valid_before in [0, 1] {
             let mut run = Run::new(|asker| async move {
                 let plan = FetchPlan::Host {
+                    key_sets: Vec::new(),
                     expect: ExpectedSchema::Schema {
                         fields: vec![field("a", ColumnType::Int64, false)],
                     },

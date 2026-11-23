@@ -18,8 +18,8 @@ import java.util.Set;
  * with {@code UNSUPPORTED_REQUEST} when no fallback is declared.
  *
  * @param optional the optional requests the provider answers itself
- * @param maxKeysPerRequest the most keys one request may carry; a larger key set is split, and the
- *     provider is called once per part. Empty is no limit.
+ * @param maxKeysPerRequest the most seeds one {@code neighbors} or {@code lookup} may carry; more
+ *     reach the provider as several requests, whose answers the core joins. Empty is no limit.
  * @param sampling whether a sample drawn with the same seed is the same rows every time
  * @param maxSeed the largest sampling seed the provider takes
  * @param nullOrder where the provider puts nulls when it orders rows; empty, and the core never

@@ -69,9 +69,7 @@ impl DataLayer for HostLayer {
         provider: &ProviderChoice,
     ) -> Result<FetchPlan, CoreError> {
         match provider {
-            ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
-                expect: request.expected(),
-            }),
+            ProviderChoice::Host { .. } => Ok(FetchPlan::host(request.expected(), request)),
             ProviderChoice::Sql { dialect, .. } => Err(no_dialect(dialect)),
         }
     }

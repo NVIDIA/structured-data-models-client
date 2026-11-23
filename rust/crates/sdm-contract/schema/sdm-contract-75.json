@@ -16736,6 +16736,13 @@
             "expect": {
               "$ref": "#/$defs/ExpectedSchema"
             },
+            "key_sets": {
+              "description": "The key sets the request asks with, by attachment, in order:\nthe seeds of a `neighbors` or a `lookup`, then each `key_in`\nfilter's keys. The host takes them from the run, as it takes a\nSQL plan's, without reading the request for them.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AttachmentId"
+              }
+            },
             "plan": {
               "type": "string",
               "const": "host"
