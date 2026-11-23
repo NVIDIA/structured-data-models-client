@@ -9,9 +9,10 @@ these packages. The three Python distributions share one version.
 
 ### Added
 
+- Java callers can read data through their own code instead of a database connection: `ProviderSource.of(provider)` takes a `com.nvidia.sdm.provider.DataProvider`, which answers the core's typed data requests with Arrow data and declares what it answers in its `Capabilities`.
 - Python callers can read data through their own code, as Java callers can: `sdm_client.ProviderSource` takes a `sdm_client.provider.DataProvider`, which answers the core's typed data requests with Arrow rows and declares what it answers in its `Capabilities`.
   It is accepted wherever a source is, and the requests, filters, capabilities and failures are Java's, in Python's types.
-  A key set larger than a provider's `max_keys_per_request` is split by the core into requests of at most that many keys, for Python and Java providers alike.
+  The seeds of a `neighbors` or `lookup` past a provider's `max_keys_per_request` are split by the core into requests of at most that many seeds, for Python and Java providers alike.
   See [Your own data provider](docs/reference/data-providers.md).
 - `Request.context_report` (Python) and `Request.contextReport()` (Java) say how the context examples were drawn from the source: for each part, the draws, the rows they read, the candidates labelled, how many the query's conditions kept, whether any condition went to the source, and why drawing stopped (`full`, `source_exhausted`, `row_budget` or `time_limit`).
   A request whose context comes up short, from a condition only the client checks, is drawn again, larger, sized by the share of the first draw that qualified, until the context holds as many examples as were asked for, the source has no more rows, 5,000,000 rows have been drawn, or `context_time_limit` has passed.
@@ -21,8 +22,15 @@ these packages. The three Python distributions share one version.
 - Java `DataProvider`s can declare the value filters they apply (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf`, `AllOf` and `HasRows` on samples and scans.
   A provider that declares none receives none, as before.
 
+### Changed
+
+- The Java library's Databricks SDK, AWS S3 SDK, commons-compress and xz dependencies are optional.
+  A feature that needs a missing one is refused with `INVALID_CONFIGURATION` naming the artifact to add, before any of its classes load.
+
 ### Fixed
 
+- Both clients call the API catalog's hosted relational model at its exact predictions URL, with the key as a bearer token.
+  That endpoint serves no sessions, model list or readiness route, so those calls fail with a named error; every other URL behaves as before.
 - A query whose `WHERE` keeps few entities, or whose static target most entities lack, gathers the context it asks for.
   The conditions on the entity's own columns, and the static target's column holding a value, go to the source with the context sample, so the sample is drawn from the entities that may qualify instead of from every entity.
   Before, a `WHERE` keeping one entity in sixty gathered about a sixtieth of the context asked for, or none.
