@@ -271,6 +271,8 @@ class SDMClient:
         verify_ssl: bool = True,
         timeout: float = 60.0,
         max_retries: int = 3,
+        exact_url: bool = False,
+        bearer_token: bool = False,
     ) -> None:
         r"""Open a client against one NIM.
 
@@ -278,14 +280,12 @@ class SDMClient:
         :meth:`health_ready`,:meth:`models`, or a prediction.
 
         Args:
-            url: Base URL of the NIM, e.g. ``'http://localhost:8000'``, or
-                the NVIDIA API catalog's predictions URL for the hosted
-                relational model, which is called as it is and serves no
-                sessions, model list or readiness route.
+            url: Base URL of the NIM, e.g. ``'http://localhost:8000'``; with
+                ``exact_url``, the endpoint's predictions URL itself.
             api_key: Sent as ``X-API-Key`` when an authenticating gateway
-                fronts the NIM, and as ``Authorization: Bearer`` to the API
-                catalog. Refused over plaintext ``http://`` to a non-local
-                host.
+                fronts the NIM, or as ``Authorization: Bearer`` with
+                ``bearer_token``. Refused over plaintext ``http://`` to a
+                non-local host.
             verify_ssl: Whether to verify the server's TLS certificate.
             timeout: Seconds to wait for each individual attempt, not for the
                 call as a whole.
@@ -295,6 +295,26 @@ class SDMClient:
                 the same on every attempt. ``POST /v1/sessions`` is excluded:
                 a re-sent create would orphan a pinned context on the
                 endpoint.
+            exact_url: Post predictions to ``url`` as it is, rather than
+                append ``/v1/predictions`` to it: for an endpoint, such as a
+                hosted model in the NVIDIA API catalog, that serves
+                predictions at one URL. Such an endpoint has no sessions,
+                model list or readiness route, so :meth:`fit`,
+                :meth:`models` and :meth:`health_ready` fail with a named
+                error.
+            bearer_token: Send ``api_key`` as ``Authorization: Bearer``
+                rather than ``X-API-Key``, as the NVIDIA API catalog reads
+                it.
+
+        A hosted model in the NVIDIA API catalog takes both:
+
+        >>> client = SDMClient(
+        ...     'https://ai.api.nvidia.com/v1/structured-data/nvidia/'
+        ...     'kumo-relational/predictions',
+        ...     api_key=key,
+        ...     exact_url=True,
+        ...     bearer_token=True,
+        ... )
         """
         self._start(
             Transport(
@@ -303,6 +323,8 @@ class SDMClient:
                 verify_ssl=verify_ssl,
                 timeout=timeout,
                 max_retries=max_retries,
+                exact_url=exact_url,
+                bearer_token=bearer_token,
             )
         )
 

@@ -512,7 +512,7 @@
           "models": "(self) -> 'list[str]'",
           "predict": "(self, request: 'Request', *, model: 'str | Model', outputs: 'Sequence[str] | None' = None) -> 'PredictionResult'"
         },
-        "signature": "(url: 'str', api_key: 'str | None' = None, *, verify_ssl: 'bool' = True, timeout: 'float' = 60.0, max_retries: 'int' = 3) -> 'None'"
+        "signature": "(url: 'str', api_key: 'str | None' = None, *, verify_ssl: 'bool' = True, timeout: 'float' = 60.0, max_retries: 'int' = 3, exact_url: 'bool' = False, bearer_token: 'bool' = False) -> 'None'"
       },
       "SDMWarning": {
         "bases": [

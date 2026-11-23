@@ -2,13 +2,13 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The API catalog's hosted relational model is called at its exact URL.
+"""An endpoint that serves predictions at one URL, called as it is.
 
-The catalog serves the model at one predictions URL and reads the key as a
-bearer token; appending ``/v1/predictions`` to it finds no route. Every other
-URL stays a base, its key sent as ``X-API-Key``. The catalog cannot be stubbed,
-so the recognition is checked on its own and the exact-URL mode against a
-local endpoint.
+``exact_url`` posts predictions to the URL given rather than to
+``/v1/predictions`` below it, and ``bearer_token`` sends the key as
+``Authorization: Bearer`` rather than ``X-API-Key``: what a hosted model in
+the NVIDIA API catalog needs. No URL is recognised: without the options,
+every URL is a base, its key sent as ``X-API-Key``.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from sdm_client.core import transport as transport_module
+from sdm_client import SDMClient
 from sdm_client.core.transport import Transport
 from sdm_client.errors import StructuredDataError
 
@@ -29,30 +29,21 @@ _CATALOG = (
 )
 
 
-@pytest.mark.parametrize(
-    ('url', 'hosted'),
-    [
-        (_CATALOG, True),
-        (_CATALOG + '/', True),
-        (_CATALOG.replace('ai.api', 'AI.API'), True),
-        (_CATALOG.replace('https', 'http'), False),
-        (_CATALOG.replace('.com/', '.com:8443/'), False),
-        (_CATALOG + '?x=1', False),
-        (_CATALOG + '/extra', False),
-        ('https://ai.api.nvidia.com', False),
-        ('https://ai.api.nvidia.com/v1/predictions', False),
-        ('http://localhost:8000', False),
-    ],
-)
-def test_only_the_catalogs_predictions_url_is_taken_as_it_is(
-    url: str, hosted: bool
-) -> None:
-    assert transport_module._is_hosted_predictions(url) is hosted
+def test_no_url_is_taken_as_exact_without_the_option() -> None:
+    assert Transport(_CATALOG, 'key').serves_sessions is True
+    assert Transport(_CATALOG, 'key', exact_url=True).serves_sessions is False
 
 
-def test_the_catalog_serves_no_sessions() -> None:
-    assert Transport(_CATALOG, 'key').serves_sessions is False
-    assert Transport('https://nim.example', 'key').serves_sessions is True
+def test_the_client_hands_its_options_to_its_transport() -> None:
+    client = SDMClient(_CATALOG, 'key', exact_url=True, bearer_token=True)
+    try:
+        assert client._transport.serves_sessions is False
+        assert client._transport._session.headers['Authorization'] == (
+            'Bearer key'
+        )
+        assert 'X-API-Key' not in client._transport._session.headers
+    finally:
+        client.close()
 
 
 @pytest.fixture
@@ -93,14 +84,15 @@ def endpoint() -> Iterator[
 
 
 def test_an_exact_url_is_posted_to_as_it_is_with_a_bearer_token(
-    endpoint: tuple[str, list], monkeypatch: pytest.MonkeyPatch
+    endpoint: tuple[str, list],
 ) -> None:
     base, seen = endpoint
-    monkeypatch.setattr(
-        transport_module, '_is_hosted_predictions', lambda url: True
-    )
     transport = Transport(
-        base + '/hosted/predictions/', 'secret', max_retries=0
+        base + '/hosted/predictions/',
+        'secret',
+        max_retries=0,
+        exact_url=True,
+        bearer_token=True,
     )
     try:
         assert transport.predict_body(b'{}') == b'{"predictions": []}'
@@ -131,3 +123,20 @@ def test_a_base_url_keeps_its_routes_and_header(
         assert transport.serves_sessions is True
     finally:
         transport.close()
+
+
+def test_each_option_stands_alone(endpoint: tuple[str, list]) -> None:
+    base, seen = endpoint
+    exact = Transport(base + '/p', 'secret', max_retries=0, exact_url=True)
+    bearer = Transport(base, 'secret', max_retries=0, bearer_token=True)
+    try:
+        exact.predict_body(b'{}')
+        bearer.predict_body(b'{}')
+        assert seen == [
+            ('POST', '/p', None, 'secret'),
+            ('POST', '/v1/predictions', 'Bearer secret', None),
+        ]
+        assert bearer.serves_sessions is True
+    finally:
+        exact.close()
+        bearer.close()

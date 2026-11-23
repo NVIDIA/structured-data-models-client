@@ -9,6 +9,8 @@ these packages. The three Python distributions share one version.
 
 ### Added
 
+- `SDMClient(..., exact_url=True, bearer_token=True)` in Python, and `ClientOptions.builder().exactUrl(true).bearerToken(true)` in Java, call an endpoint that serves predictions at one URL and reads the key as a bearer token, such as a hosted model in the NVIDIA API catalog.
+  Such an endpoint has no sessions, model list or readiness route, so those calls fail with a named error; without the options, every URL is a base, as before.
 - Java callers can read data through their own code instead of a database connection: `ProviderSource.of(provider)` takes a `com.nvidia.sdm.provider.DataProvider`, which answers the core's typed data requests with Arrow data and declares what it answers in its `Capabilities`.
 - Python callers can read data through their own code, as Java callers can: `sdm_client.ProviderSource` takes a `sdm_client.provider.DataProvider`, which answers the core's typed data requests with Arrow rows and declares what it answers in its `Capabilities`.
   It is accepted wherever a source is, and the requests, filters, capabilities and failures are Java's, in Python's types.
@@ -29,8 +31,6 @@ these packages. The three Python distributions share one version.
 
 ### Fixed
 
-- Both clients call the API catalog's hosted relational model at its exact predictions URL, with the key as a bearer token.
-  That endpoint serves no sessions, model list or readiness route, so those calls fail with a named error; every other URL behaves as before.
 - A query whose `WHERE` keeps few entities, or whose static target most entities lack, gathers the context it asks for.
   The conditions on the entity's own columns, and the static target's column holding a value, go to the source with the context sample, so the sample is drawn from the entities that may qualify instead of from every entity.
   Before, a `WHERE` keeping one entity in sixty gathered about a sixtieth of the context asked for, or none.

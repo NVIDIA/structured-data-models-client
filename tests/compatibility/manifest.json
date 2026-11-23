@@ -4025,7 +4025,8 @@
           "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_custom_nullable_producer_never_takes_arrow_snapshot",
           "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_float_refusal_keeps_specific_diagnostic",
           "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_integer_range_after_earlier_column_mutation",
-          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_conversion_order_and_nested_options"
+          "packages/structured-data-models-client/tests/test_tabular_input_families.py::test_native_conversion_order_and_nested_options",
+          "packages/structured-data-models-client/tests/test_hosted_predictions_url.py::test_the_client_hands_its_options_to_its_transport"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/DirectOptionsTest.java#directSchemaAndOptionsAreOwnedAndInferenceTravelsOnPredictAndScore",
@@ -4045,7 +4046,8 @@
           "java/src/test/java/com/nvidia/sdm/TabularTest.java#snapshotPreparationMeasurement",
           "java/src/test/java/com/nvidia/sdm/TabularTest.java#emptyScoringDoesNotContactModelAndInvalidTasksFailAtConstruction",
           "java/src/test/java/com/nvidia/sdm/TabularTest.java#dictionaryInputPreservesValuesAndCallerOwnership",
-          "java/src/test/java/com/nvidia/sdm/TabularTest.java#inferenceAdmissionIsSharedAcrossPredictionAndSessions"
+          "java/src/test/java/com/nvidia/sdm/TabularTest.java#inferenceAdmissionIsSharedAcrossPredictionAndSessions",
+          "java/src/test/java/com/nvidia/sdm/internal/HostedPredictionsTest.java#anExactUrlIsPostedToAsItIsWithABearerToken"
         ]
       },
       "gate": "local",
@@ -6073,7 +6075,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "75615e4ef65c7adba78409024e3a69f1333356cf817879eb6885c7db52756bb7",
+  "public_api_snapshot_sha256": "a8f1bb429a9473563fef10c17c3e59605e8e744f6cc9c308b315e2fccdf8d777",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -6869,7 +6871,13 @@
         "capability": "direct-dtypes-options"
       },
       "sdm_client.SDMClient": {
-        "capability": "direct-dtypes-options"
+        "capability": "direct-dtypes-options",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_hosted_predictions_url.py::test_the_client_hands_its_options_to_its_transport",
+            "behavior": "exact_url and bearer_token reach the transport: no sessions, and the key sent as a bearer token."
+          }
+        ]
       },
       "sdm_client.SDMClient.capabilities": {
         "capability": "readiness-discovery"
@@ -8566,6 +8574,24 @@
       "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions$Builder apiKey(java.lang.String);": {
         "capability": "direct-dtypes-options"
       },
+      "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions$Builder bearerToken(boolean);": {
+        "capability": "direct-dtypes-options",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostedPredictionsTest.java#anExactUrlIsPostedToAsItIsWithABearerToken",
+            "behavior": "The key is sent as Authorization: Bearer only where bearerToken is set."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions$Builder exactUrl(boolean);": {
+        "capability": "direct-dtypes-options",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostedPredictionsTest.java#anExactUrlIsPostedToAsItIsWithABearerToken",
+            "behavior": "Predictions are posted to the URL as it is only where exactUrl is set; no URL is recognised."
+          }
+        ]
+      },
       "com.nvidia.sdm.ClientOptions$Builder#public com.nvidia.sdm.ClientOptions$Builder maxRetries(int);": {
         "capability": "direct-dtypes-options"
       },
@@ -8592,6 +8618,240 @@
       },
       "com.nvidia.sdm.Column#public java.lang.String toString();": {
         "capability": "schema-edits"
+      },
+      "com.nvidia.sdm.ColumnExplanations": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicConstructorUsesEngineAndMatchesIndependentMeans",
+            "behavior": "The public constructor invokes engine analysis and matches independently calculated cohort means."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public com.nvidia.sdm.ColumnExplanations(java.util.Map<java.lang.String, ?>);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicConstructorUsesEngineAndMatchesIndependentMeans",
+            "behavior": "The public constructor invokes engine analysis and matches independently calculated cohort means."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public java.util.List<com.nvidia.sdm.ColumnExplanations$Row> rows();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public org.apache.arrow.vector.VectorSchemaRoot toArrow(org.apache.arrow.memory.BufferAllocator);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#mixedWideAndDecimalClassLabelsRoundTripWithEncodingMetadata",
+            "behavior": "Arrow preserves mixed, wide and decimal class identity with explicit lossless encoding metadata."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final int MAX_CATEGORIES = 500;": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final int MAX_CLASSES = 30;": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final int NUM_COHORTS = 10;": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String COUNT = \"COUNT(*)\";": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String NA = \"N/A\";": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String OTHER = \"OTHER(*)\";": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String TABULAR_TABLE = \"instance_table\";": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
+            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public com.nvidia.sdm.ColumnExplanations$Row(java.lang.String, long, java.lang.String, java.lang.String, java.lang.String, java.lang.Object, double, double);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public com.nvidia.sdm.ColumnExplanations$Row(java.lang.String, long, java.lang.String, java.lang.String, java.lang.String, java.lang.Object, double, double, double);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public double mean();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public double score();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public double share();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public final boolean equals(java.lang.Object);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public final int hashCode();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public final java.lang.String toString();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.Object classLabel();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String cohort();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String column();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String stype();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String table();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ColumnExplanations$Row#public long hop();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
+            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
+          }
+        ]
       },
       "com.nvidia.sdm.ColumnMetadata": {
         "capability": "metadata-explanation-reports"
@@ -8971,6 +9231,51 @@
       "com.nvidia.sdm.ExplanationView#public java.util.Map<java.lang.String, java.lang.Object> raw();": {
         "capability": "metadata-explanation-reports"
       },
+      "com.nvidia.sdm.Explanations": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.ColumnExplanations columns();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.Explanations();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.Explanations(com.nvidia.sdm.GradientExplanations, com.nvidia.sdm.ColumnExplanations);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.GradientExplanations gradients();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
+            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
+          }
+        ]
+      },
       "com.nvidia.sdm.FeatureImportance": {
         "capability": "metadata-explanation-reports"
       },
@@ -9310,6 +9615,15 @@
       "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder contextAnchorTime(java.time.LocalDateTime);": {
         "capability": "direct-dtypes-options"
       },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder contextTimeLimit(java.time.Duration);": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#theContextTimeLimitReachesTheCoreAsSeconds",
+            "behavior": "The time limit reaches the core as seconds; a negative duration is refused by the builder, and a value that is not seconds by the core, naming context_time_limit."
+          }
+        ]
+      },
       "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder indices(java.lang.Object...);": {
         "capability": "direct-dtypes-options"
       },
@@ -9475,6 +9789,15 @@
       "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.ExplanationView explanationView();": {
         "capability": "metadata-explanation-reports"
       },
+      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.Explanations explanations();": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#directPredictionAndFitReuseContextAnalysisAndHonorHoldout",
+            "behavior": "Predicted results expose model gradients and context analysis; fitted analysis honors holdout."
+          }
+        ]
+      },
       "com.nvidia.sdm.PredictionResult#public java.lang.String model();": {
         "capability": "results-merge"
       },
@@ -9510,6 +9833,15 @@
       },
       "com.nvidia.sdm.PredictionResult#public static com.nvidia.sdm.PredictionResult merge(java.util.List<com.nvidia.sdm.PredictionResult>);": {
         "capability": "results-merge"
+      },
+      "com.nvidia.sdm.PredictionResult#public static com.nvidia.sdm.PredictionResult merge(java.util.List<com.nvidia.sdm.PredictionResult>, com.nvidia.sdm.ColumnExplanations);": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#mergePreservesEqualAnalysesRejectsDifferentAndAcceptsExplicitOverride",
+            "behavior": "Explicit analysis overrides work for single and multiple parts while default conflicting analysis is rejected."
+          }
+        ]
       },
       "com.nvidia.sdm.PredictiveQuery": {
         "capability": "direct-dtypes-options"
@@ -10398,312 +10730,6 @@
       },
       "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder timestampsColumn(java.lang.String);": {
         "capability": "timeseries-preparation"
-      },
-      "com.nvidia.sdm.ColumnExplanations": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicConstructorUsesEngineAndMatchesIndependentMeans",
-            "behavior": "The public constructor invokes engine analysis and matches independently calculated cohort means."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public com.nvidia.sdm.ColumnExplanations(java.util.Map<java.lang.String, ?>);": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicConstructorUsesEngineAndMatchesIndependentMeans",
-            "behavior": "The public constructor invokes engine analysis and matches independently calculated cohort means."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public java.util.List<com.nvidia.sdm.ColumnExplanations$Row> rows();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public org.apache.arrow.vector.VectorSchemaRoot toArrow(org.apache.arrow.memory.BufferAllocator);": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#mixedWideAndDecimalClassLabelsRoundTripWithEncodingMetadata",
-            "behavior": "Arrow preserves mixed, wide and decimal class identity with explicit lossless encoding metadata."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public com.nvidia.sdm.ColumnExplanations$Row(java.lang.String, long, java.lang.String, java.lang.String, java.lang.String, java.lang.Object, double, double, double);": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public com.nvidia.sdm.ColumnExplanations$Row(java.lang.String, long, java.lang.String, java.lang.String, java.lang.String, java.lang.Object, double, double);": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public double mean();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public double score();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public double share();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public final boolean equals(java.lang.Object);": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public final int hashCode();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public final java.lang.String toString();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.Object classLabel();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String cohort();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String column();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String stype();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public java.lang.String table();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations$Row#public long hop();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#viewsAreDetachedAndClosingArrowDoesNotCloseCallerAllocator",
-            "behavior": "Typed analysis rows and detached Arrow views retain their values and caller-owned allocator lifetime."
-          }
-        ]
-      },
-      "com.nvidia.sdm.Explanations": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
-            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
-          }
-        ]
-      },
-      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.ColumnExplanations columns();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
-            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
-          }
-        ]
-      },
-      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.Explanations();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
-            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
-          }
-        ]
-      },
-      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.Explanations(com.nvidia.sdm.GradientExplanations, com.nvidia.sdm.ColumnExplanations);": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
-            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
-          }
-        ]
-      },
-      "com.nvidia.sdm.Explanations#public com.nvidia.sdm.GradientExplanations gradients();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#publicContainerDoesNotComputeAndRepresentsAbsence",
-            "behavior": "The public container exposes separate gradients and optional columns without invoking analysis."
-          }
-        ]
-      },
-      "com.nvidia.sdm.PredictionResult#public com.nvidia.sdm.Explanations explanations();": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#directPredictionAndFitReuseContextAnalysisAndHonorHoldout",
-            "behavior": "Predicted results expose model gradients and context analysis; fitted analysis honors holdout."
-          }
-        ]
-      },
-      "com.nvidia.sdm.PredictionResult#public static com.nvidia.sdm.PredictionResult merge(java.util.List<com.nvidia.sdm.PredictionResult>, com.nvidia.sdm.ColumnExplanations);": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#mergePreservesEqualAnalysesRejectsDifferentAndAcceptsExplicitOverride",
-            "behavior": "Explicit analysis overrides work for single and multiple parts while default conflicting analysis is rejected."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public static final int MAX_CATEGORIES = 500;": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
-            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public static final int MAX_CLASSES = 30;": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
-            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public static final int NUM_COHORTS = 10;": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
-            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String COUNT = \"COUNT(*)\";": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
-            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String NA = \"N/A\";": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
-            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String OTHER = \"OTHER(*)\";": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
-            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ColumnExplanations#public static final java.lang.String TABULAR_TABLE = \"instance_table\";": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/ColumnExplanationsTest.java#informationalConstantsMatchPublicAnalysisContract",
-            "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
-          }
-        ]
-      },
-      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder contextTimeLimit(java.time.Duration);": {
-        "capability": "context-reports",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#theContextTimeLimitReachesTheCoreAsSeconds",
-            "behavior": "The time limit reaches the core as seconds; a negative duration is refused by the builder, and a value that is not seconds by the core, naming context_time_limit."
-          }
-        ]
       }
     }
   },
@@ -11051,6 +11077,11 @@
       "base_commit": "5b1eaa25c5eae86831575826dd4ee49080a2ecb1",
       "record": "public_api_snapshot_sha256",
       "reason": "The snapshot records the package version, which moves from 2.0.0rc1 to 2.0.0; no public name or signature changes."
+    },
+    {
+      "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
+      "record": "api_contracts/direct-dtypes-options",
+      "reason": "Both clients take exact_url and bearer_token (Java exactUrl, bearerToken) for an endpoint that serves predictions at one URL, such as a hosted model in the NVIDIA API catalog, in place of recognising the catalog's URL; the group gains the Java test of both options."
     }
   ],
   "capabilities": [

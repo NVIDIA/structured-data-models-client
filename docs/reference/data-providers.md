@@ -4,66 +4,198 @@ A data provider lets the client read data through your own code instead of a dat
 Use one for an engine the client has no connector for, or to control exactly how each read runs.
 Python and Java take the same provider, with the same requests, in each language's own types.
 
-The core never sends a provider SQL.
-It sends one of a fixed set of typed requests, and the provider answers each with Arrow rows.
+The client never sends a provider SQL.
+It sends typed requests, such as "these columns of this table", and the provider answers each with Arrow data.
 
-## Writing one
+## A complete example
 
-| | Python | Java |
-|---|---|---|
-| The provider | `sdm_client.provider.DataProvider`, a protocol | `com.nvidia.sdm.provider.DataProvider`, an interface |
-| What it answers | `capabilities() -> Capabilities` | `Capabilities capabilities()` |
-| Each request | `answer(request, expected)`, returning any object exporting an Arrow stream: a pyarrow `Table` or `RecordBatchReader`, or a DuckDB or Polars result | `ArrowReader answer(request, expected, allocator)` |
-| Its failures, optional | `failure(error) -> ProviderFailure` | `ProviderFailure failure(Exception)` |
-| As a source | `sdm_client.ProviderSource(provider)` | `ProviderSource.of(provider)` |
+This provider serves two in-memory tables.
+It answers the two requests every provider answers, `describe` and `scan`, and lets the client answer every other request in memory from scans.
 
 ```python
-from sdm_client import ProviderSource, Schema
-from sdm_client.provider import Capabilities, OptionalRequest, Scan
+import datetime
 
-class MyProvider:
+import pyarrow as pa
+import pyarrow.compute as pc
+
+from sdm_client import PredictiveQuery, ProviderSource, Relationship, Schema
+from sdm_client.provider import (
+    Capabilities,
+    Describe,
+    DescribePart,
+    Fallback,
+    KeyIn,
+    NotNull,
+    Scan,
+    TimeRange,
+)
+
+START = datetime.datetime(2024, 1, 1)
+TABLES = {
+    'users': pa.table({'id': [1, 2, 3], 'age': [25, 40, 35]}),
+    'orders': pa.table(
+        {
+            'order_id': list(range(60)),
+            'user_id': [i % 3 + 1 for i in range(60)],
+            'amount': [float(i) for i in range(60)],
+            'placed': [START + datetime.timedelta(days=6 * i) for i in range(60)],
+        }
+    ),
+}
+
+
+class InMemoryProvider:
     def capabilities(self):
-        return Capabilities(optional={OptionalRequest.SAMPLE_ENTITIES})
+        # The client answers every request not declared here in memory, from
+        # scans, within these limits.
+        return Capabilities(fallback=Fallback(max_rows=10_000_000, max_bytes=2**31))
 
     def answer(self, request, expected):
+        if isinstance(request, Describe):
+            return describe(request, expected)
         if isinstance(request, Scan):
-            ...  # read request.table, request.columns, request.filters
+            table = TABLES[request.table.table]
+            for condition in request.filters:
+                table = table.filter(holds(table, condition))
+            table = table.select(list(request.columns))
+            return table if request.limit is None else table.slice(0, request.limit)
+        raise NotImplementedError(request.name)
+
+
+def describe(request, expected):
+    names = [relation.table for relation in request.tables] or list(TABLES)
+    if request.part is DescribePart.TABLES:
+        rows = [{'table': name} for name in names]
+    elif request.part is DescribePart.COLUMNS:
+        rows = [
+            {'name': f.name, 'type': str(f.type), 'not_null': False, 'primary_key': False}
+            for f in TABLES[names[0]].schema
+        ]
+    else:
+        rows = []  # No keys, foreign keys or namespace: the schema names them.
+    return pa.Table.from_pylist(rows, schema=expected)
+
+
+def holds(table, condition):
+    column = table[condition.columns[0] if isinstance(condition, KeyIn) else condition.column]
+    if isinstance(condition, NotNull):
+        return pc.is_valid(column)
+    if isinstance(condition, KeyIn):
+        keys = condition.keys.reader.read_all().column(0)
+        return pc.is_in(column, value_set=keys.cast(column.type))
+    if isinstance(condition, TimeRange):
+        mask = pc.is_valid(column)
+        for bound, inclusive_op, exclusive_op in (
+            (condition.lower, pc.greater_equal, pc.greater),
+            (condition.upper, pc.less_equal, pc.less),
+        ):
+            if bound is not None:
+                op = inclusive_op if bound.inclusive else exclusive_op
+                mask = pc.and_(mask, op(column, pa.scalar(bound.value, column.type)))
+        return mask
+    raise NotImplementedError(type(condition).__name__)
+
 
 schema = Schema.from_source(
-    ProviderSource(MyProvider()),
-    primary_keys={'users': 'id'},
+    ProviderSource(InMemoryProvider()),
+    primary_keys={'users': 'id', 'orders': 'order_id'},
+    time_columns={'orders': 'placed'},
+    relationships=[Relationship('orders', 'user_id', 'users', 'id')],
 )
+request = PredictiveQuery(
+    'PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.id WHERE users.age > 30',
+    schema,
+).materialize(indices=[2, 3])
+print(request.context_report)
 ```
+
+The same provider in Java implements `com.nvidia.sdm.provider.DataProvider`, whose `answer` returns an `ArrowReader`.
+The complete, runnable version is [`InMemoryProviderExampleTest.java`](../../java/src/test/java/com/nvidia/sdm/InMemoryProviderExampleTest.java); its core is:
 
 ```java
-Source source = ProviderSource.of(new MyProvider());
-Schema schema = Schema.fromSource(source, options);
+class InMemoryProvider implements DataProvider {
+  public Capabilities capabilities() {
+    return Capabilities.builder().fallback(10_000_000, 1L << 31).build();
+  }
+
+  public ArrowReader answer(
+      DataRequest request, Optional<Schema> expected, BufferAllocator allocator) throws Exception {
+    if (request instanceof DataRequest.Describe describe)
+      return describe(describe, expected.orElseThrow(), allocator);
+    if (request instanceof DataRequest.Scan scan) return scan(scan, allocator);
+    throw new UnsupportedOperationException(request.name());
+  }
+}
+
+Source source = ProviderSource.of(new InMemoryProvider());
+var schema =
+    Schema.fromSource(
+            source,
+            FromSourceOptions.builder()
+                .table("users")
+                .table("orders")
+                .primaryKey("users", "id")
+                .primaryKey("orders", "order_id")
+                .timeColumn("orders", "placed")
+                .build())
+        .withRelationships(List.of(new Relationship("orders", "user_id", "users", "id")));
 ```
 
-`expected` is the exact schema the answer must have, for the requests whose answer the contract shapes: `describe`, `key_counts` and `time_bounds`.
+[`TrinoProviderTest.java`](../../java/src/test/java/com/nvidia/sdm/TrinoProviderTest.java) is a provider over a query engine, applying every filter kind.
+
+## What a provider must answer
+
+| Request | Who answers it |
+|---|---|
+| `describe` | Always the provider |
+| `scan` | Always the provider |
+| `preview`, `count_rows`, `key_counts`, `time_bounds`, `column_ranges`, `repeated_key`, `sample_entities`, `neighbors`, `lookup` | The provider, where it declares the request in `Capabilities.optional`; otherwise the client, in memory, from scans, within `Capabilities.fallback` |
+
+Without a fallback, every request the provider does not declare fails with `UNSUPPORTED_REQUEST`, so a provider answering only `describe` and `scan` declares one.
+Declaring `sample_entities` lets the provider draw samples itself, which matters for a large table: the fallback reads the whole table to sample it.
+
+`expected` is the exact schema the answer must have, for the requests whose answer the client shapes: `describe`, `key_counts` and `time_bounds`.
 For the others it is empty, and the answer holds the columns the request names, in order, typed as the source stores them.
 
-## What a provider answers
+A `scan` or `preview` with a `limit` asks for at most that many rows, any of them.
 
-Every provider answers `describe` and `scan`.
-It declares any other request it answers in its capabilities' optional requests: `preview`, `count_rows`, `key_counts`, `time_bounds`, `column_ranges`, `repeated_key`, `sample_entities`, `neighbors` and `lookup`.
-The core answers an undeclared one in memory, from the rows a `scan` reads, within the fallback limits the provider declares, or refuses it with `UNSUPPORTED_REQUEST` when none are declared.
+## Describe answers
 
-A source that declares no primary or foreign keys, such as Trino, still works: name the keys and relationships when building the schema.
+Each `describe` request asks for one part of the catalog, for the tables it names, or every table when it names none.
+
+| Part | One row per | Columns |
+|---|---|---|
+| `tables` | table | `table` |
+| `columns` | column of the one table named, in order | `name`, `type` (the source's own type name, shown in messages), `not_null`, `primary_key` |
+| `keys` | key the table declares | `kind` (`primary`, `unique` or `foreign`), `columns` (a list) |
+| `foreign_keys` | column pair of each foreign key | `key` (a number naming the key), `referenced_table`, `columns`, `referenced_columns` |
+| `namespace` | part of the namespace a one-part table name is read in, outermost first | `name` |
+
+An empty answer is valid for `keys`, `foreign_keys` and `namespace`.
+A source that declares no primary or foreign keys, such as Trino, still works: name the keys, time columns and relationships when building the schema, as the example does.
+Keys and time columns given to `Schema.from_source` override what the source declares, and relationships given replace them.
 
 ## Filters
 
-A provider declares the kinds of value filter it applies to a `scan` or `sample_entities`: comparisons, `IN`, `IS NULL`, `OR` (`any_of`), `AND` (`all_of`), and the window check `has_rows`.
-The core never sends a kind the provider does not declare.
-It applies that condition to the rows the provider returns, so the provider reads more rows but every result is the same.
+A `scan` or `sample_entities` carries the conditions its rows must meet; all of them hold.
 
-A provider may return more rows than a filter holds for, but never fewer: the core checks every row against the query's own rules.
-So a provider whose engine cannot write a value may leave that filter out, which only widens its read.
+**Always applied.** `KeyIn` (the row's key is one of a key set's), `TimeRange` and `NotNull` reach every provider, which applies them: the client relies on the rows it gets meeting them.
+
+**Applied where declared.** Value filters reach a provider only where it declares their kind in `Capabilities.filters`: comparisons (`Compare`), `In`, `IsNull`, `OR` (`AnyOf`), `AND` (`AllOf`), and the window check `HasRows`.
+The client applies every value filter itself to the rows it gets, so a provider may return more rows than a value filter holds for, but never fewer.
+A provider whose engine cannot write a value may leave that filter out, which only widens its read.
+Declaring a kind the engine handles makes a selective query read fewer rows.
 
 ## Large key sets
 
 With a key limit (`max_keys_per_request` in Python, `maxKeysPerRequest` in Java), a `neighbors` or `lookup` with more seeds reaches the provider as several requests of at most that many seeds each.
-Each seed's rows carry the seed's own batch position, so the core joins the answers, in order, into the request's one answer.
+Each seed's rows carry the seed's own batch position, so the client joins the answers, in order, into the request's one answer.
+
+## Errors
+
+A provider's exception fails the operation with `PROVIDER_ERROR`.
+A provider may also define `failure(error)`, returning a `ProviderFailure` with the SQLSTATE, vendor code, error class and message it reads from its error; without it, the client reads a database driver's `sqlstate` and `vendor_code` attributes.
+The message is kept internal and never shown to end users.
 
 ## Values
 

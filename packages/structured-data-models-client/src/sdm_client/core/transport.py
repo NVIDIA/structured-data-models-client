@@ -49,36 +49,6 @@ _RESPONSE_CHUNK_BYTES = 1024 * 1024
 # The full request timeout would let an unreachable endpoint stall a teardown.
 _DELETE_TIMEOUT_SECONDS = 10.0
 _USERINFO_RE = re.compile(r'(?<=//)[^/@\s]+@')
-# The NVIDIA API catalog's hosted relational model: an exact predictions URL,
-# not a base, that takes its key as a bearer token and serves no other route.
-_HOSTED_HOST = 'ai.api.nvidia.com'
-_HOSTED_PATH = '/v1/structured-data/nvidia/kumo-relational/predictions'
-
-
-def _is_hosted_predictions(url: str) -> bool:
-    r"""Whether ``url`` is the API catalog's hosted relational model.
-
-    Narrow on purpose: https, the catalog's host with no port or userinfo,
-    exactly its predictions path (a trailing slash tolerated) and no query or
-    fragment. Every other URL is a base the routes are appended to.
-    """
-    if not isinstance(url, str):
-        return False
-    parsed = urlparse(url)
-    try:
-        port = parsed.port
-    except ValueError:
-        return False
-    return (
-        parsed.scheme.lower() == 'https'
-        and (parsed.hostname or '') == _HOSTED_HOST
-        and port is None
-        and parsed.username is None
-        and parsed.password is None
-        and not parsed.query
-        and not parsed.fragment
-        and parsed.path.rstrip('/') == _HOSTED_PATH
-    )
 
 
 def redact_url(url: str | None) -> str | None:
@@ -491,8 +461,8 @@ def _build_session(
     one re-mounted on the routes below it: scoring against a pinned context and
     releasing one are both replayable and keep the full policy.
 
-    ``bearer`` sends the key as ``Authorization: Bearer``, as the API catalog
-    reads it, rather than as ``X-API-Key``.
+    ``bearer`` sends the key as ``Authorization: Bearer`` rather than as
+    ``X-API-Key``.
     """
     session = _Session(verify_ssl=verify_ssl)
     if api_key and bearer:
@@ -579,10 +549,10 @@ class Transport:
     request that exhausts ``max_retries`` can take up to
     ``(max_retries + 1) * timeout`` plus backoff.
 
-    The NVIDIA API catalog's hosted relational model is the one URL taken as
-    it is rather than as a base: predictions are posted to that URL, the key
-    sent as ``Authorization: Bearer``, and it serves no sessions, model list
-    or readiness route.
+    With ``exact_url``, ``url`` is the endpoint's predictions URL, taken as
+    it is rather than as a base: predictions are posted to it, and it serves
+    no sessions, model list or readiness route. ``bearer_token`` sends the
+    key as ``Authorization: Bearer`` rather than ``X-API-Key``.
     """
 
     serves_sessions = True
@@ -596,6 +566,8 @@ class Transport:
         timeout: float = _DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = _DEFAULT_MAX_RETRIES,
         backoff_factor: float = _DEFAULT_BACKOFF_FACTOR,
+        exact_url: bool = False,
+        bearer_token: bool = False,
     ) -> None:
         _validate_url(url, api_key)
         _validate_limits(timeout, max_retries)
@@ -607,7 +579,7 @@ class Transport:
         self._closed = False
         self._max_retries = max_retries
         # An exact predictions URL rather than a base.
-        self._exact = _is_hosted_predictions(url)
+        self._exact = bool(exact_url)
         if self._exact:
             self.serves_sessions = False
         self._session = _build_session(
@@ -616,7 +588,7 @@ class Transport:
             verify_ssl,
             max_retries,
             backoff_factor,
-            bearer=self._exact,
+            bearer=bool(bearer_token),
         )
 
     @property
@@ -669,8 +641,8 @@ class Transport:
         )
 
     def _address(self, path: str) -> str:
-        r"""Where ``path`` is called: the exact URL for a prediction to the
-        API catalog, the base URL and ``path`` otherwise."""
+        r"""Where ``path`` is called: the exact URL for a prediction where
+        ``exact_url`` was given, the base URL and ``path`` otherwise."""
         return self._url if self._exact else self._url + path
 
     def health_ready(

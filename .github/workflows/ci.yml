@@ -64,7 +64,7 @@ env:
   POSTGRES_IMAGE: ghcr.io/nvidia/structured-data-models-client/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
   # Trino, the query engine a caller's own Java data provider is tested over
   # (TrinoProviderTest): it declares no primary or foreign keys.
-  TRINO_IMAGE: docker.io/trinodb/trino:476@sha256:00125e40d063bc4816d165482f6044872b18b56026fb959d3b28ce1f96ffbbee
+  TRINO_IMAGE: ghcr.io/nvidia/structured-data-models-client/trino:476@sha256:00125e40d063bc4816d165482f6044872b18b56026fb959d3b28ce1f96ffbbee
   # The manylinux2014 image both wheel builds run in (PyPA's, published on quay.io).
   MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
   BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.2 numpy==1.23.5 duckdb==1.5.6
@@ -1844,6 +1844,8 @@ jobs:
             -Dtest=SchemaTest,PredictTest,PostgresReadTest,PostgresKeylessOrderTest test
       - name: Pull Trino
         if: ${{ matrix.database == 'postgres' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: scripts/rust_core/pull_image.sh "$TRINO_IMAGE"
       - name: A caller's own data provider over Trino, in Java and Python
         if: ${{ matrix.database == 'postgres' }}

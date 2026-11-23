@@ -23,8 +23,9 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * The API catalog's hosted relational model is posted to at its exact URL with a bearer token; a
- * base URL keeps {@code /v1/predictions} and {@code X-API-Key}.
+ * An endpoint that serves predictions at one URL is posted to as it is with {@code exact}, the key
+ * sent as a bearer token with {@code bearer}, as a hosted model in the NVIDIA API catalog needs; no
+ * URL is recognised, so a base URL keeps {@code /v1/predictions} and {@code X-API-Key}.
  */
 class HostedPredictionsTest {
   private static final String CATALOG =
@@ -35,20 +36,10 @@ class HostedPredictionsTest {
   private record Seen(String method, String path, String bearer, String apiKey) {}
 
   @Test
-  void onlyTheCatalogsPredictionsUrlIsTakenAsItIs() {
-    assertTrue(HttpTransport.isHostedPredictions(CATALOG));
-    assertTrue(HttpTransport.isHostedPredictions(CATALOG + "/"));
-    assertTrue(HttpTransport.isHostedPredictions(CATALOG.replace("ai.api", "AI.API")));
-    assertFalse(HttpTransport.isHostedPredictions(CATALOG.replace("https", "http")));
-    assertFalse(HttpTransport.isHostedPredictions(CATALOG.replace(".com/", ".com:8443/")));
-    assertFalse(HttpTransport.isHostedPredictions(CATALOG + "?x=1"));
-    assertFalse(HttpTransport.isHostedPredictions(CATALOG + "/extra"));
-    assertFalse(HttpTransport.isHostedPredictions("https://ai.api.nvidia.com"));
-    assertFalse(HttpTransport.isHostedPredictions("https://ai.api.nvidia.com/v1/predictions"));
-    assertFalse(HttpTransport.isHostedPredictions("http://localhost:8000"));
-    assertFalse(HttpTransport.isHostedPredictions(null));
-    assertFalse(new HttpTransport(CATALOG, "key", Duration.ofSeconds(5), 0).servesSessions());
-    assertTrue(new HttpTransport("https://nim.example", "key", Duration.ofSeconds(5), 0).servesSessions());
+  void noUrlIsTakenAsExactWithoutTheOption() {
+    assertTrue(new HttpTransport(CATALOG, "key", Duration.ofSeconds(5), 0).servesSessions());
+    assertFalse(
+        new HttpTransport(CATALOG, "key", Duration.ofSeconds(5), 0, true, true).servesSessions());
   }
 
   @Test
@@ -57,7 +48,7 @@ class HostedPredictionsTest {
     HttpServer server = serve(seen);
     try {
       String url = "http://127.0.0.1:" + server.getAddress().getPort() + "/hosted/predictions";
-      HttpTransport transport = new HttpTransport(url, "secret", Duration.ofSeconds(30), 0, true);
+      HttpTransport transport = new HttpTransport(url, "secret", Duration.ofSeconds(30), 0, true, true);
       transport.predict("{}".getBytes(StandardCharsets.UTF_8));
       assertEquals(List.of(new Seen("POST", "/hosted/predictions", "Bearer secret", null)), seen);
       assertFalse(transport.servesSessions());

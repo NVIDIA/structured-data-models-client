@@ -733,9 +733,9 @@ pub fn template(sentence: Sentence) -> Template {
             said(r#"the data source answered with columns other than the ones asked for"#)
         }
         S::ValueNotANumber => said(r#"column {column!r} holds a value that is not a number"#),
-        S::Undeclared => {
-            said(r#"the data source does not take a {request} request, which this call needs"#)
-        }
+        S::Undeclared => said(
+            r#"the data source does not take a {request} request, which this call needs: a data provider answers it by declaring it among its capabilities' optional requests, or lets the client answer it in memory by declaring a fallback"#,
+        ),
         S::SeedPastRange => said(
             r#"the data source samples with a seed of at most {max_seed:,}, and this call asks for a larger one"#,
         ),

@@ -62,7 +62,14 @@ public final class SdmClient implements AutoCloseable {
   public static SdmClient connect(String url, ClientOptions options) {
     Objects.requireNonNull(options, "options");
     return new SdmClient(
-        new HttpTransport(url, options.apiKey(), options.timeout(), options.maxRetries()), null);
+        new HttpTransport(
+            url,
+            options.apiKey(),
+            options.timeout(),
+            options.maxRetries(),
+            options.exactUrl(),
+            options.bearerToken()),
+        null);
   }
 
   /**
@@ -195,7 +202,7 @@ public final class SdmClient implements AutoCloseable {
     if (closed) throw new StructuredDataException("this client was closed", "INVALID_CONFIGURATION", Map.of(), null);
   }
 
-  /** Whether the endpoint can pin a context: not a serving endpoint, nor the API catalog's. */
+  /** Whether the endpoint can pin a context: not a serving endpoint, nor an exact predictions URL. */
   private boolean servesSessions() {
     return serving == null && transport.servesSessions();
   }

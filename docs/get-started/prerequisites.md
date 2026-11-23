@@ -21,10 +21,19 @@ Use either option:
 
 **A hosted endpoint.** Find the model in the NVIDIA API catalog, generate a
 key, and pass the endpoint and key to `SDMClient`.
-For Kumo Relational the endpoint is
-`https://ai.api.nvidia.com/v1/structured-data/nvidia/kumo-relational/predictions`, passed as it is.
-The client posts predictions to that URL and sends the key as a bearer token.
-The hosted endpoint answers one request at a time, so `fit` sessions, `models()` and `health_ready()` are not available on it.
+A hosted model serves predictions at one URL and reads the key as a bearer token, so pass `exact_url=True` and `bearer_token=True` (Java: `exactUrl(true)` and `bearerToken(true)` on `ClientOptions`):
+
+```python
+client = SDMClient(
+    'https://ai.api.nvidia.com/v1/structured-data/nvidia/kumo-relational/predictions',
+    api_key=key,
+    exact_url=True,
+    bearer_token=True,
+)
+```
+
+Such an endpoint answers one request at a time, so `fit` sessions, `models()` and `health_ready()` are not available on it.
+Any other endpoint is a base URL, with the key sent as `X-API-Key`, unless you pass the same options.
 
 **The container, run yourself.** Pull the NIM and run it on your own GPU host,
 then point the client at it. Use this when the data cannot leave your

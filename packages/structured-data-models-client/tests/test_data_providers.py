@@ -564,3 +564,16 @@ def test_a_provider_s_failure_is_the_operation_s_provider_error(
     with pytest.raises(StructuredDataError) as raised:
         _materialize(Failing(duckdb_engine), scenario)
     assert raised.value.code == 'PROVIDER_ERROR'
+
+
+def test_the_documented_example_runs_as_written(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # The first Python block of docs/reference/data-providers.md, exactly
+    # as a reader copies it.
+    page = (ROOT / 'docs/reference/data-providers.md').read_text()
+    example = page.split('```python\n', 1)[1].split('```', 1)[0]
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        exec(compile(example, 'data-providers.md', 'exec'), {})  # noqa: S102
+    assert "ContextReport(status='available'" in capsys.readouterr().out

@@ -35,10 +35,9 @@ import java.util.concurrent.TimeoutException;
  * tried again with exponential backoff, a {@code Retry-After} the endpoint sends honoured up to a
  * minute; the timeout bounds each attempt whole, its answer's body included; a status of 400 or more is the endpoint's refusal ({@link ModelEndpointException}); an
  * endpoint that cannot be reached, or an answer past 64 MiB or that is not a JSON object, is a
- * failed transport ({@link Failed}). The NVIDIA API catalog's hosted relational model is the one
- * URL taken as it is rather than as a base: its predictions are posted to that URL, the key sent as
- * {@code Authorization: Bearer}, and it serves no sessions, model list or readiness route. Not
- * part of the API.
+ * failed transport ({@link Failed}). With {@code exact}, the URL is the endpoint's predictions URL,
+ * taken as it is rather than as a base: predictions are posted to it, and it serves no sessions,
+ * model list or readiness route. Not part of the API.
  */
 public final class HttpTransport {
   /** Where a prediction is posted. */
@@ -55,18 +54,17 @@ public final class HttpTransport {
 
   private static final Set<String> LOCAL_HOSTS = Set.of("localhost", "127.0.0.1", "::1", "[::1]");
 
-  /** The host and path of the API catalog's hosted relational model, an exact predictions URL. */
-  static final String HOSTED_HOST = "ai.api.nvidia.com";
-
-  static final String HOSTED_PATH = "/v1/structured-data/nvidia/kumo-relational/predictions";
-
   private final String url;
   private final String apiKey;
   private final Duration timeout;
   private final int maxRetries;
   private final HttpClient client;
+
   /** Whether {@link #url} is an exact predictions URL rather than a base. */
   private final boolean exact;
+
+  /** Whether the key is sent as a bearer token. */
+  private final boolean bearer;
 
   /** The transport could not reach the endpoint or read its answer. */
   public static final class Failed extends Exception {
@@ -78,12 +76,17 @@ public final class HttpTransport {
   }
 
   public HttpTransport(String url, String apiKey, Duration timeout, int maxRetries) {
-    this(url, apiKey, timeout, maxRetries, isHostedPredictions(url));
+    this(url, apiKey, timeout, maxRetries, false, false);
   }
 
-  /** {@code exact}: post predictions to {@code url} itself, as to the API catalog. */
-  HttpTransport(String url, String apiKey, Duration timeout, int maxRetries, boolean exact) {
+  /**
+   * {@code exact}: post predictions to {@code url} itself rather than a route below it; {@code
+   * bearer}: send the key as {@code Authorization: Bearer} rather than {@code X-API-Key}.
+   */
+  public HttpTransport(
+      String url, String apiKey, Duration timeout, int maxRetries, boolean exact, boolean bearer) {
     this.exact = exact;
+    this.bearer = bearer;
     this.url = validated(url, apiKey);
     this.apiKey = apiKey;
     if (timeout == null || timeout.isNegative() || timeout.isZero()) {
@@ -101,32 +104,9 @@ public final class HttpTransport {
     return url;
   }
 
-  /** Whether the endpoint can pin a context: not the API catalog's exact predictions URL. */
+  /** Whether the endpoint can pin a context: not an exact predictions URL. */
   public boolean servesSessions() {
     return !exact;
-  }
-
-  /**
-   * Whether {@code url} is the API catalog's hosted relational model: https, the catalog's host
-   * with no port or user info, exactly its predictions path (a trailing slash tolerated), no query
-   * or fragment.
-   */
-  static boolean isHostedPredictions(String url) {
-    if (url == null) return false;
-    URI parsed;
-    try {
-      parsed = new URI(url);
-    } catch (URISyntaxException e) {
-      return false;
-    }
-    String path = parsed.getRawPath() == null ? "" : parsed.getRawPath().replaceAll("/+$", "");
-    return "https".equalsIgnoreCase(parsed.getScheme())
-        && HOSTED_HOST.equalsIgnoreCase(parsed.getHost())
-        && parsed.getPort() == -1
-        && parsed.getRawUserInfo() == null
-        && parsed.getRawQuery() == null
-        && parsed.getRawFragment() == null
-        && HOSTED_PATH.equals(path);
   }
 
   private StructuredDataException unsupported(String what) {
@@ -134,10 +114,10 @@ public final class HttpTransport {
         url + " serves predictions only; it has no " + what, "UNSUPPORTED_REQUEST", Map.of(), null);
   }
 
-  /** The credential header: a bearer token for the API catalog, {@code X-API-Key} otherwise. */
+  /** The credential header: a bearer token, or {@code X-API-Key}. */
   private void authorize(HttpRequest.Builder builder) {
     if (apiKey == null) return;
-    if (exact) builder.header("Authorization", "Bearer " + apiKey);
+    if (bearer) builder.header("Authorization", "Bearer " + apiKey);
     else builder.header("X-API-Key", apiKey);
   }
 

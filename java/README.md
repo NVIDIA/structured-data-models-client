@@ -259,7 +259,7 @@ Schema schema = Schema.fromSource(source, options);
 ```
 
 With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` with more than `n` seeds reaches the provider as several requests of at most `n` seeds each, whose answers the core joins.
-Python takes the same provider; [Your own data provider](../docs/reference/data-providers.md) covers both languages.
+Python takes the same provider. [Your own data provider](../docs/reference/data-providers.md) covers both languages, with a complete example in each: the Java one is [`InMemoryProviderExampleTest.java`](src/test/java/com/nvidia/sdm/InMemoryProviderExampleTest.java).
 
 ## Build
 
