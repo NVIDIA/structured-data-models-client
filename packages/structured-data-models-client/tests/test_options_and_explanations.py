@@ -98,6 +98,16 @@ def test_a_column_the_caller_excluded_does_not_reach_the_model():
     assert 'amt' in columns
 
 
+def test_a_text_column_does_not_reach_the_model():
+    pytest.importorskip('sdm_relational_engine')
+
+    schema = graph()
+    schema['users']['seg'].stype = 'text'
+
+    assert 'seg' not in wire_columns(gather(schema), 'users')
+    assert 'amt' in wire_columns(gather(schema))
+
+
 def test_a_column_nobody_excluded_still_reaches_the_model():
     pytest.importorskip('sdm_relational_engine')
 

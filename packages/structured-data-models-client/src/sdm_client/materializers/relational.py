@@ -386,7 +386,9 @@ class RelationalMaterializer:
                 run_mode=run_mode,
                 verbose=False,
                 top_k=_candidates_to_rank(query, options),
-                exclude_cols_dict=_columns_to_leave_out(query, options),
+                exclude_cols_dict=_with_unread_columns(
+                    self.schema, _columns_to_leave_out(query, options)
+                ),
                 **{
                     key: options[key]
                     for key in (
@@ -1707,17 +1709,43 @@ def _joins_nothing(schema: Schema, link: Relationship) -> bool:
     return not bool(pd.Series(values).isin(keys).any())
 
 
+def _unread_columns(
+    schema: Schema, left_out: Mapping[str, Sequence[str]]
+) -> dict[str, list[str]]:
+    unread = KUMO_RELATIONAL.runtime.unread_feature_stypes
+    return {
+        table_name: columns
+        for table_name, table in schema.tables.items()
+        if (
+            columns := [
+                column_name
+                for column_name, column in table.columns.items()
+                if column.stype in unread
+                and column_name not in left_out.get(table_name, ())
+            ]
+        )
+    }
+
+
+def _with_unread_columns(
+    schema: Schema, left_out: Mapping[str, Sequence[str]]
+) -> dict[str, list[str]]:
+    merged = {table: list(columns) for table, columns in left_out.items()}
+    for table, columns in _unread_columns(schema, left_out).items():
+        merged.setdefault(table, []).extend(columns)
+    return merged
+
+
 def _warn_of_columns_the_model_does_not_read(
     schema: Schema, left_out: Mapping[str, Sequence[str]], sent: frozenset[str]
 ) -> None:
-    r"""Say which feature columns reach the model and are dropped there.
+    r"""Say which feature columns are left out of the request.
 
-    The model's recipe carries no text processor, so a column typed `text` is
-    ignored wherever it reaches it. Refusing the request was considered and
-    rejected: a column the answer never depended on should not be a reason not
-    to answer. That leaves the caller believing a column contributed when it
-    did not, which is worth one line. Measured on one determining token, the
-    same column scores 1.00 typed `categorical` and chance typed `text`.
+    The model's recipe carries no text processor and the endpoint refuses a
+    column typed `text`, so it is not sent. The request is still answered, and
+    the caller should know a column contributed nothing. Measured on one
+    determining token, the same column scores 1.00 typed `categorical` and
+    chance typed `text`.
 
     Read against the columns the request actually carries. A column the query
     or the caller already left out is not sent, so naming it would report a
@@ -1731,15 +1759,11 @@ def _warn_of_columns_the_model_does_not_read(
     line a caller can act on.
     """
     unread = KUMO_RELATIONAL.runtime.unread_feature_stypes
-    if not unread:
-        return
     ignored = sorted(
         f'{table_name}.{column_name}'
-        for table_name, table in schema.tables.items()
+        for table_name, columns in _unread_columns(schema, left_out).items()
         if table_name in sent
-        for column_name, column in table.columns.items()
-        if column.stype in unread
-        and column_name not in left_out.get(table_name, ())
+        for column_name in columns
     )
     if not ignored:
         return
@@ -1747,7 +1771,7 @@ def _warn_of_columns_the_model_does_not_read(
     warnings.warn(
         f'{", ".join(ignored)} {"are" if many else "is"} typed '
         f'{" or ".join(sorted(unread))}, which this model does not read, so '
-        f'the request is answered without {"them" if many else "it"} and '
+        f'{"they are" if many else "it is"} left out of the request and '
         f'{"they contribute" if many else "it contributes"} nothing to the '
         f'prediction. Type a column categorical if its values are labels '
         f'rather than prose, or leave it out to say so.',

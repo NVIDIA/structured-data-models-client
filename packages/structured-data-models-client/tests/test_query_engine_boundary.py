@@ -744,8 +744,8 @@ def unread_warnings(built: Schema) -> list[str]:
 
 
 def test_a_text_column_is_said_to_contribute_nothing():
-    """It is accepted and dropped at the model, so the request succeeds and
-    the column that looked most informative carried nothing."""
+    """It is left out of the request, so the request succeeds and the column
+    that looked most informative carried nothing."""
     said = unread_warnings(prose_schema())
 
     assert len(said) == 1
@@ -759,6 +759,16 @@ def test_every_unread_column_is_named():
     assert len(said) == 1
     assert 'papers.prose0' in said[0]
     assert 'papers.prose1' in said[0]
+
+
+def test_a_text_column_is_left_out_of_the_request():
+    from sdm_client.materializers.relational import _with_unread_columns
+
+    built = prose_schema(columns=2)
+
+    assert _with_unread_columns(built, {'papers': ['target']}) == {
+        'papers': ['target', 'prose0', 'prose1']
+    }
 
 
 def test_a_column_the_model_reads_is_not_mentioned():
