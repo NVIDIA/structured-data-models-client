@@ -1554,6 +1554,33 @@ def scan_cases(results: list[Result]) -> None:
         path.write_text(text)
 
     bans("sdm-host's allow moved up to the function", widened, f'{zones}:')
+    clock = 'rust/crates/sdm-host/src/clock.rs'
+    host_lib = 'rust/crates/sdm-host/src/lib.rs'
+    bans(
+        "a wall clock read in sdm-host's clock module",
+        lambda r: append(
+            r / clock,
+            'pub(crate) fn wall() -> std::time::SystemTime {\n'
+            '    std::time::SystemTime::now()\n}\n',
+        ),
+        f'{clock}:',
+    )
+    bans(
+        "sdm-host's clock allow widened to every ban",
+        lambda r: edit(
+            r / host_lib,
+            '    clippy::disallowed_types,\n',
+            '    clippy::disallowed_types,\n    clippy::all,\n',
+        ),
+        f'{host_lib}:',
+    )
+    bans(
+        "sdm-host's clock allow on another module",
+        lambda r: edit(
+            r / host_lib, ')]\nmod clock;', ')]\nmod frames_clock;\nmod clock;'
+        ),
+        f'{host_lib}:',
+    )
     bans(
         'a Zoned parsed by type annotation',
         lambda r: append(

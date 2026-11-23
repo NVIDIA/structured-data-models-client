@@ -1031,7 +1031,6 @@ fn drive(
                         Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
                     };
                     let reply = encode(&ControlMessage::FetchReply(FetchReply {
-                        elapsed_ns: None,
                         id: step.id,
                         outcome,
                     }))

@@ -43,15 +43,6 @@
         "outcome": {
           "$ref": "#/$defs/FetchOutcome"
         },
-        "elapsed_ns": {
-          "description": "The time since the run started, by the host's monotonic clock, as\nthe host sends this reply, in nanoseconds. The core reads no clock:\na request's time limits (`context_time_limit`) are measured by\nthese. A host that sends none is taken never to have taken any time.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
         "message": {
           "type": "string",
           "const": "fetch_reply"

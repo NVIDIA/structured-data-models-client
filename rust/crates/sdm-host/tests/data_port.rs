@@ -273,7 +273,6 @@ fn admitted(data: ArrowData, expect: ExpectedSchema) -> ArrowData {
     run.next().map_err(error).unwrap();
     run.reply(
         &encode(&ControlMessage::FetchReply(FetchReply {
-            elapsed_ns: None,
             id: ReplyId(1),
             outcome: FetchOutcome::Data {
                 data: AttachmentId(9),

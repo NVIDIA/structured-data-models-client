@@ -118,12 +118,6 @@ pub struct ModelCall {
 pub struct FetchReply {
     pub id: ReplyId,
     pub outcome: FetchOutcome,
-    /// The time since the run started, by the host's monotonic clock, as
-    /// the host sends this reply, in nanoseconds. The core reads no clock:
-    /// a request's time limits (`context_time_limit`) are measured by
-    /// these. A host that sends none is taken never to have taken any time.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub elapsed_ns: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

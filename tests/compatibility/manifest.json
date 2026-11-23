@@ -5271,7 +5271,7 @@
           "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_smaller_context_asked_for_is_not_drawn_again_for_more",
           "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_drawing_stops_at_the_time_limit_with_the_examples_kept",
           "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_time_limit_that_is_not_seconds_is_refused",
-          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_the_hosts_clock_past_the_default_five_minutes_stops_drawing"
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_draw_slower_than_the_time_limit_is_the_last"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",

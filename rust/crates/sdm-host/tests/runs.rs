@@ -377,12 +377,7 @@ fn fetching_run() -> Run {
 }
 
 fn fetch_reply(id: ReplyId, outcome: FetchOutcome) -> Vec<u8> {
-    encode(&ControlMessage::FetchReply(FetchReply {
-        id,
-        outcome,
-        elapsed_ns: None,
-    }))
-    .unwrap()
+    encode(&ControlMessage::FetchReply(FetchReply { id, outcome })).unwrap()
 }
 
 fn fetch_id(out: &Outgoing) -> ReplyId {

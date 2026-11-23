@@ -1286,14 +1286,14 @@ impl Run {
     /// does; nothing is dropped, relabelled or filled. Each page of a paged
     /// answer is held to it as it arrives, as a whole answer is. A
     /// discovery request takes the schema the data declares.
-    /// The time since the run started, by the host's monotonic clock, as
-    /// a reply tells it (`elapsed_ns`). A time earlier than one told
-    /// before leaves it as it was.
-    pub fn tell_elapsed(&mut self, elapsed_ns: Option<u64>) {
-        if let Some(ns) = elapsed_ns {
-            let mut shared = lock(&self.shared);
-            shared.elapsed = shared.elapsed.max(std::time::Duration::from_nanos(ns));
-        }
+    /// The time since the run started, in nanoseconds by the host's
+    /// monotonic clock, as the host reads it with a reply: the core reads
+    /// no clock. A time earlier than one told before leaves it as it was.
+    pub fn tell_elapsed(&mut self, elapsed_ns: u64) {
+        let mut shared = lock(&self.shared);
+        shared.elapsed = shared
+            .elapsed
+            .max(std::time::Duration::from_nanos(elapsed_ns));
     }
 
     pub fn submit_fetch(&mut self, id: ReplyId, result: FetchResult) -> Result<(), CoreError> {

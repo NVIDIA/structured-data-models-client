@@ -60,6 +60,8 @@ pub struct HostRun {
     ids: AttachmentIds,
     /// The zones of the run's host facts, which the core resolves with.
     zones: Arc<ZoneResolver>,
+    /// When the run started: each reply tells the core the time since.
+    started: crate::clock::Started,
 }
 
 /// What a contained call failed with: an error, or a panic, which
@@ -295,6 +297,7 @@ impl HostRun {
             ids: run.attachment_ids(),
             run: Mutex::new(run),
             zones,
+            started: crate::clock::Started::now(),
         }
     }
 
@@ -364,7 +367,7 @@ impl HostRun {
             let mut attachments = with_stand_ins(attachments, unreadable);
             match decode(message)? {
                 ControlMessage::FetchReply(reply) => {
-                    run.tell_elapsed(reply.elapsed_ns);
+                    run.tell_elapsed(self.started.elapsed_ns());
                     let result = match reply.outcome {
                         FetchOutcome::Data { data, continuation } => {
                             check_attachments(&[(data, AttachmentKind::Arrow)], &attachments)?;

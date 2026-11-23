@@ -250,20 +250,31 @@ def test_a_time_limit_that_is_not_seconds_is_refused() -> None:
     assert 'context_time_limit' in str(raised.value)
 
 
-def test_the_hosts_clock_past_the_default_five_minutes_stops_drawing(
+def test_a_draw_slower_than_the_time_limit_is_the_last(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The host reads its clock for each reply; ten minutes pass between
-    # every two readings, so the first draw already took longer than the
-    # default limit.
-    from sdm_client._rust import run
+    # The host layer reads its clock with each reply: a sample answered in
+    # 0.3 seconds has used a limit of 0.2, so no larger draw follows.
+    import time
 
-    ticks = iter(range(0, 10**15, 600 * 10**9))
-    monkeypatch.setattr(run.time, 'monotonic_ns', lambda: next(ticks))
-    request = _seen_after_february()
+    from sdm_client._rust.providers import duckdb as provider
+
+    answer = provider.DuckDBProvider.__call__
+
+    def slow_samples(self: Any, step: Any, keys: Any = None) -> Any:
+        if step['request']['request'] == 'sample_entities':
+            time.sleep(0.3)
+        return answer(self, step, keys)
+
+    monkeypatch.setattr(provider.DuckDBProvider, '__call__', slow_samples)
+    request = _seen_after_february(context_time_limit=0.2)
     [part] = request.context_report.parts
     assert (part.draws, part.stopped) == (1, 'time_limit')
     assert request.context_rows == part.kept < ASKED
+
+    monkeypatch.setattr(provider.DuckDBProvider, '__call__', answer)
+    [part] = _seen_after_february(context_time_limit=60).context_report.parts
+    assert (part.draws, part.stopped) == (2, 'full')
 
 
 def test_a_window_draw_chooses_the_same_examples_in_any_row_order(

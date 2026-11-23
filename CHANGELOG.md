@@ -17,7 +17,7 @@ The public API snapshot records this version update; publication remains pending
   A request whose context comes up short, from a condition only the client checks, is drawn again, larger, sized by the share of the first draw that qualified, until the context holds as many examples as were asked for, the source has no more rows, 5,000,000 rows have been drawn, or `context_time_limit` has passed.
 - `context_time_limit` (Python `materialize()` keyword, in seconds or as a `timedelta`; Java `MaterializeOptions.Builder.contextTimeLimit(Duration)`) bounds the time a request spends drawing its context, five minutes by default.
   No draw starts once it has passed, and the examples kept so far are the context; a draw already reading runs on.
-  The time is the host's: each fetch reply carries the time since the run started (`elapsed_ns`), as the core reads no clock.
+  The time is read by the host layer the Python and Java clients share, as the core reads no clock.
 - Java `DataProvider`s can declare the value filters they apply (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf`, `AllOf` and `HasRows` on samples and scans.
   A provider that declares none receives none, as before.
 - Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned

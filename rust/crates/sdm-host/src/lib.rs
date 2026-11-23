@@ -11,6 +11,12 @@
 #![forbid(unsafe_code)]
 
 pub mod admission;
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "a run's monotonic clock, which the host tells the core"
+)]
+mod clock;
 pub mod codec;
 mod extensions;
 mod frames;
