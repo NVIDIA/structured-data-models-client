@@ -856,7 +856,7 @@
         "signature": "(*args, **kwargs)"
       },
       "DataRequest": {
-        "kind": "UnionType"
+        "kind": "Union"
       },
       "Describe": {
         "bases": [
@@ -907,7 +907,7 @@
         "signature": "(max_rows: 'int', max_bytes: 'int') -> None"
       },
       "Filter": {
-        "kind": "UnionType"
+        "kind": "Union"
       },
       "FilterKind": {
         "bases": [
@@ -995,7 +995,7 @@
         "value": "__kumo_matches__"
       },
       "NeighborLimit": {
-        "kind": "UnionType"
+        "kind": "Union"
       },
       "Neighbors": {
         "bases": [

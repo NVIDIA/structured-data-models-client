@@ -6073,7 +6073,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "5f79d2b38285ebddf912274517e5d70a272f265019053ee83cf6ad64d6dc718a",
+  "public_api_snapshot_sha256": "75615e4ef65c7adba78409024e3a69f1333356cf817879eb6885c7db52756bb7",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
