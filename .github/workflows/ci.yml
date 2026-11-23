@@ -1845,10 +1845,11 @@ jobs:
       - name: Pull Trino
         if: ${{ matrix.database == 'postgres' }}
         run: scripts/rust_core/pull_image.sh "$TRINO_IMAGE"
-      - name: A caller's own data provider over Trino
+      - name: A caller's own data provider over Trino, in Java and Python
         if: ${{ matrix.database == 'postgres' }}
         env:
           SDM_TRINO_TEST_URL: http://localhost:8080
+          SDM_REQUIRE_POSTGRES: '1'
         run: |
           docker run -d --rm --name trino -p 8080:8080 "$TRINO_IMAGE"
           for _ in $(seq 90); do
@@ -1857,6 +1858,8 @@ jobs:
           done
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
             -Dtest=TrinoProviderTest test
+          python -m pytest -q -p no:cacheprovider \
+            packages/structured-data-models-client/tests/test_data_providers.py -k trino
       - name: The JAR's dependencies, from Maven Central
         run: java jar/FetchDependencies.java jar
       - name: The S1 cases on the Java host

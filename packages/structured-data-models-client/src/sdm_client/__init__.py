@@ -38,6 +38,7 @@ from sdm_client.explanations import (
 )
 from sdm_client.inference import InferenceConfig
 from sdm_client.models import KumoRelational, KumoTabular, Model
+from sdm_client.provider import ProviderSource
 from sdm_client.query import PredictiveQuery
 from sdm_client.relational_task import RelationalTask
 from sdm_client.reports import (
@@ -91,6 +92,7 @@ __all__ = [
     'ColumnExplanations',
     'Explanations',
     'PredictiveQuery',
+    'ProviderSource',
     'Relationship',
     'RelationshipOrigin',
     'Request',

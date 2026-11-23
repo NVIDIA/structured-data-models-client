@@ -32,6 +32,7 @@ SNAPSHOT = (
 PACKAGES = (
     'sdm_api',
     'sdm_client',
+    'sdm_client.provider',
     'sdm_connectors',
     'sdm_connectors.databricks',
 )

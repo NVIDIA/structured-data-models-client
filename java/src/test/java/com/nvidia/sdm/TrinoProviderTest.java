@@ -10,8 +10,8 @@ import com.nvidia.sdm.internal.ArrowData;
 import com.nvidia.sdm.internal.Json;
 import com.nvidia.sdm.provider.Capabilities;
 import com.nvidia.sdm.provider.DataProvider;
-import com.nvidia.sdm.provider.DataRequest;
 import com.nvidia.sdm.provider.DataRequest.FilterKind;
+import com.nvidia.sdm.provider.DataRequest;
 import com.nvidia.sdm.provider.OptionalRequest;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
@@ -20,6 +20,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -129,51 +130,25 @@ class TrinoProviderTest {
     trino.run("DROP SCHEMA IF EXISTS " + CATALOG + "." + schemaName);
   }
 
-  static Stream<Arguments> queries() {
-    var cases =
-        List.of(
-            // query, extra options, examples kept per part, stop, sent to Trino (every kind; no OR)
-            Arguments.of(
-                "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE users.value > 47.5",
-                List.of(70L), "full", true, true),
-            Arguments.of(
-                "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id"
-                    + " WHERE users.class IN ('3', '4') OR users.value > 48.5",
-                List.of(100L), "full", true, false),
-            Arguments.of(
-                "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id"
-                    + " WHERE NOT (users.class = '0') AND users.value > 45",
-                List.of(100L), "full", true, true),
-            Arguments.of(
-                "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id"
-                    + " WHERE COUNT(events.*, -30, 0, days) > 3",
-                List.of(75L), "full", true, false),
-            Arguments.of(
-                "PREDICT AVG(events.feature, 0, 30, days) FOR EACH users.id",
-                List.of(511L), "full", true, false),
-            Arguments.of(
-                "PREDICT SUM(events.feature, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.id"
-                    + " WHERE users.value > 47.5",
-                List.of(70L, 56L), "full", true, true),
-            Arguments.of(
-                "PREDICT LIST_DISTINCT(events.item, 0, 30, days) RANK TOP 2 FOR EACH users.id"
-                    + " WHERE users.value > 47.5",
-                List.of(70L, 70L, 70L), "full", true, true),
-            Arguments.of(
-                "PREDICT users.value FOR EACH users.id WHERE users.class = '3'",
-                List.of(12L), "source_exhausted", true, true));
-    return cases.stream()
+  /** The compatibility manifest's context scenarios, each with both declarations. */
+  @SuppressWarnings("unchecked")
+  static Stream<Arguments> queries() throws Exception {
+    Map<String, Object> manifest =
+        (Map<String, Object>)
+            Json.read(Files.readAllBytes(Path.of("..", "tests", "compatibility", "manifest.json")));
+    return ((List<Object>) manifest.get("scenarios"))
+        .stream()
+        .map(s -> (Map<String, Object>) s)
+        .filter(s -> ((String) s.get("id")).startsWith("context."))
         .flatMap(
-            c ->
-                Stream.of(
-                    Arguments.of("every kind", c.get()[0], c.get()[1], c.get()[2], c.get()[3]),
-                    Arguments.of("no OR or subquery", c.get()[0], c.get()[1], c.get()[2], c.get()[4])));
+            s -> Stream.of(Arguments.of("every kind", s), Arguments.of("no OR or subquery", s)));
   }
 
   @ParameterizedTest(name = "{0}: {1}")
   @MethodSource("queries")
-  void eachQueryKeepsExactlyTheExamplesTheSourceHolds(
-      String declared, String pql, List<Long> kept, String stopped, boolean sent) throws Exception {
+  @SuppressWarnings("unchecked")
+  void eachQueryKeepsExactlyTheExamplesTheSourceHolds(String declared, Map<String, Object> scenario)
+      throws Exception {
     Set<FilterKind> kinds = declared.equals("every kind") ? EVERY : NO_OR_NO_SUBQUERY;
     var source = ProviderSource.of(new TrinoProvider(kinds));
     var schema =
@@ -194,18 +169,42 @@ class TrinoProviderTest {
                     new Relationship("events", "id", "users", "id"),
                     new Relationship("events", "item", "items", "item")))
             .withStype("users", "value", "numerical");
-    var options = MaterializeOptions.builder().indices(1L, 2L).randomSeed(7);
-    if (pql.contains("RANK")) options.candidates(List.of(0L, 1L, 2L));
-    if (!stopped.equals("source_exhausted")) options.numContextSamples(40);
-    Request request = PredictiveQuery.parse(pql).materialize(schema, options.build());
+    var options = MaterializeOptions.builder();
+    ((Map<String, Object>) scenario.get("options"))
+        .forEach(
+            (key, value) -> {
+              switch (key) {
+                case "indices" -> options.indices((List<Object>) value);
+                case "random_seed" -> options.randomSeed(((Number) value).longValue());
+                case "num_context_samples" -> options.numContextSamples(((Number) value).intValue());
+                case "candidates" -> options.candidates((List<Object>) value);
+                case "anchor_time" ->
+                    options.anchorTime(java.time.LocalDate.parse((String) value).atStartOfDay());
+                default -> throw new IllegalArgumentException("unknown option " + key);
+              }
+            });
+    Request request =
+        PredictiveQuery.parse((String) scenario.get("pql")).materialize(schema, options.build());
 
+    // A filter reaches the provider only where it declares the kinds the scenario's filter is
+    // written with (sent_with).
+    Map<String, Object> context = (Map<String, Object>) scenario.get("context");
+    Set<String> declaredNames =
+        kinds.stream().map(FilterKind::wireName).collect(Collectors.toSet());
+    boolean sent =
+        (Boolean) context.get("filtered_at_source")
+            && declaredNames.containsAll((List<Object>) context.get("sent_with"));
+    long asked = ((Number) context.get("asked")).longValue();
+    var wanted =
+        ((List<Object>) context.get("kept"))
+            .stream()
+                .map(k -> List.<Object>of(((Number) k).longValue(), asked, context.get("stopped"), sent))
+                .toList();
     var report = request.contextReport();
     assertEquals("available", report.status());
-    long asked = stopped.equals("source_exhausted") ? 1000 : 40;
-    var wanted = kept.stream().map(k -> List.of(k, asked, stopped, sent)).toList();
     var got =
         report.parts().stream()
-            .map(p -> List.of(p.kept(), p.asked(), p.stopped(), p.filteredAtSource()))
+            .map(d -> List.<Object>of(d.kept(), d.asked(), d.stopped(), d.filteredAtSource()))
             .toList();
     assertEquals(wanted, got);
   }

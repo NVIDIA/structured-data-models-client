@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from sdm_connectors import Source
 
     from sdm_client._rust.results import SourceFacts
+    from sdm_client.provider import ProviderSource
     from sdm_client.relational_task import RelationalTask
     from sdm_client.request import Request
 
@@ -921,7 +922,7 @@ class Schema:
         tables: Mapping[str, Table | SourceTable],
         relationships: Sequence[Relationship] = (),
         *,
-        source: Source | None = None,
+        source: Source | ProviderSource | None = None,
     ) -> None:
         _require_one_kind_of_table(tables, source)
         self._source = source
@@ -1001,7 +1002,7 @@ class Schema:
             inference=inference,
         )
 
-    def with_source(self, source: Source) -> Schema:
+    def with_source(self, source: Source | ProviderSource) -> Schema:
         """Return this schema using a replacement caller-owned database source.
 
         Backend, namespace, source kind and semantic-model settings must match.
@@ -1107,7 +1108,7 @@ class Schema:
         visualize(self, path, show_columns, height)
 
     @property
-    def source(self) -> Source | None:
+    def source(self) -> Source | ProviderSource | None:
         r"""Where the tables are, for a schema built with:meth:`from_source`.
 
         ``None`` for a schema of frames. A schema has one source or none,
@@ -1360,7 +1361,7 @@ class Schema:
     @classmethod
     def from_source(
         cls,
-        source: Source,
+        source: Source | ProviderSource,
         tables: Mapping[str, str] | None = None,
         *,
         primary_keys: Mapping[str, str | Sequence[str]] | None = None,
@@ -1420,8 +1421,10 @@ class Schema:
         query, so it runs against one engine.
 
         Args:
-            source: Where the tables are: an ``sdm_connectors.Source``, or a
-                ``SemanticModel`` got from one.
+            source: Where the tables are: an ``sdm_connectors.Source``, a
+                ``SemanticModel`` got from one, or a
+                :class:`~sdm_client.provider.ProviderSource` over the caller's
+                own :class:`~sdm_client.provider.DataProvider`.
             tables: For each name a query will use, the table's name in the
                 source. Left out, every table the source describes is taken,
                 under its own name: every table in the namespace, or every
@@ -1624,13 +1627,18 @@ def _require_table_names(tables: Mapping[str, str]) -> None:
 
 
 def _require_a_source(source: object) -> None:
+    from sdm_client.provider import ProviderSource
+
+    if isinstance(source, ProviderSource):
+        return
     try:
         from sdm_connectors import Source
     except ImportError:  # pragma: no cover - nothing could have built one
         Source = None  # type: ignore[assignment,misc]
     if Source is None or not isinstance(source, Source):
         raise StructuredDataError(
-            f'a schema over tables in place needs an sdm_connectors.Source, '
+            f'a schema over tables in place needs an sdm_connectors.Source '
+            f"or a ProviderSource over a caller's own DataProvider, "
             f'got {type(source).__name__}. Build one from a connection: '
             f'DatabricksSource(databricks.sql.connect(...), catalog=..., '
             f'schema=...), or DatabricksSource(spark, ...) in a notebook',

@@ -18,10 +18,11 @@ from sdm_client.errors import StructuredDataError
 if TYPE_CHECKING:
     from sdm_connectors import Source
 
+    from sdm_client.provider import ProviderSource
     from sdm_client.schema import Schema
 
 
-def rebind(schema: Schema, source: Source) -> Schema:
+def rebind(schema: Schema, source: Source | ProviderSource) -> Schema:
     from sdm_client.schema import _require_a_source
 
     if schema.source is None:
@@ -50,7 +51,7 @@ def rebind(schema: Schema, source: Source) -> Schema:
     return result
 
 
-def _kind(source: Source) -> str:
+def _kind(source: Source | ProviderSource) -> str:
     model = providers._model_of(source)
     return (
         source.kind if model is None else f'{model.source.kind}/{source.kind}'

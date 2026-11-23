@@ -95,9 +95,20 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
     are trusted. The core reads the model afresh at every run, so the
     choice is all a schema built from it keeps of it.
 
+    A :class:`~sdm_client.provider.ProviderSource`'s choice is a host
+    provider's, its capabilities as the caller's provider declares them,
+    and its provider asks the caller's of each fetch
+    (:mod:`sdm_client._rust.host_providers`).
+
     Raises:
         NativeBoundaryError: A semantic model whose underlying source has no core provider.
     """
+    from sdm_client.provider import ProviderSource
+
+    if isinstance(source, ProviderSource):
+        from sdm_client._rust import host_providers
+
+        return host_providers.chosen(source.provider)
     model = _model_of(source)
     kept = source if model is None else model.source
     choice: dict[str, Any] = {'provider': 'sql'}
