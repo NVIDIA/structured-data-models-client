@@ -88,4 +88,29 @@ class HostProviderFiltersTest {
                         List.of(new DataRequest.In("name", List.of("ann"))))))),
         scan.filters());
   }
+
+  @Test
+  void hasRowsIsReadWithItsTableAndNestedFilters() {
+    Map<String, Object> wire =
+        Map.of(
+            "request", "scan",
+            "table", Map.of("source", List.of("users")),
+            "columns", List.of("id"),
+            "filters",
+                List.of(
+                    Map.of(
+                        "filter", "has_rows",
+                        "column", "id",
+                        "table", Map.of("source", List.of("orders")),
+                        "key", "uid",
+                        "filters", List.of(Map.of("filter", "not_null", "column", "amount")),
+                        "at_least", 2)));
+    DataRequest.Scan scan = (DataRequest.Scan) HostProviders.Requests.read(wire, at -> null);
+    DataRequest.HasRows hasRows = (DataRequest.HasRows) scan.filters().get(0);
+    assertEquals("id", hasRows.column());
+    assertEquals(List.of("orders"), hasRows.table().parts());
+    assertEquals("uid", hasRows.key());
+    assertEquals(List.of(new DataRequest.NotNull("amount")), hasRows.filters());
+    assertEquals(2L, hasRows.atLeast());
+  }
 }

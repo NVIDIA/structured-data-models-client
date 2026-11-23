@@ -13,7 +13,7 @@ The public API snapshot records this version update; publication remains pending
 
 ### Added
 
-- Java `DataProvider`s can declare the value filters they apply (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf` and `AllOf` on samples and scans.
+- Java `DataProvider`s can declare the value filters they apply (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf`, `AllOf` and `HasRows` on samples and scans.
   A provider that declares none receives none, as before.
 - Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned
   RelBench datasets with verified caches, offline mode and declared schema metadata.
@@ -165,6 +165,8 @@ The public API snapshot records this version update; publication remains pending
   Before, a `WHERE` keeping one entity in sixty gathered about a sixtieth of the context asked for, or none.
   Every example is still checked by the query's own rules, so a source's null, type or collation rules cannot change which examples are used.
   A source the client samples in memory filters there before drawing; Snowflake samples after filtering, and Databricks sizes its sample by the rows the filters keep.
+- A query that keeps only entities with rows in a window, such as `WHERE COUNT(orders.*, -30, 0, days) > 1`, or whose target is an `AVG`, `MIN` or `MAX` that most entities have no rows for, gathers the context it asks for on DuckDB, Postgres, Snowflake and Databricks.
+  The source is asked, at each anchor time, for the entities with enough rows in the window, widened by a day each way, instead of for every entity.
   For a filtered query, the same seed draws different entities than 1.0 did, from the same entities that qualify.
 - The client wheel's notices name the IANA Time Zone Database that its native module embeds, with the release and the tz project's LICENSE.
   The installation docs say that the `postgres` and `lakebase` extras install LGPL-3.0-only psycopg, which the wheels do not bundle.

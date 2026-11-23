@@ -75,3 +75,55 @@ def test_a_selective_filter_on_the_entity_fills_the_context(query: str) -> None:
 def test_a_sparse_static_target_fills_the_context() -> None:
     # 6,000 users have a label; a draw of every user would keep about 500.
     assert _context_rows('PREDICT users.labelled FOR EACH users.id') == ASKED
+
+
+def _shop() -> Any:
+    """120,000 users; one in sixty orders every five days through 2023 and
+    2024, the rest never."""
+    connection = duckdb.connect()
+    connection.execute('CREATE TABLE users (id BIGINT PRIMARY KEY, age BIGINT)')
+    connection.execute(
+        f'INSERT INTO users SELECT u, 18 + u % 60 FROM range({USERS}) t(u)'
+    )
+    connection.execute(
+        'CREATE TABLE orders (oid BIGINT PRIMARY KEY, '
+        'uid BIGINT REFERENCES users(id), placed TIMESTAMP, amount DOUBLE)'
+    )
+    connection.execute(
+        f"""
+        INSERT INTO orders
+        SELECT row_number() OVER (), u,
+               TIMESTAMP '2023-01-01' + k * INTERVAL 5 DAY, (u % 7) + k % 3
+        FROM range(0, {USERS}, 60) a(u), range(146) b(k)
+        """
+    )
+    return connection
+
+
+def _shop_context_rows(query: str) -> int:
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(_shop()))
+        request = PredictiveQuery(query, schema).materialize(
+            indices=[0, 60],
+            anchor_time=pd.Timestamp('2024-12-01'),
+            num_context_samples=ASKED,
+        )
+    return request.context_rows
+
+
+@pytest.mark.parametrize(
+    'query',
+    [
+        # 2,000 users have orders in any 30 days; a draw of every user
+        # would keep about 167.
+        'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.id '
+        'WHERE COUNT(orders.*, -30, 0, days) > 1',
+        # An average over no orders is no answer.
+        'PREDICT AVG(orders.amount, 0, 30, days) FOR EACH users.id',
+    ],
+)
+def test_a_window_most_entities_have_no_rows_in_fills_the_context(
+    query: str,
+) -> None:
+    assert _shop_context_rows(query) == ASKED

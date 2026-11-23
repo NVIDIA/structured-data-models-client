@@ -298,6 +298,18 @@ public sealed interface DataRequest {
     }
   }
 
+  /**
+   * A value filter: the row's {@code column} is referred to by at least {@code atLeast} rows of
+   * {@code table} through its column {@code key} that meet {@code filters} (a {@link TimeRange},
+   * not-null and value filters on {@code table}'s rows).
+   */
+  record HasRows(String column, Relation table, String key, List<Filter> filters, long atLeast)
+      implements Filter {
+    public HasRows {
+      filters = List.copyOf(filters);
+    }
+  }
+
   /** How a {@link Compare} compares. */
   enum CompareOp {
     EQ,
@@ -314,7 +326,8 @@ public sealed interface DataRequest {
     IN("in"),
     IS_NULL("is_null"),
     ANY_OF("any_of"),
-    ALL_OF("all_of");
+    ALL_OF("all_of"),
+    HAS_ROWS("has_rows");
 
     private final String wireName;
 

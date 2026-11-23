@@ -380,6 +380,13 @@ public final class HostProviders {
           case "is_null" -> list.add(new DataRequest.IsNull((String) filter.get("column")));
           case "any_of" -> list.add(new DataRequest.AnyOf(filters(filter.get("filters"), keys)));
           case "all_of" -> list.add(new DataRequest.AllOf(filters(filter.get("filters"), keys)));
+          case "has_rows" -> list.add(
+              new DataRequest.HasRows(
+                  (String) filter.get("column"),
+                  relation(filter.get("table")),
+                  (String) filter.get("key"),
+                  filters(filter.get("filters"), keys),
+                  ((Number) filter.get("at_least")).longValue()));
           default -> throw Messages.internal("the core sent a filter this host does not know");
         }
       }

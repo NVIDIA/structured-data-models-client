@@ -14866,7 +14866,8 @@
         "in",
         "is_null",
         "any_of",
-        "all_of"
+        "all_of",
+        "has_rows"
       ]
     },
     "Determinism": {
@@ -16419,6 +16420,45 @@
           "required": [
             "filter",
             "filters"
+          ]
+        },
+        {
+          "description": "The row's `column` is referred to by at least `at_least` rows of\n`table` through its column `key` that meet `filters`: a time range,\nnot-null and value filters on `table`'s rows. A value filter.",
+          "type": "object",
+          "properties": {
+            "column": {
+              "type": "string"
+            },
+            "table": {
+              "$ref": "#/$defs/Relation"
+            },
+            "key": {
+              "type": "string"
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Filter"
+              }
+            },
+            "at_least": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "filter": {
+              "type": "string",
+              "const": "has_rows"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "filter",
+            "column",
+            "table",
+            "key",
+            "filters",
+            "at_least"
           ]
         }
       ]

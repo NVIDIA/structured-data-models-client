@@ -212,6 +212,11 @@ impl SqlDialect for Sqlite {
     }
 
     /// What a SQLite source answers through this layer.
+    /// No time literal: SQLite stores a time as text, compared as spelled.
+    fn time_literal(&self, _value: &Scalar) -> Option<String> {
+        None
+    }
+
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             opaque_vendor: None,
@@ -222,7 +227,12 @@ impl SqlDialect for Sqlite {
             key_enforcement: false,
             sample_rows: false,
             optional: sql::rendered(),
-            filters: sdm_contract::data::FilterKind::ALL.into(),
+            // Every kind but `has_rows`, whose time bounds SQLite's text times
+            // do not compare with (`time_literal`).
+            filters: sdm_contract::data::FilterKind::ALL
+                .into_iter()
+                .filter(|k| *k != sdm_contract::data::FilterKind::HasRows)
+                .collect(),
             max_keys_per_request: None,
             // The seeded draw of RS-2 repeats under a seed.
             sampling: Determinism::SeededStable,

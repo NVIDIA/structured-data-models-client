@@ -26,7 +26,7 @@
 //! meet in the labels and not in SQL, or a negated membership, is not
 //! written.
 
-use sdm_contract::data::{CompareOp, Filter};
+use sdm_contract::data::{Bound, CompareOp, Filter};
 
 use super::*;
 
@@ -95,6 +95,197 @@ fn written(shape: &Shape, entity: &Table, negated: bool) -> Option<Filter> {
         }
         Shape::Column(_) | Shape::Aggregated(_) | Shape::Links(_) => None,
     }
+}
+
+/// A window of rows of a table referring to the entity's that an example
+/// needs at least `at_least` of to qualify: a choosing `COUNT` condition's
+/// floor, or the one row with a value an `AVG`, `MIN` or `MAX` needs to
+/// have an answer.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct WindowCheck {
+    pub table: String,
+    pub start: Offset,
+    pub end: Offset,
+    /// Not-null and value filters on the table's rows.
+    pub filters: Vec<Filter>,
+    pub at_least: u64,
+}
+
+/// The window checks an example must pass: each choosing condition's,
+/// among the parts of a conjunction, and the target's, where an
+/// aggregation of no rows gives it no answer. A part that is not certain
+/// to fail with fewer rows (`SUM`, `COUNT <`, `NOT`, `OR`) gives none.
+pub(super) fn window_checks(asked: &Asked, graph: &Graph) -> Vec<WindowCheck> {
+    let mut checks = Vec::new();
+    for shape in &asked.choosing {
+        choosing_checks(shape, graph, &mut checks);
+    }
+    let target = match &asked.target {
+        Shape::Condition { target, .. } => target.as_ref(),
+        other => other,
+    };
+    if let Shape::Aggregated(windowed) = target
+        && let Some(check) = answered(windowed, graph)
+    {
+        checks.push(check);
+    }
+    checks.dedup();
+    checks
+}
+
+fn choosing_checks(shape: &Shape, graph: &Graph, into: &mut Vec<WindowCheck>) {
+    match shape {
+        Shape::Both {
+            op: labels::BoolOp::And,
+            left,
+            right,
+        } => {
+            choosing_checks(left, graph, into);
+            choosing_checks(right, graph, into);
+        }
+        Shape::Condition { target, test } => {
+            let Shape::Aggregated(windowed) = target.as_ref() else {
+                return;
+            };
+            let check = match windowed.aggregation {
+                Some(labels::Aggregation::Count) => match test {
+                    Test::Compare(op, Some(constant)) => {
+                        // `COUNT(table.column)` counts the rows holding a
+                        // value, as `answered_by` asks.
+                        count_floor(*op, constant)
+                            .and_then(|at_least| answered_by(windowed, graph, at_least))
+                    }
+                    _ => None,
+                },
+                Some(
+                    labels::Aggregation::Avg | labels::Aggregation::Min | labels::Aggregation::Max,
+                ) => answered(windowed, graph),
+                _ => None,
+            };
+            into.extend(check);
+        }
+        _ => {}
+    }
+}
+
+/// The fewest rows a `COUNT op constant` holds with: `> c` one past
+/// `c`'s floor, `>= c` its ceiling, `= c` itself; none where no rows may
+/// meet it (a bound under one) or more rows do not keep it (`<`, `<=`,
+/// `<>`).
+fn count_floor(op: labels::RelOp, constant: &labels::Constant) -> Option<u64> {
+    let c = match constant {
+        labels::Constant::Int(i) => *i as f64,
+        labels::Constant::Float(f) if f.is_finite() => *f,
+        _ => return None,
+    };
+    let at_least = match op {
+        labels::RelOp::Gt => c.floor() + 1.0,
+        labels::RelOp::Ge => c.ceil(),
+        labels::RelOp::Eq if c.fract() == 0.0 => c,
+        _ => return None,
+    };
+    (at_least >= 1.0 && at_least < u64::MAX as f64).then_some(at_least as u64)
+}
+
+/// The check that `windowed`, an `AVG`, `MIN` or `MAX`, has an answer:
+/// one row in its window with a value.
+fn answered(windowed: &Windowed, graph: &Graph) -> Option<WindowCheck> {
+    match windowed.aggregation {
+        Some(labels::Aggregation::Avg | labels::Aggregation::Min | labels::Aggregation::Max) => {
+            answered_by(windowed, graph, 1)
+        }
+        _ => None,
+    }
+}
+
+/// `at_least` rows of `windowed`'s window: its column holding a value, and
+/// its filter's parts written for the aggregated table.
+fn answered_by(windowed: &Windowed, graph: &Graph, at_least: u64) -> Option<WindowCheck> {
+    let table = graph.table(&windowed.table)?;
+    let mut filters = Vec::new();
+    if let Some(column) = &windowed.column {
+        filters.push(Filter::NotNull {
+            column: column.clone(),
+        });
+    }
+    if let Some(filter) = &windowed.filter
+        && let Some(written) = written(filter, table, false)
+    {
+        filters.push(written);
+    }
+    Some(WindowCheck {
+        table: windowed.table.clone(),
+        start: windowed.start,
+        end: windowed.end,
+        filters,
+        at_least,
+    })
+}
+
+/// A day, in nanoseconds: how far each bound of a window check is moved
+/// out, past any zone a source compares a time in.
+const DAY: i64 = 86_400_000_000_000;
+
+/// `check` at `anchor`, as a filter on the entity table keyed by `key`:
+/// none where the referring table's time is not a time the sources
+/// compare with a literal (text a source may store a time as), the link is
+/// not one foreign key, or a bound is past what nanoseconds hold. The
+/// window, rows after `anchor + start` and not after `anchor + end` in the
+/// labels, is widened by a day each way.
+pub(super) fn has_rows(
+    check: &WindowCheck,
+    graph: &Graph,
+    entity: &Table,
+    key: &str,
+    anchor: i64,
+) -> Option<Filter> {
+    let table = graph.table(&check.table)?;
+    let time = table.time_column.as_ref()?;
+    if !matches!(
+        table.column(time)?.received,
+        ColumnType::Timestamp { .. } | ColumnType::Date32
+    ) {
+        return None;
+    }
+    let edges: Vec<_> = graph
+        .edges
+        .iter()
+        .filter(|e| e.src == table.name && e.dst == entity.name)
+        .collect();
+    let [edge] = edges.as_slice() else {
+        return None;
+    };
+    let bound = |at: i64| Bound {
+        value: Scalar::Timestamp {
+            unit: Unit::Ns,
+            zone: None,
+            value: at,
+        },
+        inclusive: true,
+    };
+    let lower = check
+        .start
+        .add_to(anchor, "anchor_time")
+        .ok()?
+        .checked_sub(DAY)?;
+    let upper = check
+        .end
+        .add_to(anchor, "anchor_time")
+        .ok()?
+        .checked_add(DAY)?;
+    let mut filters = vec![Filter::TimeRange {
+        column: time.clone(),
+        lower: Some(bound(lower)),
+        upper: Some(bound(upper)),
+    }];
+    filters.extend(check.filters.iter().cloned());
+    Some(Filter::HasRows {
+        column: key.to_owned(),
+        table: table.source.clone(),
+        key: edge.fkey.clone(),
+        filters,
+        at_least: check.at_least,
+    })
 }
 
 /// What a column's values compare as, by the type the source hands over.
@@ -469,5 +660,23 @@ mod tests {
             test: Test::Compare(labels::RelOp::Eq, None),
         };
         assert_eq!(written(&null, &users(), false), None);
+    }
+
+    #[test]
+    fn a_count_condition_needs_as_many_rows_as_its_floor() {
+        use labels::{Constant, RelOp};
+        assert_eq!(count_floor(RelOp::Gt, &Constant::Int(1)), Some(2));
+        assert_eq!(count_floor(RelOp::Gt, &Constant::Float(1.5)), Some(2));
+        assert_eq!(count_floor(RelOp::Ge, &Constant::Float(1.5)), Some(2));
+        assert_eq!(count_floor(RelOp::Ge, &Constant::Int(3)), Some(3));
+        assert_eq!(count_floor(RelOp::Eq, &Constant::Int(2)), Some(2));
+        // No rows may meet these, or more rows do not keep them.
+        assert_eq!(count_floor(RelOp::Gt, &Constant::Int(-1)), None);
+        assert_eq!(count_floor(RelOp::Ge, &Constant::Int(0)), None);
+        assert_eq!(count_floor(RelOp::Eq, &Constant::Int(0)), None);
+        assert_eq!(count_floor(RelOp::Eq, &Constant::Float(1.5)), None);
+        for op in [RelOp::Lt, RelOp::Le, RelOp::Ne] {
+            assert_eq!(count_floor(op, &Constant::Int(5)), None);
+        }
     }
 }

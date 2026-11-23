@@ -505,6 +505,16 @@ pub enum Filter {
     AllOf {
         filters: Vec<Filter>,
     },
+    /// The row's `column` is referred to by at least `at_least` rows of
+    /// `table` through its column `key` that meet `filters`: a time range,
+    /// not-null and value filters on `table`'s rows. A value filter.
+    HasRows {
+        column: String,
+        table: Relation,
+        key: String,
+        filters: Vec<Filter>,
+        at_least: u64,
+    },
 }
 
 /// How a [`Filter::Compare`] compares a column with its value.
@@ -555,16 +565,18 @@ pub enum FilterKind {
     IsNull,
     AnyOf,
     AllOf,
+    HasRows,
 }
 
 impl FilterKind {
     /// Every kind, as a source that renders them all declares them.
-    pub const ALL: [FilterKind; 5] = [
+    pub const ALL: [FilterKind; 6] = [
         FilterKind::Compare,
         FilterKind::In,
         FilterKind::IsNull,
         FilterKind::AnyOf,
         FilterKind::AllOf,
+        FilterKind::HasRows,
     ];
 }
 
@@ -579,6 +591,7 @@ impl Filter {
             Filter::IsNull { .. } => Some(FilterKind::IsNull),
             Filter::AnyOf { .. } => Some(FilterKind::AnyOf),
             Filter::AllOf { .. } => Some(FilterKind::AllOf),
+            Filter::HasRows { .. } => Some(FilterKind::HasRows),
         }
     }
 
@@ -587,9 +600,9 @@ impl Filter {
     pub fn taken_by(&self, kinds: &BTreeSet<FilterKind>) -> bool {
         self.kind().is_none_or(|kind| kinds.contains(&kind))
             && match self {
-                Filter::AnyOf { filters } | Filter::AllOf { filters } => {
-                    filters.iter().all(|f| f.taken_by(kinds))
-                }
+                Filter::AnyOf { filters }
+                | Filter::AllOf { filters }
+                | Filter::HasRows { filters, .. } => filters.iter().all(|f| f.taken_by(kinds)),
                 _ => true,
             }
     }
@@ -602,7 +615,9 @@ impl Filter {
             | Filter::NotNull { column }
             | Filter::Compare { column, .. }
             | Filter::In { column, .. }
-            | Filter::IsNull { column } => vec![column.as_str()],
+            | Filter::IsNull { column }
+            // The rows referring to it are another table's.
+            | Filter::HasRows { column, .. } => vec![column.as_str()],
             Filter::AnyOf { filters } | Filter::AllOf { filters } => {
                 filters.iter().flat_map(Filter::columns).collect()
             }

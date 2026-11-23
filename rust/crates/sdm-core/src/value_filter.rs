@@ -42,6 +42,8 @@ fn holds(rows: &RecordBatch, filter: &Filter) -> Result<Vec<bool>, CoreError> {
         // Not a value filter: the core sends none to the fallback's sample
         // and checks it itself.
         Filter::KeyIn { .. } | Filter::TimeRange { .. } => vec![true; n],
+        // Another table's rows are not read here: every row may meet it.
+        Filter::HasRows { .. } => vec![true; n],
         Filter::NotNull { column } => {
             let array = column_of(rows, column)?;
             (0..n).map(|row| array.is_valid(row)).collect()

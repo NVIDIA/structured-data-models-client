@@ -1924,6 +1924,65 @@ async fn table_rows(memo: &mut Memo<'_>, graph: &Graph) -> Result<(), CoreError>
     Ok(())
 }
 
+/// A seeded sample of `n` entities of `entity`, `columns` in order, from
+/// the rows meeting every filter: sized, for a provider sizing its draw by
+/// the table's rows, by `rows`, or with `count`, by the rows the filters
+/// keep, counted first.
+#[allow(clippy::too_many_arguments, reason = "one sample request's fields")]
+async fn drawn(
+    asker: &Asker,
+    times: &Times,
+    entity: &Table,
+    key: &str,
+    columns: Vec<String>,
+    n: usize,
+    seed: Scalar,
+    filters: Vec<Filter>,
+    rows: Option<u64>,
+    count: bool,
+) -> Result<RecordBatch, CoreError> {
+    let rows = if count {
+        Some(row_count(
+            &ask(
+                asker,
+                DataRequest::CountRows {
+                    table: entity.source.clone(),
+                    filters: filters.clone(),
+                },
+            )
+            .await?,
+        )?)
+    } else {
+        rows
+    };
+    times.read(
+        asker,
+        entity,
+        one_batch(
+            &ask(
+                asker,
+                DataRequest::SampleEntities {
+                    table: entity.source.clone(),
+                    key: vec![key.to_owned()],
+                    n: n as u64,
+                    seed,
+                    columns,
+                    filters,
+                    // The schema's type of the key, for a provider that
+                    // orders the draw by it (SQLite's, which reads the
+                    // type the key's declaration fixes first).
+                    key_dtype: asker
+                        .samples_by_key_dtype()
+                        .then(|| entity.column(key).map(|c| c.dtype))
+                        .flatten(),
+                    rows,
+                },
+            )
+            .await?,
+        )?,
+    )
+}
+
 /// One aggregate row whose first column holds a nonnegative integer count.
 fn row_count(answer: &ArrowData) -> Result<u64, CoreError> {
     let batch = one_batch(answer)?;
@@ -3535,63 +3594,95 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         }
     }
     let filtered = filters.iter().any(|f| f.kind().is_some());
+    // A temporal query's windowed conditions, and an aggregated target that
+    // has no answer over a window of no rows, as `has_rows` filters at each
+    // anchor, for a provider applying them: the entity table is then drawn
+    // from at one anchor at a time, newest first, as the walk below takes
+    // the anchors, each draw of the entities that may give an example
+    // there. Where no check can be written, one draw of every anchor.
+    let checks = match &span {
+        Some(_) if !anchor_entity && taken.contains(&sdm_contract::data::FilterKind::HasRows) => {
+            pushdown::window_checks(&asked, &graph)
+        }
+        _ => Vec::new(),
+    };
+    let windowed_at = |at: i64| -> Vec<Filter> {
+        checks
+            .iter()
+            .filter_map(|check| pushdown::has_rows(check, &graph, entity, &key, at))
+            .collect()
+    };
+    let per_anchor = !windowed_at(context_anchor).is_empty();
     // A provider sizing its draw by the table's rows draws a share of them
     // before its value filters thin it: sized instead by the rows the
     // filters keep, counted with them, the draw keeps about as many as
     // were asked for.
-    let sample_rows = if frames.is_some() || !asker.capabilities()?.sample_rows {
-        None
-    } else if filtered {
-        Some(row_count(
-            &ask(
-                asker,
-                DataRequest::CountRows {
-                    table: entity.source.clone(),
-                    filters: filters.clone(),
-                },
-            )
-            .await?,
-        )?)
-    } else {
+    let sizes_by_rows = frames.is_none() && asker.capabilities()?.sample_rows;
+    let table_rows = if sizes_by_rows {
         rows_of(&memo.memo, &entity.name)
+    } else {
+        None
     };
+    let columns = entity.ordered(&entity_columns);
     // Seeds are optional. An unseeded provider warns only of a seed the
     // caller named, above, not of the default one.
-    let sampled = if let Some(frames) = &frames {
-        frames.entities(entity, &entity.ordered(&entity_columns), trials, &seed)?
+    let (sampled, row_anchors) = if let Some(frames) = &frames {
+        (frames.entities(entity, &columns, trials, &seed)?, None)
+    } else if let (true, Some((start, end))) = (per_anchor, &span) {
+        let step = timeframe(*start, *end, "anchor_time")?;
+        let floor = earliest.unwrap_or(TIME_MAX);
+        let mut batches = Vec::new();
+        let mut anchors: Vec<i64> = Vec::new();
+        let mut at = context_anchor;
+        loop {
+            let mut at_anchor = filters.clone();
+            at_anchor.extend(windowed_at(at));
+            let batch = drawn(
+                asker,
+                &read_times,
+                entity,
+                &key,
+                columns.clone(),
+                trials.saturating_sub(anchors.len()),
+                seed_value.clone(),
+                at_anchor,
+                table_rows,
+                sizes_by_rows,
+            )
+            .await?;
+            anchors.extend(std::iter::repeat_n(at, batch.num_rows()));
+            batches.push(batch);
+            if anchors.len() >= trials {
+                break;
+            }
+            at = sample::shift(at, -step, "anchor_time")?;
+            if at < floor {
+                break;
+            }
+        }
+        let schema = batches[0].schema();
+        let sampled = arrow_select::concat::concat_batches(&schema, &batches)
+            .map_err(|_| internal("the draws at each anchor do not make one batch"))?;
+        (sampled, Some(anchors))
     } else {
-        read_times.read(
+        let sampled = drawn(
             asker,
+            &read_times,
             entity,
-            one_batch(
-                &ask(
-                    asker,
-                    DataRequest::SampleEntities {
-                        table: entity.source.clone(),
-                        key: vec![key.clone()],
-                        n: trials as u64,
-                        seed: seed_value,
-                        columns: entity.ordered(&entity_columns),
-                        filters,
-                        // The schema's type of the key, for a provider that
-                        // orders the draw by it (SQLite's, which reads the
-                        // type the key's declaration fixes first).
-                        key_dtype: asker
-                            .samples_by_key_dtype()
-                            .then(|| entity.column(&key).map(|c| c.dtype))
-                            .flatten(),
-                        // The table's rows, for a provider sizing its draw by
-                        // them (the reference's sampled percentage).
-                        rows: sample_rows,
-                    },
-                )
-                .await?,
-            )?,
-        )?
+            &key,
+            columns,
+            trials,
+            seed_value,
+            filters,
+            table_rows,
+            sizes_by_rows && filtered,
+        )
+        .await?;
+        (sampled, None)
     };
     // With value filters, no row drawn is no entity passing them: the
     // labels below find no example and say so.
-    if sampled.num_rows() == 0 && !filtered {
+    if sampled.num_rows() == 0 && !filtered && !per_anchor {
         return Err(invalid(
             Sentence::EntityTableEmpty,
             "the entity table holds no row to sample",
@@ -3602,9 +3693,15 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // One entity per key value: `1.0` and `1.00` of a column of numbers
     // handed over as their text are one key (`subgraph::key_values`).
     let sampled_keys = crate::subgraph::key_values(entity, &key, named(&sampled, &key)?)?;
+    // Drawn at each anchor, one entity per key value at each.
     let mut seen = BTreeSet::new();
     let kept: Vec<usize> = (0..sampled_keys.len())
-        .filter(|&row| seen.insert(sampled_keys[row].clone()))
+        .filter(|&row| {
+            seen.insert((
+                sampled_keys[row].clone(),
+                row_anchors.as_ref().map(|anchors| anchors[row]),
+            ))
+        })
         .collect();
     let entity_key = take(named(&sampled, &key)?, &kept)?;
     let entity_time = match &entity.time_column {
@@ -3646,24 +3743,59 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         end: entity_end.as_deref(),
     };
     let mut rng = default_rng(&entropy);
-    let examples = match &span {
-        Some((start, end)) => sample::temporal_examples_with_validity(
-            &mut rng,
-            kept.len(),
-            validity,
-            context_anchor,
-            timeframe(*start, *end, "anchor_time")?,
-            earliest.unwrap_or(TIME_MAX),
-            trials,
-        )?,
-        None if anchor_entity => sample::entity_examples(
-            &mut rng,
-            kept.len(),
-            entity_time.as_deref().unwrap_or_default(),
-            sample::MISSING_ANCHOR,
-        ),
-        None => {
-            sample::static_examples_with_validity(&mut rng, kept.len(), validity, context_anchor)?
+    let examples = if let Some(row_anchors) = &row_anchors {
+        // Each anchor's draw, in the order drawn, the entities valid at
+        // the anchor (all of them, or those whose time is not after it and
+        // whose end is), shuffled as the walk shuffles them, then cut to
+        // the trials.
+        let valid = |at: usize, anchor: i64| {
+            validity
+                .start
+                .is_none_or(|v| v[at].is_some_and(|t| t <= anchor))
+                && validity
+                    .end
+                    .is_none_or(|v| v[at].is_none_or(|t| t > anchor))
+        };
+        let mut index = Vec::new();
+        let mut anchors = Vec::new();
+        let mut from = 0;
+        while from < kept.len() {
+            let anchor = row_anchors[kept[from]];
+            let to = (from..kept.len())
+                .find(|&i| row_anchors[kept[i]] != anchor)
+                .unwrap_or(kept.len());
+            let mut group: Vec<usize> = (from..to).filter(|&i| valid(i, anchor)).collect();
+            rng.shuffle(&mut group);
+            anchors.extend(std::iter::repeat_n(anchor, group.len()));
+            index.extend(group);
+            from = to;
+        }
+        index.truncate(trials);
+        anchors.truncate(trials);
+        sample::Examples { index, anchors }
+    } else {
+        match &span {
+            Some((start, end)) => sample::temporal_examples_with_validity(
+                &mut rng,
+                kept.len(),
+                validity,
+                context_anchor,
+                timeframe(*start, *end, "anchor_time")?,
+                earliest.unwrap_or(TIME_MAX),
+                trials,
+            )?,
+            None if anchor_entity => sample::entity_examples(
+                &mut rng,
+                kept.len(),
+                entity_time.as_deref().unwrap_or_default(),
+                sample::MISSING_ANCHOR,
+            ),
+            None => sample::static_examples_with_validity(
+                &mut rng,
+                kept.len(),
+                validity,
+                context_anchor,
+            )?,
         }
     };
 

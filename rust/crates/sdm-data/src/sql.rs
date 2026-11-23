@@ -119,6 +119,13 @@ pub(crate) trait SqlDialect: Sync {
         plain_literal(value, quote::text)
     }
 
+    /// A time bound a `has_rows` filter compares a time column with, or
+    /// none where the dialect writes none (the filter is then left out):
+    /// by default a `TIMESTAMP` literal ([`timestamp_literal`]).
+    fn time_literal(&self, value: &Scalar) -> Option<String> {
+        timestamp_literal(value)
+    }
+
     // --- quoting, depths and namespace -------------------------------------
 
     /// The most name parts a relation takes.
@@ -1063,7 +1070,7 @@ pub(crate) fn conditions(
                 ));
             }
             _ => {
-                if let Some(condition) = value_condition(d, filter) {
+                if let Some(condition) = value_condition(d, request, filter) {
                     conditions.push(condition);
                 }
             }
@@ -1082,7 +1089,11 @@ pub(crate) fn conditions(
 /// never fewer ([`sdm_contract::data::FilterKind`]). So an `AnyOf` with a
 /// part left out is left out whole, and an `AllOf` keeps the parts it
 /// writes.
-pub(crate) fn value_condition(d: &dyn SqlDialect, filter: &Filter) -> Option<String> {
+pub(crate) fn value_condition(
+    d: &dyn SqlDialect,
+    request: &DataRequest,
+    filter: &Filter,
+) -> Option<String> {
     match filter {
         Filter::NotNull { column } => Some(format!("{} IS NOT NULL", d.identifier(column))),
         Filter::IsNull { column } => Some(format!("{} IS NULL", d.identifier(column))),
@@ -1113,22 +1124,119 @@ pub(crate) fn value_condition(d: &dyn SqlDialect, filter: &Filter) -> Option<Str
             }
             let parts = filters
                 .iter()
-                .map(|f| value_condition(d, f))
+                .map(|f| value_condition(d, request, f))
                 .collect::<Option<Vec<_>>>()?;
             Some(format!("({})", parts.join(" OR ")))
         }
         Filter::AllOf { filters } => {
             let parts: Vec<String> = filters
                 .iter()
-                .filter_map(|f| value_condition(d, f))
+                .filter_map(|f| value_condition(d, request, f))
                 .collect();
             if parts.is_empty() {
                 return None;
             }
             Some(format!("({})", parts.join(" AND ")))
         }
-        Filter::KeyIn { .. } | Filter::TimeRange { .. } => None,
+        Filter::HasRows {
+            column,
+            table,
+            key,
+            filters,
+            at_least,
+        } => {
+            // Referred to by no row is no condition: every row meets it.
+            if *at_least == 0 {
+                return None;
+            }
+            let referring = d.identifier(key);
+            let mut within = vec![format!("{referring} IS NOT NULL")];
+            within.extend(
+                filters
+                    .iter()
+                    .filter_map(|f| value_condition(d, request, f)),
+            );
+            let counted = if *at_least > 1 {
+                format!("\n  GROUP BY {referring}\n  HAVING COUNT(*) >= {at_least}")
+            } else {
+                String::new()
+            };
+            Some(format!(
+                "{} IN (\n  SELECT {referring}\n  FROM {}\n  WHERE {}{counted})",
+                d.identifier(column),
+                from(d, request, "filters", table).ok()?,
+                within.join("\n    AND "),
+            ))
+        }
+        // A time range, written only inside `has_rows`: each bound the
+        // dialect writes a literal of ([`SqlDialect::time_literal`]); one it
+        // does not is left out, widening the range.
+        Filter::TimeRange {
+            column,
+            lower,
+            upper,
+        } => {
+            let at = d.as_time(&d.identifier(column));
+            let mut bounds = Vec::new();
+            for (bound, below) in [(lower, true), (upper, false)] {
+                let Some(bound) = bound else { continue };
+                let Some(literal) = d.time_literal(&bound.value) else {
+                    continue;
+                };
+                let op = match (below, bound.inclusive) {
+                    (true, true) => ">=",
+                    (true, false) => ">",
+                    (false, true) => "<=",
+                    (false, false) => "<",
+                };
+                bounds.push(format!("{at} {op} {literal}"));
+            }
+            (!bounds.is_empty()).then(|| bounds.join(" AND "))
+        }
+        Filter::KeyIn { .. } => None,
     }
+}
+
+/// A zone-less timestamp, of microseconds or nanoseconds since the
+/// epoch, as a `TIMESTAMP 'YYYY-MM-DD HH:MM:SS.ffffff'` literal, the
+/// microsecond rounded down (a window's bounds are widened past it); none
+/// for another value, or a zoned one.
+pub(crate) fn timestamp_literal(value: &Scalar) -> Option<String> {
+    let Scalar::Timestamp {
+        unit,
+        zone: None,
+        value,
+    } = value
+    else {
+        return None;
+    };
+    let micros = match unit {
+        sdm_contract::Unit::Us => i128::from(*value),
+        sdm_contract::Unit::Ns => i128::from(*value).div_euclid(1_000),
+    };
+    let days = micros.div_euclid(86_400_000_000);
+    let of_day = micros.rem_euclid(86_400_000_000);
+    // Howard Hinnant's civil_from_days.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = if mp < 10 { mp + 3 } else { mp - 9 };
+    let year = yoe + era * 400 + i128::from(month <= 2);
+    if !(1..=9999).contains(&year) {
+        return None;
+    }
+    let seconds = of_day / 1_000_000;
+    Some(format!(
+        "TIMESTAMP '{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02}.{:06}'",
+        seconds / 3_600,
+        seconds / 60 % 60,
+        seconds % 60,
+        of_day % 1_000_000
+    ))
 }
 
 /// `value` as a literal every dialect reads alike, or none: a boolean, an

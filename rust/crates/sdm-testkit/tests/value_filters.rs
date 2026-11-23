@@ -270,3 +270,109 @@ fn a_value_no_dialect_writes_widens_the_read_instead_of_failing() {
     };
     assert_eq!(duckdb_ids(&sql("duckdb", &scan(vec![all]))), [1]);
 }
+
+const ORDERS: &str =
+    "CREATE TABLE orders (oid BIGINT, uid BIGINT, placed TIMESTAMP, amount DOUBLE);
+INSERT INTO orders VALUES
+  (1, 1, TIMESTAMP '2025-01-10 00:00:00', 5.0),
+  (2, 1, TIMESTAMP '2025-01-20 00:00:00', NULL),
+  (3, 2, TIMESTAMP '2025-01-15 00:00:00', 7.0),
+  (4, 3, TIMESTAMP '2024-06-01 00:00:00', 1.0),
+  (5, 5, TIMESTAMP '2025-01-31 23:59:59', NULL),
+  (6, NULL, TIMESTAMP '2025-01-15 00:00:00', 1.0);";
+
+/// Microseconds since the epoch of a UTC wall clock.
+fn micros(day: &str) -> Scalar {
+    let days = match day {
+        "2025-01-01" => 20_089,
+        "2025-02-01" => 20_120,
+        _ => unreachable!(),
+    };
+    Scalar::Timestamp {
+        unit: sdm_contract::Unit::Us,
+        zone: None,
+        value: days * 86_400_000_000,
+    }
+}
+
+fn has_rows(at_least: u64, filters: Vec<Filter>) -> Filter {
+    Filter::HasRows {
+        column: "id".into(),
+        table: Relation {
+            columns: vec![],
+            filter: None,
+            found: false,
+            source: vec!["orders".into()],
+        },
+        key: "uid".into(),
+        filters: [Filter::TimeRange {
+            column: "placed".into(),
+            lower: Some(sdm_contract::data::Bound {
+                value: micros("2025-01-01"),
+                inclusive: true,
+            }),
+            upper: Some(sdm_contract::data::Bound {
+                value: micros("2025-02-01"),
+                inclusive: false,
+            }),
+        }]
+        .into_iter()
+        .chain(filters)
+        .collect(),
+        at_least,
+    }
+}
+
+#[test]
+fn has_rows_keeps_the_rows_referred_to_within_the_window_on_duckdb() {
+    let ids = |filter: Filter| {
+        let text = sql("duckdb", &scan(vec![filter]));
+        let connection = duck::open().unwrap();
+        connection.execute_batch(ROWS).unwrap();
+        connection.execute_batch(ORDERS).unwrap();
+        let mut ids: Vec<i64> = duck::run(&connection, &text)
+            .unwrap()
+            .batches
+            .iter()
+            .flat_map(|b| {
+                b.column(0)
+                    .as_primitive::<Int64Type>()
+                    .iter()
+                    .flatten()
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        ids.sort_unstable();
+        (ids, text)
+    };
+    // In January 2025: user 1 twice, users 2 and 5 once; user 3's order is
+    // earlier, and an order of no user refers to none.
+    let (found, text) = ids(has_rows(1, vec![]));
+    assert_eq!(found, [1, 2, 5], "{text}");
+    let (found, text) = ids(has_rows(2, vec![]));
+    assert_eq!(found, [1], "{text}");
+    // Only the orders with an amount: user 5's has none.
+    let (found, text) = ids(has_rows(
+        1,
+        vec![Filter::NotNull {
+            column: "amount".into(),
+        }],
+    ));
+    assert_eq!(found, [1, 2], "{text}");
+}
+
+#[test]
+fn the_timestamp_literal_is_the_wall_clock_and_sqlite_writes_none() {
+    let text = sql("duckdb", &scan(vec![has_rows(1, vec![])]));
+    assert!(
+        text.contains("CAST(\"placed\" AS TIMESTAMP) >= TIMESTAMP '2025-01-01 00:00:00.000000'"),
+        "{text}"
+    );
+    // SQLite writes no time literal: the window is left out, and the
+    // count is over every time, never fewer rows.
+    let text = sql("sqlite", &scan(vec![has_rows(1, vec![])]));
+    assert!(
+        text.contains("\"orders\"") && !text.contains("placed"),
+        "{text}"
+    );
+}
