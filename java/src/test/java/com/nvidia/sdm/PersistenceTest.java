@@ -85,6 +85,8 @@ class PersistenceTest {
       assertEquals(original.asked(), restored.asked());
       assertEquals(original.parts().map(List::size), restored.parts().map(List::size));
       assertEquals(original.contextRows(), restored.contextRows()); assertEquals(original.predictRows(), restored.predictRows());
+      assertEquals(original.contextReport(), restored.contextReport());
+      assertEquals("available", restored.contextReport().status());
       try (RelationalTest.Endpoint endpoint = new RelationalTest.Endpoint(); SdmClient client = endpoint.client()) {
         assertEquals(client.predict(original, SdmClient.KUMO_RELATIONAL).rows(), client.predict(restored, SdmClient.KUMO_RELATIONAL).rows());
         if (query.equals(RelationalTest.SCALAR)) {

@@ -450,6 +450,15 @@ pub fn messages() -> Vec<ControlMessage> {
                 examples: None,
                 state,
                 query: None,
+                context: vec![sdm_contract::ops::ContextReport {
+                    draws: 2,
+                    rows_drawn: 12_000,
+                    candidates: 11_000,
+                    kept: 1_000,
+                    asked: 1_000,
+                    stopped: sdm_contract::ops::ContextStop::Full,
+                    filtered_at_source: true,
+                }],
             }),
         }),
         ControlMessage::Step(Step::Done {

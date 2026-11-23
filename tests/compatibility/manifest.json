@@ -3250,6 +3250,45 @@
       }
     },
     {
+      "id": "java-data-providers",
+      "apis": {
+        "python": [],
+        "java": [
+          "ProviderSource"
+        ]
+      },
+      "tests": {
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#declaredFilterKindsGoOnTheWireAndNoneLeavesTheFieldOut",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#valueFiltersAreReadAsTypedFiltersNestedAndAll",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#hasRowsIsReadWithItsTableAndNestedFilters",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore"
+        ]
+      },
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "java/src/main/java/com/nvidia/sdm/internal/HostProviders.java"
+        ],
+        "operations": [],
+        "host_only_reason": "A Java caller's own provider answers the core's data requests; the operations are the ones every source answers."
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Provider declarations and request decoding are model-independent; the focused Java tests define the boundary."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
+    },
+    {
       "id": "large-values",
       "apis": {
         "python": [
@@ -4090,6 +4129,55 @@
       }
     },
     {
+      "id": "context-reports",
+      "apis": {
+        "python": [
+          "Request.context_report",
+          "ContextReport",
+          "ContextDraw"
+        ],
+        "java": [
+          "Request.contextReport",
+          "ContextReport",
+          "ContextDraw"
+        ]
+      },
+      "tests": {
+        "python": [
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_the_report_says_the_filter_went_to_the_source_and_one_draw_did",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_condition_the_source_is_not_sent_is_drawn_again_larger",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_source_holding_too_few_says_so"
+        ],
+        "java": [
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling"
+        ]
+      },
+      "gate": "local",
+      "ownership": {
+        "paths": [
+          "rust/crates/sdm-core/src/materialize.rs"
+        ],
+        "operations": [
+          "materialize"
+        ]
+      },
+      "scope": {
+        "scenarios": {
+          "refs": [],
+          "reason": "Context report tests materialize focused DuckDB fixtures; no separate scenario scope is declared."
+        },
+        "input_paths": {
+          "refs": [],
+          "reason": "This group exposes no input-route entry point; its focused tests define the boundary."
+        },
+        "type_contracts": {
+          "refs": [],
+          "reason": "This group does not define dtype or semantic-type admission; its tests cover capability behavior."
+        }
+      }
+    },
+    {
       "id": "metadata-explanation-reports",
       "gate": "local",
       "apis": {
@@ -4747,7 +4835,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "652bd2757ca1d8ed12360b795a5c7f80ce63978210306cee1319532503f9d031",
+  "public_api_snapshot_sha256": "1c686e7e1ec844abec7e04edceb61c532c86fb9bd418ea73d0ca56da30ad6bb2",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4837,6 +4925,33 @@
           {
             "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
             "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
+      },
+      "sdm_client.ContextDraw": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_the_report_says_the_filter_went_to_the_source_and_one_draw_did",
+            "behavior": "Public report access gives each part's draws, rows drawn, candidates, kept examples, the stop reason and whether conditions went to the source."
+          }
+        ]
+      },
+      "sdm_client.ContextReport": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_the_report_says_the_filter_went_to_the_source_and_one_draw_did",
+            "behavior": "Public report access gives each part's draws, rows drawn, candidates, kept examples, the stop reason and whether conditions went to the source."
+          }
+        ]
+      },
+      "sdm_client.ContextReport.parts": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_condition_the_source_is_not_sent_is_drawn_again_larger",
+            "behavior": "Public report access gives each part's draws, rows drawn, candidates, kept examples, the stop reason and whether conditions went to the source."
           }
         ]
       },
@@ -5208,6 +5323,15 @@
       },
       "sdm_client.Request.context": {
         "capability": "direct-dtypes-options"
+      },
+      "sdm_client.Request.context_report": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_source_holding_too_few_says_so",
+            "behavior": "Public report access gives each part's draws, rows drawn, candidates, kept examples, the stop reason and whether conditions went to the source."
+          }
+        ]
       },
       "sdm_client.Request.context_rows": {
         "capability": "direct-dtypes-options"
@@ -6225,6 +6349,177 @@
       "com.nvidia.sdm.ColumnMetadata#public java.lang.String stype();": {
         "capability": "metadata-explanation-reports"
       },
+      "com.nvidia.sdm.ContextDraw": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public boolean filteredAtSource();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public com.nvidia.sdm.ContextDraw(long, long, long, long, long, java.lang.String, boolean);": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+            "behavior": "A restored request's context report equals the original, part by part."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public final boolean equals(java.lang.Object);": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+            "behavior": "A restored request's context report equals the original, part by part."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public final int hashCode();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+            "behavior": "A restored request's context report equals the original, part by part."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public final java.lang.String toString();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public java.lang.String stopped();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public long asked();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public long candidates();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public long draws();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public long kept();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextDraw#public long rowsDrawn();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextReport": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextReport#public com.nvidia.sdm.ContextReport(java.lang.String, java.util.List<com.nvidia.sdm.ContextDraw>);": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+            "behavior": "A restored request's context report equals the original, part by part."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextReport#public final boolean equals(java.lang.Object);": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+            "behavior": "A restored request's context report equals the original, part by part."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextReport#public final int hashCode();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+            "behavior": "A restored request's context report equals the original, part by part."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextReport#public final java.lang.String toString();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextReport#public java.lang.String status();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ContextReport#public java.util.List<com.nvidia.sdm.ContextDraw> parts();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
+      },
       "com.nvidia.sdm.DatabricksServing": {
         "capability": "public-serving-refusals"
       },
@@ -6975,6 +7270,69 @@
       "com.nvidia.sdm.PredictiveQuery#public static com.nvidia.sdm.PredictiveQuery parse(java.lang.String);": {
         "capability": "direct-dtypes-options"
       },
+      "com.nvidia.sdm.ProviderSource": {
+        "capability": "java-data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ProviderSource#public com.nvidia.sdm.ProviderSource(com.nvidia.sdm.provider.DataProvider);": {
+        "capability": "java-data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ProviderSource#public com.nvidia.sdm.provider.DataProvider provider();": {
+        "capability": "java-data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ProviderSource#public final boolean equals(java.lang.Object);": {
+        "capability": "java-data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ProviderSource#public final int hashCode();": {
+        "capability": "java-data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ProviderSource#public final java.lang.String toString();": {
+        "capability": "java-data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
+          }
+        ]
+      },
+      "com.nvidia.sdm.ProviderSource#public static com.nvidia.sdm.ProviderSource of(com.nvidia.sdm.provider.DataProvider);": {
+        "capability": "java-data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
+          }
+        ]
+      },
       "com.nvidia.sdm.ReadOptions": {
         "capability": "readers"
       },
@@ -7238,6 +7596,15 @@
       },
       "com.nvidia.sdm.Request#public boolean targetMovesWithTime();": {
         "capability": "direct-dtypes-options"
+      },
+      "com.nvidia.sdm.Request#public com.nvidia.sdm.ContextReport contextReport();": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
+            "behavior": "A materialized request reports one available part: its draws, rows drawn, candidates, kept examples and stop reason."
+          }
+        ]
       },
       "com.nvidia.sdm.Request#public com.nvidia.sdm.Request(org.apache.arrow.vector.table.Table, org.apache.arrow.vector.table.Table, java.lang.String, java.lang.String);": {
         "capability": "direct-dtypes-options"
@@ -8098,6 +8465,11 @@
       "capability": "schema-notebook-display",
       "language": "java",
       "reason": "Automatic notebook display and BytesIO export are Python-specific; Java provides equivalent source, HTML and explicit file exports."
+    },
+    {
+      "capability": "java-data-providers",
+      "language": "python",
+      "reason": "Python callers read sources through the connectors' SQL dialects; a caller-written provider interface is Java's alone on this branch."
     }
   ],
   "contract_changes": [
@@ -8302,6 +8674,31 @@
       "base_commit": "8c9d723c9f6ecff8c2f6f4d6d5357af17ea4399e",
       "record": "api_contracts/gradient-explanations",
       "reason": "The client no longer enforces the endpoint's payload size limit, so the test that client-only provenance does not count toward that limit was removed with it; the remaining gradient tests are unchanged."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "api_contracts/context-reports",
+      "reason": "Requests say how their context examples were drawn (draws, rows drawn, candidates, kept, why drawing stopped, whether conditions went to the source), now that a short context is drawn again; the group maps the new report in both languages to the end-to-end tests that read it."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "api_contracts/java-data-providers",
+      "reason": "Java callers' own data providers, added with ProviderSource before this change, had no group; they now declare the value filters they apply, and the group maps ProviderSource to the Java tests of provider declarations and request decoding."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "api_exceptions",
+      "reason": "Python has no caller-written provider interface on this branch, so java-data-providers is Java's alone."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "api_inventory",
+      "reason": "Adds the context report types and accessors in both languages, and maps ProviderSource's existing declarations to java-data-providers."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "public_api_snapshot_sha256",
+      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report."
     }
   ],
   "capabilities": [

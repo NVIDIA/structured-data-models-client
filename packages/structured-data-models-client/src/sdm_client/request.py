@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from sdm_client.context_report import ContextReport
 from sdm_client.core.warnings import SDMWarning, caller_stacklevel
 from sdm_client.decompose import Decomposition
 from sdm_client.errors import StructuredDataError, UnsupportedRequestError
@@ -338,6 +339,15 @@ class Request:
     # what it holds.
     _core: CoreRequest | None = None
     _sanitization_report: SanitizationReport
+    _context_report: ContextReport
+
+    @property
+    def context_report(self) -> ContextReport:
+        """How the context examples were drawn from the source: the draws,
+        the rows they read, how many candidates were kept, and why drawing
+        stopped. Unavailable for context the caller gave, and for a request
+        saved before reports were kept."""
+        return getattr(self, '_context_report', ContextReport('unavailable'))
 
     @property
     def sanitization_report(self) -> SanitizationReport:

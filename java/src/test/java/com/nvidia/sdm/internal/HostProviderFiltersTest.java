@@ -6,6 +6,7 @@ package com.nvidia.sdm.internal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nvidia.sdm.provider.Capabilities;
 import com.nvidia.sdm.provider.DataRequest;
@@ -112,5 +113,33 @@ class HostProviderFiltersTest {
     assertEquals("uid", hasRows.key());
     assertEquals(List.of(new DataRequest.NotNull("amount")), hasRows.filters());
     assertEquals(2L, hasRows.atLeast());
+  }
+
+  @Test
+  void aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore() {
+    com.nvidia.sdm.provider.DataProvider provider =
+        new com.nvidia.sdm.provider.DataProvider() {
+          @Override
+          public Capabilities capabilities() {
+            return Capabilities.builder().filters(DataRequest.FilterKind.HAS_ROWS).build();
+          }
+
+          @Override
+          public org.apache.arrow.vector.ipc.ArrowReader answer(
+              DataRequest request,
+              Optional<org.apache.arrow.vector.types.pojo.Schema> expected,
+              org.apache.arrow.memory.BufferAllocator allocator) {
+            throw new UnsupportedOperationException();
+          }
+        };
+    com.nvidia.sdm.ProviderSource source = com.nvidia.sdm.ProviderSource.of(provider);
+    assertEquals(provider, source.provider());
+    assertEquals(new com.nvidia.sdm.ProviderSource(provider), source);
+    assertEquals(new com.nvidia.sdm.ProviderSource(provider).hashCode(), source.hashCode());
+    assertTrue(source.toString().startsWith("ProviderSource["));
+    @SuppressWarnings("unchecked")
+    Map<String, Object> declared =
+        (Map<String, Object>) HostProviders.chosen(source).choice().get("capabilities");
+    assertEquals(List.of("has_rows"), declared.get("filters"));
   }
 }

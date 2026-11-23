@@ -233,7 +233,8 @@ public final class PredictiveQuery {
       com.nvidia.sdm.internal.MaterializedRequest retained =
           new com.nvidia.sdm.internal.MaterializedRequest(state, finished);
       return new Request(schema, retained, text, gathered.query(),
-          inferenceAsked(options.options().get("inference_config")));
+              inferenceAsked(options.options().get("inference_config")))
+          .withContextReport(ContextReport.reported(finished.result().get("context")));
     }
   }
 

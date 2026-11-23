@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema
+from sdm_client import ContextDraw, ContextReport, PredictiveQuery, Schema
 
 USERS = 120_000
 ASKED = 1_000
@@ -39,6 +39,7 @@ def _connection() -> Any:
                18 + u % 60 AS age,
                u % 2 = 0 AS churned,
                CASE WHEN u % 20 = 0 THEN u % 3 = 0 END AS labelled,
+               TIMESTAMP '2023-01-01' + (u % 60) * INTERVAL 1 DAY AS seen,
                TIMESTAMP '2024-01-01' AS joined
         FROM range({USERS}) t(u)
         """
@@ -47,16 +48,19 @@ def _connection() -> Any:
     return connection
 
 
-def _context_rows(query: str) -> int:
+def _request(query: str) -> Any:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_source(DuckDBSource(_connection()))
-        request = PredictiveQuery(query, schema).materialize(
+        return PredictiveQuery(query, schema).materialize(
             indices=[1, 2],
             anchor_time=pd.Timestamp('2024-03-01'),
             num_context_samples=ASKED,
         )
-    return request.context_rows
+
+
+def _context_rows(query: str) -> int:
+    return _request(query).context_rows
 
 
 @pytest.mark.parametrize(
@@ -127,3 +131,55 @@ def test_a_window_most_entities_have_no_rows_in_fills_the_context(
     query: str,
 ) -> None:
     assert _shop_context_rows(query) == ASKED
+
+
+def test_the_report_says_the_filter_went_to_the_source_and_one_draw_did() -> (
+    None
+):
+    request = _request(
+        'PREDICT users.churned FOR EACH users.id WHERE users.age > 76'
+    )
+    assert request.context_report == ContextReport(
+        'available',
+        (
+            ContextDraw(
+                # Every one of the 2,000 users older than 76: fewer than
+                # the 10,000 asked for, all of them answered.
+                draws=1,
+                rows_drawn=2_000,
+                candidates=2_000,
+                kept=2_000,
+                asked=ASKED,
+                stopped='full',
+                filtered_at_source=True,
+            ),
+        ),
+    )
+
+
+def test_a_condition_the_source_is_not_sent_is_drawn_again_larger() -> None:
+    # A time comparison stays with the client, which may read a time
+    # otherwise than the source; one user in sixty was seen after 28
+    # February 2023.
+    request = _request(
+        'PREDICT users.churned FOR EACH users.id WHERE users.seen > 2023-02-28'
+    )
+    assert request.context_rows == ASKED
+    [part] = request.context_report.parts
+    assert part.draws == 2
+    assert part.stopped == 'full'
+    assert part.filtered_at_source is False
+    assert part.kept >= ASKED
+    assert part.rows_drawn > 10_000
+
+
+def test_a_source_holding_too_few_says_so() -> None:
+    # 2,000 users are older than 76 and 120 of them are 77 with id under
+    # 7,200: fewer than asked, and the source has no more.
+    request = _request(
+        'PREDICT users.churned FOR EACH users.id '
+        'WHERE users.age > 76 AND users.id < 7200'
+    )
+    [part] = request.context_report.parts
+    assert part.stopped == 'source_exhausted'
+    assert part.kept == request.context_rows == 120

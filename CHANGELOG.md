@@ -13,6 +13,8 @@ The public API snapshot records this version update; publication remains pending
 
 ### Added
 
+- `Request.context_report` (Python) and `Request.contextReport()` (Java) say how the context examples were drawn from the source: for each part, the draws, the rows they read, the candidates labelled, how many the query's conditions kept, whether any condition went to the source, and why drawing stopped (`full`, `source_exhausted` or `row_budget`).
+  A request whose context comes up short, from a condition only the client checks, is drawn again, larger, sized by the share of the first draw that qualified, until the context is full, the source has no more rows, or 5,000,000 rows have been drawn.
 - Java `DataProvider`s can declare the value filters they apply (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf`, `AllOf` and `HasRows` on samples and scans.
   A provider that declares none receives none, as before.
 - Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned

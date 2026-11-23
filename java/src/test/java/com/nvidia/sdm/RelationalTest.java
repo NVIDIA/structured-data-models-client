@@ -231,6 +231,12 @@ class RelationalTest {
         MaterializeOptions.builder().model(SdmClient.KUMO_TABULAR).indices(1L, 2L).build()));
     Request request = query.materialize(schema, options(1L, 2L).build());
     assertEquals(2, request.predictRows()); assertEquals(16, request.contextRows());
+    // One draw, which kept every context example asked for that the fixture holds.
+    assertEquals("available", request.contextReport().status());
+    ContextDraw draw = request.contextReport().parts().get(0);
+    assertEquals(1, request.contextReport().parts().size());
+    assertTrue(draw.draws() >= 1 && draw.kept() >= 16 && draw.rowsDrawn() >= draw.candidates());
+    assertTrue(List.of("full", "source_exhausted").contains(draw.stopped()));
     assertTrue(request.isRelational());
     assertEquals("regression", map(payload(request, 0).get("task")).get("kind"));
     assertTrue(map(map(payload(request, 0).get("schema")).get("related_tables")).containsKey("orders"));
