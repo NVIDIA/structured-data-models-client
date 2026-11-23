@@ -229,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn a_comparison_holds_as_sql_holds_it_and_a_null_meets_none() {
+    fn a_comparison_holds_as_a_database_holds_it_and_a_null_meets_none() {
         let kept = may_hold(&rows(), &[compare("age", CompareOp::Gt, Scalar::Int64(76))]).unwrap();
         assert_eq!(kept, [true, false, false, true]);
         let kept = may_hold(&rows(), &[compare("age", CompareOp::Ne, Scalar::Int64(30))]).unwrap();

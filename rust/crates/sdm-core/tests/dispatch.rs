@@ -433,6 +433,7 @@ fn a_host_provider_is_asked_only_for_what_it_declared() {
         assert_eq!(
             access.plan(&request).unwrap(),
             FetchPlan::Host {
+                key_sets: Vec::new(),
                 expect: request.expected()
             }
         );

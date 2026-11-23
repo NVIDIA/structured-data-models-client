@@ -1165,7 +1165,14 @@ def test_a_missing_anchor_keeps_its_entity_and_other_entities_history() -> None:
                 return rows.add_column(
                     0, '__KUMO_BATCH__', pa.array(valid, pa.int64())
                 )
-            found = super().answer(text, parameters)
+            # The draw sends the target's not-null with it, which the
+            # recording predates: the recorded sample, filtered here.
+            target = ' AND "country" IS NOT NULL'
+            if 'SAMPLE ROW' in text and target in text:
+                found = super().answer(text.replace(target, ''), parameters)
+                found = found.filter(pc.is_valid(found['country']))
+            else:
+                found = super().answer(text, parameters)
             if (
                 'signup' in found.column_names
                 and 'user_id' in found.column_names

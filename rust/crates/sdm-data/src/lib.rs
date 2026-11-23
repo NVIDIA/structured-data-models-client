@@ -18,6 +18,7 @@
 mod blake2b;
 mod databricks;
 mod duckdb;
+mod host_parts;
 mod json;
 mod key_text;
 mod keys;
@@ -42,10 +43,10 @@ use sdm_contract::catalog::CatalogAnswer;
 use std::collections::BTreeMap;
 
 use sdm_contract::data::{
-    AttachmentId, BoundFetch, BoundRequest, DataLayer, DataRequest, DescribePart, Dialect,
-    ExpectedSchema, FailureFacts, FetchPlan, KeyData, ProviderCapabilities, ProviderChoice,
-    ProviderError, Relation, SqlResultConversion, SqlStatement, SqlTimestampEncoding,
-    SqlTimestampKind, views_unread,
+    AttachmentId, BoundRequest, DataLayer, DataRequest, DescribePart, Dialect, ExpectedSchema,
+    FailureFacts, FetchPlan, KeyData, ProviderCapabilities, ProviderChoice, ProviderError,
+    Relation, SqlResultConversion, SqlStatement, SqlTimestampEncoding, SqlTimestampKind,
+    views_unread,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::wording::DatabaseNames;
@@ -327,12 +328,15 @@ impl DataLayer for Data {
             Some(dialect) => key_text::bind(dialect, request, plan, keys, float_text, &|offset| {
                 self.render_projected(request, provider, offset, &conversions)
             }),
-            None => Ok(BoundRequest {
-                fetches: vec![BoundFetch {
-                    plan,
-                    batches: BTreeMap::new(),
-                }],
-            }),
+            None => match provider {
+                // A host provider taking so many keys a request is asked
+                // in parts, which every host reads alike.
+                ProviderChoice::Host { capabilities } => {
+                    let max = capabilities.max_keys_per_request.unwrap_or(u64::MAX);
+                    host_parts::bind(request, plan, keys, max)
+                }
+                ProviderChoice::Sql { .. } => Ok(BoundRequest::whole(plan, request)),
+            },
         }
     }
 
@@ -568,9 +572,7 @@ impl Data {
         conversions: &[SqlResultConversion],
     ) -> Result<FetchPlan, CoreError> {
         match provider {
-            ProviderChoice::Host { .. } => Ok(FetchPlan::Host {
-                expect: request.expected(),
-            }),
+            ProviderChoice::Host { .. } => Ok(FetchPlan::host(request.expected(), request)),
             ProviderChoice::Sql {
                 dialect, namespace, ..
             } => {

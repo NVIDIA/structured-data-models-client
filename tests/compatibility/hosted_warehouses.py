@@ -171,28 +171,19 @@ def semantic_view(cursor, fixture, namespace, databricks):
     return view
 
 
+#: Rows a fixture table is inserted in, per statement: a bound statement's
+#: parameters stay within what each warehouse's driver accepts.
+INSERT_ROWS = 200
+
+
 @contextlib.contextmanager
 def warehouse(connector):
-    import pyarrow as pa
-
+    """Each fixture the connector's scenarios read, in its own schema."""
     databricks = connector.startswith('databricks')
-    available = fixtures(connector)
-    if len(available) != 1:
-        raise ValueError(
-            'Warehouse provisioning requires an explicit plan for multiple fixture namespaces'
-        )
-    fixture_name, fixture = next(iter(available.items()))
     factory = databricks_connection if databricks else snowflake_connection
     connection, connect = factory()
-    schema = 'sdm_ci_' + uuid.uuid4().hex
-    if not databricks:
-        schema = schema.upper()
-
-    def q(name):
-        return quoted(name, databricks)
-
     try:
-        with connection.cursor() as cursor:
+        with connection.cursor() as cursor, contextlib.ExitStack() as stack:
             cursor.execute(
                 'SELECT current_catalog()'
                 if databricks
@@ -208,88 +199,113 @@ def warehouse(connector):
                 raise ValueError(
                     'Configure a test catalog/database before fixture provisioning'
                 )
-            namespace = q(database) + '.' + q(schema)
-            cursor.execute('CREATE SCHEMA ' + namespace)
-            try:
-                for table, frame in tables_of(fixture).items():
-                    data = pa.Table.from_pandas(frame, preserve_index=False)
-                    target = (
-                        namespace
-                        + '.'
-                        + q(
-                            table.upper()
-                            if connector == 'snowflake-semantic'
-                            else table
-                        )
+            settings = {
+                name: stack.enter_context(
+                    namespace_of(
+                        cursor, connector, database, dict(connect), fixture
                     )
-                    columns = ', '.join(
-                        f'{q(field.name)} {sql_type(field.type, databricks)}'
-                        for field in data.schema
-                    )
-                    cursor.execute(f'CREATE TABLE {target} ({columns})')
-                    placeholders = ','.join(
-                        '?' if databricks else '%s' for _ in data.column_names
-                    )
-                    rows = data.to_pylist()
-                    values = ','.join(f'({placeholders})' for _ in rows)
-                    cursor.execute(
-                        f'INSERT INTO {target} VALUES {values}',
-                        [
-                            binding_value(value)
-                            for row in rows
-                            for value in row.values()
-                        ],
-                    )
-                view = (
-                    semantic_view(cursor, fixture, namespace, databricks)
-                    if connector in ('databricks-metric', 'snowflake-semantic')
-                    else None
                 )
-                source = {
-                    'catalog' if databricks else 'database': database,
-                    'schema': schema,
-                }
-                connect.update(source)
-                if databricks:
-                    java = {
-                        'url': f'jdbc:databricks://{connect["server_hostname"]}:443;httpPath={connect["http_path"]};AuthMech=3;ssl=1',
-                        'properties': {
-                            'UID': 'token',
-                            'PWD': connect['access_token'],
-                            'ConnCatalog': database,
-                            'ConnSchema': schema,
-                        },
-                    }
-                else:
-                    java = {
-                        'url': 'jdbc:snowflake://' + connect['host'],
-                        'properties': {
-                            k: connect[k]
-                            for k in ('user', 'password', 'warehouse', 'role')
-                            if k in connect
-                        }
-                        | {'db': database, 'schema': schema},
-                    }
-                settings = {
-                    'snapshot': digest(fixture),
-                    'source': source,
-                    'connect': connect,
-                    'tables': {
-                        name: name.upper()
-                        if connector == 'snowflake-semantic'
-                        else name
-                        for name in fixture['tables']
-                    },
-                    'java': java,
-                }
-                if view:
-                    settings['view'] = view
-                if connector == 'databricks-spark':
-                    settings['connect'] = {'serverless': True}
-                    settings['java'] = {}
-                yield config_for(connector, {fixture_name: settings})
-            finally:
-                # This exact random namespace was created by this invocation.
-                cursor.execute('DROP SCHEMA ' + namespace + ' CASCADE')
+                for name, fixture in fixtures(connector).items()
+            }
+            yield config_for(connector, settings)
     finally:
         connection.close()
+
+
+@contextlib.contextmanager
+def namespace_of(cursor, connector, database, connect, fixture):
+    import pyarrow as pa
+
+    databricks = connector.startswith('databricks')
+    schema = 'sdm_ci_' + uuid.uuid4().hex
+    if not databricks:
+        schema = schema.upper()
+
+    def q(name):
+        return quoted(name, databricks)
+
+    namespace = q(database) + '.' + q(schema)
+    cursor.execute('CREATE SCHEMA ' + namespace)
+    try:
+        for table, frame in tables_of(fixture).items():
+            data = pa.Table.from_pandas(frame, preserve_index=False)
+            target = (
+                namespace
+                + '.'
+                + q(
+                    table.upper()
+                    if connector == 'snowflake-semantic'
+                    else table
+                )
+            )
+            columns = ', '.join(
+                f'{q(field.name)} {sql_type(field.type, databricks)}'
+                for field in data.schema
+            )
+            cursor.execute(f'CREATE TABLE {target} ({columns})')
+            placeholders = ','.join(
+                '?' if databricks else '%s' for _ in data.column_names
+            )
+            rows = data.to_pylist()
+            for start in range(0, len(rows), INSERT_ROWS):
+                batch = rows[start : start + INSERT_ROWS]
+                values = ','.join(f'({placeholders})' for _ in batch)
+                cursor.execute(
+                    f'INSERT INTO {target} VALUES {values}',
+                    [
+                        binding_value(value)
+                        for row in batch
+                        for value in row.values()
+                    ],
+                )
+        view = (
+            semantic_view(cursor, fixture, namespace, databricks)
+            if connector in ('databricks-metric', 'snowflake-semantic')
+            else None
+        )
+        source = {
+            'catalog' if databricks else 'database': database,
+            'schema': schema,
+        }
+        connect.update(source)
+        if databricks:
+            java = {
+                'url': f'jdbc:databricks://{connect["server_hostname"]}:443;httpPath={connect["http_path"]};AuthMech=3;ssl=1',
+                'properties': {
+                    'UID': 'token',
+                    'PWD': connect['access_token'],
+                    'ConnCatalog': database,
+                    'ConnSchema': schema,
+                },
+            }
+        else:
+            java = {
+                'url': 'jdbc:snowflake://' + connect['host'],
+                'properties': {
+                    k: connect[k]
+                    for k in ('user', 'password', 'warehouse', 'role')
+                    if k in connect
+                }
+                | {'db': database, 'schema': schema},
+            }
+        settings = {
+            'snapshot': digest(fixture),
+            'source': source,
+            'connect': connect,
+            'tables': {
+                name: name.upper()
+                if connector == 'snowflake-semantic'
+                else name
+                for name in fixture['tables']
+            },
+            'java': java,
+        }
+        if view:
+            settings['view'] = view
+        if connector == 'databricks-spark':
+            settings['connect'] = {'serverless': True}
+            settings['java'] = {}
+        yield settings
+    finally:
+        # This exact random namespace was created by this invocation.
+        cursor.execute('DROP SCHEMA ' + namespace + ' CASCADE')

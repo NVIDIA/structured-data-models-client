@@ -607,6 +607,73 @@ impl Filter {
             }
     }
 
+    /// The key sets the filter binds, nested filters included, in order.
+    fn key_sets(&self, into: &mut Vec<AttachmentId>) {
+        match self {
+            Filter::KeyIn { keys, .. } => into.push(keys.attachment),
+            Filter::AnyOf { filters }
+            | Filter::AllOf { filters }
+            | Filter::HasRows { filters, .. } => {
+                for filter in filters {
+                    filter.key_sets(into);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// [`Filter::key_sets`], each changed by `rename`.
+    fn rename_key_sets(&mut self, rename: &impl Fn(&mut KeySet)) {
+        match self {
+            Filter::KeyIn { keys, .. } => rename(keys),
+            Filter::AnyOf { filters }
+            | Filter::AllOf { filters }
+            | Filter::HasRows { filters, .. } => {
+                for filter in filters {
+                    filter.rename_key_sets(rename);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The tables the filter reads rows of (`has_rows`), nested filters
+    /// included, in order, each named `filters`.
+    fn read_relations<'a>(&'a self, into: &mut Vec<(&'static str, &'a Relation)>) {
+        match self {
+            Filter::HasRows { table, filters, .. } => {
+                into.push(("filters", table));
+                for filter in filters {
+                    filter.read_relations(into);
+                }
+            }
+            Filter::AnyOf { filters } | Filter::AllOf { filters } => {
+                for filter in filters {
+                    filter.read_relations(into);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// [`Filter::read_relations`], to change in place.
+    fn read_relations_mut<'a>(&'a mut self, into: &mut Vec<&'a mut Relation>) {
+        match self {
+            Filter::HasRows { table, filters, .. } => {
+                into.push(table);
+                for filter in filters {
+                    filter.read_relations_mut(into);
+                }
+            }
+            Filter::AnyOf { filters } | Filter::AllOf { filters } => {
+                for filter in filters {
+                    filter.read_relations_mut(into);
+                }
+            }
+            _ => {}
+        }
+    }
+
     /// The columns the filter reads, nested filters included, in order.
     pub fn columns(&self) -> Vec<&str> {
         match self {
@@ -947,8 +1014,65 @@ pub enum DataRequest {
 }
 
 impl DataRequest {
-    /// Each relation the request reads, with the field naming it.
+    /// Each relation the request reads, with the field naming it: the
+    /// tables its filters read (`has_rows`) after its own, named `filters`.
     pub fn relations(&self) -> Vec<(&'static str, &Relation)> {
+        let mut relations = self.own_relations();
+        for filter in self.filters() {
+            filter.read_relations(&mut relations);
+        }
+        relations
+    }
+
+    /// The key sets the request binds, by attachment, in order, each once:
+    /// its seeds, then each `key_in` filter's keys, nested ones included.
+    pub fn key_sets(&self) -> Vec<AttachmentId> {
+        let mut found = Vec::new();
+        if let DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } = self {
+            found.push(seeds.attachment);
+        }
+        for filter in self.filters() {
+            filter.key_sets(&mut found);
+        }
+        let mut seen = BTreeSet::new();
+        found.retain(|id| seen.insert(*id));
+        found
+    }
+
+    /// Each key set the request binds named by its new attachment in `to`,
+    /// where `to` names one.
+    pub fn rename_attachments(&mut self, to: &BTreeMap<AttachmentId, AttachmentId>) {
+        let rename = |keys: &mut KeySet| {
+            if let Some(renamed) = to.get(&keys.attachment) {
+                keys.attachment = *renamed;
+            }
+        };
+        match self {
+            DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => {
+                rename(seeds);
+            }
+            DataRequest::Scan { filters, .. }
+            | DataRequest::CountRows { filters, .. }
+            | DataRequest::SampleEntities { filters, .. } => {
+                for filter in filters {
+                    filter.rename_key_sets(&rename);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The filters the request carries, none for a request taking none.
+    fn filters(&self) -> &[Filter] {
+        match self {
+            DataRequest::Scan { filters, .. }
+            | DataRequest::CountRows { filters, .. }
+            | DataRequest::SampleEntities { filters, .. } => filters,
+            _ => &[],
+        }
+    }
+
+    fn own_relations(&self) -> Vec<(&'static str, &Relation)> {
         match self {
             DataRequest::Describe { tables, .. } => tables.iter().map(|t| ("tables", t)).collect(),
             DataRequest::KeyCounts { keys } => keys.iter().map(|k| ("keys", &k.table)).collect(),
@@ -966,8 +1090,23 @@ impl DataRequest {
         }
     }
 
-    /// Each relation the request reads, to change in place.
+    /// Each relation the request reads, to change in place: the tables its
+    /// filters read (`has_rows`) after its own, so a relation read where
+    /// the run reads it is read there inside a filter too.
     pub fn relations_mut(&mut self) -> Vec<&mut Relation> {
+        let (mut relations, filters) = match self {
+            DataRequest::Scan { table, filters, .. }
+            | DataRequest::CountRows { table, filters, .. }
+            | DataRequest::SampleEntities { table, filters, .. } => (vec![table], filters),
+            other => return other.own_relations_mut(),
+        };
+        for filter in filters.iter_mut() {
+            filter.read_relations_mut(&mut relations);
+        }
+        relations
+    }
+
+    fn own_relations_mut(&mut self) -> Vec<&mut Relation> {
         match self {
             DataRequest::Describe { tables, .. } => tables.iter_mut().collect(),
             DataRequest::KeyCounts { keys } => keys.iter_mut().map(|k| &mut k.table).collect(),
@@ -1555,10 +1694,25 @@ pub enum FetchPlan {
     },
     Host {
         expect: ExpectedSchema,
+        /// The key sets the request asks with, by attachment, in order:
+        /// the seeds of a `neighbors` or a `lookup`, then each `key_in`
+        /// filter's keys. The host takes them from the run, as it takes a
+        /// SQL plan's, without reading the request for them.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        key_sets: Vec<AttachmentId>,
     },
 }
 
 impl FetchPlan {
+    /// A host provider's plan for `request`, its answer of `expect`'s
+    /// schema and its key sets the request's.
+    pub fn host(expect: ExpectedSchema, request: &DataRequest) -> Self {
+        FetchPlan::Host {
+            expect,
+            key_sets: request.key_sets(),
+        }
+    }
+
     /// Whether catalog requests with these complete concrete plans may
     /// share the same fetched rows within one discovery step.
     /// All statements, parameters and the expected schema must match.
@@ -1571,17 +1725,25 @@ impl FetchPlan {
     /// The schema the plan returns.
     pub fn expect(&self) -> &ExpectedSchema {
         match self {
-            FetchPlan::Sql { expect, .. } | FetchPlan::Host { expect } => expect,
+            FetchPlan::Sql { expect, .. } | FetchPlan::Host { expect, .. } => expect,
         }
     }
 
     /// Each attachment the plan's statements bind, a key set's or a text's,
     /// that `to` names, named by what `to` maps it to (contract v28,
     /// ): how the core names a bound fetch's batches by the run's ids
-    /// ([`DataLayer::bind`]). A host plan binds none.
+    /// ([`DataLayer::bind`]); a host plan's key sets alike.
     pub fn rename_attachments(&mut self, to: &BTreeMap<AttachmentId, AttachmentId>) {
-        let FetchPlan::Sql { statements, .. } = self else {
-            return;
+        let statements = match self {
+            FetchPlan::Sql { statements, .. } => statements,
+            FetchPlan::Host { key_sets, .. } => {
+                for named in key_sets {
+                    if let Some(renamed) = to.get(named) {
+                        *named = *renamed;
+                    }
+                }
+                return;
+            }
         };
         for param in statements.iter_mut().flat_map(|s| &mut s.params) {
             let named = match param {
@@ -1596,7 +1758,7 @@ impl FetchPlan {
     }
 
     /// The attachments the plan's statements bind, key sets and texts, in
-    /// order, each as often as it is bound; none for a host plan.
+    /// order, each as often as it is bound; a host plan's key sets.
     pub fn key_sets(&self) -> Vec<AttachmentId> {
         match self {
             FetchPlan::Sql { statements, .. } => statements
@@ -1608,7 +1770,7 @@ impl FetchPlan {
                     SqlParam::Value { .. } => None,
                 })
                 .collect(),
-            FetchPlan::Host { .. } => Vec::new(),
+            FetchPlan::Host { key_sets, .. } => key_sets.clone(),
         }
     }
 }
@@ -1797,13 +1959,8 @@ pub trait DataLayer: Send + Sync {
         keys: &BTreeMap<AttachmentId, KeyData>,
         float_text: fn(f64) -> String,
     ) -> Result<BoundRequest, CoreError> {
-        let _ = (provider, request, keys, float_text);
-        Ok(BoundRequest {
-            fetches: vec![BoundFetch {
-                plan,
-                batches: BTreeMap::new(),
-            }],
-        })
+        let _ = (provider, keys, float_text);
+        Ok(BoundRequest::whole(plan, request))
     }
 
     /// The answer to one question about a semantic model's text (contract
@@ -1882,6 +2039,24 @@ pub struct BoundRequest {
 pub struct BoundFetch {
     pub plan: FetchPlan,
     pub batches: BTreeMap<AttachmentId, KeyData>,
+    /// The request this fetch asks: the request bound, or one part of it,
+    /// a host provider's fetch of some of a request's seeds, its seeds one
+    /// of `batches` (`max_keys_per_request`).
+    pub request: DataRequest,
+}
+
+impl BoundRequest {
+    /// `request` asked whole, as `plan` reads it, in one fetch binding no
+    /// batch of its own.
+    pub fn whole(plan: FetchPlan, request: &DataRequest) -> Self {
+        BoundRequest {
+            fetches: vec![BoundFetch {
+                plan,
+                batches: BTreeMap::new(),
+                request: request.clone(),
+            }],
+        }
+    }
 }
 
 /// The columns of the answers whose shape the contract fixes (decision

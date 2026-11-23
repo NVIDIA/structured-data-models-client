@@ -555,9 +555,13 @@ def _of_the_part(error: StructuredDataError, raised: Exception) -> None:
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
     r"""The key sets ``request``'s plan names, taken from the run by id: the
     attachments the core sent with the step, each a key set's
-    Arrow or the one text its dialect wrote of it."""
+    Arrow or the one text its dialect wrote of it; a host provider's plan
+    names its request's key sets."""
     plan = request['plan']
     taken: dict[int, Any] = {}
+    for attachment in plan.get('key_sets', ()):
+        if attachment not in taken:
+            taken[attachment] = handle.take_attachment(attachment)
     for statement in plan.get('statements', ()):
         for param in statement['params']:
             if param['param'] == 'key_set':

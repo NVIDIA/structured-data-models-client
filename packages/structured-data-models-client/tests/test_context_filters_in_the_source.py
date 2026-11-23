@@ -15,6 +15,7 @@ entities that may qualify.
 
 from __future__ import annotations
 
+import datetime
 import warnings
 from typing import Any
 
@@ -23,7 +24,13 @@ import pandas as pd
 import pytest
 from sdm_connectors import DuckDBSource
 
-from sdm_client import ContextDraw, ContextReport, PredictiveQuery, Schema
+from sdm_client import (
+    ContextDraw,
+    ContextReport,
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 
 USERS = 120_000
 ASKED = 1_000
@@ -144,7 +151,7 @@ def test_the_report_says_the_filter_went_to_the_source_and_one_draw_did() -> (
         (
             ContextDraw(
                 # Every one of the 2,000 users older than 76: fewer than
-                # the 10,000 asked for, all of them answered.
+                # the first draw's 10,000 rows, all of them answered.
                 draws=1,
                 rows_drawn=2_000,
                 candidates=2_000,
@@ -173,6 +180,27 @@ def test_a_condition_the_source_is_not_sent_is_drawn_again_larger() -> None:
     assert part.rows_drawn > 10_000
 
 
+def test_a_smaller_context_asked_for_is_not_drawn_again_for_more() -> None:
+    # The first draw keeps about one in sixty of its 10,000 rows: short of
+    # the 1,000 the route gathers by default, more than the 50 asked for.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(_connection()))
+        request = PredictiveQuery(
+            'PREDICT users.churned FOR EACH users.id '
+            'WHERE users.seen > 2023-02-28',
+            schema,
+        ).materialize(
+            indices=[1, 2],
+            anchor_time=pd.Timestamp('2024-03-01'),
+            num_context_samples=50,
+        )
+    assert request.context_rows == 50
+    [part] = request.context_report.parts
+    assert (part.draws, part.asked, part.stopped) == (1, 50, 'full')
+    assert part.kept >= 50
+
+
 def test_a_source_holding_too_few_says_so() -> None:
     # 2,000 users are older than 76 and 120 of them are 77 with id under
     # 7,200: fewer than asked, and the source has no more.
@@ -183,3 +211,103 @@ def test_a_source_holding_too_few_says_so() -> None:
     [part] = request.context_report.parts
     assert part.stopped == 'source_exhausted'
     assert part.kept == request.context_rows == 120
+
+
+def _seen_after_february(**options: Any) -> Any:
+    # One user in sixty was seen after 28 February 2023: the first draw
+    # of 10,000 rows keeps about 166 of the 1,000 asked for.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(_connection()))
+        return PredictiveQuery(
+            'PREDICT users.churned FOR EACH users.id '
+            'WHERE users.seen > 2023-02-28',
+            schema,
+        ).materialize(
+            indices=[1, 2],
+            anchor_time=pd.Timestamp('2024-03-01'),
+            num_context_samples=ASKED,
+            **options,
+        )
+
+
+@pytest.mark.parametrize(
+    'limit', [0, datetime.timedelta(0)], ids=['seconds', 'timedelta']
+)
+def test_drawing_stops_at_the_time_limit_with_the_examples_kept(
+    limit: Any,
+) -> None:
+    request = _seen_after_february(context_time_limit=limit)
+    [part] = request.context_report.parts
+    assert (part.draws, part.stopped) == (1, 'time_limit')
+    assert 0 < part.kept < ASKED
+    assert request.context_rows == part.kept
+
+
+def test_a_time_limit_that_is_not_seconds_is_refused() -> None:
+    with pytest.raises(StructuredDataError) as raised:
+        _seen_after_february(context_time_limit=-1)
+    assert 'context_time_limit' in str(raised.value)
+
+
+def test_a_draw_slower_than_the_time_limit_is_the_last(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The host layer reads its clock with each reply: a sample answered in
+    # 0.3 seconds has used a limit of 0.2, so no larger draw follows.
+    import time
+
+    from sdm_client._rust.providers import duckdb as provider
+
+    answer = provider.DuckDBProvider.__call__
+
+    def slow_samples(self: Any, step: Any, keys: Any = None) -> Any:
+        if step['request']['request'] == 'sample_entities':
+            time.sleep(0.3)
+        return answer(self, step, keys)
+
+    monkeypatch.setattr(provider.DuckDBProvider, '__call__', slow_samples)
+    request = _seen_after_february(context_time_limit=0.2)
+    [part] = request.context_report.parts
+    assert (part.draws, part.stopped) == (1, 'time_limit')
+    assert request.context_rows == part.kept < ASKED
+
+    monkeypatch.setattr(provider.DuckDBProvider, '__call__', answer)
+    [part] = _seen_after_february(context_time_limit=60).context_report.parts
+    assert (part.draws, part.stopped) == (2, 'full')
+
+
+def test_a_window_draw_chooses_the_same_examples_in_any_row_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # A source may hand a sample's rows over in any order (Snowflake's has
+    # none): the same rows, reversed, give the same context.
+    from sdm_client._rust.providers import duckdb as provider
+
+    answer = provider.DuckDBProvider.__call__
+
+    def context(reverse: bool) -> Any:
+        def reversed_samples(self: Any, step: Any, keys: Any = None) -> Any:
+            table = answer(self, step, keys)
+            if reverse and step['request']['request'] == 'sample_entities':
+                return table.take(list(range(table.num_rows))[::-1])
+            return table
+
+        monkeypatch.setattr(
+            provider.DuckDBProvider, '__call__', reversed_samples
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            schema = Schema.from_source(DuckDBSource(_shop()))
+            request = PredictiveQuery(
+                'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.id '
+                'WHERE COUNT(orders.*, -30, 0, days) > 1',
+                schema,
+            ).materialize(
+                indices=[0, 60],
+                anchor_time=pd.Timestamp('2024-12-01'),
+                num_context_samples=50,
+            )
+        return request.context.instance_table
+
+    assert context(reverse=True).equals(context(reverse=False))

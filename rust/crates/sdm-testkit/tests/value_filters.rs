@@ -376,3 +376,24 @@ fn the_timestamp_literal_is_the_wall_clock_and_sqlite_writes_none() {
         "{text}"
     );
 }
+
+/// A source read in a namespace reads a `has_rows` table there too: the
+/// subquery names the table as the outer read does, never as the
+/// session's current schema would resolve it.
+#[test]
+fn has_rows_reads_its_table_in_the_source_s_namespace() {
+    for dialect in ["postgres", "snowflake"] {
+        let text = sql(dialect, &scan(vec![has_rows(1, vec![])]));
+        let users = if dialect == "postgres" {
+            r#""public"."users""#
+        } else {
+            r#""db"."public"."users""#
+        };
+        let orders = users.replace("users", "orders");
+        assert!(text.contains(&format!("FROM {users}")), "{dialect}: {text}");
+        assert!(
+            text.contains(&format!("FROM {orders}")),
+            "{dialect}: the subquery reads its table unqualified: {text}"
+        );
+    }
+}

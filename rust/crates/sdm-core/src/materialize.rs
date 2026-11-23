@@ -3132,6 +3132,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     // faults may be refused here for another of them than the client
     // names, which the core does not claim to match ((iii)).
     let asked_values = options::values(inputs.values.as_ref())?;
+    let time_limit = options::context_time_limit(&asked_values)?;
     let mode = options::run_mode(
         asked_values.num_context_samples,
         asked_values.num_context_samples_given.as_deref(),
@@ -3576,6 +3577,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         options::RunMode::Fast => mode.context_examples(),
         options::RunMode::Best => mode.context_examples().max(asked_examples.unwrap_or(0)),
     };
+    // The examples the request keeps: as many as were asked, where fewer
+    // than the mode gathers. A short first draw is drawn again only until
+    // these are kept, and the report counts against them.
+    let wanted_examples = asked_examples.map_or(context_examples, |n| n.min(context_examples));
     // `max_pq_iterations` times as many candidates as examples; a
     // float's count is no slice bound for a temporal query's walk, the
     // engine's `TypeError`, the caller's error.
@@ -3675,6 +3680,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     let mut draw_size = trials;
     let mut drawn_rows: u64 = 0;
     let mut draws: u32 = 0;
+    // A draw is not started once the draws have taken the time the
+    // request allows (`context_time_limit`); one already reading runs on.
+    // The time is the host's, told with its replies.
+    let drawing_since = asker.elapsed();
     let (kept, entity_key, indices, examples, labelled, labelled_rows, report) = loop {
         // Seeds are optional. An unseeded provider warns only of a seed the
         // caller named, above, not of the default one.
@@ -3796,10 +3805,12 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         };
         let mut rng = default_rng(&entropy);
         let examples = if let Some(row_anchors) = &row_anchors {
-            // Each anchor's draw, in the order drawn, the entities valid at
-            // the anchor (all of them, or those whose time is not after it and
-            // whose end is), shuffled as the walk shuffles them, then cut to
-            // the draw's size.
+            // Each anchor's draw, the entities valid at the anchor (all of
+            // them, or those whose time is not after it and whose end is),
+            // put in their keys' order and shuffled as the walk shuffles
+            // them, then cut to the draw's size. A source may hand the same
+            // rows over in any order (Snowflake's sample has none), and the
+            // seed then still chooses the same examples.
             let valid = |at: usize, anchor: i64| {
                 validity
                     .start
@@ -3817,6 +3828,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                     .find(|&i| row_anchors[kept[i]] != anchor)
                     .unwrap_or(kept.len());
                 let mut group: Vec<usize> = (from..to).filter(|&i| valid(i, anchor)).collect();
+                group.sort_by(|&a, &b| sampled_keys[kept[a]].cmp(&sampled_keys[kept[b]]));
                 rng.shuffle(&mut group);
                 anchors.extend(std::iter::repeat_n(anchor, group.len()));
                 index.extend(group);
@@ -3895,9 +3907,16 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             draw_size,
             sampled.num_rows(),
             labelled_rows.len(),
-            context_examples,
+            wanted_examples,
             drawn_rows,
-        );
+        )
+        .and_then(|larger| {
+            if asker.elapsed().saturating_sub(drawing_since) >= time_limit {
+                Err(ContextStop::TimeLimit)
+            } else {
+                Ok(larger)
+            }
+        });
         match next {
             Ok(larger) => draw_size = larger,
             Err(stopped) => {
@@ -3906,7 +3925,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                     rows_drawn: drawn_rows,
                     candidates: examples.index.len() as u64,
                     kept: labelled_rows.len() as u64,
-                    asked: context_examples as u64,
+                    asked: wanted_examples as u64,
                     stopped,
                     filtered_at_source: filtered || per_anchor,
                 };
@@ -3945,13 +3964,13 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     // A first draw as large as asked for (the table holds more), which
     // still gave too few: drawn again or not.
-    if (report.draws > 1 || kept.len() >= draw_size) && gathered < context_examples / 2 {
+    if (report.draws > 1 || kept.len() >= draw_size) && gathered < wanted_examples / 2 {
         // The reference warns of it once in a process: given on every run
         // that meets it, and once in a process by the host
         // ([`ONCE_PER_PROCESS`]).
         asker.warn(CoreWarning {
             fields: [
-                ("examples".to_owned(), count(context_examples)),
+                ("examples".to_owned(), count(wanted_examples)),
                 ("candidates".to_owned(), count(draw_size)),
             ]
             .into(),

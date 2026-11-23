@@ -14,11 +14,8 @@ import com.nvidia.sdm.provider.DataRequest.KeySet;
 import com.nvidia.sdm.provider.DataRequest.Relation;
 import com.nvidia.sdm.provider.OptionalRequest;
 import com.nvidia.sdm.provider.ProviderFailure;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.channels.Channels;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -34,9 +31,7 @@ import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.function.Function;
 import org.apache.arrow.memory.BufferAllocator;
-import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ArrowReader;
-import org.apache.arrow.vector.ipc.ArrowStreamWriter;
 import org.apache.arrow.vector.types.DateUnit;
 import org.apache.arrow.vector.types.FloatingPointPrecision;
 import org.apache.arrow.vector.types.TimeUnit;
@@ -48,8 +43,8 @@ import org.apache.arrow.vector.types.pojo.Schema;
 /**
  * The bridge between the core's host-provider messages and the public {@link DataProvider}: the
  * provider choice a {@link ProviderSource} names, each fetch's request read into a {@link
- * DataRequest}, the key sets it carries, and a key set larger than the provider's limit split into
- * several calls. Not part of the API.
+ * DataRequest}, and the key sets it carries. A key set larger than the provider's limit is split by
+ * the core, for every host alike. Not part of the API.
  */
 public final class HostProviders {
   private HostProviders() {}
@@ -61,7 +56,7 @@ public final class HostProviders {
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("provider", "host");
     choice.put("capabilities", capabilities(capabilities));
-    return new Providers.Chosen(choice, new Adapter(provider, capabilities));
+    return new Providers.Chosen(choice, new Adapter(provider));
   }
 
   /** The contract's {@code ProviderCapabilities} of {@code capabilities}. */
@@ -102,40 +97,14 @@ public final class HostProviders {
   }
 
   /**
-   * The attachments of the key sets a host fetch's request carries ({@code seeds}, and each {@code
-   * key_in} filter's {@code keys}), in order, each once.
+   * The run loop's provider: reads each fetch into a request and asks the public provider. A key set
+   * past the provider's {@code maxKeysPerRequest} reaches it already asked in parts, by the core.
    */
-  @SuppressWarnings("unchecked")
-  static List<Integer> keySetAttachments(Map<String, Object> request) {
-    List<Integer> ids = new ArrayList<>();
-    if (request == null) {
-      return ids;
-    }
-    if (request.get("seeds") instanceof Map<?, ?> seeds) {
-      ids.add(((Number) seeds.get("attachment")).intValue());
-    }
-    if (request.get("filters") instanceof List<?> filters) {
-      for (Object item : filters) {
-        Map<String, Object> filter = (Map<String, Object>) item;
-        if ("key_in".equals(filter.get("filter"))) {
-          int id = ((Number) ((Map<String, Object>) filter.get("keys")).get("attachment")).intValue();
-          if (!ids.contains(id)) {
-            ids.add(id);
-          }
-        }
-      }
-    }
-    return ids;
-  }
-
-  /** The run loop's provider: reads each fetch into a request and asks the public provider. */
   static final class Adapter implements Host.Provider {
     private final DataProvider provider;
-    private final OptionalLong maxKeys;
 
-    Adapter(DataProvider provider, Capabilities capabilities) {
+    Adapter(DataProvider provider) {
       this.provider = provider;
-      this.maxKeys = capabilities.maxKeysPerRequest();
     }
 
     @Override
@@ -147,10 +116,7 @@ public final class HostProviders {
       Optional<Schema> expected = expected((Map<String, Object>) plan.get("expect"));
       Map<String, Object> wire = (Map<String, Object>) step.get("request");
       DataRequest request = Requests.read(wire, id -> keySet(keys, id));
-      if (maxKeys.isEmpty()) {
-        return provider.answer(request, expected, allocator);
-      }
-      return Split.answer(provider, request, expected, maxKeys.getAsLong(), allocator);
+      return provider.answer(request, expected, allocator);
     }
 
     @Override
@@ -502,173 +468,4 @@ public final class HostProviders {
   }
 
   // --- splitting by the provider's key limit -------------------------------------------------
-
-  /**
-   * A {@code neighbors} or {@code lookup} whose seeds, or a {@code scan} without a limit whose one
-   * key filter, hold more keys than the provider takes, asked in parts of at most {@code max} keys
-   * each, and the parts' rows given as one answer in order. Any other request is asked whole.
-   */
-  static final class Split {
-    private Split() {}
-
-    static ArrowReader answer(
-        DataProvider provider,
-        DataRequest request,
-        Optional<Schema> expected,
-        long max,
-        BufferAllocator allocator)
-        throws Exception {
-      KeySet keys = splittable(request);
-      if (keys == null) {
-        return provider.answer(request, expected, allocator);
-      }
-      List<byte[]> parts = parts(keys, max, allocator);
-      if (parts.size() <= 1) {
-        KeySet whole = new KeySet(keys.columns(), ArrowData.reader(parts.isEmpty() ? empty(keys, allocator) : parts.get(0), allocator));
-        return provider.answer(with(request, whole), expected, allocator);
-      }
-      ByteArrayOutputStream out = new ByteArrayOutputStream();
-      ArrowStreamWriter writer = null;
-      VectorSchemaRoot written = null;
-      try {
-        for (byte[] part : parts) {
-          KeySet partKeys = new KeySet(keys.columns(), ArrowData.reader(part, allocator));
-          try (ArrowReader answer = provider.answer(with(request, partKeys), expected, allocator)) {
-            VectorSchemaRoot root = answer.getVectorSchemaRoot();
-            while (answer.loadNextBatch()) {
-              if (writer == null) {
-                written = VectorSchemaRoot.create(root.getSchema(), allocator);
-                writer = new ArrowStreamWriter(written, null, Channels.newChannel(out));
-                writer.start();
-              }
-              copy(root, written);
-              writer.writeBatch();
-            }
-            if (writer == null && root.getSchema() != null) {
-              written = VectorSchemaRoot.create(root.getSchema(), allocator);
-              writer = new ArrowStreamWriter(written, null, Channels.newChannel(out));
-              writer.start();
-            }
-          } finally {
-            partKeys.reader().close();
-          }
-        }
-        if (writer != null) {
-          writer.end();
-        }
-      } finally {
-        if (writer != null) {
-          writer.close();
-        }
-        if (written != null) {
-          written.close();
-        }
-        keys.reader().close();
-      }
-      return ArrowData.reader(out.toByteArray(), allocator);
-    }
-
-    private static KeySet splittable(DataRequest request) {
-      if (request instanceof DataRequest.Neighbors neighbors) {
-        return neighbors.seeds();
-      }
-      if (request instanceof DataRequest.Lookup lookup) {
-        return lookup.seeds();
-      }
-      if (request instanceof DataRequest.Scan scan && scan.limit().isEmpty()) {
-        List<DataRequest.KeyIn> keyed =
-            scan.filters().stream()
-                .filter(DataRequest.KeyIn.class::isInstance)
-                .map(DataRequest.KeyIn.class::cast)
-                .toList();
-        return keyed.size() == 1 ? keyed.get(0).keys() : null;
-      }
-      return null;
-    }
-
-    private static DataRequest with(DataRequest request, KeySet keys) {
-      if (request instanceof DataRequest.Neighbors n) {
-        return new DataRequest.Neighbors(n.table(), n.key(), n.columns(), keys, n.window(), n.perSeed(), n.order());
-      }
-      if (request instanceof DataRequest.Lookup l) {
-        return new DataRequest.Lookup(l.table(), l.key(), l.columns(), keys);
-      }
-      DataRequest.Scan scan = (DataRequest.Scan) request;
-      List<Filter> filters = new ArrayList<>();
-      for (Filter filter : scan.filters()) {
-        filters.add(filter instanceof DataRequest.KeyIn in ? new DataRequest.KeyIn(in.columns(), keys) : filter);
-      }
-      return new DataRequest.Scan(scan.table(), scan.columns(), filters, scan.limit());
-    }
-
-    /** The key set's rows, read whole and written again in parts of at most {@code max} rows. */
-    private static List<byte[]> parts(KeySet keys, long max, BufferAllocator allocator) throws IOException {
-      List<byte[]> parts = new ArrayList<>();
-      ArrowReader reader = keys.reader();
-      VectorSchemaRoot root = reader.getVectorSchemaRoot();
-      Schema schema = root.getSchema();
-      try (VectorSchemaRoot part = VectorSchemaRoot.create(schema, allocator)) {
-        ByteArrayOutputStream out = null;
-        ArrowStreamWriter writer = null;
-        long inPart = 0;
-        while (reader.loadNextBatch()) {
-          int rows = root.getRowCount();
-          int at = 0;
-          while (at < rows) {
-            if (writer == null) {
-              out = new ByteArrayOutputStream();
-              writer = new ArrowStreamWriter(part, null, Channels.newChannel(out));
-              writer.start();
-              inPart = 0;
-            }
-            int take = (int) Math.min(rows - at, max - inPart);
-            try (VectorSchemaRoot slice = root.slice(at, take)) {
-              copy(slice, part);
-            }
-            writer.writeBatch();
-            at += take;
-            inPart += take;
-            if (inPart == max) {
-              writer.end();
-              writer.close();
-              parts.add(out.toByteArray());
-              writer = null;
-            }
-          }
-        }
-        if (writer != null) {
-          writer.end();
-          writer.close();
-          parts.add(out.toByteArray());
-        }
-      }
-      return parts;
-    }
-
-    private static byte[] empty(KeySet keys, BufferAllocator allocator) throws IOException {
-      Schema schema = keys.reader().getVectorSchemaRoot().getSchema();
-      ByteArrayOutputStream out = new ByteArrayOutputStream();
-      try (VectorSchemaRoot root = VectorSchemaRoot.create(schema, allocator);
-          ArrowStreamWriter writer = new ArrowStreamWriter(root, null, Channels.newChannel(out))) {
-        writer.start();
-        writer.end();
-      }
-      return out.toByteArray();
-    }
-
-    /** Copies {@code from}'s rows into {@code to}, replacing what it held. */
-    private static void copy(VectorSchemaRoot from, VectorSchemaRoot to) {
-      to.allocateNew();
-      int rows = from.getRowCount();
-      for (int column = 0; column < from.getFieldVectors().size(); column++) {
-        var source = from.getVector(column);
-        var target = to.getVector(column);
-        for (int row = 0; row < rows; row++) {
-          target.copyFromSafe(row, row, source);
-        }
-        target.setValueCount(rows);
-      }
-      to.setRowCount(rows);
-    }
-  }
 }

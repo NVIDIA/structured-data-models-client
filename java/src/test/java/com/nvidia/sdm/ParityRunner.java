@@ -414,6 +414,8 @@ public final class ParityRunner {
         request =
             PredictiveQuery.parse(text(scenario.get("pql"))).materialize(schema, options.build());
         semantic.put("request", requestEvidence(request, allocator));
+        if (scenario.containsKey("context"))
+          semantic.put("context", contextEvidence(request, map(scenario.get("context"))));
       }
       lifecycle.add("materialize");
       if ("restore-predict".equals(scenario.get("journey"))) {
@@ -550,6 +552,36 @@ public final class ParityRunner {
         rows = Math.addExact(rows, reader.getVectorSchemaRoot().getRowCount());
       return rows;
     }
+  }
+
+  /**
+   * How the context was drawn, held to what the scenario expects. {@code kept} counts the examples
+   * meeting the query in each part's draws: a source that dropped one the query keeps would count
+   * fewer.
+   */
+  static List<Map<String, Object>> contextEvidence(Request request, Map<String, Object> expected) {
+    var report = request.contextReport();
+    var parts = new ArrayList<Map<String, Object>>();
+    for (var part : report.parts()) {
+      var row = new LinkedHashMap<String, Object>();
+      row.put("kept", part.kept());
+      row.put("asked", part.asked());
+      row.put("stopped", part.stopped());
+      row.put("filtered_at_source", part.filteredAtSource());
+      parts.add(row);
+    }
+    var wanted = new ArrayList<Map<String, Object>>();
+    for (Object kept : list(expected.get("kept"))) {
+      var row = new LinkedHashMap<String, Object>();
+      row.put("kept", ((Number) kept).longValue());
+      row.put("asked", ((Number) expected.get("asked")).longValue());
+      row.put("stopped", expected.get("stopped"));
+      row.put("filtered_at_source", expected.get("filtered_at_source"));
+      wanted.add(row);
+    }
+    if (!"available".equals(report.status()) || !parts.equals(wanted))
+      throw new AssertionError("context draw differs from the expected");
+    return parts;
   }
 
   static LocalDateTime fixtureTime(Object value) {

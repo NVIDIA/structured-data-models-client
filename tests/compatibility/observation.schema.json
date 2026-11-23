@@ -185,6 +185,39 @@
                   }
                 }
               }
+            },
+            "context": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kept",
+                  "asked",
+                  "stopped",
+                  "filtered_at_source"
+                ],
+                "properties": {
+                  "kept": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "asked": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "stopped": {
+                    "enum": [
+                      "full",
+                      "source_exhausted",
+                      "row_budget"
+                    ]
+                  },
+                  "filtered_at_source": {
+                    "type": "boolean"
+                  }
+                }
+              }
             }
           },
           "required": [

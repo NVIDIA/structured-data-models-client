@@ -249,7 +249,10 @@ fn admitted(data: ArrowData, expect: ExpectedSchema) -> ArrowData {
             filters: vec![],
             limit: None,
         },
-        plan: Some(FetchPlan::Host { expect }),
+        plan: Some(FetchPlan::Host {
+            expect,
+            key_sets: Vec::new(),
+        }),
         provider: None,
         echo: true,
         undeclared: vec![],

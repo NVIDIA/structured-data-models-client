@@ -359,6 +359,7 @@ fn a_host_provider_is_held_to_the_contract_s_shapes() {
         assert_eq!(
             Data::new().plan(&request, &host).unwrap(),
             FetchPlan::Host {
+                key_sets: Vec::new(),
                 expect: request.expected()
             }
         );

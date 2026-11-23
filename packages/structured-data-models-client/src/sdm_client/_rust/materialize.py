@@ -43,6 +43,7 @@ TAKEN = frozenset(
         'inference_config',
         'top_k',
         'rows_per_call',
+        'context_time_limit',
         'lag_timesteps',
         'context_anchor_time',
         'exclude_cols_dict',
@@ -67,6 +68,7 @@ VALUED = frozenset(
         'inference_config',
         'top_k',
         'rows_per_call',
+        'context_time_limit',
         'lag_timesteps',
         'exclude_cols_dict',
         'max_pq_iterations',
@@ -74,6 +76,16 @@ VALUED = frozenset(
         'use_prediction_time',
     }
 )
+
+
+def _seconds(value: Any) -> Any:
+    """A ``timedelta`` as its seconds; any other value as given, for the
+    core to take or refuse."""
+    return (
+        value.total_seconds()
+        if isinstance(value, datetime.timedelta)
+        else value
+    )
 
 
 def _anchor(value: Any) -> dict[str, Any] | None:
@@ -336,7 +348,9 @@ def gather(
             value={
                 'num_context_samples': num_context_samples,
                 **{
-                    name: options[name]
+                    name: _seconds(options[name])
+                    if name == 'context_time_limit'
+                    else options[name]
                     for name in sorted(set(options) & VALUED)
                 },
                 **_context_anchor(options),

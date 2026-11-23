@@ -51,6 +51,7 @@ fn sharing_a_catalog_reply_requires_the_same_complete_concrete_read() {
     // Host plans carry only the expected schema, not the request being read.
     // Equal host plans therefore do not establish equal catalog answers.
     let host = FetchPlan::Host {
+        key_sets: Vec::new(),
         expect: ExpectedSchema::Discover {},
     };
     assert_eq!(host, host.clone());

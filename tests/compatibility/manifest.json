@@ -2646,6 +2646,1195 @@
           "rule": null
         }
       }
+    },
+    {
+      "id": "context.no-where",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          1500
+        ],
+        "stopped": "full",
+        "filtered_at_source": false,
+        "sent_with": []
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              1500
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": []
+          }
+        }
+      }
+    },
+    {
+      "id": "context.where-entity",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE users.value > 47.5",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          70
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "compare"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE users.VALUE > 47.5",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              70
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "compare"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.where-in-or",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE users.class IN ('3', '4') OR users.value > 48.5",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          100
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "any_of",
+          "compare",
+          "in"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE users.CLASS IN ('3', '4') OR users.VALUE > 48.5",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              100
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "any_of",
+              "compare",
+              "in"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.where-not-and",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE NOT (users.class = '0') AND users.value > 45",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          100
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "compare"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE NOT (users.CLASS = '0') AND users.VALUE > 45",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              100
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "compare"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.where-count-window",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE COUNT(events.*, -30, 0, days) > 3",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          75
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "has_rows"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE COUNT(events.*, -30, 0, days) > 3",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              75
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "has_rows"
+            ]
+          }
+        },
+        "sqlite": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              75
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "has_rows"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.target-average",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT AVG(events.feature, 0, 30, days) FOR EACH users.id",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          511
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "has_rows"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT AVG(events.FEATURE, 0, 30, days) FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              511
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "has_rows"
+            ]
+          }
+        },
+        "sqlite": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              511
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "has_rows"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.target-maximum-where",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT MAX(events.feature, 0, 30, days) FOR EACH users.id WHERE users.value > 40",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          96
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "compare"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT MAX(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE users.VALUE > 40",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              96
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "compare"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.forecast-where",
+      "task": "forecast",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.id WHERE users.value > 47.5",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          70,
+          56
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "compare"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.ID WHERE users.VALUE > 47.5",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              70,
+              56
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "compare"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.ranking-where",
+      "task": "ranking",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT LIST_DISTINCT(events.item, 0, 30, days) RANK TOP 2 FOR EACH users.id WHERE users.value > 47.5",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40,
+        "candidates": [
+          0,
+          1,
+          2
+        ]
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          70,
+          70,
+          70
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "compare"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT LIST_DISTINCT(events.ITEM, 0, 30, days) RANK TOP 2 FOR EACH users.ID WHERE users.VALUE > 47.5",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              70,
+              70,
+              70
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "compare"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.anchor-time-window",
+      "task": "condition",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.id WHERE COUNT(events.*, -30, 0, days) > 3",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40,
+        "anchor_time": "2024-05-01"
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          45
+        ],
+        "stopped": "full",
+        "filtered_at_source": true,
+        "sent_with": [
+          "has_rows"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.ID WHERE COUNT(events.*, -30, 0, days) > 3",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              45
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "has_rows"
+            ]
+          }
+        },
+        "sqlite": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              45
+            ],
+            "stopped": "full",
+            "filtered_at_source": false,
+            "sent_with": [
+              "has_rows"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.static-exhausted",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id WHERE users.class = '3'",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 1000,
+        "kept": [
+          12
+        ],
+        "stopped": "source_exhausted",
+        "filtered_at_source": true,
+        "sent_with": [
+          "compare"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT users.VALUE FOR EACH users.ID WHERE users.CLASS = '3'",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 1000,
+            "kept": [
+              12
+            ],
+            "stopped": "source_exhausted",
+            "filtered_at_source": false,
+            "sent_with": [
+              "compare"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "context.temporal-exhausted",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE users.class = '3'",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 1000,
+        "kept": [
+          60
+        ],
+        "stopped": "source_exhausted",
+        "filtered_at_source": true,
+        "sent_with": [
+          "compare"
+        ]
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE users.CLASS = '3'",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 1000,
+            "kept": [
+              60
+            ],
+            "stopped": "source_exhausted",
+            "filtered_at_source": false,
+            "sent_with": [
+              "compare"
+            ]
+          }
+        }
+      }
     }
   ],
   "input_paths": {
@@ -2723,7 +3912,8 @@
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_adopted_frame_tables_retain_origin_and_relationship_rules",
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_frame_time_edit_preserves_key_exclusion_and_origin",
           "packages/structured-data-models-client/tests/test_frame_edits_core.py::test_manual_and_core_frame_table_adoption_use_shared_edits",
-          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_table_constructors_preserve_end_time_role"
+          "packages/structured-data-models-client/tests/test_standalone_schema_core.py::test_standalone_table_constructors_preserve_end_time_role",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/SchemaTest.java#theShopIsDescribedAsTheReferenceDescribesIt",
@@ -3250,9 +4440,14 @@
       }
     },
     {
-      "id": "java-data-providers",
+      "id": "data-providers",
       "apis": {
-        "python": [],
+        "python": [
+          "ProviderSource",
+          "provider.DataProvider",
+          "provider.Capabilities",
+          "provider.DataRequest"
+        ],
         "java": [
           "ProviderSource"
         ]
@@ -3262,16 +4457,28 @@
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#declaredFilterKindsGoOnTheWireAndNoneLeavesTheFieldOut",
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#valueFiltersAreReadAsTypedFiltersNestedAndAll",
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#hasRowsIsReadWithItsTableAndNestedFilters",
-          "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore"
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachRequestIsReadAsTheSharedVectorsSay",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachCapabilitiesDeclaredIsSentAsTheSharedVectorsSay"
+        ],
+        "python": [
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one"
         ]
       },
       "gate": "local",
       "ownership": {
         "paths": [
-          "java/src/main/java/com/nvidia/sdm/internal/HostProviders.java"
+          "java/src/main/java/com/nvidia/sdm/internal/HostProviders.java",
+          "packages/structured-data-models-client/src/sdm_client/_rust/host_providers.py",
+          "rust/crates/sdm-data/src/host_parts.rs"
         ],
         "operations": [],
-        "host_only_reason": "A Java caller's own provider answers the core's data requests; the operations are the ones every source answers."
+        "host_only_reason": "A caller's own provider answers the core's data requests in Java or Python; the operations are the ones every source answers."
       },
       "scope": {
         "scenarios": {
@@ -3868,6 +5075,18 @@
       "scope": {
         "scenarios": {
           "refs": [
+            "context.anchor-time-window",
+            "context.forecast-where",
+            "context.no-where",
+            "context.ranking-where",
+            "context.static-exhausted",
+            "context.target-average",
+            "context.target-maximum-where",
+            "context.temporal-exhausted",
+            "context.where-count-window",
+            "context.where-entity",
+            "context.where-in-or",
+            "context.where-not-and",
             "direct.regression",
             "node.binary",
             "node.multiclass",
@@ -4139,18 +5358,24 @@
         "java": [
           "Request.contextReport",
           "ContextReport",
-          "ContextDraw"
+          "ContextDraw",
+          "MaterializeOptions.Builder.contextTimeLimit"
         ]
       },
       "tests": {
         "python": [
           "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_the_report_says_the_filter_went_to_the_source_and_one_draw_did",
           "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_condition_the_source_is_not_sent_is_drawn_again_larger",
-          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_source_holding_too_few_says_so"
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_source_holding_too_few_says_so",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_smaller_context_asked_for_is_not_drawn_again_for_more",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_drawing_stops_at_the_time_limit_with_the_examples_kept",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_time_limit_that_is_not_seconds_is_refused",
+          "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_draw_slower_than_the_time_limit_is_the_last"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RelationalTest.java#multipleTablesSelectRelationalAndSurviveCallerClosure",
-          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling"
+          "java/src/test/java/com/nvidia/sdm/PersistenceTest.java#gatheredRelationalRestoresExactPayloadsPartsAndPredictsWithoutSampling",
+          "java/src/test/java/com/nvidia/sdm/RelationalTest.java#theContextTimeLimitReachesTheCoreAsSeconds"
         ]
       },
       "gate": "local",
@@ -4164,8 +5389,20 @@
       },
       "scope": {
         "scenarios": {
-          "refs": [],
-          "reason": "Context report tests materialize focused DuckDB fixtures; no separate scenario scope is declared."
+          "refs": [
+            "context.anchor-time-window",
+            "context.forecast-where",
+            "context.no-where",
+            "context.ranking-where",
+            "context.static-exhausted",
+            "context.target-average",
+            "context.target-maximum-where",
+            "context.temporal-exhausted",
+            "context.where-count-window",
+            "context.where-entity",
+            "context.where-in-or",
+            "context.where-not-and"
+          ]
         },
         "input_paths": {
           "refs": [],
@@ -4603,7 +5840,8 @@
       },
       "tests": {
         "python": [
-          "packages/structured-data-models-client/tests/test_rebinding.py"
+          "packages/structured-data-models-client/tests/test_rebinding.py",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/RebindingTest.java"
@@ -4835,7 +6073,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "1c686e7e1ec844abec7e04edceb61c532c86fb9bd418ea73d0ca56da30ad6bb2",
+  "public_api_snapshot_sha256": "ea308fcce6c5f6b9471e5b10e9db1c85fe3470f8fa58acffbf8af1188654c986",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -4919,6 +6157,87 @@
       "sdm_client.Column.untyped": {
         "capability": "schema-edits"
       },
+      "sdm_client.ColumnExplanations": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_constructor_has_independent_cohort_oracle",
+            "behavior": "Raw-context construction uses Rust and yields independently calculated cohorts."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.COUNT": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.MAX_CATEGORIES": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.MAX_CLASSES": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.NA": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.NUM_COHORTS": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.OTHER": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.TABULAR_TABLE": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
+            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
+          }
+        ]
+      },
+      "sdm_client.ColumnExplanations.to_pandas": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_empty_labels_and_exact_mixed_classes",
+            "behavior": "The dataframe preserves exact mixed class identity and the empty-result schema."
+          }
+        ]
+      },
       "sdm_client.ColumnMetadata": {
         "capability": "metadata-explanation-reports",
         "assertions": [
@@ -4952,6 +6271,24 @@
           {
             "test": "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_condition_the_source_is_not_sent_is_drawn_again_larger",
             "behavior": "Public report access gives each part's draws, rows drawn, candidates, kept examples, the stop reason and whether conditions went to the source."
+          }
+        ]
+      },
+      "sdm_client.ExplanationSummarizer": {
+        "capability": "explanation-summaries",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_summary_request_is_explicit_preserves_prose_and_freezes_data",
+            "behavior": "Explicit summarization preserves existing prose and verifies the authorized HTTP request and unchanged source view."
+          }
+        ]
+      },
+      "sdm_client.ExplanationSummarizer.summarize": {
+        "capability": "explanation-summaries",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_summary_request_is_explicit_preserves_prose_and_freezes_data",
+            "behavior": "Explicit summarization preserves existing prose and verifies the authorized HTTP request and unchanged source view."
           }
         ]
       },
@@ -5036,6 +6373,15 @@
           }
         ]
       },
+      "sdm_client.Explanations": {
+        "capability": "column-explanations",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis",
+            "behavior": "The public container retains separate gradients and column analysis through result construction and merging."
+          }
+        ]
+      },
       "sdm_client.FeatureImportance": {
         "capability": "metadata-explanation-reports",
         "assertions": [
@@ -5111,6 +6457,93 @@
           {
             "test": "packages/structured-data-models-client/tests/test_timeseries.py::test_shared_history_preparation",
             "behavior": "History preparation preserves source ownership and matches independent expected entity, timestamp and value vectors."
+          }
+        ]
+      },
+      "sdm_client.GradientExplanations": {
+        "capability": "gradient-explanations"
+      },
+      "sdm_client.GradientExplanations.to_pandas": {
+        "capability": "gradient-explanations"
+      },
+      "sdm_client.InferenceConfig": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
+      },
+      "sdm_client.InferenceConfig.category_shuffle": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
+      },
+      "sdm_client.InferenceConfig.class_shuffle": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
+      },
+      "sdm_client.InferenceConfig.column_shuffle": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
+      },
+      "sdm_client.InferenceConfig.hop_shuffle": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
+      },
+      "sdm_client.InferenceConfig.num_estimators": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
+      },
+      "sdm_client.InferenceConfig.output_type": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
+      },
+      "sdm_client.InferenceConfig.target_transforms": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
+          }
+        ]
+      },
+      "sdm_client.InferenceConfig.to_dict": {
+        "capability": "typed-inference-settings",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
+            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
           }
         ]
       },
@@ -5285,6 +6718,69 @@
       "sdm_client.PredictiveQuery.materialize": {
         "capability": "direct-dtypes-options"
       },
+      "sdm_client.ProviderSource": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
+            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
+          }
+        ]
+      },
+      "sdm_client.ProviderSource.kind": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
+            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
+          }
+        ]
+      },
+      "sdm_client.ProviderSource.provider": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
+            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
+          }
+        ]
+      },
+      "sdm_client.RelationalTask": {
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
+      },
+      "sdm_client.RelationalTask.link_target_table": {
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
+      },
+      "sdm_client.RelationalTask.num_forecasts": {
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
+      },
+      "sdm_client.RelationalTask.step_size_ns": {
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
+      },
       "sdm_client.Relationship": {
         "capability": "schema-edits"
       },
@@ -5424,7 +6920,13 @@
         ]
       },
       "sdm_client.Schema": {
-        "capability": "schema-edits"
+        "capability": "schema-edits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one",
+            "behavior": "A schema's source may be a ProviderSource over a caller's own data provider."
+          }
+        ]
       },
       "sdm_client.Schema.check_consistent": {
         "capability": "schema-edits"
@@ -5445,7 +6947,13 @@
         ]
       },
       "sdm_client.Schema.from_source": {
-        "capability": "schema-edits"
+        "capability": "schema-edits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one",
+            "behavior": "A schema is built from a ProviderSource over a caller's own provider, which declares no keys, with the keys the caller names."
+          }
+        ]
       },
       "sdm_client.Schema.infer_links": {
         "capability": "schema-refinement",
@@ -5483,6 +6991,15 @@
           }
         ]
       },
+      "sdm_client.Schema.materialize_examples": {
+        "capability": "custom-examples",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
+            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
+          }
+        ]
+      },
       "sdm_client.Schema.metadata_report": {
         "capability": "metadata-explanation-reports",
         "assertions": [
@@ -5514,7 +7031,13 @@
         "capability": "schema-edits"
       },
       "sdm_client.Schema.source": {
-        "capability": "schema-edits"
+        "capability": "schema-edits",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one",
+            "behavior": "A schema's source may be a ProviderSource over a caller's own data provider."
+          }
+        ]
       },
       "sdm_client.Schema.tables": {
         "capability": "schema-edits"
@@ -5555,6 +7078,28 @@
           }
         ]
       },
+      "sdm_client.Schema.with_source": {
+        "capability": "connection-rebinding",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_rebinding.py::test_rebind_uses_new_connection_preserves_declarations_and_old_requests",
+            "behavior": "Rebinding uses the new connection while preserving declarations and existing request ownership."
+          },
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one",
+            "behavior": "A schema's source may be a ProviderSource over a caller's own data provider."
+          }
+        ]
+      },
+      "sdm_client.Schema.with_sql_column": {
+        "capability": "sql-columns",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_sql_columns.py::test_sql_column_values_ownership_refresh_and_materialization",
+            "behavior": "Provider-computed values, independent schema ownership, refresh and materialization retain expected results."
+          }
+        ]
+      },
       "sdm_client.Schema.without_relationship": {
         "capability": "schema-refinement",
         "assertions": [
@@ -5584,6 +7129,15 @@
       },
       "sdm_client.SourceTable.duplicate_keys": {
         "capability": "schema-edits"
+      },
+      "sdm_client.SourceTable.end_time_column": {
+        "capability": "end-time",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
+            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
+          }
+        ]
       },
       "sdm_client.SourceTable.metadata_report": {
         "capability": "metadata-explanation-reports",
@@ -5627,6 +7181,15 @@
       "sdm_client.Table.duplicate_keys": {
         "capability": "schema-edits"
       },
+      "sdm_client.Table.end_time_column": {
+        "capability": "end-time",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
+            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
+          }
+        ]
+      },
       "sdm_client.Table.metadata_report": {
         "capability": "metadata-explanation-reports",
         "assertions": [
@@ -5657,6 +7220,15 @@
           {
             "test": "packages/structured-data-models-client/tests/test_reports.py::test_shared_metadata_fixture",
             "behavior": "Constructed metadata/link descriptors produce the independent fixture text and directed-link rows."
+          }
+        ]
+      },
+      "sdm_client.TableMetadata.end_time_column": {
+        "capability": "end-time",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
+            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
           }
         ]
       },
@@ -5732,6 +7304,987 @@
           {
             "test": "packages/structured-data-models-client/tests/test_timeseries.py::test_shared_history_preparation",
             "behavior": "History preparation preserves source ownership and matches independent expected entity, timestamp and value vectors."
+          }
+        ]
+      },
+      "sdm_client.provider.AllBut": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.AllOf": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.AnyOf": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.BATCH_COLUMN": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Bound": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.fallback": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.filters": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.max_keys_per_request": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.max_seed": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.null_order": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.optional": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.sampling": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.ColumnRanges": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.ColumnRanges.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Compare": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CompareOp": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CompareOp.EQ": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CompareOp.GE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CompareOp.GT": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CompareOp.LE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CompareOp.LT": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CompareOp.NE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Count": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CountRows": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.CountRows.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DataProvider": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A caller's provider answers the core's requests; its failure is the operation's PROVIDER_ERROR."
+          }
+        ]
+      },
+      "sdm_client.provider.DataProvider.answer": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A caller's provider answers the core's requests; its failure is the operation's PROVIDER_ERROR."
+          }
+        ]
+      },
+      "sdm_client.provider.DataProvider.capabilities": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A caller's provider answers the core's requests; its failure is the operation's PROVIDER_ERROR."
+          }
+        ]
+      },
+      "sdm_client.provider.DataRequest": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Describe": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Describe.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.COLUMNS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.FOREIGN_KEYS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.INDEXES": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.INDEX_COLUMNS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.KEYS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.KEY_ENFORCEMENT": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.NAMESPACE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.TABLES": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.DescribePart.VIEW_DEFINITION": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Fallback": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Filter": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FilterKind": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FilterKind.ALL_OF": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FilterKind.ANY_OF": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FilterKind.COMPARE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FilterKind.HAS_ROWS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FilterKind.IN": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FilterKind.IS_NULL": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.HasRows": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.In": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.IsNull": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.KeyCounts": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.KeyCounts.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.KeyIn": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.KeySet": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Lookup": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Lookup.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.MATCHES_COLUMN": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.NeighborLimit": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Neighbors": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Neighbors.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.NotNull": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.NullOrder": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.NullOrder.FIRST": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.NullOrder.LAST": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.COLUMN_RANGES": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.COUNT_ROWS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.KEY_COUNTS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.LOOKUP": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.NEIGHBORS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.PREVIEW": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.REPEATED_KEY": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.SAMPLE_ENTITIES": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.OptionalRequest.TIME_BOUNDS": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Preview": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Preview.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.ProviderFailure": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
+            "behavior": "A provider's failure tells the core what the provider says of it."
+          }
+        ]
+      },
+      "sdm_client.provider.ProviderFailure.error_class": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
+            "behavior": "A provider's failure tells the core what the provider says of it."
+          }
+        ]
+      },
+      "sdm_client.provider.ProviderFailure.message": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
+            "behavior": "A provider's failure tells the core what the provider says of it."
+          }
+        ]
+      },
+      "sdm_client.provider.ProviderFailure.sqlstate": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
+            "behavior": "A provider's failure tells the core what the provider says of it."
+          }
+        ]
+      },
+      "sdm_client.provider.ProviderFailure.vendor_code": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
+            "behavior": "A provider's failure tells the core what the provider says of it."
+          }
+        ]
+      },
+      "sdm_client.provider.ProviderSource": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
+            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
+          }
+        ]
+      },
+      "sdm_client.provider.ProviderSource.kind": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
+            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
+          }
+        ]
+      },
+      "sdm_client.provider.ProviderSource.provider": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
+            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
+          }
+        ]
+      },
+      "sdm_client.provider.Relation": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Relation.table": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.RepeatedKey": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.RepeatedKey.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.SEED_BATCH": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.SEED_KEY": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.SampleEntities": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.SampleEntities.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Sampling": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Sampling.SEEDED_STABLE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Sampling.UNSEEDED": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
+            "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Scan": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Scan.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.SeedBound": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TableColumn": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TableKey": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TieTerm": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TimeBounds": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TimeBounds.name": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TimeRange": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Window": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
+            "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
           }
         ]
       },
@@ -5992,291 +8545,6 @@
       },
       "sdm_connectors.resolve_sql": {
         "capability": "sql-helpers"
-      },
-      "sdm_client.SourceTable.end_time_column": {
-        "capability": "end-time",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
-            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
-          }
-        ]
-      },
-      "sdm_client.Table.end_time_column": {
-        "capability": "end-time",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
-            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
-          }
-        ]
-      },
-      "sdm_client.TableMetadata.end_time_column": {
-        "capability": "end-time",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_end_time.py::test_explicit_expired_ids_remain_and_future_values_are_hidden",
-            "behavior": "The explicit end-time role survives table/report access and persistence while expired examples are excluded."
-          }
-        ]
-      },
-      "sdm_client.Schema.with_sql_column": {
-        "capability": "sql-columns",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_sql_columns.py::test_sql_column_values_ownership_refresh_and_materialization",
-            "behavior": "Provider-computed values, independent schema ownership, refresh and materialization retain expected results."
-          }
-        ]
-      },
-      "sdm_client.Schema.materialize_examples": {
-        "capability": "custom-examples",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
-            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
-          }
-        ]
-      },
-      "sdm_client.RelationalTask.num_forecasts": {
-        "capability": "custom-examples",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
-            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
-          }
-        ]
-      },
-      "sdm_client.RelationalTask.link_target_table": {
-        "capability": "custom-examples",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
-            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
-          }
-        ]
-      },
-      "sdm_client.RelationalTask": {
-        "capability": "custom-examples",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
-            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
-          }
-        ]
-      },
-      "sdm_client.RelationalTask.step_size_ns": {
-        "capability": "custom-examples",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_custom_examples.py::test_shared_examples_labels_order_ownership_and_persistence",
-            "behavior": "Task fields retain fixture values; supplied examples preserve expected targets, ordering, ownership and persisted payloads."
-          }
-        ]
-      },
-      "sdm_client.ExplanationSummarizer": {
-        "capability": "explanation-summaries",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_summary_request_is_explicit_preserves_prose_and_freezes_data",
-            "behavior": "Explicit summarization preserves existing prose and verifies the authorized HTTP request and unchanged source view."
-          }
-        ]
-      },
-      "sdm_client.ExplanationSummarizer.summarize": {
-        "capability": "explanation-summaries",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_summary_request_is_explicit_preserves_prose_and_freezes_data",
-            "behavior": "Explicit summarization preserves existing prose and verifies the authorized HTTP request and unchanged source view."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig.category_shuffle": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig.class_shuffle": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig.column_shuffle": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig.hop_shuffle": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig.num_estimators": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig.output_type": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig.target_transforms": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.InferenceConfig.to_dict": {
-        "capability": "typed-inference-settings",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_settings_summaries.py::test_each_typed_setting_preserves_its_explicit_value",
-            "behavior": "Explicit setting values and serialized options match independent literals, including false values and transform ordering."
-          }
-        ]
-      },
-      "sdm_client.Schema.with_source": {
-        "capability": "connection-rebinding",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_rebinding.py::test_rebind_uses_new_connection_preserves_declarations_and_old_requests",
-            "behavior": "Rebinding uses the new connection while preserving declarations and existing request ownership."
-          }
-        ]
-      },
-      "sdm_client.GradientExplanations": {
-        "capability": "gradient-explanations"
-      },
-      "sdm_client.GradientExplanations.to_pandas": {
-        "capability": "gradient-explanations"
-      },
-      "sdm_client.ColumnExplanations": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_constructor_has_independent_cohort_oracle",
-            "behavior": "Raw-context construction uses Rust and yields independently calculated cohorts."
-          }
-        ]
-      },
-      "sdm_client.ColumnExplanations.to_pandas": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_empty_labels_and_exact_mixed_classes",
-            "behavior": "The dataframe preserves exact mixed class identity and the empty-result schema."
-          }
-        ]
-      },
-      "sdm_client.Explanations": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis",
-            "behavior": "The public container retains separate gradients and column analysis through result construction and merging."
-          }
-        ]
-      },
-      "sdm_client.ColumnExplanations.COUNT": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
-            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
-          }
-        ]
-      },
-      "sdm_client.ColumnExplanations.MAX_CATEGORIES": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
-            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
-          }
-        ]
-      },
-      "sdm_client.ColumnExplanations.MAX_CLASSES": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
-            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
-          }
-        ]
-      },
-      "sdm_client.ColumnExplanations.NA": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
-            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
-          }
-        ]
-      },
-      "sdm_client.ColumnExplanations.NUM_COHORTS": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
-            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
-          }
-        ]
-      },
-      "sdm_client.ColumnExplanations.OTHER": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
-            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
-          }
-        ]
-      },
-      "sdm_client.ColumnExplanations.TABULAR_TABLE": {
-        "capability": "column-explanations",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_policy_constants_remain_available",
-            "behavior": "Existing public informational policy constants remain available with the engine cohort budgets and reserved labels; assigning them is not a tuning API."
-          }
-        ]
       }
     },
     "java": {
@@ -7271,7 +9539,7 @@
         "capability": "direct-dtypes-options"
       },
       "com.nvidia.sdm.ProviderSource": {
-        "capability": "java-data-providers",
+        "capability": "data-providers",
         "assertions": [
           {
             "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
@@ -7280,7 +9548,7 @@
         ]
       },
       "com.nvidia.sdm.ProviderSource#public com.nvidia.sdm.ProviderSource(com.nvidia.sdm.provider.DataProvider);": {
-        "capability": "java-data-providers",
+        "capability": "data-providers",
         "assertions": [
           {
             "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
@@ -7289,7 +9557,7 @@
         ]
       },
       "com.nvidia.sdm.ProviderSource#public com.nvidia.sdm.provider.DataProvider provider();": {
-        "capability": "java-data-providers",
+        "capability": "data-providers",
         "assertions": [
           {
             "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
@@ -7298,7 +9566,7 @@
         ]
       },
       "com.nvidia.sdm.ProviderSource#public final boolean equals(java.lang.Object);": {
-        "capability": "java-data-providers",
+        "capability": "data-providers",
         "assertions": [
           {
             "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
@@ -7307,7 +9575,7 @@
         ]
       },
       "com.nvidia.sdm.ProviderSource#public final int hashCode();": {
-        "capability": "java-data-providers",
+        "capability": "data-providers",
         "assertions": [
           {
             "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
@@ -7316,7 +9584,7 @@
         ]
       },
       "com.nvidia.sdm.ProviderSource#public final java.lang.String toString();": {
-        "capability": "java-data-providers",
+        "capability": "data-providers",
         "assertions": [
           {
             "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
@@ -7325,7 +9593,7 @@
         ]
       },
       "com.nvidia.sdm.ProviderSource#public static com.nvidia.sdm.ProviderSource of(com.nvidia.sdm.provider.DataProvider);": {
-        "capability": "java-data-providers",
+        "capability": "data-providers",
         "assertions": [
           {
             "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
@@ -8427,6 +10695,15 @@
             "behavior": "Java exposes the same informational cohort budgets and reserved names as Python; these constants do not tune engine policy."
           }
         ]
+      },
+      "com.nvidia.sdm.MaterializeOptions$Builder#public com.nvidia.sdm.MaterializeOptions$Builder contextTimeLimit(java.time.Duration);": {
+        "capability": "context-reports",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/RelationalTest.java#theContextTimeLimitReachesTheCoreAsSeconds",
+            "behavior": "The time limit reaches the core as seconds; a negative duration is refused by the builder, and a value that is not seconds by the core, naming context_time_limit."
+          }
+        ]
       }
     }
   },
@@ -8465,11 +10742,6 @@
       "capability": "schema-notebook-display",
       "language": "java",
       "reason": "Automatic notebook display and BytesIO export are Python-specific; Java provides equivalent source, HTML and explicit file exports."
-    },
-    {
-      "capability": "java-data-providers",
-      "language": "python",
-      "reason": "Python callers read sources through the connectors' SQL dialects; a caller-written provider interface is Java's alone on this branch."
     }
   ],
   "contract_changes": [
@@ -8682,26 +10954,483 @@
     },
     {
       "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
-      "record": "api_contracts/java-data-providers",
-      "reason": "Java callers' own data providers, added with ProviderSource before this change, had no group; they now declare the value filters they apply, and the group maps ProviderSource to the Java tests of provider declarations and request decoding."
-    },
-    {
-      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
-      "record": "api_exceptions",
-      "reason": "Python has no caller-written provider interface on this branch, so java-data-providers is Java's alone."
+      "record": "api_contracts/data-providers",
+      "reason": "Callers' own data providers, in Java (ProviderSource, before this change) and now Python (sdm_client.ProviderSource and sdm_client.provider): the group maps both languages to the shared host-provider vectors and to end-to-end providers over DuckDB and Trino; a key set past a provider's limit is split by the core for both."
     },
     {
       "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
       "record": "api_inventory",
-      "reason": "Adds the context report types and accessors in both languages, and maps ProviderSource's existing declarations to java-data-providers."
+      "reason": "Adds the context report types and accessors and MaterializeOptions.Builder.contextTimeLimit, and maps ProviderSource's existing declarations to data-providers. Adds the Python data provider API (sdm_client.ProviderSource and sdm_client.provider)."
     },
     {
       "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
       "record": "public_api_snapshot_sha256",
-      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report."
+      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report, whose stop reasons include time_limit. It now records sdm_client.provider, the Python data provider API, and sdm_client.ProviderSource."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "api_contracts/relational-materialization",
+      "reason": "Links the context draw scenarios, which materialize relational requests over the sparse context fixture."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "capabilities/context.filtered-draws",
+      "reason": "Filtered context draws are required on every relational connector in both languages, live: the examples kept, the stop reason and filtering at the source."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.anchor-time-window",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.forecast-where",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.no-where",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.ranking-where",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.static-exhausted",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.target-average",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.target-maximum-where",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.temporal-exhausted",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.where-count-window",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.where-entity",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.where-in-or",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "scenarios/context.where-not-and",
+      "reason": "A context draw over the sparse context fixture, held to the true count of matching examples so a source dropping one fails the cell."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "api_contracts/schema-edits",
+      "reason": "Schema.from_source also takes a ProviderSource over a caller's own data provider; the group gains the test that builds a schema from one."
+    },
+    {
+      "base_commit": "ad8f76117235eac52c3851f2f7c29d09d07f80f2",
+      "record": "api_contracts/connection-rebinding",
+      "reason": "Schema.with_source also takes a ProviderSource over a caller's own data provider; the group gains the test that builds a schema from one."
     }
   ],
   "capabilities": [
+    {
+      "id": "context.filtered-draws",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "context.no-where",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.where-entity",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.where-in-or",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.where-not-and",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.where-count-window",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.target-average",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.target-maximum-where",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.forecast-where",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.ranking-where",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.anchor-time-window",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.static-exhausted",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.temporal-exhausted",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        }
+      ],
+      "api_contracts": [
+        "context-reports",
+        "relational-materialization"
+      ]
+    },
     {
       "id": "lifecycle.aggregate",
       "evidence_level": "live-required",

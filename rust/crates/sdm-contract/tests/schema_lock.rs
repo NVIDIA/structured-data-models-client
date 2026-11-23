@@ -997,6 +997,10 @@ const OTHER: &[(&str, &str)] = &[
     ("Operation/materialize.indices", "Arrow, with its schema"),
     ("FetchOutcome/data.data", "Arrow, with its schema"),
     ("KeySet.attachment", "Arrow, with its schema"),
+    (
+        "FetchPlan/host.key_sets",
+        "Arrow, with its schema: the request's key sets",
+    ),
     ("OperationResult/predict.result", "Arrow, with its schema"),
     ("AnsweredParts.result", "Arrow, with its schema"),
 ];

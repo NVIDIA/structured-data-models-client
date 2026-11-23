@@ -16736,6 +16736,13 @@
             "expect": {
               "$ref": "#/$defs/ExpectedSchema"
             },
+            "key_sets": {
+              "description": "The key sets the request asks with, by attachment, in order:\nthe seeds of a `neighbors` or a `lookup`, then each `key_in`\nfilter's keys. The host takes them from the run, as it takes a\nSQL plan's, without reading the request for them.",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/AttachmentId"
+              }
+            },
             "plan": {
               "type": "string",
               "const": "host"
@@ -17874,6 +17881,7 @@
         "top_k_not_whole",
         "top_k_out_of_range",
         "rows_per_call",
+        "context_time_limit",
         "max_pq_iterations_not_a_whole_number",
         "iterations_below_one",
         "option_not_whole",
@@ -18186,6 +18194,11 @@
           "description": "Another draw would have read more rows than one request may.",
           "type": "string",
           "const": "row_budget"
+        },
+        {
+          "description": "The draws had taken the time one request's context may\n(`context_time_limit`): the examples kept so far are the context.",
+          "type": "string",
+          "const": "time_limit"
         }
       ]
     },

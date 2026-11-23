@@ -13,8 +13,15 @@ The public API snapshot records this version update; publication remains pending
 
 ### Added
 
-- `Request.context_report` (Python) and `Request.contextReport()` (Java) say how the context examples were drawn from the source: for each part, the draws, the rows they read, the candidates labelled, how many the query's conditions kept, whether any condition went to the source, and why drawing stopped (`full`, `source_exhausted` or `row_budget`).
-  A request whose context comes up short, from a condition only the client checks, is drawn again, larger, sized by the share of the first draw that qualified, until the context is full, the source has no more rows, or 5,000,000 rows have been drawn.
+- Python callers can read data through their own code, as Java callers can: `sdm_client.ProviderSource` takes a `sdm_client.provider.DataProvider`, which answers the core's typed data requests with Arrow rows and declares what it answers in its `Capabilities`.
+  It is accepted wherever a source is, and the requests, filters, capabilities and failures are Java's, in Python's types.
+  A key set larger than a provider's `max_keys_per_request` is split by the core into requests of at most that many keys, for Python and Java providers alike.
+  See [Your own data provider](docs/reference/data-providers.md).
+- `Request.context_report` (Python) and `Request.contextReport()` (Java) say how the context examples were drawn from the source: for each part, the draws, the rows they read, the candidates labelled, how many the query's conditions kept, whether any condition went to the source, and why drawing stopped (`full`, `source_exhausted`, `row_budget` or `time_limit`).
+  A request whose context comes up short, from a condition only the client checks, is drawn again, larger, sized by the share of the first draw that qualified, until the context holds as many examples as were asked for, the source has no more rows, 5,000,000 rows have been drawn, or `context_time_limit` has passed.
+- `context_time_limit` (Python `materialize()` keyword, in seconds or as a `timedelta`; Java `MaterializeOptions.Builder.contextTimeLimit(Duration)`) bounds the time a request spends drawing its context, five minutes by default.
+  No draw starts once it has passed, and the examples kept so far are the context; a draw already reading runs on.
+  The time is read by the host layer the Python and Java clients share, as the core reads no clock.
 - Java `DataProvider`s can declare the value filters they apply (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf`, `AllOf` and `HasRows` on samples and scans.
   A provider that declares none receives none, as before.
 - Python `Schema.from_relbench` and Java `Schema.fromRelbench` load the same pinned

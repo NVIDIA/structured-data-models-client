@@ -87,6 +87,7 @@ impl DataLayer for Fake {
 
     fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
         Ok(FetchPlan::Host {
+            key_sets: Vec::new(),
             expect: ExpectedSchema::Discover {},
         })
     }

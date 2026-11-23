@@ -265,6 +265,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         ])),
                     },
                     plan: FetchPlan::Host {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -279,6 +280,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         seeds: seeds(&[]),
                     },
                     plan: FetchPlan::Host {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -299,6 +301,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         key_dtype: None,
                     },
                     plan: FetchPlan::Host {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -313,6 +316,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         }],
                     },
                     plan: FetchPlan::Host {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -329,6 +333,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         }],
                     },
                     plan: FetchPlan::Host {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -341,6 +346,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         part: DescribePart::Indexes,
                     },
                     plan: FetchPlan::Host {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -353,6 +359,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         columns: vec!["ts".into()],
                     },
                     plan: FetchPlan::Host {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -365,6 +372,7 @@ pub fn messages() -> Vec<ControlMessage> {
                         key: vec!["order_id".into()],
                     },
                     plan: FetchPlan::Host {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,

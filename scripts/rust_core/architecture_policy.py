@@ -1322,11 +1322,28 @@ REQUIRED_METHODS = frozenset(
         'jiff::tz::TimeZone::system',
     }
 )
-# The one place shipped code may allow a ban: sdm-host reads the zone lookup
-# roots the host names. The allow must be exactly this one,
-# on exactly this statement: a binding of `TimeZoneDatabase::from_dir` over
-# the root's path, with at most a trailing `.ok` or `?`.
+# The two places shipped code may allow a ban, both in sdm-host, the host
+# layer every binding runs the core through. It reads the zone lookup roots
+# the host names: the allow must be exactly this one, on exactly this
+# statement, a binding of `TimeZoneDatabase::from_dir` over the root's path,
+# with at most a trailing `.ok` or `?`. And it reads a run's monotonic clock,
+# which it tells the core with each reply: the allow must be exactly the
+# clock's, on exactly `mod clock;`, and the clock module may name no banned
+# API but `std::time::Instant` (CLOCK_ONLY).
 BAN_EXEMPTION = Path('rust/crates/sdm-host/src/zones.rs')
+CLOCK_EXEMPTION = Path('rust/crates/sdm-host/src/lib.rs')
+CLOCK_MODULE = Path('rust/crates/sdm-host/src/clock.rs')
+_CLOCK_ATTRIBUTE = re.compile(
+    r'^#\[allow\(clippy::disallowed_methods,clippy::disallowed_types,'
+    r'reason=""\)\]$'
+)
+_CLOCK_STATEMENT = re.compile(r'^mod clock ;$')
+#: What the clock module may not name: every banned API but the monotonic
+#: clock it reads.
+CLOCK_ONLY = re.compile(
+    r'\b(SystemTime|HashMap|HashSet|RandomState|env\s*::|fs\s*::|File\b|'
+    r'thread_rng|rand\s*::|TimeZone|Zoned|unix_epoch)'
+)
 _EXEMPT_ATTRIBUTE = re.compile(
     r'^#\[allow\(clippy::disallowed_methods,reason=""\)\]$'
 )
@@ -1434,15 +1451,22 @@ def ban_switches(attribute: Attribute) -> set[str]:
     return switches
 
 
-def exempt(source: Source, attribute: Attribute) -> bool:
-    """Whether this is sdm-host's approved allow on its approved statement."""
-    if attribute.inner or not _EXEMPT_ATTRIBUTE.match(attribute.text):
+def exempt(
+    source: Source,
+    attribute: Attribute,
+    allow: re.Pattern[str] = _EXEMPT_ATTRIBUTE,
+    statement: re.Pattern[str] = _EXEMPT_STATEMENT,
+) -> bool:
+    """Whether this is one of sdm-host's approved allows on its approved
+    statement: the zone roots' by default, the clock's when named."""
+    if attribute.inner or not allow.match(attribute.text):
         return False
     end = source.skeleton.find(';', attribute.end)
     if end < 0:
         return False
-    statement = tokens(source.skeleton[attribute.end : end + 1])
-    return bool(_EXEMPT_STATEMENT.match(statement))
+    return bool(
+        statement.match(tokens(source.skeleton[attribute.end : end + 1]))
+    )
 
 
 def ban_problems(rel: Path, source: Source, shipped: bool) -> list[str]:
@@ -1464,11 +1488,23 @@ def ban_problems(rel: Path, source: Source, shipped: bool) -> list[str]:
             exemptions += 1
             if exemptions == 1:
                 continue
+        if rel == CLOCK_EXEMPTION and exempt(
+            source, attribute, _CLOCK_ATTRIBUTE, _CLOCK_STATEMENT
+        ):
+            exemptions += 1
+            if exemptions == 1:
+                continue
         for lint in sorted(switches):
             problems.append(
-                f'{rel}:{line}: shipped code allows {lint}; the one '
-                "exemption is sdm-host's reading of the zone lookup roots, "
-                'on its one statement'
+                f'{rel}:{line}: shipped code allows {lint}; the '
+                "exemptions are sdm-host's reading of the zone lookup roots "
+                'and its run clock module, each on its one statement'
+            )
+    if rel == CLOCK_MODULE:
+        for match in CLOCK_ONLY.finditer(source.skeleton):
+            problems.append(
+                f'{rel}:{source.line(match.start())}: the clock module reads '
+                f'only the monotonic clock, not `{match.group(0)}`'
             )
     if shipped:
         # Code brought in from outside src/ would be read as test code.

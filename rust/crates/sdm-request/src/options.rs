@@ -181,6 +181,9 @@ pub struct Asked {
     pub rows_per_call: Option<u64>,
     /// The `lag_timesteps` given, none where the call names none.
     pub lag_timesteps: Option<AskedLag>,
+    /// How long the context's draws may take (`context_time_limit`), in
+    /// seconds, as given: read by [`context_time_limit`].
+    pub context_time_limit: Option<Value>,
 }
 
 /// A value of the wrong type for its option, refused as the client
@@ -292,6 +295,7 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
         top_k: None,
         rows_per_call: None,
         lag_timesteps: None,
+        context_time_limit: None,
     };
     let Some(given) = given else {
         return Ok(asked);
@@ -376,6 +380,11 @@ pub fn values(given: Option<&Value>) -> Result<Asked, CoreError> {
                 ));
             }
             ("rows_per_call", v) => asked.rows_per_call = rows_per_call(v)?,
+            ("context_time_limit", Value::Null) => {}
+            ("context_time_limit", v) => {
+                context_seconds(v)?;
+                asked.context_time_limit = Some(v.clone());
+            }
             ("random_seed", Value::Null) => asked.seed = AskedSeed::Unseeded,
             ("random_seed", v) => {
                 let (negative, digits) = integer(name, v)?;
@@ -435,6 +444,39 @@ pub(crate) fn lax_boolean(field: &str, value: &Value) -> Result<bool, CoreError>
         Value::Text(text) if TRUE.iter().any(|w| w.eq_ignore_ascii_case(text)) => Ok(true),
         _ => Err(refused()),
     }
+}
+
+/// How long a request may draw its context examples where the call names
+/// no time.
+pub const CONTEXT_TIME_LIMIT: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// How long a request's context may be drawn (`context_time_limit`):
+/// seconds given as a number of at least zero, [`CONTEXT_TIME_LIMIT`]
+/// where none is given. Drawing again stops once it has taken this long,
+/// and the context is the examples kept so far; zero draws once.
+pub fn context_time_limit(asked: &Asked) -> Result<std::time::Duration, CoreError> {
+    asked
+        .context_time_limit
+        .as_ref()
+        .map_or(Ok(CONTEXT_TIME_LIMIT), context_seconds)
+}
+
+fn context_seconds(value: &Value) -> Result<std::time::Duration, CoreError> {
+    let refused = || {
+        mistyped(
+            Sentence::ContextTimeLimit,
+            "context_time_limit",
+            "not_seconds",
+        )
+    };
+    let Value::Number(token) = value else {
+        return Err(refused());
+    };
+    token
+        .parse::<f64>()
+        .ok()
+        .and_then(|seconds| std::time::Duration::try_from_secs_f64(seconds).ok())
+        .ok_or_else(refused)
 }
 
 /// The options the engine reads with the task (`_get_task_table`), in its
@@ -2125,6 +2167,31 @@ mod tests {
             assert_eq!(e.code, ErrorCode::InvalidRequest, "{given}");
             assert_eq!(e.fields["field"], Detail::text("max_pq_iterations"));
             assert_eq!(reason(&e), Detail::text(why), "{given}");
+        }
+    }
+
+    #[test]
+    fn context_time_limit_is_seconds_of_at_least_zero_five_minutes_unnamed() {
+        let limit = |text: &str| context_time_limit(&asked(text));
+        assert_eq!(limit("{}").unwrap(), std::time::Duration::from_secs(300));
+        assert_eq!(
+            limit(r#"{"context_time_limit": null}"#).unwrap(),
+            std::time::Duration::from_secs(300)
+        );
+        assert_eq!(
+            limit(r#"{"context_time_limit": 0}"#).unwrap(),
+            std::time::Duration::ZERO
+        );
+        assert_eq!(
+            limit(r#"{"context_time_limit": 2.5}"#).unwrap(),
+            std::time::Duration::from_millis(2500)
+        );
+        for given in ["-1", "\"60\"", "true", "1e400", "[1]"] {
+            let text = format!(r#"{{"context_time_limit": {given}}}"#);
+            let refused = values(Some(&read(&text)))
+                .err()
+                .unwrap_or_else(|| panic!("{given} was taken"));
+            assert_eq!(refused.sentence, Sentence::ContextTimeLimit, "{given}");
         }
     }
 

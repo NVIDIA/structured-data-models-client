@@ -969,6 +969,9 @@ pub fn template(sentence: Sentence) -> Template {
         S::RowsPerCall => said(
             r#"rows_per_call is not a whole number of at least one, and a call scores a whole number of rows, at least one"#,
         ),
+        S::ContextTimeLimit => said(
+            r#"context_time_limit is not a number of seconds of at least zero, and it is how long a request may draw its context examples"#,
+        ),
         S::MaxPqIterationsNotAWholeNumber => owned(
             r#"max_pq_iterations must be a whole number, got {given!N}"#,
             Owner::HostComparison,

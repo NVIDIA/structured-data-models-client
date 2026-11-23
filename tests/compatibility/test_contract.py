@@ -223,7 +223,7 @@ def test_helper_api_registry_has_real_behavior_tests_and_declared_scope():
         'persistence',
         'readers',
         'provider-contract',
-        'java-data-providers',
+        'data-providers',
         'large-values',
         'public-serving-refusals',
         'result-items',
