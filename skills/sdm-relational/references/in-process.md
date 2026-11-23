@@ -4,43 +4,23 @@ Nothing deployed to point at, or tables that must not leave the machine: the
 same client runs the model here instead, with the same calls. This is how a
 notebook asks with no NIM at all.
 
-It is an extra, but no published release carries `in_process()` yet, so the
-plain install gets a client without it. Until one does, install from a
-checkout of `v2-candidate`, the branch the release is cut from. That build
-compiles the client's native extension, so it needs rustup and the toolchain
-`rust/rust-toolchain.toml` pins; pip runs the build from the client's own
-directory, where rustup does not read that pin, which is what the variable
-names. The client pins the API package to a version that is not published
-either, so install that from the checkout too, and the connectors package
-beside it: gathering reaches the client's data providers, and they are read
-even when the tables are already frames in memory.
+It is an extra:
 
 ```
-git clone -b v2-candidate \
-    https://github.com/NVIDIA/structured-data-models-client
-cd structured-data-models-client
-RUSTUP_TOOLCHAIN=1.97.0 pip install \
-    -e './packages/structured-data-models-api' \
-    -e './packages/structured-data-models-connectors' \
-    -e './packages/structured-data-models-client[in-process]'
+pip install 'structured-data-models-client[in-process]>=2.0.0'
 ```
 
-Once a release carries it, that build goes away, but the connectors package
-does not: gathering imports it whatever the client was installed from.
-
-```
-pip install 'structured-data-models-client[in-process]' \
-    structured-data-models-connectors
-```
+Tables already in memory as frames need nothing more. Tables that stay in a
+warehouse need the connectors package, as
+[`warehouses.md`](warehouses.md) describes; that is the same with or without
+a NIM.
 
 A pip warning that the client `does not provide the extra 'in-process'`, or
 an `AttributeError` saying `SDMClient` has no attribute `in_process`, is an
 installed client older than the feature, whichever command installed it.
 
 The extra brings structured-data-models and PyTorch, and needs Python 3.11
-or later. Gathering the request happens in this client, with no model and no
-engine behind it, but it imports the connectors package the install above
-names. Without it, `SDMClient.in_process()` raises `MissingExtraError`
+or later. Without it, `SDMClient.in_process()` raises `MissingExtraError`
 naming that command; on Python 3.10 the error names the Python it needs
 instead. The first prediction fetches the published weights,
 `nvidia/Kumo-Relational` on Hugging Face, into the Hugging Face cache, and
@@ -192,7 +172,7 @@ model already loaded with structured-data-models is used as it is:
 `sdm.models.KumoRelational`, shares its weights with every context the client
 fits, and refuses `device=` beside it, since that model is already somewhere.
 The quickstart's section on a model in this process, in
-[`docs/get-started/quickstart.md`](../../../docs/get-started/quickstart.md),
+[`docs/get-started/quickstart.md`](https://github.com/NVIDIA/structured-data-models-client/blob/main/docs/get-started/quickstart.md),
 shows it.
 
 A model loaded that way arrives in evaluation mode and loaded for both tasks,

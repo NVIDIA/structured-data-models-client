@@ -148,7 +148,7 @@ If a later model call fails, `exception.answered(allocator)` returns any complet
 |---|---|
 | Group | `com.nvidia` |
 | Artifact | `structured-data-models-client` |
-| Version | the client's (`2.0.0rc1`); not released |
+| Version | the client's (`2.0.0`); not released |
 | Java package | `com.nvidia.sdm` |
 | Bytecode | Java 17, tested on JDK 17 and 21 |
 | Natives in the JAR | Linux x86_64 and aarch64 (glibc 2.17 or later), macOS arm64 and x86_64, Windows x86_64 |
