@@ -62,6 +62,9 @@ env:
   # for postgres:17. A service container's image cannot read env, so the
   # configuration job exposes it to service definitions.
   POSTGRES_IMAGE: ghcr.io/nvidia/structured-data-models-client/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+  # Trino, the query engine a caller's own Java data provider is tested over
+  # (TrinoProviderTest): it declares no primary or foreign keys.
+  TRINO_IMAGE: docker.io/trinodb/trino:476@sha256:00125e40d063bc4816d165482f6044872b18b56026fb959d3b28ce1f96ffbbee
   # The manylinux2014 image both wheel builds run in (PyPA's, published on quay.io).
   MANYLINUX: ghcr.io/nvidia/structured-data-models-client/manylinux2014_x86_64:2026.09.14-1@sha256:21c37461985655aaa25ed3a923b28e6c9d4dd9e10edc0281eb50385184bddd31
   BINDING_FLOOR: pyarrow==14.0.1 pandas==2.2.2 numpy==1.23.5 duckdb==1.5.6
@@ -1839,6 +1842,21 @@ jobs:
           unzip -q jar/structured-data-models-client-${{ needs.configuration.outputs.version }}.jar 'com/nvidia/sdm/native/*' -d "$RUNNER_TEMP/java-native"
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
             -Dtest=SchemaTest,PredictTest,PostgresReadTest,PostgresKeylessOrderTest test
+      - name: Pull Trino
+        if: ${{ matrix.database == 'postgres' }}
+        run: scripts/rust_core/pull_image.sh "$TRINO_IMAGE"
+      - name: A caller's own data provider over Trino
+        if: ${{ matrix.database == 'postgres' }}
+        env:
+          SDM_TRINO_TEST_URL: http://localhost:8080
+        run: |
+          docker run -d --rm --name trino -p 8080:8080 "$TRINO_IMAGE"
+          for _ in $(seq 90); do
+            if curl -sf http://localhost:8080/v1/info | grep -q '"starting":false'; then break; fi
+            sleep 2
+          done
+          mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
+            -Dtest=TrinoProviderTest test
       - name: The JAR's dependencies, from Maven Central
         run: java jar/FetchDependencies.java jar
       - name: The S1 cases on the Java host
