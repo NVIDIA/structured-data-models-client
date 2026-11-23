@@ -2646,6 +2646,1114 @@
           "rule": null
         }
       }
+    },
+    {
+      "id": "context.no-where",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          1500
+        ],
+        "stopped": "full",
+        "filtered_at_source": false
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              1500
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.where-entity",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE users.value > 47.5",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          70
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE users.VALUE > 47.5",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              70
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.where-in-or",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE users.class IN ('3', '4') OR users.value > 48.5",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          100
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE users.CLASS IN ('3', '4') OR users.VALUE > 48.5",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              100
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.where-not-and",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE NOT (users.class = '0') AND users.value > 45",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          100
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE NOT (users.CLASS = '0') AND users.VALUE > 45",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              100
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.where-count-window",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE COUNT(events.*, -30, 0, days) > 3",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          75
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE COUNT(events.*, -30, 0, days) > 3",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              75
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        },
+        "sqlite": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              75
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.target-average",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT AVG(events.feature, 0, 30, days) FOR EACH users.id",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          511
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT AVG(events.FEATURE, 0, 30, days) FOR EACH users.ID",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              511
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        },
+        "sqlite": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              511
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.target-maximum-where",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT MAX(events.feature, 0, 30, days) FOR EACH users.id WHERE users.value > 40",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          96
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT MAX(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE users.VALUE > 40",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              96
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.forecast-where",
+      "task": "forecast",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.id WHERE users.value > 47.5",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          70,
+          56
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FORECAST 2 TIMEFRAMES FOR EACH users.ID WHERE users.VALUE > 47.5",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              70,
+              56
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.ranking-where",
+      "task": "ranking",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT LIST_DISTINCT(events.item, 0, 30, days) RANK TOP 2 FOR EACH users.id WHERE users.value > 47.5",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40,
+        "candidates": [
+          0,
+          1,
+          2
+        ]
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          70,
+          70,
+          70
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT LIST_DISTINCT(events.ITEM, 0, 30, days) RANK TOP 2 FOR EACH users.ID WHERE users.VALUE > 47.5",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              70,
+              70,
+              70
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.anchor-time-window",
+      "task": "condition",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.id WHERE COUNT(events.*, -30, 0, days) > 3",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7,
+        "num_context_samples": 40,
+        "anchor_time": "2024-05-01"
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 40,
+        "kept": [
+          45
+        ],
+        "stopped": "full",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT COUNT(events.*, 0, 30, days) > 0 FOR EACH users.ID WHERE COUNT(events.*, -30, 0, days) > 3",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              45
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        },
+        "sqlite": {
+          "context": {
+            "asked": 40,
+            "kept": [
+              45
+            ],
+            "stopped": "full",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.static-exhausted",
+      "task": "regression",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT users.value FOR EACH users.id WHERE users.class = '3'",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 1000,
+        "kept": [
+          12
+        ],
+        "stopped": "source_exhausted",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT users.VALUE FOR EACH users.ID WHERE users.CLASS = '3'",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 1000,
+            "kept": [
+              12
+            ],
+            "stopped": "source_exhausted",
+            "filtered_at_source": false
+          }
+        }
+      }
+    },
+    {
+      "id": "context.temporal-exhausted",
+      "task": "aggregate",
+      "entry": "pql",
+      "journey": "predict",
+      "models": [
+        "relational"
+      ],
+      "connectors": [
+        "memory",
+        "sqlite",
+        "duckdb",
+        "postgres",
+        "lakebase",
+        "databricks-sql",
+        "databricks-spark",
+        "databricks-metric",
+        "snowflake",
+        "snowflake-semantic"
+      ],
+      "pql": "PREDICT SUM(events.feature, 0, 30, days) FOR EACH users.id WHERE users.class = '3'",
+      "fixture": "fixtures/context.json",
+      "options": {
+        "indices": [
+          1,
+          2
+        ],
+        "random_seed": 7
+      },
+      "expected": {
+        "status": "supported"
+      },
+      "tolerance": {
+        "absolute": 0,
+        "relative": 0
+      },
+      "apis": {
+        "python": [
+          "Schema.from_data",
+          "Schema.from_source",
+          "PredictiveQuery.materialize",
+          "SDMClient.predict"
+        ],
+        "java": [
+          "Schema.fromData",
+          "Schema.fromSource",
+          "PredictiveQuery.materialize",
+          "SdmClient.predict"
+        ]
+      },
+      "comparison": "fixture-source-identity",
+      "preparation": {
+        "users.class": "string",
+        "users.flag": "boolean-from-0-or-1",
+        "events.event_time": "timestamp",
+        "frame_order": "fixture-primary-key"
+      },
+      "context": {
+        "asked": 1000,
+        "kept": [
+          60
+        ],
+        "stopped": "source_exhausted",
+        "filtered_at_source": true
+      },
+      "variants": {
+        "snowflake-semantic": {
+          "fixture": "fixtures/context-snowflake-semantic.json",
+          "pql": "PREDICT SUM(events.FEATURE, 0, 30, days) FOR EACH users.ID WHERE users.CLASS = '3'",
+          "preparation": {
+            "users.CLASS": "string",
+            "users.FLAG": "boolean-from-0-or-1",
+            "events.EVENT_TIME": "timestamp",
+            "frame_order": "fixture-primary-key"
+          }
+        },
+        "memory": {
+          "context": {
+            "asked": 1000,
+            "kept": [
+              60
+            ],
+            "stopped": "source_exhausted",
+            "filtered_at_source": false
+          }
+        }
+      }
     }
   ],
   "input_paths": {
@@ -3868,6 +4976,18 @@
       "scope": {
         "scenarios": {
           "refs": [
+            "context.anchor-time-window",
+            "context.forecast-where",
+            "context.no-where",
+            "context.ranking-where",
+            "context.static-exhausted",
+            "context.target-average",
+            "context.target-maximum-where",
+            "context.temporal-exhausted",
+            "context.where-count-window",
+            "context.where-entity",
+            "context.where-in-or",
+            "context.where-not-and",
             "direct.regression",
             "node.binary",
             "node.multiclass",
@@ -4164,8 +5284,20 @@
       },
       "scope": {
         "scenarios": {
-          "refs": [],
-          "reason": "Context report tests materialize focused DuckDB fixtures; no separate scenario scope is declared."
+          "refs": [
+            "context.anchor-time-window",
+            "context.forecast-where",
+            "context.no-where",
+            "context.ranking-where",
+            "context.static-exhausted",
+            "context.target-average",
+            "context.target-maximum-where",
+            "context.temporal-exhausted",
+            "context.where-count-window",
+            "context.where-entity",
+            "context.where-in-or",
+            "context.where-not-and"
+          ]
         },
         "input_paths": {
           "refs": [],
@@ -8702,6 +9834,388 @@
     }
   ],
   "capabilities": [
+    {
+      "id": "context.filtered-draws",
+      "evidence_level": "live-required",
+      "requirements": [
+        {
+          "scenario": "context.no-where",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.where-entity",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.where-in-or",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.where-not-and",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.where-count-window",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.target-average",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.target-maximum-where",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.forecast-where",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.ranking-where",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.anchor-time-window",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.static-exhausted",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        },
+        {
+          "scenario": "context.temporal-exhausted",
+          "languages": [
+            "python",
+            "java"
+          ],
+          "models": [
+            "relational"
+          ],
+          "connectors": [
+            "memory",
+            "sqlite",
+            "duckdb",
+            "postgres",
+            "lakebase",
+            "databricks-sql",
+            "databricks-spark",
+            "databricks-metric",
+            "snowflake",
+            "snowflake-semantic"
+          ],
+          "expected": {
+            "status": "supported"
+          },
+          "expected_by_model": {},
+          "expected_by_language": {},
+          "fixture_hashes": {
+            "fixtures/context-snowflake-semantic.json": "df03b5ec4bbfaf8a563336758d999242b0e71c83468dd281d9bcbcb79ff77910",
+            "fixtures/context.json": "cee8fab0833ce513413bf0e9977cb10f89d68ea832869f926a08f980f949e661"
+          }
+        }
+      ],
+      "api_contracts": [
+        "context-reports",
+        "relational-materialization"
+      ]
+    },
     {
       "id": "lifecycle.aggregate",
       "evidence_level": "live-required",

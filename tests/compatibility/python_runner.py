@@ -435,6 +435,36 @@ def request_observation(request):
     }
 
 
+def context_observation(request, expected):
+    """How the context was drawn, held to what the scenario expects.
+
+    ``kept`` counts the examples meeting the query in each part's draws: a
+    source that dropped one the query keeps would count fewer.
+    """
+    report = request.context_report
+    parts = [
+        {
+            'kept': part.kept,
+            'asked': part.asked,
+            'stopped': part.stopped,
+            'filtered_at_source': part.filtered_at_source,
+        }
+        for part in report.parts
+    ]
+    wanted = [
+        {
+            'kept': kept,
+            'asked': expected['asked'],
+            'stopped': expected['stopped'],
+            'filtered_at_source': expected['filtered_at_source'],
+        }
+        for kept in expected['kept']
+    ]
+    if report.status != 'available' or parts != wanted:
+        raise AssertionError('context draw differs from the expected')
+    return parts
+
+
 def journey(case, connector, model, config, mode, record):
     from sdm_client import (
         KumoRelational,
@@ -603,10 +633,18 @@ def journey(case, connector, model, config, mode, record):
             options = dict(case['options'])
             if model == 'tabular':
                 options.pop('random_seed', None)
+            if 'anchor_time' in options:
+                import pandas as pd
+
+                options['anchor_time'] = pd.Timestamp(options['anchor_time'])
             request = PredictiveQuery(case['pql'], schema).materialize(
                 model=chosen, **options
             )
             semantic['request'] = request_observation(request)
+            if 'context' in case:
+                semantic['context'] = context_observation(
+                    request, case['context']
+                )
         semantic['lifecycle'].append('materialize')
         if case['journey'] == 'restore-predict':
             record['stage'] = 'restore'

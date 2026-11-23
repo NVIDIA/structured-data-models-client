@@ -1,10 +1,17 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""The shared shop plus explicit extra user columns or uppercase identifiers."""
+"""The shared fixtures plus explicit extra user columns or uppercase identifiers.
+
+``shop.json`` is the small shop every scenario reads; ``context.json`` is a
+larger shop in which the rows a query asks for are rare, so a request draws
+its context examples instead of reading the whole table.
+"""
 
 import json
 from pathlib import Path
+
+BASES = ('shop.json', 'context.json')
 
 
 def load_fixture(path):
@@ -12,9 +19,9 @@ def load_fixture(path):
     variant = json.loads(path.read_text())
     if 'base' not in variant:
         return variant
-    if variant['base'] != 'shop.json':
-        raise ValueError('shop variants must use shop.json')
-    fixture = json.loads(path.with_name('shop.json').read_text())
+    if variant['base'] not in BASES:
+        raise ValueError('shop variants must use shop.json or context.json')
+    fixture = json.loads(path.with_name(variant['base']).read_text())
     if set(variant) == {'base', 'uppercase_columns'}:
         if variant['uppercase_columns'] is not True:
             raise ValueError('uppercase_columns must be true')

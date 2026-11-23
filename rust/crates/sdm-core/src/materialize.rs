@@ -3576,6 +3576,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         options::RunMode::Fast => mode.context_examples(),
         options::RunMode::Best => mode.context_examples().max(asked_examples.unwrap_or(0)),
     };
+    // The examples the request keeps: as many as were asked, where fewer
+    // than the mode gathers. A short first draw is drawn again only until
+    // these are kept, and the report counts against them.
+    let wanted_examples = asked_examples.map_or(context_examples, |n| n.min(context_examples));
     // `max_pq_iterations` times as many candidates as examples; a
     // float's count is no slice bound for a temporal query's walk, the
     // engine's `TypeError`, the caller's error.
@@ -3895,7 +3899,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
             draw_size,
             sampled.num_rows(),
             labelled_rows.len(),
-            context_examples,
+            wanted_examples,
             drawn_rows,
         );
         match next {
@@ -3906,7 +3910,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
                     rows_drawn: drawn_rows,
                     candidates: examples.index.len() as u64,
                     kept: labelled_rows.len() as u64,
-                    asked: context_examples as u64,
+                    asked: wanted_examples as u64,
                     stopped,
                     filtered_at_source: filtered || per_anchor,
                 };
@@ -3945,13 +3949,13 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
     }
     // A first draw as large as asked for (the table holds more), which
     // still gave too few: drawn again or not.
-    if (report.draws > 1 || kept.len() >= draw_size) && gathered < context_examples / 2 {
+    if (report.draws > 1 || kept.len() >= draw_size) && gathered < wanted_examples / 2 {
         // The reference warns of it once in a process: given on every run
         // that meets it, and once in a process by the host
         // ([`ONCE_PER_PROCESS`]).
         asker.warn(CoreWarning {
             fields: [
-                ("examples".to_owned(), count(context_examples)),
+                ("examples".to_owned(), count(wanted_examples)),
                 ("candidates".to_owned(), count(draw_size)),
             ]
             .into(),

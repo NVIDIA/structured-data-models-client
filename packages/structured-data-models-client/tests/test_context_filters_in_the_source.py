@@ -144,7 +144,7 @@ def test_the_report_says_the_filter_went_to_the_source_and_one_draw_did() -> (
         (
             ContextDraw(
                 # Every one of the 2,000 users older than 76: fewer than
-                # the 10,000 asked for, all of them answered.
+                # the first draw's 10,000 rows, all of them answered.
                 draws=1,
                 rows_drawn=2_000,
                 candidates=2_000,
@@ -171,6 +171,27 @@ def test_a_condition_the_source_is_not_sent_is_drawn_again_larger() -> None:
     assert part.filtered_at_source is False
     assert part.kept >= ASKED
     assert part.rows_drawn > 10_000
+
+
+def test_a_smaller_context_asked_for_is_not_drawn_again_for_more() -> None:
+    # The first draw keeps about one in sixty of its 10,000 rows: short of
+    # the 1,000 the route gathers by default, more than the 50 asked for.
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        schema = Schema.from_source(DuckDBSource(_connection()))
+        request = PredictiveQuery(
+            'PREDICT users.churned FOR EACH users.id '
+            'WHERE users.seen > 2023-02-28',
+            schema,
+        ).materialize(
+            indices=[1, 2],
+            anchor_time=pd.Timestamp('2024-03-01'),
+            num_context_samples=50,
+        )
+    assert request.context_rows == 50
+    [part] = request.context_report.parts
+    assert (part.draws, part.asked, part.stopped) == (1, 50, 'full')
+    assert part.kept >= 50
 
 
 def test_a_source_holding_too_few_says_so() -> None:
