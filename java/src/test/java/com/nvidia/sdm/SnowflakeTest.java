@@ -7,15 +7,14 @@ package com.nvidia.sdm;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.nvidia.sdm.internal.Json;
 import java.math.BigDecimal;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.TimeNanoVector;
 import org.apache.arrow.vector.TimeStampVector;
@@ -39,23 +38,61 @@ class SnowflakeTest {
     }
   }
 
-  @Test
-  @SuppressWarnings("unchecked")
-  void liveExactNumbersTemporalValuesAndCallerSettings() throws Exception {
-    String config = System.getProperty("sdm.snowflake.config", "");
-    assumeTrue(!config.isBlank(), "requires private Snowflake configuration");
-    var root = (Map<String, Object>) Json.read(Files.readAllBytes(Path.of(config)));
-    var source = (Map<String, Object>) ((Map<String, Object>) root.get("sources")).get("snowflake");
-    var connect = (Map<String, Object>) source.get("connect");
-    Properties properties = new Properties();
-    for (String key : List.of("user", "authenticator", "token", "warehouse", "schema")) {
-      if (connect.containsKey(key)) properties.put(key, connect.get(key));
+  /**
+   * A connection to the CI Snowflake account, from the same variables live parity uses; skipped
+   * without them, and a failure when {@code SDM_REQUIRE_SNOWFLAKE=1} says CI must run it.
+   */
+  static Connection live() throws Exception {
+    String url = System.getenv().getOrDefault("SNOWFLAKE_URL", "");
+    boolean required = "1".equals(System.getenv("SDM_REQUIRE_SNOWFLAKE"));
+    if (url.isBlank()) {
+      if (required) fail("SDM_REQUIRE_SNOWFLAKE=1 but SNOWFLAKE_URL is not set");
+      assumeTrue(false, "requires SNOWFLAKE_URL, SNOWFLAKE_USERNAME and SNOWFLAKE_ACCESS_TOKEN");
     }
-    properties.put("db", connect.get("database"));
+    String host = URI.create(url.contains("://") ? url : "https://" + url).getHost();
+    Properties properties = new Properties();
+    properties.put("user", System.getenv("SNOWFLAKE_USERNAME"));
+    properties.put("password", System.getenv("SNOWFLAKE_ACCESS_TOKEN"));
+    String warehouse = System.getenv("PARITY_SNOWFLAKE_WAREHOUSE");
+    if (warehouse != null && !warehouse.isBlank()) properties.put("warehouse", warehouse);
+    properties.put("db", System.getenv("PARITY_SNOWFLAKE_DATABASE"));
     properties.put("TIMEZONE", "America/Los_Angeles");
     properties.put("CLIENT_OUT_OF_BAND_TELEMETRY_ENABLED", "false");
-    String url = "jdbc:snowflake://" + connect.get("account") + ".snowflakecomputing.com";
-    try (Connection connection = DriverManager.getConnection(url, properties);
+    return DriverManager.getConnection("jdbc:snowflake://" + host, properties);
+  }
+
+  @Test
+  void liveSchemaFromSourceDescribesAndChecksKeysThroughTheSource() throws Exception {
+    try (Connection connection = live()) {
+      String database = System.getenv("PARITY_SNOWFLAKE_DATABASE");
+      String schema = "SDM_CI_JAVA_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
+      try (var statement = connection.createStatement()) {
+        statement.execute("CREATE SCHEMA " + schema);
+        try {
+          statement.execute("CREATE TABLE " + schema + ".USERS (USER_ID NUMBER(38,0) PRIMARY KEY, COUNTRY VARCHAR)");
+          statement.execute(
+              "CREATE TABLE " + schema + ".EVENTS (USER_ID NUMBER(38,0), KIND VARCHAR, TS TIMESTAMP_NTZ)");
+          statement.execute("INSERT INTO " + schema + ".USERS VALUES (1, 'DE'), (2, 'US')");
+          statement.execute(
+              "INSERT INTO " + schema + ".EVENTS VALUES (1, 'a', '2024-01-01'), (1, 'a', '2024-01-01'),"
+                  + " (2, 'b', '2024-01-02')");
+          Schema described = Schema.fromSource(SnowflakeSource.of(connection, database, schema));
+          assertEquals(
+              List.of("EVENTS", "USERS"),
+              described.tables().stream().map(com.nvidia.sdm.Table::name).sorted().toList());
+          assertEquals(List.of("USER_ID"), described.table("USERS").primaryKey());
+          assertEquals(List.of(), described.table("EVENTS").primaryKey());
+          assertEquals("TS", described.table("EVENTS").timeColumn().orElseThrow());
+        } finally {
+          statement.execute("DROP SCHEMA IF EXISTS " + schema);
+        }
+      }
+    }
+  }
+
+  @Test
+  void liveExactNumbersTemporalValuesAndCallerSettings() throws Exception {
+    try (Connection connection = live();
         RootAllocator allocator = new RootAllocator()) {
       var input = SnowflakeSource.of(connection);
       String sql =

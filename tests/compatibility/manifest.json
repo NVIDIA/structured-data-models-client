@@ -10030,9 +10030,6 @@
       "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder checkKeys(boolean);": {
         "capability": "schema-edits"
       },
-      "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder noPrimaryKey(java.lang.String);": {
-        "capability": "schema-edits"
-      },
       "com.nvidia.sdm.FromSourceOptions$Builder#public com.nvidia.sdm.FromSourceOptions$Builder noTimeColumn(java.lang.String);": {
         "capability": "schema-edits"
       },
@@ -13727,6 +13724,16 @@
     {
       "api_contract": "readers",
       "test": "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#liveExactNumbersTemporalValuesAndCallerSettings",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "data-providers",
+      "test": "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#liveSchemaFromSourceDescribesAndChecksKeysThroughTheSource",
+      "evidence_level": "live-required"
+    },
+    {
+      "api_contract": "data-providers",
+      "test": "packages/structured-data-models-client/tests/test_snowflake_live.py::test_from_source_describes_and_checks_keys_through_the_source",
       "evidence_level": "live-required"
     },
     {
