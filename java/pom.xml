@@ -448,6 +448,9 @@
                   <exclude>com.nvidia.sdm.Source#capabilities()</exclude>
                   <!-- Added with capabilities(): the typed request every source answers in Arrow. -->
                   <exclude>com.nvidia.sdm.Source#answer(com.nvidia.sdm.provider.DataRequest,java.util.Optional,org.apache.arrow.memory.BufferAllocator)</exclude>
+                  <!-- Removed: the core always refused it, as client 1.0 and Python refuse a None key; a table
+                       with no key is still described without one. -->
+                  <exclude>com.nvidia.sdm.FromSourceOptions$Builder#noPrimaryKey(java.lang.String)</exclude>
                 </excludes>
               </parameter>
             </configuration>

@@ -65,6 +65,7 @@ these packages. The three Python distributions share one version.
 - `Source(connection)`, which chose a built-in source class by the connection's driver: name the class instead.
 - `Source.kind`, `Source.backend` and `Source.namespace_parts()`.
 - Java's `ProviderSource`, `com.nvidia.sdm.provider.DataProvider` and `JdbcSource`.
+- Java's `FromSourceOptions.Builder.noPrimaryKey`, which the core always refused, as it refuses Python's `primary_keys={table: None}`; a table with no key is still described without one.
 
 ### Fixed
 

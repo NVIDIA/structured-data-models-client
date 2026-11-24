@@ -73,6 +73,28 @@ class SchemaTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"duckdb", "sqlite"})
+  void aTableWithNoKeyIsDescribedWithoutOneAndAKeyCanBeCleared(String database) throws Exception {
+    try (Connection connection = Shop.open(database)) {
+      try (var statement = connection.createStatement()) {
+        statement.execute("CREATE TABLE events (user_id INTEGER, kind VARCHAR)");
+        statement.execute("INSERT INTO events VALUES (1, 'a'), (1, 'a'), (2, 'b')");
+      }
+      Schema schema = Schema.fromSource(Shop.source(database, connection));
+      assertEquals(List.of(), schema.table("events").primaryKey());
+      assertEquals(List.of(), schema.withoutPrimaryKey("users").table("users").primaryKey());
+      StructuredDataException empty =
+          assertThrows(
+              StructuredDataException.class,
+              () ->
+                  Schema.fromSource(
+                      Shop.source(database, connection),
+                      FromSourceOptions.builder().primaryKey("users").build()));
+      assertEquals("INVALID_REQUEST", empty.code());
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"duckdb", "sqlite"})
   void anEditGivesANewSchemaAndLeavesTheOldOneAsItWas(String database) throws Exception {
     try (Connection connection = Shop.open(database)) {
       Schema schema = Schema.fromSource(Shop.source(database, connection));
