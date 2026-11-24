@@ -11608,7 +11608,7 @@
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "api_inventory",
-      "reason": "Adds the context report types and accessors and MaterializeOptions.Builder.contextTimeLimit, and maps ProviderSource's existing declarations to data-providers. Adds the Python data provider API (sdm_client.ProviderSource and sdm_client.provider). The source redesign makes Source the one public source type in both languages: DataProvider becomes the abstract Source (sdm_client.Source, com.nvidia.sdm.Source), ProviderSource, JdbcSource, SemanticModel and sdm_connectors' source classes are removed, the built-in Python sources are mapped from sdm_connectors to sdm_client under readers, Java gains semanticModel(name) and Readers over a Connection or a Spark session, each new or changed symbol with its own behavior assertion. One path for every source: Capabilities gains the source traits the core reads (namespace, ask_namespace_first, retry_upper_case_names, column_types_are_affinities, reread_tables_every_run, engine, semantic_model and the engine traits the built-in sources declare), requests carry each value as a Value with its Arrow type, derived relations, key set schemas, window source types and key dtypes, and failures their FailureFacts; Java Source is an interface, its failure a default method, and JdbcSource is gone, as Python has no such type."
+      "reason": "Adds the context report types and accessors and MaterializeOptions.Builder.contextTimeLimit, and maps ProviderSource's existing declarations to data-providers. Adds the Python data provider API (sdm_client.ProviderSource and sdm_client.provider). The source redesign makes Source the one public source type in both languages: DataProvider becomes the abstract Source (sdm_client.Source, com.nvidia.sdm.Source), ProviderSource, JdbcSource, SemanticModel and sdm_connectors' source classes are removed, the built-in Python sources are mapped from sdm_connectors to sdm_client under readers, Java gains semanticModel(name) and Readers over a Connection or a Spark session, each new or changed symbol with its own behavior assertion. One path for every source: Capabilities gains the source traits the core reads (namespace, ask_namespace_first, retry_upper_case_names, column_types_are_affinities, reread_tables_every_run, engine, semantic_model and the engine traits the built-in sources declare), requests carry each value as a Value with its Arrow type, derived relations, key set schemas, window source types and key dtypes, and failures their FailureFacts; Java Source is an interface, its failure a default method, and JdbcSource is gone, as Python has no such type. Java's FromSourceOptions.Builder.noPrimaryKey is removed: the core always refused it, as it refuses Python's primary_keys={table: None} and as client 1.0 refused it; a table with no key is still described without one."
     },
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
@@ -11709,6 +11709,11 @@
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "api_contracts/readers",
       "reason": "Source redesign: the built-in Python sources moved to sdm_client, so the group names SnowflakeSource there and gains the built-in source tests moved from the connectors package to test_built_in_sources.py; its ownership names sdm_client/sources.py. The built-in sources answer capabilities and answer themselves; the group gains the Java test that a built-in source asked directly answers what a run receives."
+    },
+    {
+      "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
+      "record": "live_api_tests",
+      "reason": "Adds the brief live Snowflake checks, Python test_snowflake_live.py and Java SnowflakeTest#liveSchemaFromSource..., which describe a fresh schema through the built-in SnowflakeSource and check keys through it; the Live warehouse workflow runs both on pushes to main, v2-candidate and epic/* with the parity-live secrets."
     }
   ],
   "capabilities": [

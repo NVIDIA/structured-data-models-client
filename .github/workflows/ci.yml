@@ -28,6 +28,10 @@ on:
         description: 'Resolve fresh dependencies: cargo update before Rust builds'
         type: boolean
         default: true
+      api_base:
+        description: 'The commit the API and ledger are compared with (a pull request uses its base); default origin/main'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -77,7 +81,7 @@ jobs:
     needs: configuration
     if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.pql_runtime_only) }}
     env:
-      SDM_API_BASE: ${{ github.event.pull_request.base.sha || 'origin/main' }}
+      SDM_API_BASE: ${{ github.event.pull_request.base.sha || inputs.api_base || 'origin/main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
