@@ -18,12 +18,14 @@ source answers exactly what an operation over it receives.
 >>> source = DuckDBSource(duckdb.connect('sales.duckdb', read_only=True))
 
 A source never closes its connection. It belongs to whoever opened it.
+Each class is final, as Java's are: to read a database differently, write
+your own :class:`~sdm_client.Source`.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, ClassVar, NoReturn, TypeGuard
+from typing import TYPE_CHECKING, Any, ClassVar, NoReturn, TypeGuard, final
 
 from sdm_client.errors import MissingExtraError
 from sdm_client.provider import Source
@@ -274,6 +276,7 @@ def _refuse(message: str, code: str) -> NoReturn:
     raise ConnectorError(message, code=code)
 
 
+@final
 class DatabricksSource(_BuiltInSource):
     r"""Tables in a Databricks catalog and schema.
 
@@ -362,6 +365,7 @@ class DatabricksSource(_BuiltInSource):
         return model
 
 
+@final
 class SnowflakeSource(_BuiltInSource):
     r"""Tables in a Snowflake database and schema.
 
@@ -432,6 +436,7 @@ class SnowflakeSource(_BuiltInSource):
         return model
 
 
+@final
 class PostgresSource(_BuiltInSource):
     r"""Tables in a PostgreSQL schema, Lakebase included.
 
@@ -472,6 +477,7 @@ class PostgresSource(_BuiltInSource):
         return self._connection
 
 
+@final
 class DuckDBSource(_BuiltInSource):
     r"""Tables in a DuckDB database.
 
@@ -496,6 +502,7 @@ class DuckDBSource(_BuiltInSource):
         return self._connection
 
 
+@final
 class SQLiteSource(_BuiltInSource):
     r"""Tables in a SQLite database.
 

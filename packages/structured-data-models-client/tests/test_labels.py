@@ -156,7 +156,9 @@ def test_provider_ground_truth(connector, monkeypatch):
             Relationship('orders', 'user_id', 'users', 'user_id'),
             Relationship('orders', 'item_id', 'items', 'item_id'),
         ]
-        watched = type(data.source)
+        # An operation over a built-in source asks its own SQL kit.
+        from sdm_client._rust.sql_kit import KitRun as watched
+
         original_answer = watched.answer
         requests = []
 
