@@ -82,7 +82,7 @@ pub struct SqlKit {
     /// Each catalog read's answer this run, by the plan that read it: an
     /// identical catalog read is answered once a run, as the core answered
     /// a SQL source's.
-    catalog: std::sync::Mutex<Vec<(FetchPlan, Answered)>>,
+    catalog: std::sync::Mutex<Vec<(FetchPlan, Result<Answered, KitError>)>>,
 }
 
 impl SqlKit {
@@ -184,16 +184,17 @@ impl SqlKit {
                 .map(|(_, answered)| answered.clone())
         });
         let answered = match read_before {
-            Some(answered) => answered,
+            Some(answered) => answered?,
             None => {
-                let answered = self.run_bound(&provider, request, plan, keys, float_text, run)?;
+                // A failed read is kept too: the same read fails alike.
+                let answered = self.run_bound(&provider, request, plan, keys, float_text, run);
                 if let Some(plan) = catalog_read {
                     self.catalog
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push((plan, answered.clone()));
                 }
-                answered
+                answered?
             }
         };
         // A catalog answer is read from the dialect's own rows and written

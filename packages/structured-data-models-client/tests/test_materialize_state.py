@@ -490,7 +490,13 @@ class _Located:
                 control, sent = self._handle.next()
                 step = codec.read(control, sent)
                 if step.get('step') == 'fetch':
-                    located.requests.extend(step['requests'])
+                    # A built-in source's SQL is recorded where its kit
+                    # hands it to the driver, below.
+                    located.requests.extend(
+                        asked
+                        for asked in step['requests']
+                        if asked['plan'].get('plan') == 'sql'
+                    )
                     for asked in step['requests']:
                         if asked.get('purpose') == 'locate':
                             located.statements += len(
