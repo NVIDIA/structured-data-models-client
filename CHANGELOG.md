@@ -35,7 +35,7 @@ these packages. The three Python distributions share one version.
 - A semantic model is a source of the same class: `DatabricksSource.semantic_model(name, trust_expressions=False)` returns a `DatabricksSource` reading the metric view, and `SnowflakeSource.semantic_model(...)` a `SnowflakeSource` reading the semantic view.
   Java's `semanticModel(name)` is added beside `semanticModel(name, trustExpressions)`.
 - Java's `Readers.readTable` and `Readers.readQuery` take the caller's `java.sql.Connection` instead of a source, as Python's `read_table` does, and read an unqualified table name in the connection's current schema.
-  `Readers.readSparkTable` and `Readers.readSparkQuery` read through a Spark session.
+  Java no longer reads a whole table or query through a Spark session; a Databricks schema is still read in place through the session (`DatabricksSparkSource`), and a Spark DataFrame can be converted to Arrow by the caller.
 - A built-in source's `capabilities()` and `answer()` are refused with `UNSUPPORTED_REQUEST`: the library answers it with its own SQL.
 - Rebinding a schema to another source (`with_source`, `withSource`) compares the sources' classes, and whether each reads a semantic model, in both languages.
   A Python schema over a SQL warehouse connection can now be rebound to a notebook's Spark session over the same catalog, and back.

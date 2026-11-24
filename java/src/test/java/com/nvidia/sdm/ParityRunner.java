@@ -1184,8 +1184,15 @@ public final class ParityRunner {
         spark.catalog().ifPresent(parts::add);
         spark.schema().ifPresent(parts::add);
         parts.add(name);
-        return Readers.readSparkTable(
-            spark.session(), name.contains(".") ? name : String.join(".", parts), allocator);
+        String qualified = name.contains(".") ? name : String.join(".", parts);
+        String quoted =
+            java.util.Arrays.stream(qualified.split("\\.", -1))
+                .map(part -> "`" + part.replace("`", "``") + "`")
+                .collect(java.util.stream.Collectors.joining("."));
+        return com.nvidia.sdm.internal.ReadTables.collect(
+            new com.nvidia.sdm.internal.jdbc.SparkProvider(spark.session())
+                .readQuery("SELECT * FROM " + quoted, allocator),
+            allocator);
       }
       Connection connection;
       if (source instanceof DatabricksSource databricks) {

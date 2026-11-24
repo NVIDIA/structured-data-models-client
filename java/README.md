@@ -63,7 +63,6 @@ Readers return an owned Arrow `Table`; callers close it before their `BufferAllo
 | --- | --- |
 | `Readers.readTable(Connection, table, allocator)` | Read one named table on the caller's JDBC connection. |
 | `Readers.readQuery(Connection, sql, allocator)` | Read the caller's SQL result on that same connection. |
-| `Readers.readSparkTable(SparkSession, table, allocator)`, `readSparkQuery` | The same through the caller's Spark session. |
 | `Readers.read(URI, ReadOptions, allocator)` | Read local/file/S3 CSV or Parquet, including partitioned datasets. |
 | `DatabricksSparkSource.of(SparkSession, catalog, schema)` | Execute Rust's existing Databricks SQL through the caller's Spark session. |
 

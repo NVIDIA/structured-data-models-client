@@ -16,7 +16,6 @@ import java.sql.Statement;
 import java.util.Objects;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.table.Table;
-import org.apache.spark.sql.SparkSession;
 
 /** Read one table into owned Arrow data for either model's in-memory API. */
 public final class Readers {
@@ -34,13 +33,6 @@ public final class Readers {
     return readQuery(connection, "SELECT * FROM " + quoted(name, quote), allocator);
   }
 
-  /** Read the table {@code name} through the caller's Spark {@code session}, which stays open. */
-  public static Table readSparkTable(SparkSession session, String name, BufferAllocator allocator)
-      throws Exception {
-    Objects.requireNonNull(session, "session");
-    return readSparkQuery(session, "SELECT * FROM " + quoted(name, "`"), allocator);
-  }
-
   /** Execute caller SQL on the caller's {@code connection} without closing it. */
   public static Table readQuery(Connection connection, String sql, BufferAllocator allocator)
       throws Exception {
@@ -48,14 +40,6 @@ public final class Readers {
     Objects.requireNonNull(sql, "sql");
     JdbcProvider provider = new JdbcProvider(connection, JdbcProvider.Driver.of(connection));
     return ReadTables.collect(provider.readQuery(sql, allocator), allocator);
-  }
-
-  /** Execute caller SQL on the caller's Spark {@code session} without closing it. */
-  public static Table readSparkQuery(SparkSession session, String sql, BufferAllocator allocator)
-      throws Exception {
-    Objects.requireNonNull(session, "session");
-    Objects.requireNonNull(sql, "sql");
-    return ReadTables.collect(new SparkProvider(session).readQuery(sql, allocator), allocator);
   }
 
   private static String quoted(String name, String quote) {

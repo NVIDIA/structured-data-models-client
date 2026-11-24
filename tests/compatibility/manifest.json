@@ -4347,7 +4347,7 @@
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#csvRejectsNonDecimalGrammarAndPreservesFiniteOverflow",
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#csvTablesFeedTheNativeTabularRequestAfterReaderResourcesClose",
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#ordinaryJavaWorksWithoutSparkOrSnowflakeRuntime",
-          "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java#callerSessionTypedRowsAndBoundNativeSqlStayIntact",
+          "java/src/test/java/com/nvidia/sdm/SparkSourceTest.java#aCallersSessionReadsTypedRowsAndBoundNativeSqlIntact",
           "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#sourceUsesExistingCoreDialectNamespaceAndViewWithoutChangingConnection",
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#customS3EndpointIsScopedAndValidated"
         ]
@@ -10060,24 +10060,6 @@
           {
             "test": "java/src/test/java/com/nvidia/sdm/ReadersTest.java#jdbcReadsUseTheCallerConnectionAndKeepItOpen",
             "behavior": "A JDBC connection's table and query are read with exact values, and the caller's connection stays open."
-          }
-        ]
-      },
-      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readSparkQuery(org.apache.spark.sql.SparkSession, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java#callerSessionTypedRowsAndBoundNativeSqlStayIntact",
-            "behavior": "A Spark session's table and query are read with exact values, and the session stays open."
-          }
-        ]
-      },
-      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readSparkTable(org.apache.spark.sql.SparkSession, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java#callerSessionTypedRowsAndBoundNativeSqlStayIntact",
-            "behavior": "A Spark session's table and query are read with exact values, and the session stays open."
           }
         ]
       },
