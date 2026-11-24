@@ -15,7 +15,7 @@ these packages. The three Python distributions share one version.
   The core sends it typed data requests, never SQL; it answers each with Arrow data and declares what it answers in its `Capabilities`.
   An instance is passed wherever a source is taken, as a built-in source is, and the requests, filters, capabilities and failures are the same in both languages, in each one's own types.
   The seeds of a `neighbors` or `lookup` past a source's `max_keys_per_request` are split by the core into requests of at most that many seeds, for Python and Java sources alike.
-  See [Your own source](docs/reference/data-providers.md).
+  See [Your own source](docs/reference/data-providers.md), and the Trino example in both languages, which it links.
 - `Request.context_report` (Python) and `Request.contextReport()` (Java) say how the context examples were drawn from the source: for each part, the draws, the rows they read, the candidates labelled, how many the query's conditions kept, whether any condition went to the source, and why drawing stopped (`full`, `source_exhausted`, `row_budget` or `time_limit`).
   A request whose context comes up short, from a condition only the client checks, is drawn again, larger, sized by the share of the first draw that qualified, until the context holds as many examples as were asked for, the source has no more rows, 5,000,000 rows have been drawn, or `context_time_limit` has passed.
 - `context_time_limit` (Python `materialize()` keyword, in seconds or as a `timedelta`; Java `MaterializeOptions.Builder.contextTimeLimit(Duration)`) bounds the time a request spends drawing its context, five minutes by default.
@@ -37,11 +37,15 @@ these packages. The three Python distributions share one version.
 - Java's `Readers.readTable` and `Readers.readQuery` take the caller's `java.sql.Connection` instead of a source, as Python's `read_table` does, and read an unqualified table name in the connection's current schema.
   Java no longer reads a whole table or query through a Spark session; a Databricks schema is still read in place through the session (`DatabricksSparkSource`), and a Spark DataFrame can be converted to Arrow by the caller.
 - The core reaches every source the same way, through `capabilities()` and `answer()`: a built-in source answers them itself, with the library's SQL for its database run on the caller's connection, and asked directly returns exactly what an operation over it receives.
-  `capabilities()` is read once as each operation starts, before any request of it; a built-in source opens the operation's answers there, so the namespace it settles and the catalog it reads hold for that operation only.
+  `capabilities()` is read once as each operation starts, before any request of it.
+  Each operation over a built-in source is answered through a SQL kit of its own, so the namespace it settles and the catalog it reads hold for that operation only, whichever thread runs it.
+  The built-in Python source classes are final (`typing.final`), as Java's are: to read a database differently, write your own `Source`.
   A request its database's SQL cannot answer is refused by name with the client's own error.
 - `Capabilities` declares the traits of a source the core reads, each defaulting to a plain source of tables: `namespace` and `ask_namespace_first`, `retry_upper_case_names`, `column_types_are_affinities`, `reread_tables_every_run`, `engine`, `semantic_model`, `derived_relations`, `text_times`, `index_advice`, `sample_by_row_count`, `sample_by_key_type`, `neighbor_lookback`, `keys_optional`, `key_enforcement`, `compares_stored_times`, `nan_is_missing`, `opaque_vendor` and `fallback_text_order` (Java: the same in camel case, on `Capabilities.builder()`).
   Java's `Capabilities` is a class built by its builder rather than a record.
-- Each value in a request is a `Value` (Java: `DataRequest.Value`): the plain value with the Arrow type the core holds it as, so a request read and written again is exactly the request the core sent.
+- Each value in a request is a `Value` (Java: `DataRequest.Value`): the plain value with the Arrow type the core holds it as, so a source writes it exactly (an integer's width and sign, a decimal's precision, a timestamp's unit and zone, a null's type), and a request read and written again is exactly the request the core sent.
+  `Capabilities.max_seed` (Java: `maxSeed`, a `BigInteger`) is an unsigned 64-bit integer in both languages, refused past that range; an empty `engine` or `opaque_vendor` is refused in both.
+  Java's `FailureFacts.builder()` builds facts as Python's keywords do.
   A `Relation` carries a derived relation's `columns`, `filter` and `found`, a `KeySet` its `schema` with the core's field metadata, a `Window` its `source_type`, a `SampleEntities` its `key_dtype`, and a per-seed limit may be a `SqlLimit`.
   A `ProviderFailure` carries the `FailureFacts` the failure means.
 - Python's `Source.answer()` returns an `ArrowStream`, any object exporting an Arrow stream through the PyCapsule interface.

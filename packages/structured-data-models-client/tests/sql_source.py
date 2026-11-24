@@ -5,7 +5,8 @@ r"""A caller's own :class:`~sdm_client.Source` over a SQL
 engine, as a caller writes one for an engine the client has no connector
 for: each request it declares rendered as that engine's SQL, by an
 :class:`Engine` naming how the engine runs a query, qualifies a table and
-hashes a value. The tests run it over DuckDB in process and over Trino.
+hashes a value. The tests run it over DuckDB in process; the Trino example
+of your own source is ``trino_source.py``.
 """
 
 from __future__ import annotations

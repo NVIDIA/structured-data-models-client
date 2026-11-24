@@ -144,7 +144,21 @@ var schema =
         .withRelationships(List.of(new Relationship("orders", "user_id", "users", "id")));
 ```
 
-[`TrinoProviderTest.java`](../../java/src/test/java/com/nvidia/sdm/TrinoProviderTest.java) is a source over a query engine, applying every filter kind.
+## A source over a query engine
+
+The Trino example is a complete source over a query engine the client has no built-in source for, in both languages: [`trino_source.py`](../../packages/structured-data-models-client/tests/trino_source.py), over Trino's HTTP protocol with the standard library, and [`TrinoSource.java`](../../java/src/test/java/com/nvidia/sdm/examples/TrinoSource.java), over Trino's JDBC driver.
+Each uses only the public API, and turns every request it declares into one Trino query:
+
+- `describe` reads the tables, columns and namespace from Trino's `information_schema`; Trino declares no keys, so the schema names them.
+- `scan` and `preview` are a `SELECT` with the request's filters, every filter kind written in Trino's SQL.
+- `count_rows` is a `count(*)`, which writes every filter, since a count is exact.
+- `sample_entities` orders the rows by a hash of each key and the seed, so the same seed draws the same rows.
+- `lookup` joins the seeds' key set to the table, with a key limit, so a large key set reaches it as several lookups.
+- `failure` reads Trino's error codes into the `FailureFacts` they mean, such as a table that does not exist.
+
+Every other request, `neighbors` among them, is answered by the client from scans within the declared fallback.
+Each value is written as a literal of its `Value.type`, so a decimal keeps its precision and a timestamp its unit.
+[`test_trino_source.py`](../../packages/structured-data-models-client/tests/test_trino_source.py) and [`TrinoProviderTest.java`](../../java/src/test/java/com/nvidia/sdm/TrinoProviderTest.java) run them against a Trino server named by `SDM_TRINO_TEST_URL`: they build a schema, materialize queries keeping exactly the examples the data holds, split a key set past the key limit, and fail an operation over a dropped table with `PROVIDER_ERROR`.
 
 ## What a source must answer
 
@@ -233,17 +247,20 @@ Each seed's rows carry the seed's own batch position, so the client joins the an
 ## Errors
 
 A source's exception fails the operation with `PROVIDER_ERROR`.
-A source may also override `failure(error)`, returning a `ProviderFailure` with the SQLSTATE, vendor code, error class and message it reads from its error, and the `FailureFacts` it means, such as a table not found or access denied; by default, the client reads a database driver's `sqlstate` and `vendor_code` attributes.
+A source may also override `failure(error)`, returning a `ProviderFailure` with the SQLSTATE, vendor code, error class and message it reads from its error, and the `FailureFacts` it means, such as a table not found or access denied; by default, the client reads a database driver's `sqlstate` and `vendor_code` attributes (Java: a `SQLException`'s state and vendor code).
+Python builds facts by keyword, `FailureFacts(not_found=True)`, and Java with `FailureFacts.builder().notFound().build()`.
 A built-in source refuses a request its database's SQL cannot answer with the client's own error, which the operation fails with.
 The message is kept internal and never shown to end users.
 
 ## Values
 
 Each value in a request is a `Value`: a plain value of each language, `value`, with the Arrow `type` the client holds it as, such as `int64` or `timestamp[us, tz=UTC]`.
+The type is what lets a source write the value exactly in its own SQL: an integer's width and sign, a decimal's precision and scale, a timestamp's unit and zone, and the type of a null.
 
 | Value | Python | Java |
 |---|---|---|
-| Integers | `int` | `Long`, or the integer type of its width |
+| Nulls | `None` | `null` |
+| Integers | `int` | `Byte`, `Short`, `Integer`, `Long` by width; an unsigned one in the next wider type, and an unsigned 64-bit one a `BigInteger` |
 | Floats | `float` | `Double`, `Float` |
 | Decimals | `Decimal` | `BigDecimal` |
 | Text, bytes | `str`, `bytes` | `String`, `byte[]` |

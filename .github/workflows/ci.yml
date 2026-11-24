@@ -1861,7 +1861,7 @@ jobs:
           mvn -B -f java/pom.xml -Dsdm.natives="$RUNNER_TEMP/java-native/com/nvidia/sdm/native" \
             -Dtest=TrinoProviderTest test
           python -m pytest -q -p no:cacheprovider \
-            packages/structured-data-models-client/tests/test_data_providers.py -k trino
+            packages/structured-data-models-client/tests/test_trino_source.py
       - name: The JAR's dependencies, from Maven Central
         run: java jar/FetchDependencies.java jar
       - name: The S1 cases on the Java host

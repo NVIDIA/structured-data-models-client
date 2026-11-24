@@ -263,6 +263,14 @@
       <version>${junit.version}</version>
       <scope>test</scope>
     </dependency>
+    <!-- Trino's JDBC driver, for the example of a caller's own source over a query engine
+         (examples/TrinoSource, run by TrinoProviderTest). -->
+    <dependency>
+      <groupId>io.trino</groupId>
+      <artifactId>trino-jdbc</artifactId>
+      <version>476</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
