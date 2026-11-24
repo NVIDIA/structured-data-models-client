@@ -67,6 +67,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import kit_host
 import pandas as pd
 import pytest
 
@@ -320,30 +321,40 @@ def _failing(kind: str) -> str:
 
 
 def _provider_error(kind: str) -> Callable[[], Any]:
-    r"""The provider scenario: the test-only fetch, answered by the DuckDB
-    provider on the planted source, with a plan of the failing statement."""
-    fetch = {
-        'request': {
-            'request': 'scan',
-            'table': {'source': ['vault']},
-            'columns': [],
-            'filters': [],
-            'limit': None,
-        },
-        'plan': {
-            'plan': 'sql',
-            'statements': [
-                {'dialect': 'duckdb', 'text': _failing(kind), 'params': []}
-            ],
-            'expect': {'expect': 'discover'},
-        },
+    r"""The provider scenario: the test-only fetch of the DuckDB source on
+    the planted data, its provider running the failing statement for the
+    fetch its SQL kit hands it."""
+    failing = {
+        'plan': 'sql',
+        'statements': [
+            {'dialect': 'duckdb', 'text': _failing(kind), 'params': []}
+        ],
+        'expect': {'expect': 'discover'},
     }
 
     def call() -> Any:
+        driver = DuckDBProvider(_planted(vault=True))
+
+        def answer(fetch: dict[str, Any], binds: Any) -> Any:
+            return driver({**fetch, 'plan': failing}, binds)
+
+        choice, provider = kit_host.chosen(
+            {'provider': 'sql', 'dialect': 'duckdb'}, answer
+        )
+        fetch = {
+            'request': {
+                'request': 'scan',
+                'table': {'source': ['vault']},
+                'columns': ['kind'],
+                'filters': [],
+                'limit': None,
+            },
+            'provider': choice,
+        }
         return run(
             {'op': 'test', 'test': 'fetch', 'fetch': 1},
             {1: codec.attachment(fetch)},
-            provider=DuckDBProvider(_planted(vault=True)),
+            provider=provider,
         )
 
     return call

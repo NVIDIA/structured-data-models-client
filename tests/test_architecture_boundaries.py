@@ -320,7 +320,6 @@ def test_jni_cannot_contain_provider_specific_words(
         ('describe.rs', 'crate::sql_column::project();'),
         ('lib.rs', 'mod sql_column;'),
         ('materialize/examples.rs', 'ExampleSource::Sql { schema };'),
-        ('rebind.rs', 'sdm_contract::data::ProviderChoice::Sql { provider };'),
         (
             'sql_column.rs',
             'use sdm_contract::sql_column::{SqlColumn, SqlColumnCall}; fn f(request: SqlColumn, call: SqlColumnCall) {}',

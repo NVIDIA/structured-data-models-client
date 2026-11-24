@@ -3,17 +3,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """Key sets bound by each dialect, sent as attachments (design S4).
 
-The core writes a Databricks or Postgres key set as the JSON text its
-statement reads, splits it past the old client's budget of 900,000 bytes
-(``_chunk_rows``, ``DB/sampler.py:32-44``, ``PG/sampler.py:125-182``), sends
-one fetch per chunk in one step, each chunk's text a one-cell Arrow
-attachment the fetch's plan names (never in the control message), and joins
-the answers in order; any chunk failing fails the request. The providers
-bind the text they are handed and write no JSON.
+A Databricks or Postgres source's SQL kit writes a key set as the JSON
+text its statement reads, splits it past the old client's budget of
+900,000 bytes (``_chunk_rows``, ``DB/sampler.py:32-44``,
+``PG/sampler.py:125-182``), hands the driver one fetch per chunk, each
+chunk's text a one-cell Arrow attachment the fetch's plan names (never in
+the fetch itself), and joins the answers in order; any chunk failing fails
+the request. The providers bind the text they are handed and write no JSON.
 
 Each test here runs a keyed fetch through the core's test-only operation:
 the core attaches the seeds as its own key set, as an operation's body
-does, and the run loop hands each fetch's attachments to the provider. On
+does, the run loop hands it to the source, and its kit hands each chunk's
+text to the provider. On
 Databricks the provider is the client's own, over a fake warehouse that
 reads each text as ``posexplode(from_json(?,...))`` does; on Postgres it is
 the client's own over a real server, where ``SDM_POSTGRES_TEST_DSN`` names
@@ -31,6 +32,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import kit_host
 import pyarrow as pa
 import pytest
 
@@ -72,28 +74,35 @@ def _reference_chunk_rows(rows: list, max_bytes: int) -> list[list]:
 
 
 def _keyed(
-    provider: Any,
+    driver: Any,
     dialect: str,
     request: dict[str, Any],
     seeds: pa.Table,
     seen: list[dict[str, Any]],
 ) -> pa.Table:
-    r"""A keyed fetch of ``request`` against ``seeds`` through the core on
-    ``dialect``, each fetch the provider answers kept in ``seen``: the
-    step's control size and the attachments handed over with it."""
+    r"""A keyed fetch of ``request`` against ``seeds`` through the core, the
+    source answering it through ``dialect``'s SQL kit on ``driver``, each
+    fetch the kit hands the driver kept in ``seen``: the fetch's size and
+    the attachments handed over with it."""
     from sdm_client._rust.codec import CONTROL_CAP
 
-    def answer(step: dict[str, Any], keys: Any) -> Any:
+    def bound(fetch: dict[str, Any], binds: Any) -> None:
         handed = {
             attachment: pa.RecordBatchReader._import_from_c_capsule(
                 stream.__arrow_c_stream__()
             ).read_all()
-            for attachment, stream in keys.items()
+            for attachment, stream in (binds or {}).items()
         }
-        control = len(json.dumps(step).encode())
-        seen.append({'step': step, 'keys': handed, 'control': control})
+        control = len(json.dumps(fetch).encode())
+        seen.append({'fetch': fetch, 'keys': handed, 'control': control})
         assert control < CONTROL_CAP
-        return provider(step, dict(handed))
+
+    # Postgres names its schema, which a source names or reads from its
+    # session.
+    sql = {'provider': 'sql', 'dialect': dialect} | (
+        {'namespace': ['public']} if dialect == 'postgres' else {}
+    )
+    choice, provider = kit_host.chosen(sql, kit_host.Driven(driver, bound))
 
     request = dict(request)
     request['seeds'] = {
@@ -103,18 +112,11 @@ def _keyed(
             {'name': 'batch', 'type': {'type': 'int64'}, 'nullable': False},
         ],
     }
-    fetch = {
-        'request': request,
-        # Postgres names its schema, which a source names or reads from its
-        # session.
-        'provider': {'provider': 'sql', 'dialect': dialect}
-        | ({'namespace': ['public']} if dialect == 'postgres' else {}),
-        'echo': True,
-    }
+    fetch = {'request': request, 'provider': choice, 'echo': True}
     finished = run(
         {'op': 'test', 'test': 'keyed', 'fetch': 1, 'keys': 2},
         {1: codec.attachment(fetch), 2: seeds},
-        provider=answer,
+        provider=provider,
     )
     stream = finished.take(finished.result['data'])
     return pa.RecordBatchReader._import_from_c_capsule(
@@ -216,7 +218,7 @@ def test_a_databricks_key_set_past_the_budget_is_one_fetch_per_chunk_joined() ->
     data = _keyed(
         DatabricksProvider(warehouse), 'databricks', LOOKUP, _seeds(keys), seen
     )
-    # One fetch per chunk, all asked in one step, each handed its own text,
+    # One fetch per chunk, all for one request, each handed its own text,
     # the old client's chunk byte for byte.
     assert len(seen) == len(expected)
     sent = [_text(each['keys']) for each in seen]

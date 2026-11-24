@@ -151,10 +151,12 @@ def _arrow_type(field: Any) -> str:
     return str(kind) + (f' {name}' if name else '')
 
 
-def admitted(provider: Any, name: str) -> Any:
-    r"""``t_<name>``'s ``id`` and ``v`` read through ``provider`` and
-    admitted by the core (the test-only fetch), in ``id`` order, or the
-    core's refusal as ``refused <code>``."""
+def admitted(choice: Any, provider: Any, name: str) -> Any:
+    r"""``t_<name>``'s ``id`` and ``v`` asked of the source the core names
+    ``choice`` (a host provider choice, under the database's schema, as
+    every Postgres read names one), answered by ``provider`` (the run
+    loop's) and admitted by the core (the test-only fetch), in ``id``
+    order, or the core's refusal as ``refused <code>``."""
     import pyarrow as pa
     from sdm_client._rust import codec
     from sdm_client._rust.run import run
@@ -168,13 +170,7 @@ def admitted(provider: Any, name: str) -> Any:
             'filters': [],
             'limit': None,
         },
-        # Under the database's schema, as every Postgres read names one
-        # .
-        'provider': {
-            'provider': 'sql',
-            'dialect': 'postgres',
-            'namespace': ['public'],
-        },
+        'provider': choice,
         'echo': True,
     }
     try:
