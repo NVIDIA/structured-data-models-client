@@ -535,7 +535,11 @@ class _Located:
 
             def recording(fetch: Any, binds: Any) -> Any:
                 located.requests.append(
-                    {'plan': fetch['plan'], 'purpose': step.get('purpose')}
+                    {
+                        'plan': fetch['plan'],
+                        'request': fetch['request'],
+                        'purpose': step.get('purpose'),
+                    }
                 )
                 if step.get('purpose') == 'locate':
                     located.statements += len(

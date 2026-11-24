@@ -79,6 +79,10 @@ impl From<CoreError> for KitError {
 pub struct SqlKit {
     data: Data,
     provider: std::sync::Mutex<ProviderChoice>,
+    /// Each catalog read's answer this run, by the plan that read it: an
+    /// identical catalog read is answered once a run, as the core answered
+    /// a SQL source's.
+    catalog: std::sync::Mutex<Vec<(FetchPlan, Answered)>>,
 }
 
 impl SqlKit {
@@ -104,6 +108,7 @@ impl SqlKit {
         Ok(SqlKit {
             data,
             provider: std::sync::Mutex::new(provider),
+            catalog: std::sync::Mutex::new(Vec::new()),
         })
     }
 
@@ -169,7 +174,28 @@ impl SqlKit {
                 .data
                 .project_result(&provider, request, &plan, &described.batches)?;
         }
-        let answered = self.run_bound(&provider, request, plan, keys, float_text, run)?;
+        let catalog_read = matches!(request, DataRequest::Describe { .. }).then(|| plan.clone());
+        let read_before = catalog_read.as_ref().and_then(|plan| {
+            self.catalog
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .iter()
+                .find(|(read, _)| read == plan)
+                .map(|(_, answered)| answered.clone())
+        });
+        let answered = match read_before {
+            Some(answered) => answered,
+            None => {
+                let answered = self.run_bound(&provider, request, plan, keys, float_text, run)?;
+                if let Some(plan) = catalog_read {
+                    self.catalog
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push((plan, answered.clone()));
+                }
+                answered
+            }
+        };
         // A catalog answer is read from the dialect's own rows and written
         // in the standard shape every source answers in.
         if let DataRequest::Describe { part, .. } = request {
