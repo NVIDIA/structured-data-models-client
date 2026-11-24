@@ -729,7 +729,7 @@ fn table(received: &DataType) -> ArrowData {
 /// and declares the preview, the one optional request describing a table
 /// of three rows asks.
 fn host_provider() -> ProviderChoice {
-    ProviderChoice::Host {
+    ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,

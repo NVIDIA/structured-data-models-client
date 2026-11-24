@@ -11,11 +11,12 @@
 //! schema).
 
 use sdm_contract::Scalar;
-use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderChoice, SqlParam};
-use sdm_sql::Data;
+use sdm_contract::data::DataRequest;
+use sdm_sql::Sql;
+use sdm_sql::plan::{SqlChoice, SqlParam, SqlPlan};
 use serde_json::json;
 
-fn choice(dialect: &str, namespace: serde_json::Value) -> ProviderChoice {
+fn choice(dialect: &str, namespace: serde_json::Value) -> SqlChoice {
     serde_json::from_value(json!({"provider": "sql", "dialect": dialect, "namespace": namespace}))
         .unwrap()
 }
@@ -28,9 +29,9 @@ fn preview() -> DataRequest {
 }
 
 fn text(dialect: &str, namespace: serde_json::Value) -> Result<String, String> {
-    match Data::new().plan(&preview(), &choice(dialect, namespace)) {
-        Ok(FetchPlan::Sql { statements, .. }) => Ok(statements.last().unwrap().text.clone()),
-        Ok(other) => Err(format!("{other:?}")),
+    match Sql::new().plan(&preview(), &choice(dialect, namespace)) {
+        Ok(SqlPlan { statements, .. }) => Ok(statements.last().unwrap().text.clone()),
+
         Err(error) => Err(format!("{error:?}")),
     }
 }
@@ -84,8 +85,8 @@ fn a_catalog_alone_reads_its_namespace_with_the_session_s_current_schema() {
         "request": "describe", "tables": [], "part": "namespace"
     }))
     .unwrap();
-    let Ok(FetchPlan::Sql { statements, .. }) =
-        Data::new().plan(&request, &choice("databricks", json!(["main", null])))
+    let Ok(SqlPlan { statements, .. }) =
+        Sql::new().plan(&request, &choice("databricks", json!(["main", null])))
     else {
         panic!("the namespace of a catalog alone is read");
     };
@@ -109,7 +110,7 @@ fn a_catalog_alone_reads_its_namespace_with_the_session_s_current_schema() {
         }]
     );
     assert!(
-        Data::new()
+        Sql::new()
             .plan(&request, &choice("databricks", json!(["x", "main", null])))
             .is_err()
     );
@@ -122,7 +123,7 @@ fn a_catalog_alone_reads_its_namespace_with_the_session_s_current_schema() {
 /// it is.
 #[test]
 fn a_databricks_source_leaving_any_part_to_the_connection_is_settled_first() {
-    let data = Data::new();
+    let data = Sql::new();
     for namespace in [
         json!([]),
         json!([null, null]),
@@ -160,8 +161,8 @@ fn a_table_named_in_full_is_read_whatever_the_provider_leaves_out() {
         "request": "count_rows", "table": {"source": ["main", "shop", "orders"]}, "filters": []
     }))
     .unwrap();
-    let Ok(FetchPlan::Sql { statements, .. }) =
-        Data::new().plan(&request, &choice("databricks", json!(["main", null])))
+    let Ok(SqlPlan { statements, .. }) =
+        Sql::new().plan(&request, &choice("databricks", json!(["main", null])))
     else {
         panic!("a table named in full is read");
     };
@@ -175,7 +176,7 @@ fn a_table_named_in_full_is_read_whatever_the_provider_leaves_out() {
 /// shorthand to the innermost part. Settlement must retain that answer.
 #[test]
 fn databricks_settlement_preserves_full_resolved_namespaces() {
-    let data = Data::new();
+    let data = Sql::new();
     for (given, resolved) in [
         (json!([null]), vec!["main", "public"]),
         (json!([null, null]), vec!["main", "public"]),
@@ -190,9 +191,7 @@ fn databricks_settlement_preserves_full_resolved_namespaces() {
             resolved.iter().map(|p| (*p).to_owned()).collect(),
         );
         assert_eq!(settled, choice("databricks", json!(resolved)), "{given}");
-        let FetchPlan::Sql { statements, .. } = data.plan(&preview(), &settled).unwrap() else {
-            panic!("SQL")
-        };
+        let SqlPlan { statements, .. } = data.plan(&preview(), &settled).unwrap();
         assert!(
             statements[0]
                 .text
@@ -201,9 +200,7 @@ fn databricks_settlement_preserves_full_resolved_namespaces() {
         let request: DataRequest =
             serde_json::from_value(json!({"request": "describe", "part": "tables", "tables": []}))
                 .unwrap();
-        let FetchPlan::Sql { statements, .. } = data.plan(&request, &settled).unwrap() else {
-            panic!("SQL")
-        };
+        let SqlPlan { statements, .. } = data.plan(&request, &settled).unwrap();
         assert!(
             statements[0]
                 .text
@@ -217,7 +214,7 @@ fn databricks_settlement_preserves_full_resolved_namespaces() {
 
 #[test]
 fn snowflake_raw_session_settlement_fills_short_namespaces_without_truncation() {
-    let data = Data::new();
+    let data = Sql::new();
     for (given, expected) in [
         (json!([null]), json!(["SESSION_DB", "SESSION_SCHEMA"])),
         (json!(["NAMED_DB"]), json!(["NAMED_DB", "SESSION_SCHEMA"])),

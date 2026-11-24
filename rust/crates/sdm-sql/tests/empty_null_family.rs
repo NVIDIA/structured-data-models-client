@@ -6,8 +6,10 @@
 //! Companion sdm-testkit tests execute the family cases through DuckDB
 //! and check outcomes, result encoding and query-log consistency.
 
-use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice};
-use sdm_sql::Data;
+use sdm_contract::data::DataRequest;
+
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice, SqlPlan};
 
 /// Each request, as the contract writes it, and its statement.
 const PINS: &[(&str, &str)] = &[(
@@ -23,7 +25,7 @@ QUALIFY ROW_NUMBER() OVER (
 
 #[test]
 fn each_request_of_the_empty_null_family_renders_its_pinned_statement() {
-    let duckdb = ProviderChoice::Sql {
+    let duckdb = SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
@@ -32,9 +34,7 @@ fn each_request_of_the_empty_null_family_renders_its_pinned_statement() {
     assert!(!PINS.is_empty());
     for (written, pinned) in PINS {
         let request: DataRequest = serde_json::from_str(written).expect("a data request");
-        let FetchPlan::Sql { statements, .. } = Data::new().plan(&request, &duckdb).unwrap() else {
-            panic!("not SQL: {written}");
-        };
+        let SqlPlan { statements, .. } = Sql::new().plan(&request, &duckdb).unwrap();
         assert_eq!(statements.len(), 1, "{written}");
         assert_eq!(statements[0].text, *pinned, "{written}");
     }

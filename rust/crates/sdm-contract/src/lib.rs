@@ -19,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 pub mod catalog;
+pub mod catalog_read;
 pub mod columns;
 pub mod data;
 pub mod direct;

@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Provider SQL keeps physical expressions, aliases and row filters together.
-use sdm_contract::data::{
-    DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice, Relation, RelationColumn,
-};
-use sdm_sql::Data;
+use sdm_contract::data::{DataRequest, Relation, RelationColumn};
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice, SqlPlan};
 
 #[test]
 fn projections_preserve_filters_and_quoted_names_on_every_sql_provider() {
@@ -37,15 +36,13 @@ fn projections_preserve_filters_and_quoted_names_on_every_sql_provider() {
             columns: vec!["entity".into(), "line total".into()],
             limit: 10,
         };
-        let choice = ProviderChoice::Sql {
+        let choice = SqlChoice {
             dialect: Dialect::new(dialect),
             namespace,
             view: None,
             timestamp_encoding: None,
         };
-        let FetchPlan::Sql { statements, .. } = Data::new().plan(&request, &choice).unwrap() else {
-            panic!("not SQL")
-        };
+        let SqlPlan { statements, .. } = Sql::new().plan(&request, &choice).unwrap();
         let sql = &statements.last().unwrap().text;
         assert!(sql.contains("price * quantity"), "{dialect}: {sql}");
         assert!(sql.contains("quantity > 2"), "{dialect}: {sql}");

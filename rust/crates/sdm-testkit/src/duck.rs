@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The pure-Rust host's DuckDB: a connection as the Python host's driver
-//! has it, and the DuckDB provider, which answers a fetch step by running
-//! the statements its plan carries, in order, on a cursor of its own (a
-//! connection to the same database, as the Python provider's cursor is),
-//! and handing every batch of the last one's result back as one attachment.
+//! has it, and the DuckDB driver, which runs each fetch DuckDB's SQL kit
+//! asks ([`crate::sql_source`]) by running the statements its plan
+//! carries, in order, on a cursor of its own (a connection to the same
+//! database, as the Python provider's cursor is), and handing every batch
+//! of the last one's result back as one attachment.
 //!
 //! The Python wheel of DuckDB links ICU, so a session there takes `SET
 //! TimeZone` and casts a `TIMESTAMPTZ` in that zone. The `icu` feature of
@@ -39,10 +40,12 @@ use duckdb::arrow::record_batch::RecordBatch;
 use duckdb::vtab::arrow::{ArrowVTab, arrow_recordbatch_to_query_params};
 use duckdb::{Config, Connection};
 use sdm_contract::ErrorKind;
-use sdm_contract::data::{AttachmentId, FetchPlan, ProviderError, SqlParam};
+use sdm_contract::data::{AttachmentId, ProviderError};
 use sdm_contract::run::FetchStep;
+use sdm_host::kit::{SqlParam, SqlPlan};
 
 use crate::driver::DriverLog;
+use crate::sql_source::{Failed, SqlSource};
 
 /// The DuckDB version the reference runs, which this host must link.
 pub const DUCKDB_VERSION: &str = "v1.5.6";
@@ -210,37 +213,69 @@ fn load(connection: &Connection, name: &str, digests: &[(&str, &str)]) -> Result
 }
 
 /// A query's result: its schema and every batch the driver handed over.
+#[derive(Debug, Clone)]
 pub struct Fetched {
     pub schema: SchemaRef,
     pub batches: Vec<RecordBatch>,
 }
 
-/// The answer to one fetch step whose plan binds no key set, or the
-/// provider's error as the contract carries it: its kind, never the
-/// driver's text.
-pub fn answer(connection: &Connection, step: &FetchStep) -> Result<Fetched, ProviderError> {
+/// The answer to one fetch step whose request binds no key set, answered
+/// through a DuckDB source's kit ([`SqlSource`]) on `connection`.
+pub fn answer(connection: &Connection, step: &FetchStep) -> Result<Fetched, Failed> {
     answer_with(connection, step, &BTreeMap::new())
 }
 
-/// The answer to one fetch step, its key sets bound from `keys`, the
-/// attachments the step named, by id: each as the relation its plan names
-/// it by, on the step's own cursor, as the Python provider registers one;
-/// a key set's rows travel as Arrow, never as text. A plan
-/// with a scalar parameter, which no request carries yet, is not run.
+/// The answer to one fetch step, its key sets `keys`, the attachments the
+/// step named, by id, answered through a DuckDB source's kit on
+/// `connection`, each fetch the kit asks run by [`run_plan`].
 pub fn answer_with(
     connection: &Connection,
     step: &FetchStep,
     keys: &BTreeMap<AttachmentId, Fetched>,
-) -> Result<Fetched, ProviderError> {
-    answer_logged(connection, step, keys, &mut DriverLog::default())
+) -> Result<Fetched, Failed> {
+    let mut log = DriverLog::default();
+    SqlSource::of("duckdb")
+        .answer(&step.request, keys, &mut |fetch| {
+            Ok(run_plan(connection, fetch.plan, fetch.keys, &mut log))
+        })
+        .unwrap_or_else(|error| panic!("a DuckDB fetch failed this host: {error}"))
+        .data()
 }
 
-/// [`answer_with`], recording in `log` the cursor, each statement run with
-/// its result, and each key set bound (the observation's
-/// `driver` section).
-pub fn answer_logged(
+/// Each fetch DuckDB's kit asks for `request`, its key sets `keys`, run on
+/// `connection`: its statements and the rows the driver handed over,
+/// before the kit reads them; or why the request was not answered.
+pub fn fetches(
     connection: &Connection,
-    step: &FetchStep,
+    request: &sdm_contract::data::DataRequest,
+    keys: &BTreeMap<AttachmentId, Fetched>,
+) -> Result<Vec<(SqlPlan, Fetched)>, Failed> {
+    let mut log = DriverLog::default();
+    let mut ran = Vec::new();
+    SqlSource::of("duckdb")
+        .answer(request, keys, &mut |fetch| {
+            let fetched = run_plan(connection, fetch.plan, fetch.keys, &mut log);
+            if let Ok(fetched) = &fetched {
+                ran.push((fetch.plan.clone(), fetched.clone()));
+            }
+            Ok(fetched)
+        })
+        .unwrap_or_else(|error| panic!("a DuckDB fetch failed this host: {error}"))
+        .data()?;
+    Ok(ran)
+}
+
+/// The answer to one fetch the kit asks, `plan`'s statements run in order,
+/// its key sets bound from `keys` by attachment id: each as the relation
+/// its plan names it by, on the fetch's own cursor, as the Python provider
+/// registers one; a key set's rows travel as Arrow, never as text. A plan
+/// with a scalar parameter, which no request carries yet, is not run. The
+/// provider's error as the contract carries it: its kind, never the
+/// driver's text. `log` records the cursor, each statement run with its
+/// result, and each key set bound (the observation's `driver` section).
+pub fn run_plan(
+    connection: &Connection,
+    plan: &SqlPlan,
     keys: &BTreeMap<AttachmentId, Fetched>,
     log: &mut DriverLog,
 ) -> Result<Fetched, ProviderError> {
@@ -253,10 +288,7 @@ pub fn answer_logged(
         vendor_code: None,
         facts: None,
     };
-    let FetchPlan::Sql { statements, .. } = &step.plan else {
-        // A host plan is a host provider's to answer; this one runs SQL.
-        return Err(failed());
-    };
+    let statements = &plan.statements;
     let Some((last, before)) = statements.split_last() else {
         return Err(failed());
     };

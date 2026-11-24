@@ -41,8 +41,8 @@ fn data_run<F>(make: impl FnOnce(Asker) -> F) -> Run
 where
     F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
 {
-    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::new()));
-    let host = ProviderChoice::Host {
+    let root = CompositionRoot::default();
+    let host = ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,

@@ -7,8 +7,10 @@
 //! the rows less those missing part of it, and any other key by its
 //! distinct values, as before (carried row P2--3).
 
-use sdm_contract::data::{DataLayer, DataRequest, Dialect, FetchPlan, ProviderChoice, TableKey};
-use sdm_sql::Data;
+use sdm_contract::data::{DataRequest, TableKey};
+
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice, SqlPlan};
 
 fn statement(dialect: &str, unique: bool) -> String {
     let request = DataRequest::KeyCounts {
@@ -27,13 +29,13 @@ fn statement(dialect: &str, unique: bool) -> String {
     } else {
         Vec::new()
     };
-    let choice = ProviderChoice::Sql {
+    let choice = SqlChoice {
         timestamp_encoding: None,
         namespace,
         dialect: Dialect::new(dialect),
         view: None,
     };
-    let Ok(FetchPlan::Sql { statements, .. }) = Data::new().plan(&request, &choice) else {
+    let Ok(SqlPlan { statements, .. }) = Sql::new().plan(&request, &choice) else {
         panic!("{dialect}: key_counts is not planned as SQL");
     };
     statements.last().expect("a statement").text.clone()

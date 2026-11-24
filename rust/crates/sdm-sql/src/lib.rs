@@ -2,12 +2,17 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! SQL planning and catalog decoding for supported connectors.
-//! This crate owns dialect-specific SQL; other domain crates use typed requests.
+//! SQL planning and catalog decoding for the built-in sources.
+//! This crate owns dialect-specific SQL; the core sends every source typed
+//! requests and never names a dialect.
 //!
-//! [`Data`] dispatches to a SQL dialect or returns typed requests to a host provider.
-//! Both paths enforce the expected result shape from the data contract.
-//! [`DataLayer::read`] converts dialect-specific catalog answers into neutral facts.
+//! A built-in source answers the core's typed requests through its SQL kit
+//! ([`kit::SqlKit`]), over [`Sql`]: the source's statements rendered in its
+//! dialect ([`plan::SqlPlan`]), its key sets bound as the dialect binds
+//! them, its answers read as the reference reads them, and its catalog's
+//! answers read into neutral facts. [`Databases`] is the core's data
+//! layer: the shape a source's engine answers in and the semantic models
+//! it is read through, by the database it declares.
 //!
 //! [`sql`] shares statement construction through its dialect trait, while each
 //! connector module supplies its differences.
@@ -19,16 +24,15 @@ mod blake2b;
 mod databricks;
 mod duckdb;
 mod failure;
-mod host_parts;
 mod json;
 mod key_text;
 mod keys;
 pub mod kit;
 mod mt19937;
 mod pg_values;
+pub mod plan;
 mod postgres;
 mod quote;
-mod read;
 mod snowflake;
 mod sql;
 #[cfg(test)]
@@ -44,11 +48,14 @@ use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use std::collections::BTreeMap;
 
+use plan::{
+    Dialect, SqlChoice, SqlPlan, SqlResultConversion, SqlStatement, SqlTimestampEncoding,
+    SqlTimestampKind,
+};
+use sdm_contract::catalog_read;
 use sdm_contract::data::{
-    AttachmentId, BoundRequest, DataLayer, DataRequest, DescribePart, Dialect, ExpectedSchema,
-    FailureFacts, FetchPlan, KeyData, ProviderCapabilities, ProviderChoice, ProviderError,
-    Relation, SqlResultConversion, SqlStatement, SqlTimestampEncoding, SqlTimestampKind,
-    views_unread,
+    AttachmentId, BoundRequest, DataLayer, DataRequest, DescribePart, ExpectedSchema, FailureFacts,
+    KeyData, ProviderCapabilities, ProviderError, Relation, views_unread,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::wording::DatabaseNames;
@@ -65,7 +72,7 @@ const KNOWN: &[&str] = &[
     snowflake::NAME,
 ];
 
-/// The databases this build's data layer provides for, by the names the
+/// The databases this build's SQL kit provides for, by the names the
 /// case format and the contract runners use: the dialects it
 /// renders. The private, plain-data marker of the staging rule
 /// (the current runner admission check): the Python host's
@@ -121,111 +128,171 @@ fn rendered(dialect: &Dialect) -> Result<&'static dyn SqlDialect, CoreError> {
     sql::dialect(dialect.name()).ok_or_else(|| no_dialect(dialect))
 }
 
-/// The dialect whose semantic models a source is read through: a SQL
-/// provider's own, or, for a source answering typed requests, the one its
-/// declared database names (contract v76). Only a semantic model's
-/// definition and text are read by it; such a source writes its own SQL.
-fn view_dialect(provider: &ProviderChoice) -> Option<&'static dyn SqlDialect> {
-    match provider {
-        ProviderChoice::Sql { .. } => sql_dialect(provider),
-        ProviderChoice::Host { capabilities } => sql::dialect(capabilities.database.as_deref()?),
-    }
+/// The dialect of `source`, if it is one this build renders.
+fn sql_dialect(source: &SqlChoice) -> Option<&'static dyn SqlDialect> {
+    sql::dialect(source.dialect.name())
 }
 
-/// The dialect of `provider`, if it is a built-in SQL provider of a
-/// dialect this build renders.
-fn sql_dialect(provider: &ProviderChoice) -> Option<&'static dyn SqlDialect> {
-    match provider {
-        ProviderChoice::Sql { dialect, .. } => sql::dialect(dialect.name()),
-        ProviderChoice::Host { .. } => None,
-    }
+/// The dialect whose semantic models a source declaring `capabilities` is
+/// read through: the one its declared database names (contract v76).
+fn view_dialect(capabilities: &ProviderCapabilities) -> Option<&'static dyn SqlDialect> {
+    sql::dialect(capabilities.database.as_deref()?)
 }
 
-/// The data layer of a shipped build: DuckDB's SQL, and host providers.
-/// It reads semantic models only where it was given the white space their
-/// checks read text by ([`Data::reading_views`]), the rule the core holds.
+/// The SQL of the built-in sources: each request rendered in a source's
+/// dialect, bound, conformed and read as its dialect does. It reads
+/// semantic models only where it was given the white space their checks
+/// read text by ([`Sql::reading_views`]).
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Data {
+pub struct Sql {
     spaces: Option<&'static view_expr::Spaces>,
 }
 
-impl Data {
-    pub fn new() -> Self {
-        Data { spaces: None }
+/// The core's data layer over the built-in databases, by the database a
+/// source declares ([`ProviderCapabilities::database`]): the shape its
+/// engine answers in, and the semantic models it is read through, with the
+/// white space their checks read text by.
+#[derive(Debug, Clone, Copy)]
+pub struct Databases {
+    spaces: &'static view_expr::Spaces,
+}
+
+impl Databases {
+    /// The data layer reading semantic models, each text question of one
+    /// read by `spaces`, Python's white space as the core hands it in.
+    pub fn new(spaces: &'static view_expr::Spaces) -> Self {
+        Databases { spaces }
     }
 
-    /// A data layer that reads semantic models, each text question of one
-    /// read by `spaces`, Python's white space as the core hands it in.
+    /// The dialect of the database `capabilities` declares, where it reads
+    /// semantic models.
+    fn dialect(
+        capabilities: &ProviderCapabilities,
+    ) -> Option<(&'static dyn SqlDialect, view_expr::ExprDialect)> {
+        let dialect = view_dialect(capabilities)?;
+        Some((dialect, dialect.expr_dialect()?))
+    }
+}
+
+impl DataLayer for Databases {
+    fn expected(
+        &self,
+        capabilities: &ProviderCapabilities,
+        request: &DataRequest,
+    ) -> ExpectedSchema {
+        match (view_dialect(capabilities), request) {
+            // A catalog's answer is in the standard shape every source
+            // answers in (the kit writes its dialect's rows so), but for a
+            // semantic model's definition, in its database's own.
+            (Some(dialect), DataRequest::Describe { part, .. })
+                if *part == DescribePart::ViewDefinition =>
+            {
+                dialect.expected(request)
+            }
+            (Some(_), DataRequest::Describe { .. }) | (None, _) => request.expected(),
+            (Some(dialect), _) => dialect.expected(request),
+        }
+    }
+
+    fn view_kind(
+        &self,
+        capabilities: &ProviderCapabilities,
+    ) -> Option<sdm_contract::view::ViewKind> {
+        view_dialect(capabilities)?.view_kind()
+    }
+
+    fn view_text(
+        &self,
+        capabilities: &ProviderCapabilities,
+        ask: ViewTextAsk,
+    ) -> Result<ViewTextAnswer, CoreError> {
+        let (sql, dialect) = Databases::dialect(capabilities).ok_or_else(views_unread)?;
+        Ok(view_expr::answer(ask, dialect, self.spaces, &|data_type| {
+            sql.declared_type(data_type)
+        }))
+    }
+
+    fn read_view(
+        &self,
+        capabilities: &ProviderCapabilities,
+        request: &DataRequest,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        view_dialect(capabilities)
+            .ok_or_else(views_unread)?
+            .read_view(request, batches, self.spaces)
+    }
+}
+
+impl Sql {
+    pub fn new() -> Self {
+        Sql { spaces: None }
+    }
+
+    /// The SQL that reads semantic models, each text question of one read
+    /// by `spaces`, Python's white space as the core hands it in.
     pub fn reading_views(spaces: &'static view_expr::Spaces) -> Self {
-        Data {
+        Sql {
             spaces: Some(spaces),
         }
     }
 
-    /// The dialect of `provider` and the white space, where this layer
-    /// reads its semantic models.
+    /// The dialect of `source` and the white space, where this reads its
+    /// semantic models.
     fn views(
         &self,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
     ) -> Option<(view_expr::ExprDialect, &'static view_expr::Spaces)> {
-        Some((view_dialect(provider)?.expr_dialect()?, self.spaces?))
+        Some((sql_dialect(source)?.expr_dialect()?, self.spaces?))
     }
-}
 
-impl DataLayer for Data {
-    fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
-        match provider {
-            ProviderChoice::Host { capabilities } => Ok(capabilities.clone()),
-            ProviderChoice::Sql { dialect, view, .. } => {
-                let rendered_dialect = rendered(dialect)?;
-                // A semantic model is read only by a dialect that reads one,
-                // with the white space it is read by; refused by name, never
-                // read as the source's own tables.
-                if view.is_some() && self.views(provider).is_none() {
-                    return Err(views_unread());
-                }
-                Ok(rendered_dialect.capabilities())
-            }
+    /// What `source` answers: every request and filter its dialect writes.
+    /// A dialect this build has no rendering for is refused with
+    /// `UNSUPPORTED_REQUEST` naming it, as is a semantic model its dialect
+    /// does not read.
+    pub fn capabilities(&self, source: &SqlChoice) -> Result<ProviderCapabilities, CoreError> {
+        let rendered_dialect = rendered(&source.dialect)?;
+        // A semantic model is read only by a dialect that reads one,
+        // with the white space it is read by; refused by name, never
+        // read as the source's own tables.
+        if source.view.is_some() && self.views(source).is_none() {
+            return Err(views_unread());
         }
+        Ok(rendered_dialect.capabilities())
     }
 
-    fn plan(
-        &self,
-        request: &DataRequest,
-        provider: &ProviderChoice,
-    ) -> Result<FetchPlan, CoreError> {
-        let mut plan = self.render(request, provider, 0)?;
-        if sql_dialect(provider).is_some_and(|dialect| dialect.name() == "postgres")
-            && let FetchPlan::Sql {
-                result_conversions, ..
-            } = &mut plan
-        {
-            result_conversions.push(SqlResultConversion::ZonedTextUtc);
+    /// The statements `source` answers `request` with.
+    pub fn plan(&self, request: &DataRequest, source: &SqlChoice) -> Result<SqlPlan, CoreError> {
+        let mut plan = self.render(request, source, 0)?;
+        if sql_dialect(source).is_some_and(|dialect| dialect.name() == "postgres") {
+            plan.result_conversions
+                .push(SqlResultConversion::ZonedTextUtc);
         }
         Ok(plan)
     }
 
-    fn result_metadata(
+    /// A schema-only preflight for a driver's lossless result transport,
+    /// where `source` asks for one: `plan`'s last statement described, not
+    /// run. It binds empty key sets; it never executes the sampled data
+    /// query. None where the source asks for no transport, or the request
+    /// carries no timestamp to transport.
+    pub fn result_metadata(
         &self,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
         request: &DataRequest,
-        plan: &FetchPlan,
-    ) -> Result<Option<FetchPlan>, CoreError> {
-        if !matches!(
-            provider,
-            ProviderChoice::Sql {
-                timestamp_encoding: Some(SqlTimestampEncoding::Microseconds),
-                ..
-            }
-        ) || matches!(
-            request,
-            DataRequest::Describe { .. }
-                | DataRequest::KeyCounts { .. }
-                | DataRequest::CountRows { .. }
-        ) {
+        plan: &SqlPlan,
+    ) -> Result<Option<SqlPlan>, CoreError> {
+        if source.timestamp_encoding != Some(SqlTimestampEncoding::Microseconds)
+            || matches!(
+                request,
+                DataRequest::Describe { .. }
+                    | DataRequest::KeyCounts { .. }
+                    | DataRequest::CountRows { .. }
+            )
+        {
             return Ok(None);
         }
-        if sql_dialect(provider).is_none_or(|d| {
+        if sql_dialect(source).is_none_or(|d| {
             d.timestamp_micros("value", SqlTimestampKind::WallTime)
                 .is_none()
         }) {
@@ -235,38 +302,39 @@ impl DataLayer for Data {
             )
             .with_field("request", Detail::text("timestamp_encoding")));
         }
-        let FetchPlan::Sql { statements, .. } = plan else {
-            return Ok(None);
-        };
-        let mut statements = statements.clone();
+        let mut statements = plan.statements.clone();
         let last = statements.last_mut().ok_or_else(|| {
             CoreError::new(Sentence::Internal, "a SQL result plan has no statement")
         })?;
         last.text = format!("DESCRIBE QUERY {}", last.text);
-        Ok(Some(FetchPlan::Sql {
+        Ok(Some(SqlPlan {
             statements,
             expect: ExpectedSchema::Discover {},
             result_conversions: Vec::new(),
         }))
     }
 
-    fn project_result(
+    /// `plan` projected using the warehouse's preflight result types,
+    /// `metadata` ([`Sql::result_metadata`]): each timestamp column
+    /// transported as microseconds. The host only executes the explicit
+    /// output conversions.
+    pub fn project_result(
         &self,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
         request: &DataRequest,
-        plan: &FetchPlan,
+        plan: &SqlPlan,
         metadata: &[RecordBatch],
-    ) -> Result<FetchPlan, CoreError> {
+    ) -> Result<SqlPlan, CoreError> {
         let mut conversions = Vec::new();
         let mut position = 0_u32;
         for batch in metadata {
-            let names = read::text_at(batch, 0)?;
-            let types = read::text_at(batch, 1)?;
+            let names = catalog_read::text_at(batch, 0)?;
+            let types = catalog_read::text_at(batch, 1)?;
             for row in 0..batch.num_rows() {
-                let name = read::text(&names, row).ok_or_else(|| {
+                let name = catalog_read::text(&names, row).ok_or_else(|| {
                     CoreError::new(Sentence::Internal, "a result metadata column has no name")
                 })?;
-                let kind = read::text(&types, row).ok_or_else(|| {
+                let kind = catalog_read::text(&types, row).ok_or_else(|| {
                     CoreError::new(Sentence::Internal, "a result metadata column has no type")
                 })?;
                 let kind = kind.trim().to_ascii_lowercase();
@@ -302,152 +370,138 @@ impl DataLayer for Data {
         if conversions.is_empty() {
             return Ok(plan.clone());
         }
-        self.render_projected(request, provider, 0, &conversions)
+        self.render_projected(request, source, 0, &conversions)
     }
 
-    fn conform(
+    /// An answer of `source`'s driver, read as the reference reads its
+    /// source's values where the driver hands over its own (MID2 P2-3): a
+    /// dialect's value rules, such as Postgres's text of a JSON value and
+    /// its reading of a `numeric` past the digits an Arrow decimal holds
+    /// (each `float_text`, the text the reference's language gives a
+    /// double, where it writes one). `None`: the answer as it is. A value
+    /// the rule cannot read is refused by name, never guessed.
+    pub fn conform(
         &self,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
         schema: &arrow_schema::SchemaRef,
         batches: &[RecordBatch],
         float_text: fn(f64) -> String,
     ) -> Result<Option<(arrow_schema::SchemaRef, Vec<RecordBatch>)>, CoreError> {
-        match sql_dialect(provider) {
+        match sql_dialect(source) {
             Some(dialect) => dialect.conform(schema, batches, float_text),
             None => Ok(None),
         }
     }
 
-    /// `plan` bound as the run's provider binds it: a built-in dialect's key
-    /// set written as the text its statement reads where it binds one so,
-    /// split past its budget, one fetch per chunk ([`key_text`]); a
-    /// host provider's plan, or one binding the core's Arrow key set as a
-    /// relation, one fetch as it is.
-    fn bind(
+    /// `plan` bound as `source` binds it, its key sets `keys` by the
+    /// attachment the plan names each by: a key set written as the text
+    /// its statement reads where the dialect binds one so, split past its
+    /// budget, one fetch per chunk ([`key_text`]); a plan binding the
+    /// core's Arrow key set as a relation, one fetch as it is. A double the
+    /// binding writes is written as `float_text` writes it.
+    pub fn bind(
         &self,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
         request: &DataRequest,
-        plan: FetchPlan,
+        plan: SqlPlan,
         keys: &BTreeMap<AttachmentId, KeyData>,
         float_text: fn(f64) -> String,
-    ) -> Result<BoundRequest, CoreError> {
-        let conversions = match &plan {
-            FetchPlan::Sql {
-                result_conversions, ..
-            } => result_conversions.clone(),
-            _ => Vec::new(),
-        };
-        match sql_dialect(provider) {
+    ) -> Result<BoundRequest<SqlPlan>, CoreError> {
+        let conversions = plan.result_conversions.clone();
+        match sql_dialect(source) {
             Some(dialect) => key_text::bind(dialect, request, plan, keys, float_text, &|offset| {
-                self.render_projected(request, provider, offset, &conversions)
+                self.render_projected(request, source, offset, &conversions)
             }),
-            None => match provider {
-                // A host provider taking so many keys a request is asked
-                // in parts, which every host reads alike.
-                ProviderChoice::Host { capabilities } => {
-                    let max = capabilities.max_keys_per_request.unwrap_or(u64::MAX);
-                    host_parts::bind(request, plan, keys, max)
-                }
-                ProviderChoice::Sql { .. } => Ok(BoundRequest::whole(plan, request)),
-            },
+            None => Ok(BoundRequest::whole(plan, request)),
         }
     }
 
-    fn holds_column_types(&self, provider: &ProviderChoice) -> bool {
-        match provider {
-            ProviderChoice::Host { capabilities } => !capabilities.column_affinities,
-            ProviderChoice::Sql { .. } => {
-                sql_dialect(provider).is_none_or(|dialect| dialect.holds_column_types())
-            }
+    /// Whether `source` holds a type per column that a caller's type for
+    /// the column must match: `false` for a source whose columns hold
+    /// affinities only (SQLite's), where the old client reads any column as
+    /// the type its caller gives.
+    pub fn holds_column_types(&self, source: &SqlChoice) -> bool {
+        sql_dialect(source).is_none_or(|dialect| dialect.holds_column_types())
+    }
+
+    /// Whether `source`'s tables are read as they stand at every run, as a
+    /// database's or warehouse's are: their location where the source
+    /// leaves a part to the session, their columns and their types.
+    pub fn reads_tables_as_they_stand(&self, source: &SqlChoice) -> bool {
+        sql_dialect(source).is_some()
+    }
+
+    /// The database `source` reads, by the name its dialect has (`duckdb`,
+    /// `sqlite`, `postgres`), which a host words a refusal naming the source
+    /// with.
+    pub fn source_database(&self, source: &SqlChoice) -> Option<String> {
+        Some(sql_dialect(source)?.name().to_owned())
+    }
+
+    /// Whether `source` leaves a namespace part to the connection that
+    /// must be read before any table: one inside a part it gives (a catalog
+    /// named and not its schema), or any part of a dialect that reads every
+    /// table under its full namespace (Databricks, whose catalog names a
+    /// referenced table in full); its namespace is then read first
+    /// ([`DescribePart::Namespace`]) and settled by the parts it answers
+    /// ([`Sql::settled`]).
+    pub fn unsettled(&self, source: &SqlChoice) -> bool {
+        given_parts(&source.namespace).is_none()
+            || sql_dialect(source).is_some_and(|d| {
+                d.settles_namespace()
+                    && source.namespace.iter().flatten().count() < d.namespace_depth()
+            })
+    }
+
+    /// `source` with its namespace the full namespace answer, settled by
+    /// its dialect: an already resolved answer is retained; raw session
+    /// parts are combined with supplied parts according to that dialect's
+    /// namespace alignment.
+    pub fn settled(&self, source: &SqlChoice, parts: Vec<String>) -> SqlChoice {
+        let parts = match sql_dialect(source) {
+            Some(dialect) => dialect.settled_namespace(&source.namespace, parts),
+            None => parts,
+        };
+        SqlChoice {
+            namespace: parts.into_iter().map(Some).collect(),
+            ..source.clone()
         }
     }
 
-    fn source_database(&self, provider: &ProviderChoice) -> Option<String> {
-        match provider {
-            ProviderChoice::Host { capabilities } => capabilities.database.clone(),
-            ProviderChoice::Sql { .. } => Some(sql_dialect(provider)?.name().to_owned()),
-        }
+    /// The kind of semantic model `source` reads, known before its
+    /// definition is fetched.
+    pub fn view_kind(&self, source: &SqlChoice) -> Option<sdm_contract::view::ViewKind> {
+        sql_dialect(source)?.view_kind()
     }
 
-    fn reads_tables_as_they_stand(&self, provider: &ProviderChoice) -> bool {
-        match provider {
-            ProviderChoice::Host { capabilities } => capabilities.reads_tables_as_they_stand,
-            ProviderChoice::Sql { .. } => sql_dialect(provider).is_some(),
-        }
-    }
-
-    fn unsettled(&self, provider: &ProviderChoice) -> bool {
-        match provider {
-            ProviderChoice::Sql {
-                dialect, namespace, ..
-            } => {
-                given_parts(namespace).is_none()
-                    || sql::dialect(dialect.name()).is_some_and(|d| {
-                        d.settles_namespace()
-                            && namespace.iter().flatten().count() < d.namespace_depth()
-                    })
-            }
-            ProviderChoice::Host { capabilities } => capabilities.namespace_first,
-        }
-    }
-
-    /// The full namespace answer, settled by its dialect: an already
-    /// resolved answer is retained; raw session parts are combined with
-    /// supplied parts according to that dialect's namespace alignment.
-    fn settled(&self, provider: &ProviderChoice, parts: Vec<String>) -> ProviderChoice {
-        match provider {
-            ProviderChoice::Sql {
-                dialect,
-                namespace,
-                view,
-                timestamp_encoding,
-            } => {
-                let parts = match sql_dialect(provider) {
-                    Some(dialect) => dialect.settled_namespace(namespace, parts),
-                    None => parts,
-                };
-                ProviderChoice::Sql {
-                    timestamp_encoding: *timestamp_encoding,
-                    dialect: dialect.clone(),
-                    namespace: parts.into_iter().map(Some).collect(),
-                    view: view.clone(),
-                }
-            }
-            // A source asked its namespace first answers it in full.
-            ProviderChoice::Host { capabilities } => ProviderChoice::Host {
-                capabilities: ProviderCapabilities {
-                    namespace: parts,
-                    namespace_first: false,
-                    ..capabilities.clone()
-                },
-            },
-        }
-    }
-
-    fn view_kind(&self, provider: &ProviderChoice) -> Option<sdm_contract::view::ViewKind> {
-        view_dialect(provider)?.view_kind()
-    }
-
-    fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
-        match sql_dialect(provider) {
+    /// What `source`'s driver failure `error` says, as facts each step of
+    /// the core selects according to the operation: a spelling retry reads
+    /// `not_found`, a join's table read `unusable`, an expression sample
+    /// `refuses_expression`. The dialect reads them from the driver's
+    /// SQLSTATE, vendor code and error class, as the old client's separate
+    /// predicates do.
+    pub fn failure(&self, source: &SqlChoice, error: &ProviderError) -> FailureFacts {
+        match sql_dialect(source) {
             Some(dialect) => {
                 let mut facts = dialect.failure(error);
                 facts.reason = failure::reason(error);
                 facts.denied = failure::denied(error);
                 facts
             }
-            // A source that says what its failure means says it itself.
-            None => error.facts.clone().unwrap_or_default(),
+            None => FailureFacts::default(),
         }
     }
 
-    fn view_text(
+    /// The answer to one question about a semantic model's text in
+    /// `source`'s dialect: a name, a condition, an expression checked
+    /// against its table's columns, a derived relation rendered. Refused by
+    /// name where the dialect reads no semantic model.
+    pub fn view_text(
         &self,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
         ask: ViewTextAsk,
     ) -> Result<ViewTextAnswer, CoreError> {
-        let (Some((dialect, spaces)), Some(sql)) = (self.views(provider), view_dialect(provider))
-        else {
+        let (Some((dialect, spaces)), Some(sql)) = (self.views(source), sql_dialect(source)) else {
             return Err(views_unread());
         };
         Ok(view_expr::answer(ask, dialect, spaces, &|data_type| {
@@ -455,24 +509,23 @@ impl DataLayer for Data {
         }))
     }
 
-    fn spellings(&self, provider: &ProviderChoice, relation: &Relation) -> Vec<Relation> {
-        match provider {
-            ProviderChoice::Host { capabilities } => capabilities.spellings(relation),
-            ProviderChoice::Sql { .. } => sql_dialect(provider)
-                .map_or_else(|| vec![relation.clone()], |d| d.spellings(relation)),
-        }
+    /// The name forms the catalog read of `relation` tries, in order, kept
+    /// for that run once one resolves: Snowflake's as given, then
+    /// upper-cased. How names compare is another question, the dialect's
+    /// `name_case`.
+    pub fn spellings(&self, source: &SqlChoice, relation: &Relation) -> Vec<Relation> {
+        sql_dialect(source).map_or_else(|| vec![relation.clone()], |d| d.spellings(relation))
     }
 
-    fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
-        let parts = match provider {
-            ProviderChoice::Sql { namespace, .. } if relation.source.len() == 1 => {
-                // A namespace no relation can write was refused before any
-                // relation was read.
-                given_parts(namespace).unwrap_or_default()
-            }
-            ProviderChoice::Host { capabilities } => return capabilities.read_as(relation),
-            _ => Vec::new(),
-        };
+    /// `relation` as `source` reads it: one of one part under the parts of
+    /// `source`'s namespace given ([`given_parts`]).
+    pub fn read_as(&self, source: &SqlChoice, relation: &Relation) -> Relation {
+        if relation.source.len() != 1 {
+            return relation.clone();
+        }
+        // A namespace no relation can write was refused before any
+        // relation was read.
+        let parts = given_parts(&source.namespace).unwrap_or_default();
         Relation::of(
             parts
                 .into_iter()
@@ -481,10 +534,14 @@ impl DataLayer for Data {
         )
     }
 
-    fn read(
+    /// `source`'s answer to `request`, a `describe`, read from its
+    /// dialect's own catalog rows into the contract's dialect-neutral shape
+    /// (decision E54). A request that is not a `describe` is refused with
+    /// `INTERNAL_ERROR`.
+    pub fn read(
         &self,
         request: &DataRequest,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError> {
         let DataRequest::Describe { part, .. } = request else {
@@ -494,30 +551,19 @@ impl DataLayer for Data {
             )
             .with_field("request", Detail::text(request.name())));
         };
-        let answer = match provider {
-            // A semantic model's definition, in its dialect's own shape,
-            // read by the database the source declares.
-            ProviderChoice::Host { .. } if *part == DescribePart::ViewDefinition => {
-                let spaces = self.spaces.ok_or_else(views_unread)?;
-                view_dialect(provider)
-                    .ok_or_else(views_unread)?
-                    .read_view(request, batches, spaces)?
-            }
-            ProviderChoice::Host { .. } => read::host(*part, batches)?,
-            ProviderChoice::Sql { dialect, .. } if *part == DescribePart::ViewDefinition => {
-                let spaces = self.spaces.ok_or_else(views_unread)?;
-                rendered(dialect)?.read_view(request, batches, spaces)?
-            }
-            ProviderChoice::Sql { dialect, .. } => {
-                rendered(dialect)?.read(request, *part, batches)?
-            }
+        let dialect = rendered(&source.dialect)?;
+        let answer = if *part == DescribePart::ViewDefinition {
+            let spaces = self.spaces.ok_or_else(views_unread)?;
+            dialect.read_view(request, batches, spaces)?
+        } else {
+            dialect.read(request, *part, batches)?
         };
         debug_assert_eq!(answer.part(), *part);
         Ok(answer)
     }
 }
 
-/// The parts a relation of one part is read under, of the provider's
+/// The parts a relation of one part is read under, of the source's
 /// `namespace` (contract v28): the parts given, outermost first, those
 /// left `null` before them dropped, since a relation of fewer parts is
 /// read in the connection's current ones. A part given inside one left
@@ -605,96 +651,89 @@ fn no_dialect(dialect: &Dialect) -> CoreError {
     }
 }
 
-impl Data {
-    /// [`DataLayer::plan`], a key set's seeds numbered from `offset`: a
-    /// later chunk's statements, rendered as the first's are ([`key_text`]).
+impl Sql {
+    /// [`Sql::plan`], a key set's seeds numbered from `offset`: a later
+    /// chunk's statements, rendered as the first's are ([`key_text`]).
     fn render(
         &self,
         request: &DataRequest,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
         offset: usize,
-    ) -> Result<FetchPlan, CoreError> {
-        self.render_projected(request, provider, offset, &[])
+    ) -> Result<SqlPlan, CoreError> {
+        self.render_projected(request, source, offset, &[])
     }
 
     fn render_projected(
         &self,
         request: &DataRequest,
-        provider: &ProviderChoice,
+        source: &SqlChoice,
         offset: usize,
         conversions: &[SqlResultConversion],
-    ) -> Result<FetchPlan, CoreError> {
-        match provider {
-            ProviderChoice::Host { .. } => Ok(FetchPlan::host(request.expected(), request)),
-            ProviderChoice::Sql {
-                dialect, namespace, ..
-            } => {
-                let dialect = rendered(dialect)?;
-                let plan = |request: &DataRequest, namespace: &[String]| {
-                    if conversions.is_empty() {
-                        sql::plan(dialect, request, namespace, offset)
-                    } else {
-                        sql::plan_projected(dialect, request, namespace, offset, conversions)
-                    }
-                };
-                // The namespace itself, read where a part is left to the
-                // connection inside one given, which the core then reads
-                // every relation under.
-                if let DataRequest::Describe {
-                    part: DescribePart::Namespace,
-                    ..
-                } = request
-                    && given_parts(namespace).is_none()
-                {
-                    let parts: Vec<String> = namespace
-                        .iter()
-                        .map(|part| part.clone().unwrap_or_default())
-                        .collect();
-                    deeper(request, &parts, dialect.namespace_depth())?;
-                    let (text, params) = dialect.current_namespace(request, namespace)?;
-                    return Ok(FetchPlan::Sql {
-                        result_conversions: Vec::new(),
-                        statements: vec![SqlStatement {
-                            dialect: Dialect::new(dialect.name()),
-                            text,
-                            params,
-                        }],
-                        expect: dialect.expected(request),
-                    });
-                }
-                // A request of a dialect that reads every table under its
-                // full namespace, whose every relation names it in full (a
-                // table the core reads where it was described), reads none
-                // of the parts the provider leaves to the connection.
-                let under = request.relations();
-                if dialect.settles_namespace()
-                    && !under.is_empty()
-                    && under
-                        .iter()
-                        .all(|(_, r)| r.source.len() == dialect.namespace_depth() + 1)
-                {
-                    return plan(request, &[]);
-                }
-                let namespace = if matches!(
-                    request,
-                    DataRequest::Describe {
-                        part: DescribePart::ViewDefinition,
-                        ..
-                    }
-                ) && dialect.view_kind()
-                    == Some(sdm_contract::view::ViewKind::Semantic)
-                {
-                    // The semantic lookup binds a name, prefixed only by
-                    // the source parts explicitly supplied by its caller.
-                    // Missing parts are the warehouse's to resolve, even
-                    // where a physical relation would need a namespace read.
-                    namespace.iter().flatten().cloned().collect()
-                } else {
-                    qualifying(request, namespace)?
-                };
-                deeper(request, &namespace, dialect.namespace_depth())?;
-                plan(&in_namespace(request, &namespace), &namespace)
+    ) -> Result<SqlPlan, CoreError> {
+        let namespace = &source.namespace;
+        let dialect = rendered(&source.dialect)?;
+        let plan = |request: &DataRequest, namespace: &[String]| {
+            if conversions.is_empty() {
+                sql::plan(dialect, request, namespace, offset)
+            } else {
+                sql::plan_projected(dialect, request, namespace, offset, conversions)
             }
+        };
+        // The namespace itself, read where a part is left to the
+        // connection inside one given, which every relation is then read
+        // under.
+        if let DataRequest::Describe {
+            part: DescribePart::Namespace,
+            ..
+        } = request
+            && given_parts(namespace).is_none()
+        {
+            let parts: Vec<String> = namespace
+                .iter()
+                .map(|part| part.clone().unwrap_or_default())
+                .collect();
+            deeper(request, &parts, dialect.namespace_depth())?;
+            let (text, params) = dialect.current_namespace(request, namespace)?;
+            return Ok(SqlPlan {
+                result_conversions: Vec::new(),
+                statements: vec![SqlStatement {
+                    dialect: Dialect::new(dialect.name()),
+                    text,
+                    params,
+                }],
+                expect: dialect.expected(request),
+            });
         }
+        // A request of a dialect that reads every table under its
+        // full namespace, whose every relation names it in full (a
+        // table the core reads where it was described), reads none
+        // of the parts the source leaves to the connection.
+        let under = request.relations();
+        if dialect.settles_namespace()
+            && !under.is_empty()
+            && under
+                .iter()
+                .all(|(_, r)| r.source.len() == dialect.namespace_depth() + 1)
+        {
+            return plan(request, &[]);
+        }
+        let namespace = if matches!(
+            request,
+            DataRequest::Describe {
+                part: DescribePart::ViewDefinition,
+                ..
+            }
+        ) && dialect.view_kind() == Some(sdm_contract::view::ViewKind::Semantic)
+        {
+            // The semantic lookup binds a name, prefixed only by
+            // the source parts explicitly supplied by its caller.
+            // Missing parts are the warehouse's to resolve, even
+            // where a physical relation would need a namespace read.
+            namespace.iter().flatten().cloned().collect()
+        } else {
+            qualifying(request, namespace)?
+        };
+        deeper(request, &namespace, dialect.namespace_depth())?;
+        plan(&in_namespace(request, &namespace), &namespace)
     }
 }

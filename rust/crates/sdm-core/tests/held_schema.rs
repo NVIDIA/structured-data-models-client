@@ -179,7 +179,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
 }
 
 fn host() -> ProviderChoice {
-    ProviderChoice::Host {
+    ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,
@@ -221,7 +221,7 @@ const QUERY: &str = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_
 
 fn run_of(operation: Operation, attachments: Attachments) -> Result<Run, CoreError> {
     start(
-        &CompositionRoot::new(Arc::new(sdm_sql::Data::new())),
+        &CompositionRoot::default(),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

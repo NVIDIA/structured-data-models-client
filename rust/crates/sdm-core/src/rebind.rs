@@ -17,9 +17,7 @@ pub(crate) fn start(
     // A source whose tables are read as they stand at every run (a
     // built-in one, contract v76) is rebound to another connection to the
     // same source; one whose tables are its own is not.
-    if !root
-        .data_layer()
-        .reads_tables_as_they_stand(&request.provider)
+    if !request.provider.capabilities.reads_tables_as_they_stand
         || request.provider != request.previous_provider
         || request.source_kind != request.previous_source_kind
     {

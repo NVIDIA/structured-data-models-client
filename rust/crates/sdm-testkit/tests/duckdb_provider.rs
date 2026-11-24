@@ -20,14 +20,16 @@ use duckdb::arrow::array::{Array, Int32Array, Int64Array, StringArray, Timestamp
 use duckdb::arrow::compute::concat_batches;
 use duckdb::arrow::datatypes::DataType;
 use duckdb::arrow::record_batch::RecordBatch;
-use sdm_contract::data::{AttachmentId, DataRequest, Dialect, ProviderChoice};
+use sdm_contract::data::{AttachmentId, DataRequest};
 use sdm_contract::ops::{Operation, OperationResult};
 use sdm_contract::run::{FetchOutcome, FetchReply, StartRun};
 use sdm_contract::test_ops::{TestFetch, TestOperation, TestResult};
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, Step};
 use sdm_host::{ArrowData, Attachment, HostRun, default_root, encode, read};
 use sdm_testkit::host::{self, Answer};
+use sdm_testkit::sql_source::SqlSource;
 use sdm_testkit::{bases, case, duck};
+
 use serde_json::Value;
 
 #[path = "support/request_kind_assertions.rs"]
@@ -66,12 +68,7 @@ fn start(request: &Value) -> HostRun {
     let fetch = TestFetch {
         request: serde_json::from_value::<DataRequest>(request.clone()).unwrap(),
         plan: None,
-        provider: Some(ProviderChoice::Sql {
-            timestamp_encoding: None,
-            dialect: Dialect::new("duckdb"),
-            namespace: Vec::new(),
-            view: None,
-        }),
+        provider: Some(SqlSource::of("duckdb").provider().unwrap()),
         echo: true,
         undeclared: vec![],
         fallback: None,
@@ -778,12 +775,7 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
     let fetch = TestFetch {
         request: serde_json::from_value::<DataRequest>(request).unwrap(),
         plan: None,
-        provider: Some(ProviderChoice::Sql {
-            timestamp_encoding: None,
-            dialect: Dialect::new("duckdb"),
-            namespace: Vec::new(),
-            view: None,
-        }),
+        provider: Some(SqlSource::of("duckdb").provider().unwrap()),
         echo: true,
         undeclared: vec![],
         fallback: None,
@@ -820,21 +812,17 @@ fn keyed(connection: &Connection, request: &Value, keys: RecordBatch) -> (Record
     };
     let step = &requests[0];
     let mut sets = BTreeMap::new();
-    if let sdm_contract::data::FetchPlan::Sql { statements, .. } = &step.plan {
-        for param in statements.iter().flat_map(|s| &s.params) {
-            if let sdm_contract::data::SqlParam::KeySet { keys, .. } = param {
-                let Ok(Some(Attachment::Arrow(data))) = run.take_attachment(keys.attachment) else {
-                    panic!("the key set is not attached");
-                };
-                sets.insert(
-                    keys.attachment,
-                    duck::Fetched {
-                        schema: data.schema,
-                        batches: data.batches,
-                    },
-                );
-            }
-        }
+    for set in step.plan.key_sets.iter().copied() {
+        let Ok(Some(Attachment::Arrow(data))) = run.take_attachment(set) else {
+            panic!("the key set is not attached");
+        };
+        sets.insert(
+            set,
+            duck::Fetched {
+                schema: data.schema,
+                batches: data.batches,
+            },
+        );
     }
     assert_eq!(sets.len(), 1, "the plan binds one key set");
     let fetched = duck::answer_with(connection, step, &sets).unwrap();
@@ -1000,8 +988,8 @@ fn a_key_set_past_the_control_cap_travels_as_an_attachment() {
 
 #[test]
 fn two_key_sets_bound_to_one_name_are_refused() {
-    use sdm_contract::data::{FetchPlan, KeySet, SqlParam, SqlStatement};
-    use sdm_contract::run::FetchStep;
+    use sdm_contract::data::KeySet;
+    use sdm_host::kit::{Dialect, SqlParam, SqlPlan, SqlStatement};
     let connection = database(None);
     let set = |id| SqlParam::KeySet {
         keys: KeySet {
@@ -1010,23 +998,14 @@ fn two_key_sets_bound_to_one_name_are_refused() {
         },
         relation: "seeds".into(),
     };
-    let step = FetchStep {
-        id: sdm_contract::run::ReplyId(1),
-        request: DataRequest::Describe {
-            tables: vec![],
-            part: sdm_contract::data::DescribePart::Tables,
-        },
-        plan: FetchPlan::Sql {
-            result_conversions: Vec::new(),
-            statements: vec![SqlStatement {
-                dialect: Dialect::new("duckdb"),
-                text: "SELECT 1".into(),
-                params: vec![set(1), set(2)],
-            }],
-            expect: sdm_contract::data::ExpectedSchema::Discover {},
-        },
-        continuation: None,
-        purpose: None,
+    let plan = SqlPlan {
+        result_conversions: Vec::new(),
+        statements: vec![SqlStatement {
+            dialect: Dialect::new("duckdb"),
+            text: "SELECT 1".into(),
+            params: vec![set(1), set(2)],
+        }],
+        expect: sdm_contract::data::ExpectedSchema::Discover {},
     };
     let keys = |values: &[&str]| {
         let batch = seeds_of(&serde_json::json!({"type": "int64"}), values);
@@ -1039,7 +1018,7 @@ fn two_key_sets_bound_to_one_name_are_refused() {
         (AttachmentId(1), keys(&["1"])),
         (AttachmentId(2), keys(&["2"])),
     ]);
-    assert!(duck::answer_with(&connection, &step, &both).is_err());
+    assert!(duck::run_plan(&connection, &plan, &both, &mut Default::default()).is_err());
 }
 
 /// Driver capture agrees with DuckDB's query log and binds real seed inputs.
@@ -1184,23 +1163,14 @@ fn key_set(attachment: u64, more: &[Value]) -> Value {
 /// The answer to the one statement the shipped data layer plans for the
 /// columns of `table` on DuckDB, and that statement.
 fn columns_of(connection: &Connection, table: &str) -> (String, Vec<RecordBatch>) {
-    use sdm_contract::data::{DescribePart, FetchPlan};
+    use sdm_contract::data::DescribePart;
     let request = DataRequest::Describe {
         tables: vec![table.into()],
         part: DescribePart::Columns,
     };
-    let duckdb = ProviderChoice::Sql {
-        timestamp_encoding: None,
-        dialect: Dialect::new("duckdb"),
-        namespace: Vec::new(),
-        view: None,
-    };
-    let FetchPlan::Sql { statements, .. } =
-        default_root().data_layer().plan(&request, &duckdb).unwrap()
-    else {
-        panic!("not SQL");
-    };
-    let text = statements[0].text.clone();
+    let text = SqlSource::of("duckdb").plan(&request).unwrap().statements[0]
+        .text
+        .clone();
     let fetched = duck::run(connection, &text).unwrap();
     (text, fetched.batches)
 }
@@ -1476,6 +1446,16 @@ fn every_request_kind_returns_source_data_on_every_base() {
                 request["seeds"] = serde_json::json!({"attachment": 0, "columns": []});
                 let (batch, _) = keyed(&connection, &request, seeds);
                 ArrowData::new(batch.schema(), vec![batch])
+            }
+            // A catalog's rows, as the source handed them over: the kit
+            // hands the core them in the standard shape every source
+            // answers a `describe` in.
+            None if fetch["request"]["request"] == "describe" => {
+                let request: DataRequest =
+                    serde_json::from_value(fetch["request"].clone()).unwrap();
+                let mut ran = duck::fetches(&connection, &request, &BTreeMap::new()).unwrap();
+                let (_, fetched) = ran.pop().expect("a fetch");
+                ArrowData::new(fetched.schema, fetched.batches)
             }
             None => {
                 let run = start(&fetch["request"]);

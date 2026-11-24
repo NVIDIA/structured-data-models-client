@@ -5,10 +5,12 @@
 //! The pure-Rust host's strict SQL replay: it reads actual recorded fetch
 //! results instead of opening another database driver.
 //!
-//! A recording is what a source answered each fetch the core asked
-//! for one case, in order: the fetch's request and plan as the core wrote
-//! them, and the answer, its rows as an Arrow IPC stream, or the provider's
-//! error as the contract carries it. The Python runner writes one
+//! A recording is what a source answered each fetch its SQL kit asked of
+//! the driver for one case, in order: the fetch's request and statements
+//! as the kit wrote them (as the core wrote them before a built-in source
+//! answered through its kit: the same statements, fetch for fetch), and
+//! the answer, its rows as an Arrow IPC stream, or the provider's error as
+//! the contract carries it. The Python runner writes one
 //! (`run_python.py --record-fetches`) as python-core runs the case on a
 //! loaded Postgres database, through the Python host's Postgres provider, so
 //! the rows are the server's answers to the core's own statements. Replayed,
@@ -35,7 +37,10 @@
 //!
 //! The key sets a plan binds are not compared: they are the core's own,
 //! made from the answers replayed before them, and the plan names each by
-//! its schema, which is compared.
+//! its schema, which is compared. Nor is the attachment a request or a
+//! statement names one by: which ids a run hands out is the run's (a key
+//! set the kit writes as text is named by the kit's own local id, where
+//! the core once named it by one of the run's), never the source's.
 //!
 //! The file is JSON Lines, one line per case, `{"format": "sdm-replay/1",
 //! "case": <key>, "fetches": [{"request", "plan", "statements", "data" |
@@ -55,8 +60,8 @@ use anyhow::{Context, Result, anyhow, bail};
 use base64::Engine;
 use duckdb::arrow::record_batch::RecordBatch;
 use sdm_contract::ErrorKind;
-use sdm_contract::data::ProviderError;
-use sdm_contract::run::FetchStep;
+use sdm_contract::data::{DataRequest, ProviderError};
+use sdm_host::kit::SqlPlan;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -239,11 +244,15 @@ impl Replay<'_> {
         }
     }
 
-    /// The recorded answer to `step`, which must be the next fetch
-    /// recorded: the statements run for it, and its rows or the provider's
-    /// error recorded; a fetch other than the one recorded is this host's
-    /// failure.
-    pub fn answer(&self, step: &FetchStep) -> Result<Replayed<'_>> {
+    /// The recorded answer to the fetch the kit asks, `request` answered by
+    /// `plan`, which must be the next fetch recorded: the statements run
+    /// for it, and its rows or the provider's error recorded; a fetch other
+    /// than the one recorded is this host's failure.
+    pub fn answer(
+        &self,
+        request_asked: &DataRequest,
+        plan_asked: &SqlPlan,
+    ) -> Result<Replayed<'_>> {
         let position = self.next.get();
         let Some(Recorded {
             request,
@@ -279,8 +288,8 @@ impl Replay<'_> {
             }
             .into());
         };
-        if serde_json::to_value(&step.request)? != *request
-            || serde_json::to_value(&step.plan)? != *plan
+        if unnamed(serde_json::to_value(request_asked)?) != unnamed(request.clone())
+            || unnamed(serde_json::to_value(plan_asked)?) != unnamed(plan.clone())
         {
             bail!(
                 "{}: the core's fetch {position} is not the one recorded (its request or plan differs): record the case again",
@@ -313,6 +322,27 @@ impl Replay<'_> {
     }
 }
 
+/// `value` with every attachment it names left unnamed: which ids a run
+/// hands out is the run's, never the source's.
+fn unnamed(value: Value) -> Value {
+    match value {
+        Value::Object(fields) => Value::Object(
+            fields
+                .into_iter()
+                .map(|(name, field)| {
+                    if name == "attachment" {
+                        (name, Value::Null)
+                    } else {
+                        (name, unnamed(field))
+                    }
+                })
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.into_iter().map(unnamed).collect()),
+        other => other,
+    }
+}
+
 /// An Arrow IPC stream's schema and batches.
 fn read_stream(bytes: &[u8]) -> Result<Fetched> {
     let reader = arrow_ipc::reader::StreamReader::try_new(Cursor::new(bytes), None)
@@ -334,14 +364,32 @@ mod tests {
 
     use super::*;
 
-    fn step(column: &str) -> FetchStep {
-        serde_json::from_value(json!({
-            "id": 1,
-            "request": {"request": "scan", "table": {"source": ["t"]},
-                        "columns": [column], "filters": [], "limit": null},
-            "plan": {"plan": "host", "expect": {"expect": "discover"}},
-        }))
-        .unwrap()
+    /// A scan of `column` and the one statement it runs.
+    struct Asked {
+        request: DataRequest,
+        plan: SqlPlan,
+    }
+
+    impl Asked {
+        fn answer<'a>(&self, replay: &'a Replay<'_>) -> Result<Replayed<'a>> {
+            replay.answer(&self.request, &self.plan)
+        }
+    }
+
+    fn step(column: &str) -> Asked {
+        Asked {
+            request: serde_json::from_value(json!({
+                "request": "scan", "table": {"source": ["t"]},
+                "columns": [column], "filters": [], "limit": null,
+            }))
+            .unwrap(),
+            plan: serde_json::from_value(json!({
+                "plan": "sql", "expect": {"expect": "discover"},
+                "statements": [{"dialect": "postgres", "text": format!("SELECT {column}"),
+                                "params": []}],
+            }))
+            .unwrap(),
+        }
     }
 
     fn recording(dir: &Path) -> Recording {
@@ -378,22 +426,22 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let recording = recording(&dir);
         let replay = recording.replay("c@postgres").unwrap();
-        let first = replay.answer(&step("v")).unwrap();
+        let first = step("v").answer(&replay).unwrap();
         assert_eq!(first.statements, ["SELECT 1"]);
         let Ok(fetched) = first.answer else {
             panic!("the recorded rows");
         };
         assert_eq!(fetched.batches[0].num_rows(), 2);
         assert!(!replay.finished());
-        let Err(failed) = replay.answer(&step("v")).unwrap().answer else {
+        let Err(failed) = step("v").answer(&replay).unwrap().answer else {
             panic!("the recorded error");
         };
         assert_eq!(failed.sqlstate.as_deref(), Some("42P01"));
         assert!(replay.finished());
         // Past the recording, and a fetch other than the one recorded.
-        assert!(replay.answer(&step("v")).is_err());
+        assert!(step("v").answer(&replay).is_err());
         let other = recording.replay("c@postgres").unwrap();
-        let Err(refused) = other.answer(&step("w")) else {
+        let Err(refused) = step("w").answer(&other) else {
             panic!("a fetch other than the one recorded is answered");
         };
         let refused = refused.to_string();

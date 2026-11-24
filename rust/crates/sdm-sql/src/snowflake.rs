@@ -43,6 +43,7 @@
 
 use std::sync::Arc;
 
+use crate::plan::SqlParam;
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
     Decimal128Type, Int8Type, Int16Type, Int32Type, TimestampMicrosecondType,
@@ -57,7 +58,7 @@ use sdm_contract::catalog::{
 use sdm_contract::data::{
     DataRequest, DescribePart, Determinism, ExpectedSchema, FailureFacts, MARKED, MATCHES_COLUMN,
     NullOrder, ProviderCapabilities, ProviderError, Relation, SEED_BATCH, SEED_COUNT_UNREAD,
-    SEED_KEY, SEED_KEY_UNIQUE, SqlParam, TextTimes, field,
+    SEED_KEY, SEED_KEY_UNIQUE, TextTimes, field,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
@@ -66,8 +67,8 @@ use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::key_text;
 use crate::quote;
-use crate::read::{text, text_at};
 use crate::sql::{self, Batches, Sample, SeedRead, SqlDialect, not_taken};
+use sdm_contract::catalog_read::{text, text_at};
 
 /// The dialect's name on the wire.
 pub(crate) const NAME: &str = "snowflake";
@@ -447,7 +448,7 @@ impl SqlDialect for Snowflake {
 
     /// The session's read, whatever the source names: the core keeps the
     /// parts the source gives and takes the others from the answer
-    /// (`DataLayer::settled`), as the reference fills only the missing part.
+    /// ([`crate::Sql::settled`]), as the reference fills only the missing part.
     fn current_namespace(
         &self,
         request: &DataRequest,

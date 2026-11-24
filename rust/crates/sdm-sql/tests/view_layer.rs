@@ -12,15 +12,16 @@ use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::ErrorKind;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, Dialect, FailureFacts, FetchPlan, ProviderChoice,
-    ProviderError, Relation, RelationColumn, Unusable, ViewChoice,
+    DataRequest, DescribePart, FailureFacts, FailureReason, ProviderError, Relation,
+    RelationColumn, Unusable, ViewChoice,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::view::{
     DeclaredType, ExprRefusal, KeyRef, ViewKind, ViewTextAnswer, ViewTextAsk,
 };
 use sdm_contract::{Detail, Sentence};
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice, SqlPlan};
 use sdm_sql::view_expr::Spaces;
 
 /// Python's white space (`str.isspace`), which the core hands in from
@@ -47,8 +48,8 @@ fn spaces() -> &'static Spaces {
     &SPACES
 }
 
-fn databricks() -> ProviderChoice {
-    ProviderChoice::Sql {
+fn databricks() -> SqlChoice {
+    SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new("databricks"),
         namespace: vec![Some("cat".into()), Some("sch".into())],
@@ -60,7 +61,7 @@ fn databricks() -> ProviderChoice {
 }
 
 fn ask(question: ViewTextAsk) -> ViewTextAnswer {
-    Data::reading_views(spaces())
+    Sql::reading_views(spaces())
         .view_text(&databricks(), question)
         .unwrap()
 }
@@ -171,27 +172,27 @@ fn a_question_of_a_view_s_text_is_answered_in_the_dialect() {
 /// model, refuses one by name.
 #[test]
 fn a_layer_that_reads_no_view_refuses_one_by_name() {
-    let refused = Data::new()
+    let refused = Sql::new()
         .view_text(
             &databricks(),
             ViewTextAsk::StripComments { expr: "x".into() },
         )
         .unwrap_err();
     assert_eq!(refused.sentence, Sentence::ViewsUnread);
-    let refused = Data::new().capabilities(&databricks()).unwrap_err();
+    let refused = Sql::new().capabilities(&databricks()).unwrap_err();
     assert_eq!(refused.sentence, Sentence::ViewsUnread);
     assert!(
-        Data::reading_views(spaces())
+        Sql::reading_views(spaces())
             .capabilities(&databricks())
             .is_ok()
     );
-    let duckdb = ProviderChoice::Sql {
+    let duckdb = SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: vec![],
         view: None,
     };
-    let refused = Data::reading_views(spaces())
+    let refused = Sql::reading_views(spaces())
         .view_text(&duckdb, ViewTextAsk::StripComments { expr: "x".into() })
         .unwrap_err();
     assert_eq!(refused.sentence, Sentence::ViewsUnread);
@@ -210,10 +211,11 @@ fn failed(sqlstate: Option<&str>, class: Option<&str>) -> ProviderError {
 }
 
 /// What a Databricks failure says (`DB/errors.py:66-99`), each fact on its
-/// own; another dialect's failures say nothing.
+/// own; another dialect's failures say only what went wrong, which every
+/// dialect reads alike from the SQLSTATE.
 #[test]
 fn a_databricks_failure_says_its_facts() {
-    let facts = |state, class| Data::new().failure(&databricks(), &failed(state, class));
+    let facts = |state, class| Sql::new().failure(&databricks(), &failed(state, class));
     assert_eq!(
         facts(Some("42P01"), None),
         FailureFacts {
@@ -221,9 +223,10 @@ fn a_databricks_failure_says_its_facts() {
             refuses_expression: true,
             unusable: Some(Unusable::Missing),
             denied: false,
-            reason: None,
+            reason: Some(FailureReason::TableUnresolved),
         }
     );
+    assert!(facts(Some("42501"), None).denied);
     assert_eq!(
         facts(Some("42501"), None).unusable,
         Some(Unusable::Forbidden)
@@ -240,10 +243,13 @@ fn a_databricks_failure_says_its_facts() {
     assert!(facts(Some("42703"), Some("UNRESOLVED_COLUMN.WITH_SUGGESTION")).refuses_expression);
     assert_eq!(facts(Some("08001"), None), FailureFacts::default());
     assert_eq!(facts(None, None), FailureFacts::default());
-    let duckdb = ProviderChoice::sql("duckdb");
+    let duckdb = SqlChoice::new("duckdb");
     assert_eq!(
-        Data::new().failure(&duckdb, &failed(Some("42P01"), None)),
-        FailureFacts::default()
+        Sql::new().failure(&duckdb, &failed(Some("42P01"), None)),
+        FailureFacts {
+            reason: Some(FailureReason::TableUnresolved),
+            ..FailureFacts::default()
+        }
     );
 }
 
@@ -260,15 +266,12 @@ fn definition_request(parts: &[&str]) -> DataRequest {
 /// part of its name in backticks (`DB/metric_view.py:1440-1450`).
 #[test]
 fn a_metric_view_s_definition_is_asked_by_its_quoted_name() {
-    let FetchPlan::Sql { statements, .. } = Data::reading_views(spaces())
+    let SqlPlan { statements, .. } = Sql::reading_views(spaces())
         .plan(
             &definition_request(&["cat", "s`ch", "sales_mv"]),
             &databricks(),
         )
-        .unwrap()
-    else {
-        panic!("a SQL plan")
-    };
+        .unwrap();
     let texts: Vec<&str> = statements.iter().map(|s| s.text.as_str()).collect();
     assert_eq!(texts, ["DESCRIBE TABLE EXTENDED `cat`.`s``ch`.`sales_mv`"]);
 }
@@ -278,9 +281,9 @@ fn a_metric_view_s_definition_is_asked_by_its_quoted_name() {
 #[test]
 fn semantic_definition_names_are_bound_without_physical_table_qualification() {
     use sdm_contract::Scalar;
-    use sdm_contract::data::SqlParam;
+    use sdm_sql::plan::SqlParam;
 
-    let provider = ProviderChoice::sql("snowflake");
+    let provider = SqlChoice::new("snowflake");
     for (parts, expected) in [
         (vec!["V"], "V"),
         (vec!["DB", "V"], "DB.V"),
@@ -293,12 +296,9 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
         ),
         (vec!["DB", "SHOP", "\"Sales.View\""], "\"Sales.View\""),
     ] {
-        let FetchPlan::Sql { statements, .. } = Data::reading_views(spaces())
+        let SqlPlan { statements, .. } = Sql::reading_views(spaces())
             .plan(&definition_request(&parts), &provider)
-            .unwrap()
-        else {
-            panic!("a SQL plan")
-        };
+            .unwrap();
         assert_eq!(statements.len(), 1);
         assert_eq!(
             statements[0].text,
@@ -313,7 +313,7 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
     }
     for name in ["V", "SHOP.V", "DB.SHOP.\"Sales View\"", "\"Sales.View\""] {
         assert_eq!(
-            Data::reading_views(spaces())
+            Sql::reading_views(spaces())
                 .view_text(&provider, ViewTextAsk::ViewName { name: name.into() })
                 .unwrap(),
             ViewTextAnswer::Names(Some(vec![name.into()]))
@@ -325,18 +325,15 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
         (vec![None, Some("SHOP".into())], "SHOP.V"),
         (vec![Some("DB".into()), Some("SHOP".into())], "DB.SHOP.V"),
     ] {
-        let source = ProviderChoice::Sql {
+        let source = SqlChoice {
             timestamp_encoding: None,
             dialect: Dialect::new("snowflake"),
             namespace,
             view: None,
         };
-        let FetchPlan::Sql { statements, .. } = Data::reading_views(spaces())
+        let SqlPlan { statements, .. } = Sql::reading_views(spaces())
             .plan(&definition_request(&["V"]), &source)
-            .unwrap()
-        else {
-            panic!("a SQL plan")
-        };
+            .unwrap();
         assert_eq!(
             statements[0].params,
             vec![SqlParam::Value {
@@ -346,7 +343,7 @@ fn semantic_definition_names_are_bound_without_physical_table_qualification() {
     }
     // Only definition lookups bypass physical qualification.
     assert!(
-        Data::new()
+        Sql::new()
             .plan(
                 &DataRequest::Preview {
                     table: Relation::of(vec!["V".into()]),
@@ -381,7 +378,7 @@ fn batch(rows: &[Vec<Option<&str>>]) -> RecordBatch {
 /// Arrow batches from both warehouse and Spark preserve the same definition facts.
 #[test]
 fn metric_definition_is_read_through_the_data_layer_port() {
-    let layer = Data::reading_views(spaces());
+    let layer = Sql::reading_views(spaces());
     for width in [3, 4] {
         let mut rows = vec![
             vec![Some("id"), Some("bigint")],
@@ -427,7 +424,7 @@ fn invalid_definitions_report_the_specific_reason_and_qualified_view_name() {
             vec![Some("Type"), Some(kind)],
             vec![Some("View Text"), Some(text)],
         ];
-        let error = Data::reading_views(spaces())
+        let error = Sql::reading_views(spaces())
             .read(
                 &definition_request(&["cat", "sch", "sales_mv"]),
                 &databricks(),
@@ -441,14 +438,14 @@ fn invalid_definitions_report_the_specific_reason_and_qualified_view_name() {
 
 #[test]
 fn a_views_kind_is_known_before_its_definition_is_fetched() {
-    let data = Data::reading_views(spaces());
+    let data = Sql::reading_views(spaces());
     assert_eq!(
-        data.view_kind(&ProviderChoice::sql("databricks")),
+        data.view_kind(&SqlChoice::new("databricks")),
         Some(ViewKind::Metric)
     );
-    assert_eq!(data.view_kind(&ProviderChoice::sql("duckdb")), None);
+    assert_eq!(data.view_kind(&SqlChoice::new("duckdb")), None);
     assert_eq!(
-        data.view_kind(&ProviderChoice::sql("snowflake")),
+        data.view_kind(&SqlChoice::new("snowflake")),
         Some(ViewKind::Semantic)
     );
 }

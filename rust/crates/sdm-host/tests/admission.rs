@@ -741,7 +741,7 @@ fn plain(values: &ArrayRef, indices: &[u64]) -> ArrayRef {
 /// receives it, admitted.
 fn through_host_run(data: ArrowData) -> ArrowData {
     let (send, receive) = mpsc::channel();
-    let host = ProviderChoice::Host {
+    let host = ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,

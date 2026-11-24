@@ -17,12 +17,13 @@ use duckdb::arrow::array::{Array, ArrayRef, Float64Array, Int64Array, TimestampN
 use duckdb::arrow::compute::{cast, concat_batches};
 use duckdb::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use duckdb::arrow::record_batch::RecordBatch;
-use sdm_contract::data::{AttachmentId, DataRequest, Dialect, FetchPlan, ProviderChoice, SqlParam};
+use sdm_contract::data::{AttachmentId, DataRequest};
 use sdm_contract::ops::{Operation, OperationResult};
 use sdm_contract::run::{FetchOutcome, FetchReply, StartRun};
 use sdm_contract::test_ops::{TestFetch, TestOperation, TestResult};
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, Step};
 use sdm_host::{ArrowData, Attachment, HostRun, default_root, encode, read};
+use sdm_testkit::sql_source::SqlSource;
 use sdm_testkit::{duck, host};
 use serde_json::{Value, json};
 
@@ -139,12 +140,7 @@ fn answered(connection: &Connection, request: DataRequest, seeds: RecordBatch) -
     let fetch = TestFetch {
         request,
         plan: None,
-        provider: Some(ProviderChoice::Sql {
-            timestamp_encoding: None,
-            dialect: Dialect::new("duckdb"),
-            namespace: Vec::new(),
-            view: None,
-        }),
+        provider: Some(SqlSource::of("duckdb").provider().unwrap()),
         echo: true,
         undeclared: vec![],
         fallback: None,
@@ -179,21 +175,17 @@ fn answered(connection: &Connection, request: DataRequest, seeds: RecordBatch) -
     };
     let step = &requests[0];
     let mut sets = BTreeMap::new();
-    if let FetchPlan::Sql { statements, .. } = &step.plan {
-        for param in statements.iter().flat_map(|s| &s.params) {
-            if let SqlParam::KeySet { keys, .. } = param {
-                let Ok(Some(Attachment::Arrow(data))) = run.take_attachment(keys.attachment) else {
-                    panic!("the seeds are not attached");
-                };
-                sets.insert(
-                    keys.attachment,
-                    duck::Fetched {
-                        schema: data.schema,
-                        batches: data.batches,
-                    },
-                );
-            }
-        }
+    for set in step.plan.key_sets.iter().copied() {
+        let Ok(Some(Attachment::Arrow(data))) = run.take_attachment(set) else {
+            panic!("the seeds are not attached");
+        };
+        sets.insert(
+            set,
+            duck::Fetched {
+                schema: data.schema,
+                batches: data.batches,
+            },
+        );
     }
     let fetched = duck::answer_with(connection, step, &sets).unwrap();
     run.reply(

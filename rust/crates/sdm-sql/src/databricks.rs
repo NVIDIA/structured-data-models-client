@@ -50,13 +50,14 @@
 //! chunk's statement adding the seeds before it to `pos`, as the
 //! reference's `_flatten` moves each chunk's batches.
 
+use crate::plan::{SqlParam, SqlTimestampKind};
 use arrow_array::{RecordBatch, StringArray};
 use arrow_schema::SchemaRef;
 use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogKey, KeyKind};
 use sdm_contract::data::{
     DataRequest, DescribePart, Determinism, ExpectedSchema, MARKED, MATCHES_COLUMN, NullOrder,
     ProviderCapabilities, Relation, SEED_BATCH, SEED_COUNT_UNREAD, SEED_KEY, SEED_KEY_UNIQUE,
-    SqlParam, SqlTimestampKind, TextTimes, TieTerm, refused, seed_integer, views_unread,
+    TextTimes, TieTerm, refused, seed_integer, views_unread,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::types::ColumnType;
@@ -66,8 +67,8 @@ use std::collections::BTreeMap;
 use crate::json;
 use crate::key_text;
 use crate::quote;
-use crate::read::{text, text_at};
 use crate::sql::{self, NameCase, Sample, SeedRead, SqlDialect, not_taken};
+use sdm_contract::catalog_read::{text, text_at};
 
 /// The dialect's name on the wire.
 pub(crate) const NAME: &str = "databricks";
@@ -859,9 +860,10 @@ pub(crate) fn read(
         // Read only with the white space its sections are read by
         // ([`read_view`]).
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
-        DescribePart::Namespace => {
-            crate::read::namespace(batches, sdm_contract::data::catalog_columns::NAME)
-        }
+        DescribePart::Namespace => sdm_contract::catalog_read::namespace(
+            batches,
+            sdm_contract::data::catalog_columns::NAME,
+        ),
         DescribePart::Tables => {
             let mut names = Vec::new();
             for batch in batches {

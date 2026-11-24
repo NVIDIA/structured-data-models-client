@@ -83,7 +83,7 @@ fn limits(max_rows: u64, max_bytes: u64) -> FallbackLimits {
 }
 
 fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> ProviderChoice {
-    ProviderChoice::Host {
+    ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,
@@ -129,7 +129,7 @@ fn run_with(
     seeds: Option<RecordBatch>,
     answer: impl Fn(&DataRequest) -> FetchResult,
 ) -> Ran {
-    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::new()));
+    let root = CompositionRoot::default();
     let kept: Arc<Mutex<Option<ArrowData>>> = Arc::default();
     let into = Arc::clone(&kept);
     let mut run = Run::with_data(
@@ -651,9 +651,7 @@ fn a_sample_draws_from_the_rows_its_value_filters_keep_where_the_host_applies_no
 #[test]
 fn a_host_declaring_a_value_filter_gets_it_on_its_scan() {
     let mut provider = host(&[], Some(limits(1_000, 1 << 30)));
-    let ProviderChoice::Host { capabilities } = &mut provider else {
-        unreachable!()
-    };
+    let ProviderChoice { capabilities } = &mut provider;
     capabilities.filters = [sdm_contract::data::FilterKind::Compare].into();
     let mut request = sample(10, 7);
     let DataRequest::SampleEntities { filters, .. } = &mut request else {
@@ -869,7 +867,7 @@ fn preview_budget_counts_returned_slice_not_its_large_parent() {
 
 #[test]
 fn a_range_budget_refusal_can_recover_with_preview_in_the_same_run() {
-    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::new()));
+    let root = CompositionRoot::default();
     let provider = host(&[], Some(limits(1, 4096)));
     let mut run = Run::with_data(root.data_access(&provider).unwrap(), |asker| async move {
         let failed = asker
@@ -928,9 +926,7 @@ fn a_range_budget_refusal_can_recover_with_preview_in_the_same_run() {
 #[test]
 fn text_comparisons_require_compatible_declared_collation_but_preview_does_not() {
     let mut provider = host(&[], Some(limits(100, 1 << 20)));
-    let ProviderChoice::Host { capabilities } = &mut provider else {
-        unreachable!()
-    };
+    let ProviderChoice { capabilities } = &mut provider;
     capabilities.fallback_text_order = None;
     let rejected = run_with(
         provider.clone(),

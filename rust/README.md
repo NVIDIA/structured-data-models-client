@@ -16,7 +16,7 @@ The last column is what `scripts/rust_core/dependency_policy.py` allows, for any
 | `sdm-pql` | The PQL lexer, parser and validators | nothing |
 | `sdm-wire` | The model API's JSON: the payload and the response | `sdm-contract` |
 | `sdm-schema` | Schema inference over Arrow, assembly and edits (the schema's types are `sdm-contract`'s) | `sdm-contract` |
-| `sdm-data` | The engine-neutral data layer: time-series preparation | `sdm-contract` |
+| `sdm-data` | The engine-neutral data layer: request parts and time-series preparation | `sdm-contract` |
 | `sdm-sql` | The SQL kit: each dialect's statements (DuckDB, SQLite, Postgres, Databricks, Snowflake), key-set binding, catalog reading, view-text answers | `sdm-contract` |
 | `sdm-engine` | Time and zones, random streams, sampling rules, labels | `sdm-schema`, `sdm-contract` |
 | `sdm-request` | The model request's payload and options, the ranking and the result layout | `sdm-engine`, `sdm-schema`, `sdm-wire`, `sdm-contract` |
@@ -31,7 +31,7 @@ The Java binding, `sdm-jni`, lives under `bindings/` with the same dependency ru
 ## Dependency diagram
 
 The normal (non-test) dependencies in use today.
-Shipped `sdm-core` code reaches the data layer only through the `DataLayer` trait in `sdm-contract`, and `sdm-host` plugs `sdm-sql` in.
+Shipped `sdm-core` code sends every source typed requests and reaches a database's own reading only through the `DataLayer` trait in `sdm-contract`; `sdm-host` plugs `sdm-sql`'s in, and answers a built-in source's requests through its SQL kit.
 `sdm-engine` depends on `sdm-schema` only to implement its `infer::TextTimes` trait, which is how inference reads text as times.
 Test-only dependencies, not drawn: `sdm-core`'s tests use `sdm-sql`, and the tests of `sdm-host` and `sdm-testkit` use `test-ops` builds of `sdm-core` and `sdm-host`.
 Each crate's own README repeats its part of this graph.

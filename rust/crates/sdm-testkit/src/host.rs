@@ -33,7 +33,7 @@ use std::sync::Arc;
 use duckdb::arrow::array::{ArrayRef, RecordBatch};
 use duckdb::arrow::compute::concat_batches;
 use duckdb::arrow::datatypes::{Field, Schema};
-use sdm_contract::data::{AttachmentId, Dialect, FetchPlan, ProviderChoice, SqlParam};
+use sdm_contract::data::{AttachmentId, ProviderChoice};
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
     DescribeSource, Dtype, EditSchema, ForecastStep, GivenCandidate, HeldSchema, Materialize,
@@ -41,11 +41,12 @@ use sdm_contract::ops::{
     Ranking, RankingPart, RequestBatch, RequestState, SamplerState, Seed, SourceDescription,
     SourceSpec, ValidateQuery,
 };
-use sdm_contract::run::{FetchOutcome, FetchReply, ModelOutcome, ModelReply, StartRun};
+use sdm_contract::run::{FetchReply, ModelOutcome, ModelReply, StartRun};
 use sdm_contract::{
     CONTRACT_VERSION, ControlMessage, CoreError, Detail, ErrorCode, ErrorKind, HostFacts, Scalar,
     Step, Unit,
 };
+use sdm_host::kit::SqlChoice;
 use sdm_host::{
     ArrowData, Attachment, CompositionRoot, HostRun, Outgoing, default_root, encode, read,
 };
@@ -60,7 +61,9 @@ use crate::driver::{self, DriverLog};
 use crate::edits::{self, SchemaEdit};
 use crate::memory::Memory;
 use crate::replay::{Recording, Replay, Replayed};
+use crate::sql_source::{Outcome, SqlSource};
 use crate::sqlite::Sqlite;
+
 use crate::{duck, endpoint};
 
 /// What the host saw of one case: the operations it started with their
@@ -632,33 +635,31 @@ enum Source<'a> {
 }
 
 impl Source<'_> {
-    /// The provider choice a run over this source names: the case's own on
-    /// DuckDB; on a Postgres replay, Postgres's SQL dialect, as the Python
-    /// host names it for a Postgres source.
-    fn provider(self, given: ProviderChoice) -> ProviderChoice {
-        match self {
-            Source::Duck(_) => given,
-            Source::Sqlite(_) => ProviderChoice::Sql {
-                timestamp_encoding: None,
-                dialect: Dialect::new(Database::Sqlite.name()),
-                namespace: Vec::new(),
-                view: None,
-            },
-            Source::Replay {
+    /// The provider a run over this source names, and the built-in source
+    /// that answers its requests through its kit, one per run: the case's
+    /// own (`given`, its SQL choice) on DuckDB; SQLite's on SQLite; on a
+    /// Postgres replay, Postgres's, as the Python host names it for a
+    /// Postgres source, or the recorded one on a warehouse's; and the
+    /// non-SQL provider as it declares itself, with no kit.
+    fn provider(self, given: &Value) -> Result<(ProviderChoice, Option<SqlSource>)> {
+        let built = match self {
+            Source::Duck(_)
+            | Source::Replay {
                 preserve_provider: true,
                 ..
-            } => given,
-            Source::Replay { .. } => ProviderChoice::Sql {
-                timestamp_encoding: None,
-                dialect: Dialect::new(Database::Postgres.name()),
-                namespace: Vec::new(),
-                view: None,
-            },
-            // The non-SQL provider, a host provider, as it declares itself.
-            Source::Memory(memory, _) => ProviderChoice::Host {
-                capabilities: memory.declared.clone().unwrap_or_else(Memory::capabilities),
-            },
-        }
+            } => SqlSource::from_json(given)?,
+            Source::Sqlite(_) => SqlSource::of(Database::Sqlite.name()),
+            Source::Replay { .. } => SqlSource::of(Database::Postgres.name()),
+            Source::Memory(memory, _) => {
+                return Ok((
+                    ProviderChoice::new(
+                        memory.declared.clone().unwrap_or_else(Memory::capabilities),
+                    ),
+                    None,
+                ));
+            }
+        };
+        Ok((built.provider()?, Some(built)))
     }
 
     /// The composition root a run over this source starts with: the one
@@ -670,6 +671,21 @@ impl Source<'_> {
             _ => default_root(),
         }
     }
+}
+
+/// The provider a run names, as this host records it: a built-in source
+/// by its SQL choice, as the case gives it and the host makes its kit with;
+/// any other by what it declares.
+fn named_provider(provider: &ProviderChoice, kit: Option<&SqlSource>) -> Result<Value> {
+    Ok(match kit {
+        Some(kit) => serde_json::to_value(kit.choice())?,
+        None => serde_json::to_value(provider)?,
+    })
+}
+
+/// Whether a run reads DuckDB, through `kit`.
+fn on_duckdb(kit: Option<&SqlSource>) -> bool {
+    kit.is_some_and(|kit| kit.choice().dialect.name() == Database::Duckdb.name())
 }
 
 /// Runs `case` over its data loaded into a new SQLite file by the contract
@@ -774,10 +790,9 @@ pub fn run_replayed_on(case: &Case, recording: &Recording, leg: &str) -> Result<
                 .and_then(|c| c.materialize.as_ref())
                 .map(|s| &s.provider),
         ) {
-            let provider: ProviderChoice = serde_json::from_value(provider.clone())
-                .map_err(|_| anyhow!("{key}: a recorded provider is not a ProviderChoice"))?;
-            if !matches!(provider, ProviderChoice::Sql { dialect: ref d, .. } if d.name() == dialect)
-            {
+            let provider: SqlChoice = serde_json::from_value(provider.clone())
+                .map_err(|_| anyhow!("{key}: a recorded provider is not a built-in source"))?;
+            if provider.dialect.name() != dialect {
                 bail!("{key}: the recorded provider does not match the replay leg");
             }
         }
@@ -932,13 +947,18 @@ fn take_warnings(handle: &HostRun, into: &mut Vec<Value>) -> Result<()> {
     Ok(())
 }
 
-/// Runs a started operation to its result, answering each fetch with the
-/// DuckDB provider and the key sets the step names, and recording each
-/// fetch in `fetches`: the result, or the core's error.
+/// Runs a started operation to its result, answering each fetch through
+/// `kit`, the built-in source's kit of this run, its statements run on
+/// `source`'s driver (or by the non-SQL provider, which answers the
+/// request itself), and recording each fetch in `fetches`: each fetch the
+/// kit ran, its request and statements, as the core asked a built-in
+/// source's before its kit; the non-SQL provider's request as the core
+/// asked it. The result, or the core's error.
 fn drive(
     case: &Case,
     handle: &HostRun,
     source: Source<'_>,
+    kit: Option<&SqlSource>,
     observed: &mut Observed,
     log: &mut DriverLog,
 ) -> Result<std::result::Result<OperationResult, Answer>> {
@@ -953,30 +973,11 @@ fn drive(
             ControlMessage::Step(Step::Done { result }) => return Ok(Ok(result)),
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in &requests {
-                    let mut fetched = json!({"request": step.request, "plan": step.plan});
                     // Plan B's read of a table as it stands, marked as the
                     // core marks it, on the fetch and its statements.
                     log.purpose = step.purpose.map(|_| "locate");
-                    if let Some(purpose) = step.purpose {
-                        fetched["purpose"] = json!(purpose);
-                    }
-                    observed.fetches.push(fetched);
-                    // The key sets the step names: a SQL plan's parameters,
-                    // or, for a host provider, the request's own.
-                    let sets: Vec<AttachmentId> = match &step.plan {
-                        FetchPlan::Sql { statements, .. } => statements
-                            .iter()
-                            .flat_map(|s| &s.params)
-                            .filter_map(|param| match param {
-                                SqlParam::KeySet { keys, .. } => Some(keys.attachment),
-                                SqlParam::Text { .. } => None,
-                                SqlParam::Value { .. } => None,
-                            })
-                            .collect(),
-                        FetchPlan::Host { key_sets, .. } => key_sets.clone(),
-                    };
                     let mut keys = BTreeMap::new();
-                    for set in sets {
+                    for set in step.plan.key_sets.iter().copied() {
                         if let Entry::Vacant(entry) = keys.entry(set) {
                             let Ok(Some(Attachment::Arrow(data))) = handle.take_attachment(set)
                             else {
@@ -988,19 +989,13 @@ fn drive(
                             });
                         }
                     }
-                    let answered = match source {
-                        Source::Duck(connection) => {
-                            duck::answer_logged(connection, step, &keys, log)
-                        }
-                        Source::Sqlite(source) => source.answer_logged(step, &keys, log),
-                        Source::Replay {
-                            answers: replay, ..
-                        } => {
-                            let replayed = replay.answer(step)?;
-                            log_replayed(log, &replayed);
-                            replayed.answer
-                        }
-                        Source::Memory(memory, _) => {
+                    let answered = match (source, kit) {
+                        (Source::Memory(memory, _), _) => {
+                            let mut fetched = json!({"request": step.request, "plan": step.plan});
+                            if let Some(purpose) = step.purpose {
+                                fetched["purpose"] = json!(purpose);
+                            }
+                            observed.fetches.push(fetched);
                             let mut sets = BTreeMap::new();
                             for (id, fetched) in &keys {
                                 sets.insert(
@@ -1008,27 +1003,52 @@ fn drive(
                                     concat_batches(&fetched.schema, &fetched.batches)?,
                                 );
                             }
-                            memory
-                                .answer(&step.request, &sets)
-                                .map(|batch| duck::Fetched {
+                            match memory.answer(&step.request, &sets) {
+                                Ok(batch) => Outcome::Data(duck::Fetched {
                                     schema: batch.schema(),
                                     batches: vec![batch],
+                                }),
+                                Err(error) => Outcome::Error(error),
+                            }
+                        }
+                        (_, None) => bail!("{}: a run of a built-in source has no kit", case.id),
+                        (_, Some(kit)) => {
+                            let fetches = &mut observed.fetches;
+                            kit.answer(&step.request, &keys, &mut |fetch| {
+                                let mut fetched =
+                                    json!({"request": fetch.request, "plan": fetch.plan});
+                                if let Some(purpose) = step.purpose {
+                                    fetched["purpose"] = json!(purpose);
+                                }
+                                fetches.push(fetched);
+                                Ok(match source {
+                                    Source::Duck(connection) => {
+                                        duck::run_plan(connection, fetch.plan, fetch.keys, log)
+                                    }
+                                    Source::Sqlite(source) => {
+                                        source.run_plan(fetch.plan, fetch.keys, log)
+                                    }
+                                    Source::Replay {
+                                        answers: replay, ..
+                                    } => {
+                                        let replayed = replay.answer(fetch.request, fetch.plan)?;
+                                        log_replayed(log, &replayed);
+                                        replayed.answer
+                                    }
+                                    Source::Memory(..) => unreachable!("answered above"),
                                 })
+                            })?
                         }
                     };
-                    let (outcome, attachments) = match answered {
-                        Ok(fetched) => (
-                            FetchOutcome::Data {
-                                data: AttachmentId(1),
-                                continuation: None,
-                            },
+                    let (outcome, data) = answered.reply(AttachmentId(1));
+                    let attachments = data
+                        .map(|fetched| {
                             BTreeMap::from([(
                                 AttachmentId(1),
                                 Attachment::Arrow(ArrowData::new(fetched.schema, fetched.batches)),
-                            )]),
-                        ),
-                        Err(error) => (FetchOutcome::Error { error }, BTreeMap::new()),
-                    };
+                            )])
+                        })
+                        .unwrap_or_default();
                     let reply = encode(&ControlMessage::FetchReply(FetchReply {
                         id: step.id,
                         outcome,
@@ -1078,18 +1098,11 @@ fn describe_on(
     log: &mut DriverLog,
     edits: &[SchemaEdit],
 ) -> Result<Observed> {
-    let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
-        anyhow!(
-            "{}: core.describe_source.provider is not a ProviderChoice",
-            case.id
-        )
-    })?;
-    let provider = source.provider(provider);
+    let (provider, kit) = source
+        .provider(&spec.provider)
+        .map_err(|error| anyhow!("{}: core.describe_source.provider: {error}", case.id))?;
     // Off DuckDB a case runs every call through its `until`.
-    let off_duckdb = !matches!(
-        &provider,
-        ProviderChoice::Sql { dialect, .. } if dialect.name() == Database::Duckdb.name()
-    );
+    let off_duckdb = !on_duckdb(kit.as_ref());
     let spec_given: SourceSpec = serde_json::from_value(spec.source.clone()).map_err(|_| {
         anyhow!(
             "{}: core.describe_source.source is not a SourceSpec",
@@ -1100,7 +1113,7 @@ fn describe_on(
     let source_bytes = serde_json::to_vec(&spec_given)?;
     let input = json!({
         "op": "describe_source",
-        "provider": serde_json::to_value(&provider)?,
+        "provider": named_provider(&provider, kit.as_ref())?,
         "source": serde_json::from_slice::<Value>(&source_bytes)?,
         "check_keys": spec.check_keys,
     });
@@ -1137,7 +1150,7 @@ fn describe_on(
         }
     };
     log.stage = "from_source";
-    let described = match drive(case, &handle, source, &mut observed, log)? {
+    let described = match drive(case, &handle, source, kit.as_ref(), &mut observed, log)? {
         Err(answer) => {
             observed.answer = answer;
             return Ok(observed);
@@ -1280,7 +1293,7 @@ fn edit_schema(
         Ok(handle) => handle,
         Err(refused) => return Ok(Err(error_of(&refused)?)),
     };
-    match drive(case, &handle, source, observed, log)? {
+    match drive(case, &handle, source, None, observed, log)? {
         Err(answer) => Ok(Err(answer)),
         Ok(OperationResult::EditSchema(edited)) => {
             let Ok(Some(Attachment::Bytes(bytes))) = handle.take_attachment(edited.schema) else {
@@ -1631,13 +1644,9 @@ fn start_materialize(
     as_op: &dyn Fn(Materialize) -> Operation,
 ) -> Result<Option<Driven>> {
     log.stage = "materialize";
-    let provider: ProviderChoice = serde_json::from_value(spec.provider.clone()).map_err(|_| {
-        anyhow!(
-            "{}: core.materialize.provider is not a ProviderChoice",
-            case.id
-        )
-    })?;
-    let provider = source.provider(provider);
+    let (provider, kit) = source
+        .provider(&spec.provider)
+        .map_err(|error| anyhow!("{}: core.materialize.provider: {error}", case.id))?;
     let indices: Vec<Scalar> = serde_json::from_value(Value::from(spec.indices.clone()))
         .map_err(|_| anyhow!("{}: core.materialize.indices are not scalars", case.id))?;
     let anchor_time: Option<Scalar> = serde_json::from_value(spec.anchor_time.clone())
@@ -1660,10 +1669,7 @@ fn start_materialize(
     // it sends the validated query as the PQL library writes it back
     // (`to_string`), which `sdm-pql` writes the same way; a query it does
     // not parse is sent as the case gives it.
-    let off_duckdb = !matches!(
-        &provider,
-        ProviderChoice::Sql { dialect, .. } if dialect.name() == Database::Duckdb.name()
-    );
+    let off_duckdb = !on_duckdb(kit.as_ref());
     let query = if off_duckdb {
         written_back(&case.input.pql)
     } else {
@@ -1770,7 +1776,7 @@ fn start_materialize(
     observed.operations.push("materialize".into());
     observed.inputs.push(json!({
         "op": "materialize",
-        "provider": serde_json::to_value(&provider)?,
+        "provider": named_provider(&provider, kit.as_ref())?,
         "schema": serde_json::from_slice::<Value>(&schema_bytes)?,
         "query": serde_json::from_slice::<Value>(&query_bytes)?,
         "indices": serde_json::to_value(&indices)?,
@@ -1835,7 +1841,7 @@ fn start_materialize(
             return Ok(None);
         }
     };
-    let driven = drive(case, &handle, source, observed, log)?;
+    let driven = drive(case, &handle, source, kit.as_ref(), observed, log)?;
     if let Some(held) = sampler {
         keep_sampler(&handle, held)?;
     }

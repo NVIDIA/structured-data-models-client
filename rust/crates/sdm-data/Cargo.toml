@@ -4,7 +4,7 @@
 
 [package]
 name = "sdm-data"
-description = "The engine-neutral data layer: time-series preparation"
+description = "The engine-neutral data layer: request parts and time-series preparation"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

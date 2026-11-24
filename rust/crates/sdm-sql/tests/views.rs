@@ -6,14 +6,16 @@
 //! until a dialect reads views, never read as if its logical tables were the
 //! source's own.
 
-use sdm_contract::data::{DataLayer, Dialect, ProviderChoice, ViewChoice};
+use sdm_contract::data::ViewChoice;
+
 use sdm_contract::{Detail, ErrorCode, Sentence};
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice};
 
 #[test]
 fn a_sql_source_naming_a_view_is_refused_by_name() {
     for dialect in ["duckdb", "sqlite", "postgres", "databricks"] {
-        let choice = ProviderChoice::Sql {
+        let choice = SqlChoice {
             timestamp_encoding: None,
             dialect: Dialect::new(dialect),
             namespace: Vec::new(),
@@ -22,7 +24,7 @@ fn a_sql_source_naming_a_view_is_refused_by_name() {
                 trust_expressions: false,
             }),
         };
-        let refused = Data::new().capabilities(&choice).unwrap_err();
+        let refused = Sql::new().capabilities(&choice).unwrap_err();
         assert_eq!(refused.sentence, Sentence::ViewsUnread, "{dialect}");
         assert_eq!(refused.code, ErrorCode::UnsupportedRequest);
         assert_eq!(refused.fields["rule"], Detail::text("view"));

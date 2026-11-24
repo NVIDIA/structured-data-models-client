@@ -9,10 +9,10 @@
 use arrow_array::cast::AsArray;
 use arrow_array::types::Int64Type;
 use sdm_contract::Scalar;
-use sdm_contract::data::{
-    CompareOp, DataRequest, Dialect, FetchPlan, Filter, ProviderChoice, Relation,
-};
+use sdm_contract::data::{CompareOp, DataRequest, Filter, Relation};
+use sdm_host::kit::{Dialect, SqlChoice};
 use sdm_testkit::duck;
+use sdm_testkit::sql_source::SqlSource;
 
 const ROWS: &str =
     "CREATE TABLE users (id BIGINT, age BIGINT, name VARCHAR, score DOUBLE, active BOOLEAN);
@@ -23,8 +23,8 @@ INSERT INTO users VALUES
   (4, 77, NULL, 0.5, NULL),
   (5, 76, 'ed', 3.5, TRUE);";
 
-fn provider(dialect: &str) -> ProviderChoice {
-    ProviderChoice::Sql {
+fn provider(dialect: &str) -> SqlChoice {
+    SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new(dialect),
         namespace: match dialect {
@@ -51,12 +51,12 @@ fn scan(filters: Vec<Filter>) -> DataRequest {
 }
 
 fn sql(dialect: &str, request: &DataRequest) -> String {
-    let root = sdm_host::default_root();
-    let FetchPlan::Sql { statements, .. } =
-        root.data_layer().plan(request, &provider(dialect)).unwrap()
-    else {
-        panic!("{dialect}: expected SQL");
-    };
+    let statements = SqlSource::new(provider(dialect))
+        .unwrap()
+        .plan(request)
+        .unwrap()
+        .statements;
+
     assert_eq!(statements.len(), 1, "{dialect}: one statement");
     assert!(
         statements[0].params.is_empty(),

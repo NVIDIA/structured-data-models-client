@@ -18,52 +18,51 @@ use sdm_contract::catalog::{
     CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
-use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema, FetchPlan,
-    ProviderCapabilities, ProviderChoice,
-};
+use sdm_contract::data::{DataRequest, DescribePart, ExpectedSchema};
 use sdm_contract::{CoreError, Detail, ErrorCode, ErrorKind};
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice};
 
-fn duckdb() -> ProviderChoice {
-    ProviderChoice::Sql {
-        timestamp_encoding: None,
-        dialect: Dialect::new("duckdb"),
-        namespace: Vec::new(),
-        view: None,
-    }
+/// Who reads a catalog answer: DuckDB's dialect from its own catalog's
+/// rows, or the contract's reader from the standard shape every source
+/// answers the core in.
+#[derive(Clone)]
+enum Reader {
+    Sql(SqlChoice),
+    Standard,
 }
 
-fn host() -> ProviderChoice {
-    ProviderChoice::Host {
-        capabilities: ProviderCapabilities {
-            opaque_vendor: None,
-            compares_stored_times: false,
-            samples_by_key_dtype: false,
-            reads_nan_as_missing: false,
-            derived_relations: false,
-            neighbor_lookback: false,
-            keys_optional: false,
-            key_enforcement: false,
-            sample_rows: false,
-            optional: Default::default(),
-            filters: Default::default(),
-            max_keys_per_request: None,
-            max_seed: u64::MAX,
-            text_times: None,
-            null_order: None,
-            index_advice: None,
-            sampling: Determinism::SeededStable,
-            fallback_text_order: None,
-            fallback: None,
-            database: None,
-            column_affinities: false,
-            reads_tables_as_they_stand: false,
-            namespace: Vec::new(),
-            tries_upper_case_names: false,
-            namespace_first: false,
-            view: None,
-        },
+fn duckdb() -> Reader {
+    Reader::Sql(SqlChoice::new("duckdb"))
+}
+
+fn host() -> Reader {
+    Reader::Standard
+}
+
+impl Reader {
+    /// The schema the answer to `request` has.
+    fn expect(&self, request: &DataRequest) -> ExpectedSchema {
+        match self {
+            Reader::Sql(source) => Sql::new().plan(request, source).unwrap().expect,
+            Reader::Standard => request.expected(),
+        }
+    }
+
+    fn read(
+        &self,
+        request: &DataRequest,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        match self {
+            Reader::Sql(source) => Sql::new().read(request, source, batches),
+            Reader::Standard => {
+                let DataRequest::Describe { part, .. } = request else {
+                    panic!("the standard reader reads a catalog answer");
+                };
+                sdm_contract::catalog_read::standard(*part, batches)
+            }
+        }
     }
 }
 
@@ -95,17 +94,8 @@ fn lists(item: &str, rows: &[&[&str]]) -> ArrayRef {
 
 /// One batch of these columns, each field typed as its array and named as
 /// given, in the schema the plan for `request` on `provider` expects.
-fn answer(
-    request: &DataRequest,
-    provider: &ProviderChoice,
-    columns: Vec<ArrayRef>,
-) -> Vec<RecordBatch> {
-    let ExpectedSchema::Schema { fields, .. } = Data::new()
-        .plan(request, provider)
-        .unwrap()
-        .expect()
-        .clone()
-    else {
+fn answer(request: &DataRequest, provider: &Reader, columns: Vec<ArrayRef>) -> Vec<RecordBatch> {
+    let ExpectedSchema::Schema { fields, .. } = provider.expect(request) else {
         panic!("a catalog answer has a fixed shape");
     };
     assert_eq!(fields.len(), columns.len());
@@ -119,12 +109,8 @@ fn answer(
     vec![RecordBatch::try_new(Arc::new(schema), columns).unwrap()]
 }
 
-fn read(
-    request: &DataRequest,
-    provider: &ProviderChoice,
-    batches: &[RecordBatch],
-) -> CatalogAnswer {
-    Data::new().read(request, provider, batches).unwrap()
+fn read(request: &DataRequest, provider: &Reader, batches: &[RecordBatch]) -> CatalogAnswer {
+    provider.read(request, batches).unwrap()
 }
 
 /// The same catalog, as DuckDB answers it and as a host provider answers
@@ -379,7 +365,7 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
             vec![strings(&[Some("x")])],
         )
         .unwrap();
-        let err = Data::new().read(&columns, &provider, &[batch]).unwrap_err();
+        let err = provider.read(&columns, &[batch]).unwrap_err();
         assert_eq!(
             internal(&err),
             (ErrorKind::Internal, ErrorCode::InternalError)
@@ -400,28 +386,28 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
             vec![strings(&[Some("UNIQUE")]), strings(&[Some("a")])],
         )
         .unwrap();
-        let err = Data::new().read(&keys, &provider, &[batch]).unwrap_err();
+        let err = provider.read(&keys, &[batch]).unwrap_err();
         assert_eq!(err.code, ErrorCode::InternalError);
         assert_eq!(err.fields["column"], Detail::text(names[1]));
     }
-    let err = Data::new()
+    let err = Sql::new()
         .read(
             &DataRequest::Preview {
                 table: "t".into(),
                 columns: vec!["c".into()],
                 limit: 1,
             },
-            &duckdb(),
+            &SqlChoice::new("duckdb"),
             &[],
         )
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::InternalError);
     assert_eq!(err.fields["request"], Detail::text("preview"));
     // A dialect this build renders nothing for reads nothing either.
-    let err = Data::new()
+    let err = Sql::new()
         .read(
             &columns,
-            &ProviderChoice::Sql {
+            &SqlChoice {
                 timestamp_encoding: None,
                 dialect: Dialect::new("nope"),
                 namespace: Vec::new(),
@@ -434,11 +420,11 @@ fn an_answer_not_in_its_checked_shape_is_refused_not_a_panic() {
     assert!(!err.fields.contains_key("dialect"));
 }
 
-/// The plan's expected shape is what the reader reads: an answer in the
-/// contract's host shape is not DuckDB's, so a DuckDB plan would refuse it
-/// at admission (check (b)), and the reverse.
+/// The plan's expected shape is what the reader reads: DuckDB's own
+/// catalog's shape is not the standard one, so an answer in either shape
+/// is refused at admission (check (b)) where the other is expected.
 #[test]
-fn a_duckdb_plan_and_a_host_plan_expect_different_catalog_shapes() {
+fn duckdb_s_catalog_shape_and_the_standard_shape_differ() {
     for part in [
         DescribePart::Tables,
         DescribePart::Columns,
@@ -447,17 +433,11 @@ fn a_duckdb_plan_and_a_host_plan_expect_different_catalog_shapes() {
         DescribePart::Indexes,
     ] {
         let request = describe(part);
-        let duckdb = Data::new().plan(&request, &duckdb()).unwrap();
-        let host = Data::new().plan(&request, &host()).unwrap();
-        assert!(matches!(duckdb, FetchPlan::Sql { .. }));
-        assert_eq!(
-            host,
-            FetchPlan::Host {
-                key_sets: Vec::new(),
-                expect: request.expected()
-            }
+        assert_ne!(
+            duckdb().expect(&request),
+            host().expect(&request),
+            "{part:?}"
         );
-        assert_ne!(duckdb.expect(), host.expect(), "{part:?}");
     }
 }
 

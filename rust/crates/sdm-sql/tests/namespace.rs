@@ -11,14 +11,14 @@
 //! name. A Postgres source given no schema has the session's current one
 //! read once per run and every relation named under it.
 
-use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, Dialect, FetchPlan, ProviderChoice, Relation,
-};
-use sdm_contract::{Detail, ErrorCode, Sentence};
-use sdm_sql::Data;
+use sdm_contract::data::{DataRequest, DescribePart, Relation};
 
-fn sql(name: &str, namespace: &[Option<&str>]) -> ProviderChoice {
-    ProviderChoice::Sql {
+use sdm_contract::{Detail, ErrorCode, Sentence};
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice};
+
+fn sql(name: &str, namespace: &[Option<&str>]) -> SqlChoice {
+    SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new(name),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
@@ -26,15 +26,15 @@ fn sql(name: &str, namespace: &[Option<&str>]) -> ProviderChoice {
     }
 }
 
-fn text(request: &DataRequest, provider: &ProviderChoice) -> String {
-    match Data::new().plan(request, provider).unwrap() {
-        FetchPlan::Sql { statements, .. } => statements
-            .iter()
-            .map(|s| s.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n"),
-        FetchPlan::Host { .. } => panic!("a SQL dialect planned a host fetch"),
-    }
+fn text(request: &DataRequest, provider: &SqlChoice) -> String {
+    Sql::new()
+        .plan(request, provider)
+        .unwrap()
+        .statements
+        .iter()
+        .map(|s| s.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn listing() -> DataRequest {
@@ -79,7 +79,7 @@ fn a_postgres_namespace_lists_and_reads_under_its_schema() {
 fn no_namespace_or_a_null_part_reads_no_relation_before_the_schema_is_settled() {
     for current in [sql("postgres", &[]), sql("postgres", &[None])] {
         for request in [listing(), preview(Relation::named("orders"))] {
-            let refused = Data::new().plan(&request, &current).unwrap_err();
+            let refused = Sql::new().plan(&request, &current).unwrap_err();
             assert_eq!(refused.sentence, Sentence::NoCurrentSchema, "{request:?}");
             assert_eq!(refused.code, ErrorCode::InvalidRequest);
             assert_eq!(
@@ -104,7 +104,7 @@ fn a_namespace_the_dialect_cannot_write_is_refused_by_name() {
             preview(Relation::named("t")),
         ),
     ] {
-        let refused = Data::new().plan(&request, &provider).unwrap_err();
+        let refused = Sql::new().plan(&request, &provider).unwrap_err();
         assert_eq!(refused.code, ErrorCode::UnsupportedRequest, "{provider:?}");
         assert_eq!(
             refused.fields.get("field"),
@@ -113,11 +113,7 @@ fn a_namespace_the_dialect_cannot_write_is_refused_by_name() {
         );
     }
     // DuckDB and SQLite read as before with a null part, their current one.
-    assert!(
-        Data::new()
-            .plan(&listing(), &sql("duckdb", &[None]))
-            .is_ok()
-    );
+    assert!(Sql::new().plan(&listing(), &sql("duckdb", &[None])).is_ok());
 }
 
 /// The namespace a relation of one part is read in, which the core asks for

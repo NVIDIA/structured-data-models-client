@@ -10,14 +10,14 @@
 //! text is built past its bound.
 
 use sdm_contract::CoreError;
-use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{TypeClass, ViewTextAnswer, ViewTextAsk};
 use sdm_core::pql::yaml_rules;
 use sdm_core::{view_steps, view_words};
 use sdm_schema::view::metric;
 use sdm_schema::view::spec::ColumnItem;
 use sdm_schema::view::yaml;
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::SqlChoice;
 use sdm_sql::view_expr::metric::DefaultRefusal;
 
 const TYPES: &[&str] = &[
@@ -90,7 +90,7 @@ impl Rng {
 /// The data layer's answers in Databricks's dialect, as the routine asks
 /// them (`DataLayer::view_text`).
 fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-    Data::reading_views(spaces()).view_text(&ProviderChoice::sql("databricks"), question)
+    Sql::reading_views(spaces()).view_text(&SqlChoice::new("databricks"), question)
 }
 
 /// A type's class, as the data layer answers it.

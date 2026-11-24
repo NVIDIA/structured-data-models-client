@@ -78,9 +78,9 @@ use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
 use crate::key_text;
 use crate::pg_values;
+use crate::plan::SqlParam;
 use crate::quote::identifier;
 use crate::sql::{self, Sample, SeedRead, SqlDialect};
-use sdm_contract::data::SqlParam;
 
 /// The dialect's name on the wire.
 pub(crate) const NAME: &str = "postgres";
@@ -560,24 +560,26 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
 /// their position in it, each constraint once, by its name; a foreign key's
 /// columns and the columns it refers to the same way, numbered by name.
 /// The indexes, which the reference never reads, are in the contract's own
-/// shape ([`crate::read::host`]).
+/// shape ([`sdm_contract::catalog_read::standard`]).
 fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     use catalog as k;
     match part {
         // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
-        DescribePart::Tables => crate::read::tables(batches, k::TABLE_NAME),
+        DescribePart::Tables => sdm_contract::catalog_read::tables(batches, k::TABLE_NAME),
         DescribePart::Columns => {
             let mut found = Vec::new();
             for batch in batches {
-                let names = crate::read::strings(batch, k::COLUMN_NAME)?;
-                let nullable = crate::read::strings(batch, k::IS_NULLABLE)?;
-                let declared = crate::read::strings(batch, k::FORMAT_TYPE)?;
+                let names = sdm_contract::catalog_read::strings(batch, k::COLUMN_NAME)?;
+                let nullable = sdm_contract::catalog_read::strings(batch, k::IS_NULLABLE)?;
+                let declared = sdm_contract::catalog_read::strings(batch, k::FORMAT_TYPE)?;
                 for row in 0..batch.num_rows() {
                     found.push(CatalogColumn {
-                        name: crate::read::text(names, row).unwrap_or_default(),
-                        declared_type: crate::read::text(declared, row).unwrap_or_default(),
-                        not_null: crate::read::text(nullable, row).as_deref() == Some("NO"),
+                        name: sdm_contract::catalog_read::text(names, row).unwrap_or_default(),
+                        declared_type: sdm_contract::catalog_read::text(declared, row)
+                            .unwrap_or_default(),
+                        not_null: sdm_contract::catalog_read::text(nullable, row).as_deref()
+                            == Some("NO"),
                         primary_key: false,
                         key_nullable: false,
                         unique: false,
@@ -590,19 +592,19 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
         DescribePart::Keys => {
             let mut keys: BTreeMap<(String, String), Vec<(i32, String)>> = BTreeMap::new();
             for batch in batches {
-                let kinds = crate::read::strings(batch, k::CONSTRAINT_TYPE)?;
-                let names = crate::read::strings(batch, k::CONSTRAINT_NAME)?;
-                let columns = crate::read::strings(batch, k::COLUMN_NAME)?;
+                let kinds = sdm_contract::catalog_read::strings(batch, k::CONSTRAINT_TYPE)?;
+                let names = sdm_contract::catalog_read::strings(batch, k::CONSTRAINT_NAME)?;
+                let columns = sdm_contract::catalog_read::strings(batch, k::COLUMN_NAME)?;
                 let positions = int32s(batch, 3)?;
                 for row in 0..batch.num_rows() {
                     keys.entry((
-                        crate::read::text(names, row).unwrap_or_default(),
-                        crate::read::text(kinds, row).unwrap_or_default(),
+                        sdm_contract::catalog_read::text(names, row).unwrap_or_default(),
+                        sdm_contract::catalog_read::text(kinds, row).unwrap_or_default(),
                     ))
                     .or_default()
                     .push((
                         positions.value(row),
-                        crate::read::text(columns, row).unwrap_or_default(),
+                        sdm_contract::catalog_read::text(columns, row).unwrap_or_default(),
                     ));
                 }
             }
@@ -640,14 +642,17 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
                 let positions = int32s(batch, 5)?;
                 for row in 0..batch.num_rows() {
                     let entry = keys
-                        .entry(crate::read::text(names, row).unwrap_or_default())
+                        .entry(sdm_contract::catalog_read::text(names, row).unwrap_or_default())
                         .or_insert_with(|| {
-                            (crate::read::text(tables, row).unwrap_or_default(), vec![])
+                            (
+                                sdm_contract::catalog_read::text(tables, row).unwrap_or_default(),
+                                vec![],
+                            )
                         });
                     entry.1.push((
                         positions.value(row),
-                        crate::read::text(columns, row).unwrap_or_default(),
-                        crate::read::text(referenced, row).unwrap_or_default(),
+                        sdm_contract::catalog_read::text(columns, row).unwrap_or_default(),
+                        sdm_contract::catalog_read::text(referenced, row).unwrap_or_default(),
                     ));
                 }
             }
@@ -671,8 +676,12 @@ fn read(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, Co
             ))
         }
         // The schema, none where the session has none.
-        DescribePart::Namespace => crate::read::namespace(batches, k::CURRENT_SCHEMA),
-        DescribePart::Indexes | DescribePart::IndexColumns => crate::read::host(part, batches),
+        DescribePart::Namespace => {
+            sdm_contract::catalog_read::namespace(batches, k::CURRENT_SCHEMA)
+        }
+        DescribePart::Indexes | DescribePart::IndexColumns => {
+            sdm_contract::catalog_read::standard(part, batches)
+        }
     }
 }
 

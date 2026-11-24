@@ -11,7 +11,7 @@
 //! Each step reads through the run's asker and sees its answer before the
 //! next, as the old client did; every question of the view's text is the
 //! data layer's (`DataLayer::view_text`), and every failure is read by the
-//! fact that fits what was asked (`DataLayer::failure`). The
+//! fact that fits what was asked (`DataAccess::failure`). The
 //! logical model is `sdm-schema`'s ([`sdm_schema::view::model`]); each
 //! logical table reads a relation the data layer renders, which lives in
 //! the run alone ([`Converted::relations`]).

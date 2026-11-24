@@ -5,10 +5,10 @@
 //! bounds retain each native SQL language's original placement.
 //! These unit requests do not add warehouse acceptance cases or fixtures.
 
-use sdm_contract::data::{
-    DataLayer, DataRequest, Dialect, FetchPlan, NeighborLimit, ProviderChoice,
-};
-use sdm_sql::Data;
+use sdm_contract::data::{DataRequest, NeighborLimit};
+
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice, SqlPlan};
 
 fn rendered(dialect: &str, limit: NeighborLimit) -> String {
     let table = match dialect {
@@ -32,15 +32,13 @@ fn rendered(dialect: &str, limit: NeighborLimit) -> String {
         unreachable!()
     };
     *per_seed = Some(limit);
-    let provider = ProviderChoice::Sql {
+    let provider = SqlChoice {
         dialect: Dialect::new(dialect),
         namespace: vec![],
         view: None,
         timestamp_encoding: None,
     };
-    let FetchPlan::Sql { statements, .. } = Data::new().plan(&request, &provider).unwrap() else {
-        panic!("not SQL")
-    };
+    let SqlPlan { statements, .. } = Sql::new().plan(&request, &provider).unwrap();
     statements
         .into_iter()
         .map(|statement| statement.text)

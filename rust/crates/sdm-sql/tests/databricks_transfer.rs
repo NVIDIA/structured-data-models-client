@@ -8,10 +8,11 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderChoice, Relation};
-use sdm_sql::Data;
+use sdm_contract::data::{DataRequest, Relation};
+use sdm_sql::Sql;
+use sdm_sql::plan::{SqlChoice, SqlPlan};
 
-fn provider() -> ProviderChoice {
+fn provider() -> SqlChoice {
     serde_json::from_str(r#"{"provider":"sql","dialect":"databricks","namespace":["main","test"],"timestamp_encoding":"microseconds"}"#).unwrap()
 }
 
@@ -43,14 +44,12 @@ fn instant_and_wall_projection_preserve_their_distinct_meaning_and_positions() {
         limit: 5,
     };
     let choice = provider();
-    let plan = Data::new().plan(&request, &choice).unwrap();
-    let before = Data::new()
+    let plan = Sql::new().plan(&request, &choice).unwrap();
+    let before = Sql::new()
         .result_metadata(&choice, &request, &plan)
         .unwrap()
         .unwrap();
-    let FetchPlan::Sql { statements, .. } = before else {
-        panic!("SQL")
-    };
+    let SqlPlan { statements, .. } = before;
     assert!(
         statements
             .last()
@@ -63,7 +62,7 @@ fn instant_and_wall_projection_preserve_their_distinct_meaning_and_positions() {
         ("at`time", "timestamp_ntz"),
         ("zoned", "timestamp"),
     ]);
-    let projected = Data::new()
+    let projected = Sql::new()
         .project_result(&choice, &request, &plan, &[types])
         .unwrap();
     let value = serde_json::to_value(&projected).unwrap();
@@ -95,9 +94,9 @@ fn instant_and_wall_projection_preserve_their_distinct_meaning_and_positions() {
     assert!(sql.ends_with(" LIMIT 5"));
     assert!(sql.contains("`id`, "));
     assert!(!sql.contains("CAST(`zoned` AS TIMESTAMP_NTZ)"), "{sql}");
-    let native = ProviderChoice::sql("databricks");
+    let native = SqlChoice::new("databricks");
     assert!(
-        Data::new()
+        Sql::new()
             .result_metadata(&native, &request, &plan)
             .unwrap()
             .is_none()
@@ -112,13 +111,13 @@ fn precise_timestamp_names_are_selected_from_metadata_not_output_names() {
         limit: 1,
     };
     let choice = provider();
-    let plan = Data::new().plan(&request, &choice).unwrap();
+    let plan = Sql::new().plan(&request, &choice).unwrap();
     let types = metadata(&[
         ("naive_name", "TIMESTAMP_LTZ(6)"),
         ("utc_name", "TIMESTAMP_NTZ(6)"),
         ("id", "bigint"),
     ]);
-    let projected = Data::new()
+    let projected = Sql::new()
         .project_result(&choice, &request, &plan, &[types])
         .unwrap();
     let value = serde_json::to_value(&projected).unwrap();
@@ -140,9 +139,9 @@ fn metadata_without_ntz_keeps_the_original_plan_exactly() {
         limit: None,
     };
     let choice = provider();
-    let plan = Data::new().plan(&request, &choice).unwrap();
+    let plan = Sql::new().plan(&request, &choice).unwrap();
     assert_eq!(
-        Data::new()
+        Sql::new()
             .project_result(&choice, &request, &plan, &[metadata(&[("id", "bigint")])])
             .unwrap(),
         plan

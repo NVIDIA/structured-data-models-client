@@ -15,15 +15,13 @@ use std::sync::Arc;
 use arrow_array::{Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use sdm_contract::ErrorKind;
-use sdm_contract::data::{
-    AttachmentId, DataLayer, DataRequest, Dialect, FetchPlan, KeyData, ProviderChoice,
-    ProviderError, SqlTimestampEncoding,
-};
-use sdm_sql::Data;
+use sdm_contract::data::{AttachmentId, DataRequest, KeyData, ProviderError};
+use sdm_sql::Sql;
 use sdm_sql::kit::{Answered, KitError, KitFetch, SqlKit};
+use sdm_sql::plan::{Dialect, SqlChoice, SqlPlan, SqlTimestampEncoding};
 
-fn choice(dialect: &str) -> ProviderChoice {
-    ProviderChoice::Sql {
+fn choice(dialect: &str) -> SqlChoice {
+    SqlChoice {
         dialect: Dialect::new(dialect),
         namespace: if dialect == "postgres" {
             vec![Some("public".to_owned())]
@@ -97,7 +95,7 @@ fn rows(fetch: usize) -> Answered {
 /// handed, by id, as row counts.
 #[derive(Debug, PartialEq)]
 struct Asked {
-    plan: FetchPlan,
+    plan: SqlPlan,
     keys: BTreeMap<AttachmentId, usize>,
 }
 
@@ -129,11 +127,11 @@ fn ask(
 /// The fetches the core's run asks today for `request` on `provider`: the
 /// data layer's plan, bound with `keys`.
 fn core_fetches(
-    provider: &ProviderChoice,
+    provider: &SqlChoice,
     request: &DataRequest,
     keys: &BTreeMap<AttachmentId, KeyData>,
 ) -> Vec<Asked> {
-    let data = Data::new();
+    let data = Sql::new();
     let plan = data.plan(request, provider).unwrap();
     assert!(
         data.result_metadata(provider, request, &plan)
@@ -198,7 +196,7 @@ fn a_postgres_key_set_past_the_budget_runs_one_fetch_per_chunk_joined_in_order()
 
 #[test]
 fn a_databricks_source_needing_microsecond_timestamps_reads_the_result_schema_first() {
-    let provider = ProviderChoice::Sql {
+    let provider = SqlChoice {
         dialect: Dialect::new("databricks"),
         namespace: Vec::new(),
         view: None,
@@ -206,7 +204,7 @@ fn a_databricks_source_needing_microsecond_timestamps_reads_the_result_schema_fi
     };
     let request = lookup(r#""main","shop","users""#);
     let keys = seeds(3);
-    let data = Data::new();
+    let data = Sql::new();
     let plan = data.plan(&request, &provider).unwrap();
     let metadata = data
         .result_metadata(&provider, &request, &plan)
@@ -324,10 +322,13 @@ fn a_driver_failure_is_the_provider_s_error_with_what_it_means() {
 
 #[test]
 fn a_host_provider_or_an_unknown_dialect_has_no_kit() {
-    let host: ProviderChoice =
-        serde_json::from_str(r#"{"provider":"host","capabilities":{"optional":[],"sampling":"seeded_stable","max_seed":0}}"#)
-            .unwrap();
-    assert!(SqlKit::new(host, None).is_err());
+    // A provider declaring what it answers is no SQL source.
+    assert!(
+        serde_json::from_str::<SqlChoice>(
+            r#"{"provider":"host","capabilities":{"optional":[],"sampling":"seeded_stable","max_seed":0}}"#
+        )
+        .is_err()
+    );
     assert!(SqlKit::new(choice("oracle"), None).is_err());
 }
 
@@ -355,7 +356,7 @@ fn the_kit_declares_what_the_core_declares_for_its_source() {
         assert_eq!(declared.namespace, namespace, "{dialect}");
         assert_eq!(
             declared.namespace_first,
-            Data::new().unsettled(&provider),
+            Sql::new().unsettled(&provider),
             "{dialect}"
         );
         declared.namespace_first = false;
@@ -366,7 +367,7 @@ fn the_kit_declares_what_the_core_declares_for_its_source() {
         declared.namespace = Vec::new();
         assert_eq!(
             declared,
-            Data::new().capabilities(&provider).unwrap(),
+            Sql::new().capabilities(&provider).unwrap(),
             "{dialect}"
         );
     }
@@ -381,35 +382,24 @@ fn a_source_answering_through_the_kit_reads_as_its_sql_source() {
     use sdm_contract::data::Relation;
     for dialect in ["duckdb", "sqlite", "postgres", "databricks", "snowflake"] {
         let sql = choice(dialect);
-        let host = ProviderChoice::Host {
-            capabilities: SqlKit::new(sql.clone(), None)
-                .unwrap()
-                .capabilities()
-                .unwrap(),
-        };
-        let data = Data::new();
-        assert_eq!(data.source_database(&host), data.source_database(&sql));
+        let host = SqlKit::new(sql.clone(), None)
+            .unwrap()
+            .capabilities()
+            .unwrap();
+        let data = Sql::new();
+        assert_eq!(host.database, data.source_database(&sql));
+        assert_eq!(!host.column_affinities, data.holds_column_types(&sql));
         assert_eq!(
-            data.holds_column_types(&host),
-            data.holds_column_types(&sql)
-        );
-        assert_eq!(
-            data.reads_tables_as_they_stand(&host),
+            host.reads_tables_as_they_stand,
             data.reads_tables_as_they_stand(&sql)
         );
-        assert_eq!(data.unsettled(&host), data.unsettled(&sql));
+        assert_eq!(host.namespace_first, data.unsettled(&sql));
         for relation in [
             Relation::of(vec!["users".to_owned()]),
             Relation::of(vec!["Main".to_owned(), "Users".to_owned()]),
         ] {
-            assert_eq!(
-                data.read_as(&host, &relation),
-                data.read_as(&sql, &relation)
-            );
-            assert_eq!(
-                data.spellings(&host, &relation),
-                data.spellings(&sql, &relation)
-            );
+            assert_eq!(host.read_as(&relation), data.read_as(&sql, &relation));
+            assert_eq!(host.spellings(&relation), data.spellings(&sql, &relation));
         }
     }
 }
@@ -435,7 +425,7 @@ fn a_namespace_left_to_the_connection_is_settled_once_and_kept_for_the_run() {
     )
     .unwrap();
     // What the core reads of the same answer from a SQL source today.
-    let data = Data::new();
+    let data = Sql::new();
     let read = data.read(&asked, &sql, std::slice::from_ref(&row));
     let (answer, _) = ask(&kit, &asked, &BTreeMap::new(), |_, _| {
         Ok(Answered {

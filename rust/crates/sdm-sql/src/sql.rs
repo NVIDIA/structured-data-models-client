@@ -22,14 +22,18 @@
 
 use std::collections::BTreeSet;
 
+use crate::plan::{
+    Dialect, SqlParam, SqlPlan, SqlResultConversion, SqlStatement, SqlTimestampKind,
+};
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    BATCH_COLUMN, DataRequest, DescribePart, Dialect, ExpectedSchema, FailureFacts, FetchPlan,
-    Filter, KeySet, OptionalRequest, ProviderCapabilities, ProviderError, Relation, SEED_BATCH,
-    SqlParam, SqlResultConversion, SqlStatement, SqlTimestampKind, TableColumn, TableKey, TieBreak,
-    TieTerm, Window, refuse_derived, refuse_relation, refused, seed_key_columns,
+    BATCH_COLUMN, DataRequest, DescribePart, ExpectedSchema, FailureFacts, Filter, KeySet,
+    OptionalRequest, ProviderCapabilities, ProviderError, Relation, SEED_BATCH, TableColumn,
+    TableKey, TieBreak, TieTerm, Window, refuse_derived, refuse_relation, refused,
+    seed_key_columns,
 };
+
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
 
@@ -441,22 +445,22 @@ pub(crate) trait SqlDialect: Sync {
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError>;
 
-    // --- what the core asks of a provider (`DataLayer`) -------------------------
+    // --- what the kit asks of a source ([`crate::Sql`]) -----------------------
 
-    /// What a provider's failure says (`DataLayer::failure`): no fact, the
+    /// What a provider's failure says ([`crate::Sql::failure`]): no fact, the
     /// default, so every failure stays the provider's error.
     fn failure(&self, _error: &ProviderError) -> FailureFacts {
         FailureFacts::default()
     }
 
     /// The name forms the catalog read of `relation` tries, in order
-    /// (`DataLayer::spellings`): as given alone, the default.
+    /// ([`crate::Sql::spellings`]): as given alone, the default.
     fn spellings(&self, relation: &Relation) -> Vec<Relation> {
         vec![relation.clone()]
     }
 
     /// The answer's values conformed to the reference's reading, if the
-    /// dialect changes any (`DataLayer::conform`).
+    /// dialect changes any ([`crate::Sql::conform`]).
     fn conform(
         &self,
         _schema: &arrow_schema::SchemaRef,
@@ -468,7 +472,7 @@ pub(crate) trait SqlDialect: Sync {
 
     /// Whether the source holds a type per column that a caller's type
     /// must match: `true`, the default; SQLite's columns hold affinities
-    /// only (`DataLayer::holds_column_types`).
+    /// only ([`crate::Sql::holds_column_types`]).
     fn holds_column_types(&self) -> bool {
         true
     }
@@ -756,7 +760,7 @@ pub(crate) fn plan(
     request: &DataRequest,
     namespace: &[String],
     offset: usize,
-) -> Result<FetchPlan, CoreError> {
+) -> Result<SqlPlan, CoreError> {
     plan_projected(dialect, request, namespace, offset, &[])
 }
 
@@ -768,7 +772,7 @@ pub(crate) fn plan_projected(
     namespace: &[String],
     offset: usize,
     conversions: &[SqlResultConversion],
-) -> Result<FetchPlan, CoreError> {
+) -> Result<SqlPlan, CoreError> {
     let d = dialect;
     if conversions
         .iter()
@@ -994,7 +998,7 @@ pub(crate) fn plan_projected(
         .map(|text| statement(text, vec![]))
         .collect();
     statements.push(statement(text, params));
-    Ok(FetchPlan::Sql {
+    Ok(SqlPlan {
         result_conversions: conversions.to_vec(),
         statements,
         expect: d.expected(request),

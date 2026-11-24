@@ -92,7 +92,7 @@ fn the_warehouse_samplers_fields_are_optional_and_round_trip() {
         }
     ));
     // The error's class is a fact the host hands over; what it means is
-    // the data layer's to say (`DataLayer::failure`).
+    // the source's to say (`ProviderError::facts`).
     let error: ProviderError = read(json!({
         "kind": "data_source", "retryable": false, "sqlstate": "42703",
         "vendor_code": null, "error_class": "UNRESOLVED_COLUMN"

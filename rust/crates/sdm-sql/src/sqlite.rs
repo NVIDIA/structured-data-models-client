@@ -59,9 +59,9 @@ use sdm_contract::ops::Dtype;
 use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Sentence};
 
 use crate::mt19937::{HASH_PRIME, coefficients};
+use crate::plan::SqlParam;
 use crate::quote::{identifier, text};
 use crate::sql::{self, Sample, SeedRead, SqlDialect};
-use sdm_contract::data::SqlParam;
 
 /// The dialect's name on the wire.
 pub(crate) const NAME: &str = "sqlite";
@@ -802,7 +802,7 @@ fn read(
     match part {
         // No view is read here: only a dialect that reads views answers it.
         DescribePart::KeyEnforcement | DescribePart::ViewDefinition => Err(views_unread()),
-        DescribePart::Namespace => crate::read::namespace(batches, c::NAME),
+        DescribePart::Namespace => sdm_contract::catalog_read::namespace(batches, c::NAME),
         DescribePart::Tables => {
             let mut found = Vec::new();
             for batch in batches {

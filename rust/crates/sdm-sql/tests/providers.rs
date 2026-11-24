@@ -6,11 +6,11 @@
 //! this build renders: each listed one answers its capabilities, and the
 //! corpus's other databases are refused as dialects it does not render.
 
-use sdm_contract::data::{DataLayer, Dialect, ProviderChoice};
-use sdm_sql::{Data, PROVIDERS};
+use sdm_sql::plan::{Dialect, SqlChoice};
+use sdm_sql::{PROVIDERS, Sql};
 
-fn sql(name: &str) -> ProviderChoice {
-    ProviderChoice::Sql {
+fn sql(name: &str) -> SqlChoice {
+    SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new(name),
         namespace: Vec::new(),
@@ -22,7 +22,7 @@ fn sql(name: &str) -> ProviderChoice {
 fn every_listed_provider_renders_and_no_other_does() {
     assert!(PROVIDERS.contains(&"duckdb"));
     for name in ["duckdb", "sqlite", "postgres"] {
-        let renders = Data::new().capabilities(&sql(name)).is_ok();
+        let renders = Sql::new().capabilities(&sql(name)).is_ok();
         assert_eq!(renders, PROVIDERS.contains(&name), "{name}");
     }
 }

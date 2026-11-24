@@ -6,7 +6,6 @@
 //! Authored inputs assert joins, parameters, dimensions, measures and refusals.
 
 use sdm_contract::CoreError;
-use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_core::pql::yaml_rules;
 use sdm_core::view::definition::{self as view_definition, Dimension};
@@ -16,7 +15,8 @@ use sdm_schema::view::joins::JoinWalk;
 use sdm_schema::view::metric;
 use sdm_schema::view::spec::{Cardinality, JoinKeys, RefusalReason, Source, TableItem, ViewSpec};
 use sdm_schema::view::yaml::Value;
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::SqlChoice;
 use sdm_sql::view_expr::metric as data;
 use sdm_sql::view_expr::strip_comments;
 use serde_json::Value as Json;
@@ -24,7 +24,7 @@ use serde_json::Value as Json;
 /// The data layer's answers in Databricks's dialect, as the routine asks
 /// them (`DataLayer::view_text`).
 fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-    Data::reading_views(spaces()).view_text(&ProviderChoice::sql("databricks"), question)
+    Sql::reading_views(spaces()).view_text(&SqlChoice::new("databricks"), question)
 }
 
 /// `unquote_ident`: a name in backticks, unquoted, else as written.

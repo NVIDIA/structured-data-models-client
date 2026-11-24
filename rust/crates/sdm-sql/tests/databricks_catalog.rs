@@ -6,9 +6,10 @@
 use arrow_array::{ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
 use sdm_contract::catalog::{CatalogAnswer, KeyKind};
-use sdm_contract::data::{DataLayer, DataRequest, DescribePart, ProviderChoice};
+use sdm_contract::data::{DataRequest, DescribePart};
 use sdm_contract::ops::Dtype;
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::SqlChoice;
 use std::sync::Arc;
 
 fn batch(names: &[&str], rows: &[Vec<String>]) -> RecordBatch {
@@ -38,7 +39,7 @@ fn read(part: DescribePart, input: RecordBatch) -> Result<CatalogAnswer, sdm_con
         ],
         part,
     };
-    Data::new().read(&request, &ProviderChoice::sql("databricks"), &[input])
+    Sql::new().read(&request, &SqlChoice::new("databricks"), &[input])
 }
 const COLUMNS: &[&str] = &[
     "column_name",

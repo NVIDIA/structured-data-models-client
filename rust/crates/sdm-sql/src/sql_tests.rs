@@ -10,12 +10,12 @@
 //! The statements themselves are held by the goldens and by
 //! `tests/dialect_matrix.rs`.
 
+use crate::plan::SqlParam;
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    DataRequest, DescribePart, Determinism, ExpectedSchema, FetchPlan, Filter, KeySet,
-    ProviderCapabilities, Relation, SeedBound, SqlParam, TableColumn, TableKey, TieTerm, Window,
-    field, seed_integer,
+    DataRequest, DescribePart, Determinism, ExpectedSchema, Filter, KeySet, ProviderCapabilities,
+    Relation, SeedBound, TableColumn, TableKey, TieTerm, Window, field, seed_integer,
 };
 use sdm_contract::{ColumnType, CoreError, Detail, Scalar, Unit};
 
@@ -292,19 +292,15 @@ impl SqlDialect for Plain {
         part: DescribePart,
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError> {
-        crate::read::host(part, batches)
+        sdm_contract::catalog_read::standard(part, batches)
     }
 }
 
 /// `request`'s statements on [`Plain`].
 fn plain(request: &DataRequest) -> Result<Vec<String>, CoreError> {
-    match sql::plan(&Plain, request, &[], 0)? {
-        FetchPlan::Sql { statements, .. } => {
-            assert!(statements.iter().all(|s| s.dialect.name() == "plain"));
-            Ok(statements.into_iter().map(|s| s.text).collect())
-        }
-        FetchPlan::Host { .. } => panic!("a dialect planned a host fetch"),
-    }
+    let statements = sql::plan(&Plain, request, &[], 0)?.statements;
+    assert!(statements.iter().all(|s| s.dialect.name() == "plain"));
+    Ok(statements.into_iter().map(|s| s.text).collect())
 }
 
 #[test]
@@ -475,9 +471,7 @@ fn a_catalog_statement_keeps_the_parameters_its_dialect_binds() {
         tables: vec![relation(&["Orders"])],
         part: DescribePart::Columns,
     };
-    let FetchPlan::Sql { statements, .. } = sql::plan(&Plain, &request, &[], 0).unwrap() else {
-        panic!("a dialect planned a host fetch");
-    };
+    let statements = sql::plan(&Plain, &request, &[], 0).unwrap().statements;
     let [statement] = statements.as_slice() else {
         panic!("one catalog statement, not {}", statements.len());
     };
@@ -492,7 +486,7 @@ fn a_catalog_statement_keeps_the_parameters_its_dialect_binds() {
         }]
     );
     // A catalog statement binding nothing carries no parameter.
-    let FetchPlan::Sql { statements, .. } = sql::plan(
+    let statements = sql::plan(
         &Plain,
         &DataRequest::Describe {
             tables: vec![],
@@ -501,9 +495,8 @@ fn a_catalog_statement_keeps_the_parameters_its_dialect_binds() {
         &[],
         0,
     )
-    .unwrap() else {
-        panic!("a dialect planned a host fetch");
-    };
+    .unwrap()
+    .statements;
     assert!(statements.iter().all(|s| s.params.is_empty()));
 }
 

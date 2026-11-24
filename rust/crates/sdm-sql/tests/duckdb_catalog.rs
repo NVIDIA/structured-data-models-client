@@ -9,12 +9,11 @@
 //! for a `describe`, the reference statement's own columns, which
 //! `sdm-sql` reads into the contract's catalog answer.
 
-use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, Dialect, ExpectedSchema, FetchPlan, ProviderChoice,
-    TableColumn, TableKey,
-};
+use sdm_contract::data::{DataRequest, DescribePart, ExpectedSchema, TableColumn, TableKey};
+
 use sdm_contract::{ErrorCode, ErrorKind};
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice, SqlPlan};
 
 /// The statements the reference ran on `base.regression`, in order, through
 /// `Schema.from_source` and the first steps of `materialize`, as the
@@ -34,8 +33,8 @@ const REFERENCE: [&str; 12] = [
     "SELECT\n  0 as table_index,\n  MIN(CAST(\"ts\" AS TIMESTAMP)) as min_date,\n  MAX(CAST(\"ts\" AS TIMESTAMP)) as max_date\nFROM \"orders\"",
 ];
 
-fn duckdb() -> ProviderChoice {
-    ProviderChoice::Sql {
+fn duckdb() -> SqlChoice {
+    SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new("duckdb"),
         namespace: Vec::new(),
@@ -70,27 +69,23 @@ fn catalog_columns(part: DescribePart) -> &'static [&'static str] {
 
 /// The one statement `request` renders to, its expected schema checked.
 fn rendered(request: &DataRequest) -> String {
-    match Data::new().plan(request, &duckdb()).unwrap() {
-        FetchPlan::Sql {
-            statements, expect, ..
-        } => {
-            match request {
-                DataRequest::Describe { part, .. } => {
-                    let ExpectedSchema::Schema { fields, .. } = &expect else {
-                        panic!("a catalog answer has a fixed shape");
-                    };
-                    let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
-                    assert_eq!(names, catalog_columns(*part));
-                }
-                _ => assert_eq!(expect, request.expected()),
-            }
-            assert_eq!(statements.len(), 1);
-            assert!(statements[0].params.is_empty());
-            assert_eq!(statements[0].dialect, Dialect::new("duckdb"));
-            statements[0].text.clone()
+    let SqlPlan {
+        statements, expect, ..
+    } = Sql::new().plan(request, &duckdb()).unwrap();
+    match request {
+        DataRequest::Describe { part, .. } => {
+            let ExpectedSchema::Schema { fields, .. } = &expect else {
+                panic!("a catalog answer has a fixed shape");
+            };
+            let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
+            assert_eq!(names, catalog_columns(*part));
         }
-        other => panic!("not SQL: {other:?}"),
+        _ => assert_eq!(expect, request.expected()),
     }
+    assert_eq!(statements.len(), 1);
+    assert!(statements[0].params.is_empty());
+    assert_eq!(statements[0].dialect, Dialect::new("duckdb"));
+    statements[0].text.clone()
 }
 
 fn describe(tables: &[&str], part: DescribePart) -> DataRequest {
@@ -223,7 +218,7 @@ fn the_column_ranges_are_the_reference_s_whole_table_query() {
         text,
         "SELECT COUNT(*), MIN(\"happ\"\"ened\"), MAX(\"happ\"\"ened\"), COUNT(\"happ\"\"ened\"), MIN(\"due_on\"), MAX(\"due_on\"), COUNT(\"due_on\"), MIN(\"at_time\"), MAX(\"at_time\"), COUNT(\"at_time\"), MIN(\"created_at\"), MAX(\"created_at\"), COUNT(\"created_at\")\nFROM \"evs\""
     );
-    let err = Data::new()
+    let err = Sql::new()
         .plan(
             &DataRequest::ColumnRanges {
                 table: "evs".into(),
@@ -247,7 +242,7 @@ fn a_repeated_key_is_read_as_the_reference_reads_one() {
         text,
         "SELECT \"payment_id\"\nFROM \"payments\"\nWHERE \"payment_id\" IS NOT NULL\nGROUP BY \"payment_id\"\nHAVING COUNT(*) > 1\nLIMIT 1"
     );
-    let err = Data::new()
+    let err = Sql::new()
         .plan(
             &DataRequest::RepeatedKey {
                 table: "payments".into(),
@@ -267,7 +262,7 @@ fn a_part_read_per_table_or_whole_is_refused_otherwise() {
         DescribePart::ForeignKeys,
     ] {
         for tables in [&[][..], &["a", "b"][..]] {
-            let err = Data::new()
+            let err = Sql::new()
                 .plan(&describe(tables, part), &duckdb())
                 .unwrap_err();
             assert_eq!(
@@ -277,26 +272,23 @@ fn a_part_read_per_table_or_whole_is_refused_otherwise() {
         }
     }
     // The indexes are read whole, as the reference reads them.
-    let err = Data::new()
+    let err = Sql::new()
         .plan(&describe(&["a"], DescribePart::Indexes), &duckdb())
         .unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
     // The table list with a name asked: the relations, tables or views,
     // DuckDB would read under it, matched as DuckDB folds a name (
     // fix 2; sdm-testkit's duckdb_provider.rs runs it).
-    let FetchPlan::Sql { statements, .. } = Data::new()
+    let SqlPlan { statements, .. } = Sql::new()
         .plan(&describe(&["O'Brien"], DescribePart::Tables), &duckdb())
-        .unwrap()
-    else {
-        panic!("DuckDB answers with SQL");
-    };
+        .unwrap();
     let text = &statements[0].text;
     assert!(
         text.contains("duckdb_tables()") && text.contains("duckdb_views()"),
         "{text}"
     );
     assert!(text.contains("'O''Brien'"), "{text}");
-    let err = Data::new().plan(&preview("t", &[]), &duckdb()).unwrap_err();
+    let err = Sql::new().plan(&preview("t", &[]), &duckdb()).unwrap_err();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }
 
@@ -305,10 +297,12 @@ fn a_part_read_per_table_or_whole_is_refused_otherwise() {
 /// a filter of another kind is not taken, by name.
 #[test]
 fn a_scan_and_a_count_of_rows_render() {
-    let text = |request: &DataRequest| match Data::new().plan(request, &duckdb()).unwrap() {
-        FetchPlan::Sql { statements, .. } => statements[0].text.clone(),
-        other => panic!("{other:?}"),
+    let text = |request: &DataRequest| {
+        Sql::new().plan(request, &duckdb()).unwrap().statements[0]
+            .text
+            .clone()
     };
+
     let not_null = || vec![sdm_contract::data::Filter::NotNull { column: "k".into() }];
     let scan = |filters, limit| DataRequest::Scan {
         table: "t".into(),
@@ -333,48 +327,65 @@ fn a_scan_and_a_count_of_rows_render() {
         lower: None,
         upper: None,
     }];
-    let err = Data::new()
-        .plan(&scan(ranged, None), &duckdb())
-        .unwrap_err();
+    let err = Sql::new().plan(&scan(ranged, None), &duckdb()).unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
 }
 
+/// A source of a built-in database answers the core in its engine's own
+/// shape, as its SQL returns it, but a `describe` in the standard shape
+/// every source answers in (`Databases::expected`); a source declaring no
+/// database in the contract's fixed shapes.
 #[test]
-fn a_host_provider_is_held_to_the_contract_s_shapes() {
-    let host = ProviderChoice::Host {
-        capabilities: Data::new().capabilities(&duckdb()).unwrap(),
+fn a_source_s_answer_shape_is_its_database_s() {
+    use sdm_contract::data::DataLayer;
+    let databases = sdm_sql::Databases::new(spaces());
+    let declared = sdm_sql::kit::SqlKit::new(duckdb(), None)
+        .unwrap()
+        .capabilities()
+        .unwrap();
+    let mut caller = declared.clone();
+    caller.database = None;
+    let key_counts = DataRequest::KeyCounts {
+        keys: vec![TableKey {
+            unique: false,
+            table: "t".into(),
+            columns: vec!["k".into()],
+            label: None,
+        }],
     };
     for request in [
         describe(&["t"], DescribePart::Columns),
-        DataRequest::KeyCounts {
-            keys: vec![TableKey {
-                unique: false,
-                table: "t".into(),
-                columns: vec!["k".into()],
-                label: None,
-            }],
-        },
+        key_counts.clone(),
         preview("t", &["c"]),
     ] {
-        assert_eq!(
-            Data::new().plan(&request, &host).unwrap(),
-            FetchPlan::Host {
-                key_sets: Vec::new(),
-                expect: request.expected()
-            }
-        );
+        assert_eq!(databases.expected(&caller, &request), request.expected());
     }
+    assert_eq!(
+        databases.expected(&declared, &describe(&["t"], DescribePart::Columns)),
+        describe(&["t"], DescribePart::Columns).expected()
+    );
+    assert_eq!(
+        databases.expected(&declared, &key_counts),
+        Sql::new().plan(&key_counts, &duckdb()).unwrap().expect
+    );
     assert!(matches!(
         describe(&["t"], DescribePart::Keys).expected(),
         ExpectedSchema::Schema { .. }
     ));
 }
 
+fn spaces() -> &'static sdm_sql::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(char::is_whitespace));
+    &SPACES
+}
+
 /// A table whose name, in any case, is the one the seeds are bound by is
 /// read, not shadowed: its statement binds the seeds under another name.
 #[test]
 fn a_table_named_as_the_seeds_are_is_still_the_table_read() {
-    use sdm_contract::data::{AttachmentId, KeySet, SqlParam};
+    use sdm_contract::data::{AttachmentId, KeySet};
+    use sdm_sql::plan::SqlParam;
     for table in ["__sdm_seeds__", "__SDM_Seeds__", "orders"] {
         let request = DataRequest::Lookup {
             table: table.into(),
@@ -392,10 +403,7 @@ fn a_table_named_as_the_seeds_are_is_still_the_table_read() {
                     .into(),
             },
         };
-        let FetchPlan::Sql { statements, .. } = Data::new().plan(&request, &duckdb()).unwrap()
-        else {
-            panic!("not SQL");
-        };
+        let SqlPlan { statements, .. } = Sql::new().plan(&request, &duckdb()).unwrap();
         let [SqlParam::KeySet { relation, .. }] = statements[0].params.as_slice() else {
             panic!("not one key set");
         };

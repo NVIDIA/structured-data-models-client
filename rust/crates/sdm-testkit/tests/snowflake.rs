@@ -16,12 +16,16 @@ use arrow_array::types::Int64Type;
 use arrow_array::{Array, ArrayRef, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use sdm_contract::catalog::{CatalogAnswer, CatalogForeignKey, KeyKind};
+use sdm_contract::catalog_read::standard;
 use sdm_contract::data::{
-    DataLayer, DataRequest, Determinism, Dialect, ExpectedSchema, FetchPlan, NullOrder,
-    ProviderChoice, ProviderError, Relation, SqlParam,
+    AttachmentId, DataLayer, DataRequest, DescribePart, Determinism, ExpectedSchema, FailureFacts,
+    NullOrder, ProviderCapabilities, ProviderError, Relation,
 };
 use sdm_contract::ops::Dtype;
 use sdm_contract::{CoreError, Detail, ErrorKind, Scalar, Sentence};
+use sdm_host::kit::{Dialect, SqlChoice, SqlParam};
+use sdm_testkit::duck::Fetched;
+use sdm_testkit::sql_source::{Outcome, SqlSource};
 use serde_json::{Value, json};
 
 /// The database and schema the recordings name, as their placeholders.
@@ -40,14 +44,15 @@ fn arrow(_case: &str, file: &str) -> Vec<RecordBatch> {
     reader.map(Result::unwrap).collect()
 }
 
+/// The data layer a binding's runs read a semantic model's definition by.
 fn layer() -> Arc<dyn DataLayer> {
     Arc::clone(sdm_host::default_root().data_layer())
 }
 
-/// The Snowflake provider's choice, its database and schema each given or
-/// left to the session.
-fn snowflake(namespace: &[Option<&str>]) -> ProviderChoice {
-    ProviderChoice::Sql {
+/// The Snowflake source, its database and schema each given or left to
+/// the session.
+fn snowflake(namespace: &[Option<&str>]) -> SqlChoice {
+    SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new("snowflake"),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
@@ -55,8 +60,62 @@ fn snowflake(namespace: &[Option<&str>]) -> ProviderChoice {
     }
 }
 
-fn named() -> ProviderChoice {
+fn named() -> SqlChoice {
     snowflake(&[Some(DB), Some(SCHEMA)])
+}
+
+/// The kit of `source`, one run's.
+fn kit(source: &SqlChoice) -> SqlSource {
+    SqlSource::new(source.clone()).unwrap()
+}
+
+/// What the kit of `source` declares.
+fn declared(source: &SqlChoice) -> ProviderCapabilities {
+    kit(source).provider().unwrap().capabilities
+}
+
+/// `source`'s kit answering `request` with `batches`, as its driver hands
+/// them over, run by run.
+fn answered(
+    source: &SqlChoice,
+    request: &DataRequest,
+    batches: &[RecordBatch],
+) -> (SqlSource, Outcome) {
+    let kit = kit(source);
+    let schema = batches
+        .first()
+        .map_or_else(|| Arc::new(Schema::empty()), RecordBatch::schema);
+    let given = Fetched {
+        schema,
+        batches: batches.to_vec(),
+    };
+    let outcome = kit
+        .answer(request, &Default::default(), &mut |_| Ok(Ok(given.clone())))
+        .unwrap();
+    (kit, outcome)
+}
+
+/// `source` with its namespace settled by a session whose current database
+/// and schema are `session`, as its kit settles it on its namespace read.
+fn settled(source: &SqlChoice, session: &[&str]) -> SqlChoice {
+    let current = |at: usize| session.get(at).copied();
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![
+            Field::new("CURRENT_DATABASE()", DataType::Utf8, true),
+            Field::new("CURRENT_SCHEMA()", DataType::Utf8, true),
+        ])),
+        vec![
+            Arc::new(StringArray::from(vec![current(0)])) as ArrayRef,
+            Arc::new(StringArray::from(vec![current(1)])) as ArrayRef,
+        ],
+    )
+    .unwrap();
+    let request: DataRequest =
+        serde_json::from_value(json!({"request": "describe", "part": "namespace", "tables": []}))
+            .unwrap();
+    let (kit, outcome) = answered(source, &request, &[batch]);
+    assert!(matches!(outcome, Outcome::Data(_)), "{outcome:?}");
+    kit.choice()
 }
 
 fn relation(parts: &[&str]) -> Relation {
@@ -64,14 +123,9 @@ fn relation(parts: &[&str]) -> Relation {
 }
 
 /// `request`'s plan on `provider`: each statement's text and parameters.
-fn planned(
-    provider: &ProviderChoice,
-    request: Value,
-) -> Result<Vec<(String, Vec<String>)>, CoreError> {
+fn planned(provider: &SqlChoice, request: Value) -> Result<Vec<(String, Vec<String>)>, CoreError> {
     let request: DataRequest = serde_json::from_value(request).unwrap();
-    let FetchPlan::Sql { statements, .. } = layer().plan(&request, provider)? else {
-        panic!("not a SQL plan");
-    };
+    let statements = kit(provider).plan(&request)?.statements;
     Ok(statements
         .into_iter()
         .map(|s| {
@@ -92,7 +146,7 @@ fn planned(
 }
 
 /// Check one SQL request without a historical statement-membership oracle.
-fn one_statement(_case: &str, provider: &ProviderChoice, request: Value) -> (String, Vec<String>) {
+fn one_statement(_case: &str, provider: &SqlChoice, request: Value) -> (String, Vec<String>) {
     let mut statements = planned(provider, request.clone()).unwrap();
     assert_eq!(statements.len(), 1, "{request}: {statements:?}");
     let statement = statements.remove(0);
@@ -450,10 +504,24 @@ fn what_the_dialect_cannot_read_is_refused_by_name() {
 
 // --- the catalog reader -------------------------------------------------------
 
-/// A Python `str` of a recorded cell, as the row adapter writes it.
+/// The catalog answer the core reads from the kit's answer to `request`,
+/// `batches` the rows the driver handed over: in the standard shape, but
+/// for a semantic model's definition, which the data layer reads.
 fn read(request: Value, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     let request: DataRequest = serde_json::from_value(request).unwrap();
-    layer().read(&request, &named(), batches)
+    let DataRequest::Describe { part, .. } = &request else {
+        panic!("a read of no catalog");
+    };
+    let (_, outcome) = answered(&named(), &request, batches);
+    let answered = match outcome {
+        Outcome::Data(fetched) => fetched,
+        Outcome::Refused(error) => return Err(error),
+        Outcome::Error(error) => panic!("the driver answered: {error:?}"),
+    };
+    if *part == DescribePart::ViewDefinition {
+        return layer().read_view(&declared(&named()), &request, &answered.batches);
+    }
+    standard(*part, &answered.batches)
 }
 
 /// Read authored DESCRIBE rows as both columns and key declarations.
@@ -800,8 +868,7 @@ fn the_tables_and_the_session_are_read_from_their_answers() {
 
 #[test]
 fn a_session_with_no_current_database_keeps_the_database_the_source_names() {
-    let layer = layer();
-    let settled = layer.settled(&snowflake(&[Some(DB), None]), vec![]);
+    let settled = settled(&snowflake(&[Some(DB), None]), &[]);
     assert_eq!(settled, snowflake(&[Some(DB)]));
     let refused = planned(
         &settled,
@@ -811,7 +878,7 @@ fn a_session_with_no_current_database_keeps_the_database_the_source_names() {
     assert_eq!(refused.sentence, Sentence::NoCurrentSchema);
     // A source naming no database on such a session: the old client's bare
     // assert, an internal error here (P3D-4).
-    let nowhere = layer.settled(&snowflake(&[None, None]), vec![]);
+    let nowhere = self::settled(&snowflake(&[None, None]), &[]);
     for request in [
         json!({"request": "describe", "part": "tables", "tables": []}),
         json!({"request": "describe", "part": "columns", "tables": [table("users")]}),
@@ -865,14 +932,17 @@ fn connector_sample(kind: &str) -> Vec<RecordBatch> {
     arrow("", file)
 }
 
+/// `batches`, a scan's rows as the connector hands them over, as the kit
+/// reads them.
 fn conformed(batches: &[RecordBatch]) -> Vec<RecordBatch> {
-    let schema = batches[0].schema();
-    match layer()
-        .conform(&named(), &schema, batches, |f| f.to_string())
-        .unwrap()
-    {
-        Some((_, batches)) => batches,
-        None => batches.to_vec(),
+    let request: DataRequest = serde_json::from_value(json!({
+        "request": "scan", "table": table("t"), "columns": ["c"], "filters": [], "limit": null,
+
+    }))
+    .unwrap();
+    match answered(&named(), &request, batches).1 {
+        Outcome::Data(fetched) => fetched.batches,
+        other => panic!("not read: {other:?}"),
     }
 }
 
@@ -949,6 +1019,15 @@ fn the_connectors_arrow_is_read_as_the_old_client_reads_it() {
 
 // --- the data layer's answers ------------------------------------------------
 
+/// The kit's reading of a driver's failure, asked as the data layer was.
+struct Failures(SqlSource);
+
+impl Failures {
+    fn failure(&self, _: &(), error: &ProviderError) -> FailureFacts {
+        self.0.failure(error)
+    }
+}
+
 fn failed(vendor_code: Option<&str>, sqlstate: Option<&str>) -> ProviderError {
     said(vendor_code, sqlstate, None)
 }
@@ -967,8 +1046,8 @@ fn said(vendor_code: Option<&str>, sqlstate: Option<&str>, message: Option<&str>
 
 #[test]
 fn errno_2003_or_a_message_saying_does_not_exist_says_an_object_is_not_found() {
-    let layer = layer();
-    let p = &named();
+    let layer = Failures(kit(&named()));
+    let p = &();
     // The old client's `_is_missing_object_error` (`SNOW/table.py:34-45`):
     // errno 2003, or the driver's message saying "does not exist", in any
     // case.
@@ -1016,25 +1095,23 @@ fn errno_2003_or_a_message_saying_does_not_exist_says_an_object_is_not_found() {
 
 #[test]
 fn a_name_is_tried_as_given_then_upper_cased_once() {
-    let layer = layer();
-    let p = &named();
+    let declared = declared(&named());
     assert_eq!(
-        layer.spellings(p, &relation(&["db", "Sales", "users"])),
+        declared.spellings(&relation(&["db", "Sales", "users"])),
         vec![
             relation(&["db", "Sales", "users"]),
             relation(&["DB", "SALES", "USERS"]),
         ]
     );
     assert_eq!(
-        layer.spellings(p, &relation(&["DB", "S", "USERS"])),
+        declared.spellings(&relation(&["DB", "S", "USERS"])),
         vec![relation(&["DB", "S", "USERS"])]
     );
 }
 
 #[test]
 fn the_session_fills_only_the_parts_the_source_leaves_out() {
-    let layer = layer();
-    let session = || vec!["SESSION_DB".to_owned(), "SESSION_SCHEMA".to_owned()];
+    let session = ["SESSION_DB", "SESSION_SCHEMA"];
     for (given, settled) in [
         (vec![Some(DB), None], vec![Some(DB), Some("SESSION_SCHEMA")]),
         (
@@ -1047,21 +1124,20 @@ fn the_session_fills_only_the_parts_the_source_leaves_out() {
         ),
     ] {
         let source = snowflake(&given);
-        assert!(layer.unsettled(&source));
-        assert_eq!(layer.settled(&source, session()), snowflake(&settled));
+        assert!(declared(&source).namespace_first);
+        assert_eq!(self::settled(&source, &session), snowflake(&settled));
     }
     // A session with no current schema: the database named, alone.
     assert_eq!(
-        layer.settled(&snowflake(&[Some(DB), None]), vec!["SESSION_DB".to_owned()]),
+        self::settled(&snowflake(&[Some(DB), None]), &["SESSION_DB"]),
         snowflake(&[Some(DB)])
     );
-    assert!(!layer.unsettled(&named()));
+    assert!(!declared(&named()).namespace_first);
 }
 
 #[test]
 fn snowflake_declares_what_the_old_clients_sampler_does() {
-    let layer = layer();
-    let capabilities = layer.capabilities(&named()).unwrap();
+    let capabilities = declared(&named());
     // `SAMPLE ROW (n ROWS)` takes no seed (owner option C).
     assert_eq!(capabilities.sampling, Determinism::Unseeded);
     assert_eq!(capabilities.null_order, Some(NullOrder::Last));
@@ -1073,23 +1149,15 @@ fn snowflake_declares_what_the_old_clients_sampler_does() {
     // Semantic-view tables use derived relations.
     assert!(capabilities.derived_relations);
     assert!(capabilities.fallback.is_none());
-    assert_eq!(
-        layer.source_database(&named()).as_deref(),
-        Some("snowflake")
-    );
-    assert!(layer.reads_tables_as_they_stand(&named()));
-    // The key counts in the case Snowflake folds an unquoted alias to.
-    let FetchPlan::Sql { expect, .. } = layer
-        .plan(
-            &serde_json::from_value(json!({"request": "key_counts", "keys": [
-                {"table": table("users"), "columns": ["user_id"]}]}))
-            .unwrap(),
-            &named(),
-        )
-        .unwrap()
-    else {
-        panic!("not SQL");
-    };
+    assert_eq!(capabilities.database.as_deref(), Some("snowflake"));
+    assert!(capabilities.reads_tables_as_they_stand);
+    // The key counts in the case Snowflake folds an unquoted alias to,
+    // which the core holds the source's answer to.
+    let key_counts: DataRequest = serde_json::from_value(json!({"request": "key_counts", "keys": [
+        {"table": table("users"), "columns": ["user_id"]}]}))
+    .unwrap();
+    let expect = kit(&named()).plan(&key_counts).unwrap().expect;
+    assert_eq!(layer().expected(&capabilities, &key_counts), expect);
     let ExpectedSchema::Schema { fields, .. } = expect else {
         panic!("no schema expected");
     };
@@ -1155,37 +1223,38 @@ fn seed_data(payload: &str) -> sdm_contract::data::KeyData {
 /// `request` planned and bound on Snowflake with `keys` its seeds: each
 /// fetch's statements, the text each binds and its other parameters.
 fn bound(request: Value, keys: sdm_contract::data::KeyData) -> Vec<(String, String, Vec<String>)> {
-    use sdm_contract::data::{AttachmentId, KeyData};
     let request: DataRequest = serde_json::from_value(request).unwrap();
-    let plan = layer().plan(&request, &named()).unwrap();
-    let handed: std::collections::BTreeMap<AttachmentId, KeyData> =
-        [(AttachmentId(2), keys)].into();
-    let bound = layer()
-        .bind(&named(), &request, plan, &handed, |x| format!("{x:?}"))
-        .unwrap();
+    let handed = [(
+        AttachmentId(2),
+        Fetched {
+            schema: keys.schema,
+            batches: keys.batches,
+        },
+    )]
+    .into();
     let mut found = Vec::new();
-    for fetch in bound.fetches {
-        let FetchPlan::Sql { statements, .. } = fetch.plan else {
-            panic!("not SQL");
-        };
-        for statement in statements {
-            let mut text = String::new();
-            let mut others = Vec::new();
-            for param in statement.params {
-                match param {
-                    SqlParam::Text { attachment } => {
-                        let batch = &fetch.batches[&attachment].batches[0];
-                        text = batch.column(0).as_string::<i32>().value(0).to_owned();
+    kit(&named())
+        .answer(&request, &handed, &mut |fetch| {
+            for statement in &fetch.plan.statements {
+                let mut text = String::new();
+                let mut others = Vec::new();
+                for param in &statement.params {
+                    match param {
+                        SqlParam::Text { attachment } => {
+                            let batch = &fetch.keys[attachment].batches[0];
+                            text = batch.column(0).as_string::<i32>().value(0).to_owned();
+                        }
+                        SqlParam::Value {
+                            value: Scalar::Utf8(value),
+                        } => others.push(value.clone()),
+                        other => panic!("an unexpected parameter {other:?}"),
                     }
-                    SqlParam::Value {
-                        value: Scalar::Utf8(value),
-                    } => others.push(value),
-                    other => panic!("an unexpected parameter {other:?}"),
                 }
+                found.push((statement.text.clone(), text, others));
             }
-            found.push((statement.text, text, others));
-        }
-    }
+            Ok(Err(failed(None, None)))
+        })
+        .unwrap();
     found
 }
 

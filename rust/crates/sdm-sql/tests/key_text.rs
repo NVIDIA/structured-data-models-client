@@ -2,7 +2,7 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! Key sets bound by each dialect (design S4): `DataLayer::bind`
+//! Key sets bound by each dialect (design S4): `Sql::bind`
 //! writes a Databricks or Postgres key set as the JSON text its statement
 //! reads, one text cell per fetch, split past the dialect's budget of
 //! 900,000 bytes as the old client splits it (`_chunk_rows`, at
@@ -26,18 +26,16 @@ use arrow_array::{
     StringArray, TimestampNanosecondArray,
 };
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
-use sdm_contract::data::{
-    AttachmentId, BoundFetch, BoundRequest, DataLayer, DataRequest, FetchPlan, KeyData,
-    ProviderChoice, SqlParam,
-};
-use sdm_sql::Data;
+use sdm_contract::data::{AttachmentId, BoundFetch, BoundRequest, DataRequest, KeyData};
+use sdm_sql::Sql;
+use sdm_sql::plan::{SqlChoice, SqlParam, SqlPlan, SqlStatement};
 
 /// The budget of one key set's text, in bytes, on Databricks and Postgres.
 const BUDGET: usize = 900_000;
 
 /// The choice of `dialect`; Postgres's naming its schema, which a source
 /// must name or read from its session.
-fn choice(dialect: &str) -> ProviderChoice {
+fn choice(dialect: &str) -> SqlChoice {
     let namespace = if dialect == "postgres" {
         r#","namespace":["public"]"#
     } else {
@@ -89,8 +87,12 @@ fn seeds(keys: ArrayRef) -> KeyData {
 }
 
 /// `request` planned and bound on `dialect` with `keys` as its seeds.
-fn bind_on(dialect: &str, request: &DataRequest, keys: KeyData) -> (FetchPlan, BoundRequest) {
-    let data = Data::new();
+fn bind_on(
+    dialect: &str,
+    request: &DataRequest,
+    keys: KeyData,
+) -> (SqlPlan, BoundRequest<SqlPlan>) {
+    let data = Sql::new();
     let provider = choice(dialect);
     let plan = data.plan(request, &provider).unwrap();
     let mut handed = BTreeMap::new();
@@ -127,17 +129,14 @@ fn reference_float(x: f64) -> String {
 }
 
 /// The statements of a SQL plan.
-fn statements(plan: &FetchPlan) -> &[sdm_contract::data::SqlStatement] {
-    match plan {
-        FetchPlan::Sql { statements, .. } => statements,
-        FetchPlan::Host { .. } => panic!("not a SQL plan"),
-    }
+fn statements(plan: &SqlPlan) -> &[SqlStatement] {
+    &plan.statements
 }
 
 /// The one text a fetch binds: its last statement's one parameter, a
 /// text parameter, and the one cell of the batch its local reference
 /// names, a one-row, one-column text batch.
-fn text(fetch: &BoundFetch) -> String {
+fn text(fetch: &BoundFetch<SqlPlan>) -> String {
     let last = statements(&fetch.plan).last().unwrap();
     let [SqlParam::Text { attachment }] = &last.params[..] else {
         panic!("not one text parameter: {:?}", last.params);
@@ -163,7 +162,7 @@ fn text(fetch: &BoundFetch) -> String {
 }
 
 /// The texts of every fetch, in order.
-fn texts(bound: &BoundRequest) -> Vec<String> {
+fn texts(bound: &BoundRequest<SqlPlan>) -> Vec<String> {
     bound.fetches.iter().map(text).collect()
 }
 
@@ -651,7 +650,7 @@ fn a_key_set_whose_batches_are_not_its_positions_is_a_named_defect() {
             )
             .unwrap(),
         ];
-        let data = Data::new();
+        let data = Sql::new();
         let provider = choice(dialect);
         let plan = data.plan(&request, &provider).unwrap();
         let refused = data
@@ -799,7 +798,7 @@ fn a_request_binding_no_key_set_is_its_plan() {
         r#"{"request":"preview","table":{"source":["main","shop","users"]},"columns":["user_id"],"limit":5}"#,
     )
     .unwrap();
-    let data = Data::new();
+    let data = Sql::new();
     let provider = choice("databricks");
     let plan = data.plan(&request, &provider).unwrap();
     let bound = data

@@ -7,13 +7,15 @@
 //! identifier handling, aggregates, windows and ordering without SQL recordings.
 
 use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, Dialect, Filter, KeySet, ProviderChoice, Relation,
-    SEED_COUNT_UNREAD, SEED_KEY_TYPE, SEED_KEY_UNIQUE, SEED_STORED_TIME, SeedBound, TableColumn,
-    TableKey, TieBreak, TieTerm, Window, field,
+    DataRequest, DescribePart, Filter, KeySet, Relation, SEED_COUNT_UNREAD, SEED_KEY_TYPE,
+    SEED_KEY_UNIQUE, SEED_STORED_TIME, SeedBound, TableColumn, TableKey, TieBreak, TieTerm, Window,
+    field,
 };
+
 use sdm_contract::ops::Dtype;
 use sdm_contract::{ColumnType, Field, Scalar, Unit};
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::{Dialect, SqlChoice};
 use serde_json::{Value, json};
 
 const RENDERED: [&str; 5] = ["duckdb", "sqlite", "postgres", "databricks", "snowflake"];
@@ -748,8 +750,8 @@ fn requests() -> Vec<DataRequest> {
     found
 }
 
-fn provider(dialect: &str, namespace: &[Option<&str>]) -> ProviderChoice {
-    ProviderChoice::Sql {
+fn provider(dialect: &str, namespace: &[Option<&str>]) -> SqlChoice {
+    SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new(dialect),
         namespace: namespace.iter().map(|p| p.map(str::to_owned)).collect(),
@@ -804,7 +806,7 @@ fn the_matrix_holds_every_request_kind_and_catalog_part_on_every_dialect() {
             let answers: Vec<_> = requests
                 .iter()
                 .filter(|r| r.name() == kind)
-                .map(|r| Data::new().plan(r, &p))
+                .map(|r| Sql::new().plan(r, &p))
                 .collect();
             assert!(
                 answers.iter().any(Result::is_ok),
@@ -820,7 +822,7 @@ fn the_matrix_holds_every_request_kind_and_catalog_part_on_every_dialect() {
 
 #[test]
 fn provider_capabilities_and_namespace_probes_have_explicit_contracts() {
-    let data = Data::new();
+    let data = Sql::new();
     for dialect in RENDERED {
         let p = provider(dialect, &[]);
         let capabilities = data.capabilities(&p).unwrap();
@@ -916,7 +918,8 @@ fn provider_capabilities_and_namespace_probes_have_explicit_contracts() {
 
 #[test]
 fn scans_and_counts_preserve_projection_filters_and_limits() {
-    use sdm_contract::data::{ExpectedSchema, FetchPlan};
+    use sdm_contract::data::ExpectedSchema;
+    use sdm_sql::plan::SqlPlan;
     for dialect in RENDERED {
         let quote = if dialect == "databricks" { '`' } else { '"' };
         let q = |name: &str| format!("{quote}{name}{quote}");
@@ -967,11 +970,11 @@ fn scans_and_counts_preserve_projection_filters_and_limits() {
             ),
         ];
         for (request, expected_sql) in cases {
-            let FetchPlan::Sql {
+            let SqlPlan {
                 statements,
                 expect,
                 result_conversions,
-            } = Data::new()
+            } = Sql::new()
                 .plan(
                     &request,
                     &provider(
@@ -985,10 +988,7 @@ fn scans_and_counts_preserve_projection_filters_and_limits() {
                         },
                     ),
                 )
-                .unwrap()
-            else {
-                panic!("{dialect}: expected SQL");
-            };
+                .unwrap();
             assert_eq!(statements.len(), 1, "{dialect}");
             assert_eq!(statements[0].text, expected_sql, "{dialect}");
             assert!(
@@ -999,7 +999,7 @@ fn scans_and_counts_preserve_projection_filters_and_limits() {
             assert_eq!(
                 result_conversions,
                 if dialect == "postgres" {
-                    vec![sdm_contract::data::SqlResultConversion::ZonedTextUtc]
+                    vec![sdm_sql::plan::SqlResultConversion::ZonedTextUtc]
                 } else {
                     vec![]
                 }
@@ -1010,7 +1010,7 @@ fn scans_and_counts_preserve_projection_filters_and_limits() {
 
 #[test]
 fn lookup_retains_typed_seed_attachment_and_field_order() {
-    use sdm_contract::data::{FetchPlan, SqlParam};
+    use sdm_sql::plan::{SqlParam, SqlPlan};
     for dialect in RENDERED {
         for key_fields in [
             one_key(ColumnType::Int64),
@@ -1029,7 +1029,7 @@ fn lookup_retains_typed_seed_attachment_and_field_order() {
                 columns: names(&["id", "value"]),
                 seeds: supplied.clone(),
             };
-            let planned = Data::new().plan(
+            let planned = Sql::new().plan(
                 &request,
                 &provider(
                     dialect,
@@ -1052,9 +1052,7 @@ fn lookup_retains_typed_seed_attachment_and_field_order() {
                 );
                 continue;
             }
-            let FetchPlan::Sql { statements, .. } = planned.unwrap() else {
-                panic!("{dialect}: expected SQL");
-            };
+            let SqlPlan { statements, .. } = planned.unwrap();
             let bound: Vec<_> = statements
                 .iter()
                 .flat_map(|s| &s.params)
@@ -1075,7 +1073,7 @@ fn lookup_retains_typed_seed_attachment_and_field_order() {
     }
 }
 
-fn settled_provider(dialect: &str) -> ProviderChoice {
+fn settled_provider(dialect: &str) -> SqlChoice {
     provider(
         dialect,
         match dialect {
@@ -1189,7 +1187,7 @@ fn key_counts_and_time_bounds_have_independent_fixed_schemas() {
                 ],
             ),
         ] {
-            let plan = Data::new()
+            let plan = Sql::new()
                 .plan(&request, &settled_provider(dialect))
                 .unwrap();
             let expected = match (&request, dialect) {
@@ -1213,14 +1211,14 @@ fn key_counts_and_time_bounds_have_independent_fixed_schemas() {
                     optional: Vec::new(),
                 },
             };
-            assert_eq!(plan.expect(), &expected, "{dialect}: {request:?}");
+            assert_eq!(&plan.expect, &expected, "{dialect}: {request:?}");
         }
     }
 }
 
 #[test]
 fn identifiers_escape_quotes_without_splitting_literal_dots() {
-    use sdm_contract::data::FetchPlan;
+    use sdm_sql::plan::SqlPlan;
     for dialect in RENDERED {
         let (name, quoted) = if dialect == "databricks" {
             ("a.`b's", "`a.``b's`")
@@ -1232,12 +1230,9 @@ fn identifiers_escape_quotes_without_splitting_literal_dots() {
             columns: names(&[name]),
             limit: 3,
         };
-        let FetchPlan::Sql { statements, .. } = Data::new()
+        let SqlPlan { statements, .. } = Sql::new()
             .plan(&request, &settled_provider(dialect))
-            .unwrap()
-        else {
-            panic!("SQL");
-        };
+            .unwrap();
         let prefix = match dialect {
             "postgres" => "\"public\".",
             "snowflake" => "\"db\".\"public\".",
@@ -1278,7 +1273,7 @@ fn sample_seed_admission_matches_dialect_capabilities() {
                 filters: vec![not_null("id")],
                 key_dtype: Some(Dtype::Int),
             };
-            let result = Data::new().plan(&request, &settled_provider(dialect));
+            let result = Sql::new().plan(&request, &settled_provider(dialect));
             assert_eq!(
                 result.is_ok(),
                 accepted,
@@ -1296,7 +1291,7 @@ fn sample_seed_admission_matches_dialect_capabilities() {
 
 #[test]
 fn neighbor_windows_and_per_seed_order_keep_endpoint_semantics() {
-    use sdm_contract::data::FetchPlan;
+    use sdm_sql::plan::SqlPlan;
     for dialect in RENDERED {
         for (lower, upper) in [
             (Some(false), Some(true)),
@@ -1329,12 +1324,9 @@ fn neighbor_windows_and_per_seed_order_keep_endpoint_semantics() {
                     term("y", false, false, false),
                 ])),
             };
-            let FetchPlan::Sql { statements, .. } = Data::new()
+            let SqlPlan { statements, .. } = Sql::new()
                 .plan(&request, &settled_provider(dialect))
-                .unwrap()
-            else {
-                panic!("SQL");
-            };
+                .unwrap();
             let text = statements
                 .iter()
                 .map(|s| s.text.as_str())
@@ -1483,7 +1475,7 @@ fn catalog_scope_is_explicit_for_each_dialect() {
         for (part, (whole, single)) in parts.into_iter().zip(admitted) {
             for (tables, expected) in [(vec![], whole), (vec![relation(&["t"])], single)] {
                 let request = DataRequest::Describe { tables, part };
-                let plan = Data::new().plan(&request, &settled_provider(dialect));
+                let plan = Sql::new().plan(&request, &settled_provider(dialect));
                 assert_eq!(plan.is_ok(), expected, "{dialect} {request:?}: {plan:?}");
                 if let Err(error) = plan {
                     assert_eq!(error.code, sdm_contract::ErrorCode::UnsupportedRequest);
@@ -1510,7 +1502,7 @@ fn renderer_refuses_filters_it_cannot_preserve() {
                 upper: None,
             }],
         };
-        let error = Data::new()
+        let error = Sql::new()
             .plan(&request, &settled_provider(dialect))
             .unwrap_err();
         assert_eq!(error.code, sdm_contract::ErrorCode::UnsupportedRequest);
@@ -1523,7 +1515,7 @@ fn renderer_refuses_filters_it_cannot_preserve() {
 
 #[test]
 fn ranges_and_repeated_composite_keys_preserve_aggregate_semantics() {
-    use sdm_contract::data::FetchPlan;
+    use sdm_sql::plan::SqlPlan;
     for dialect in RENDERED {
         let quote = if dialect == "databricks" { '`' } else { '"' };
         let q = |s: &str| format!("{quote}{s}{quote}");
@@ -1537,12 +1529,9 @@ fn ranges_and_repeated_composite_keys_preserve_aggregate_semantics() {
                 key: names(&["a", "b"]),
             },
         ] {
-            let FetchPlan::Sql { statements, .. } = Data::new()
+            let SqlPlan { statements, .. } = Sql::new()
                 .plan(&request, &settled_provider(dialect))
-                .unwrap()
-            else {
-                panic!("SQL")
-            };
+                .unwrap();
             let text = &statements.last().unwrap().text;
             if matches!(request, DataRequest::ColumnRanges { .. }) {
                 let aggregates = format!(

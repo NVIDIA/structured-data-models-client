@@ -11,12 +11,12 @@
 //! the type the source holds asks the dialect whether its source
 //! holds one; every other dialect does.
 
-use sdm_contract::data::{DataLayer, ProviderChoice};
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::SqlChoice;
 
 #[test]
 fn only_sqlite_holds_no_column_type_a_caller_s_type_must_match() {
-    let data = Data::new();
+    let data = Sql::new();
     for (dialect, holds) in [
         ("sqlite", false),
         ("duckdb", true),
@@ -24,18 +24,9 @@ fn only_sqlite_holds_no_column_type_a_caller_s_type_must_match() {
         ("databricks", true),
     ] {
         assert_eq!(
-            data.holds_column_types(&ProviderChoice::sql(dialect)),
+            data.holds_column_types(&SqlChoice::new(dialect)),
             holds,
             "{dialect}"
         );
     }
-}
-
-#[test]
-fn a_host_provider_s_columns_hold_their_types() {
-    let data = Data::new();
-    let host = ProviderChoice::Host {
-        capabilities: data.capabilities(&ProviderChoice::sql("duckdb")).unwrap(),
-    };
-    assert!(data.holds_column_types(&host));
 }

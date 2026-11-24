@@ -14605,55 +14605,8 @@
       ]
     },
     "ProviderChoice": {
-      "description": "The composition root's choice: a built-in SQL provider by dialect, which\ncompiles each request to SQL the host runs, or a host provider that\nanswers the typed requests itself.\n\nA SQL provider's `namespace` (contract v28) is where the source's tables\nare, as the source was given it: the name parts before a table's own,\noutermost first, a Postgres source's schema (`PostgresSource(schema=...)`),\neach `null` where the source names none, which is then the connection's\ncurrent one. Every relation of one part a request names is read under\nit, and the source's tables are listed in it, as the reference\nqualifies each read by the schema it was given (`PostgresTable`). Left\nout, empty or all `null`, the connection's current one, as before v28.\nA dialect takes as many parts as a relation's parts before its table's,\nand refuses by name more, or a part given inside one left `null`.\n\nA SQL provider's `view` (contract v28) names the semantic model\nthe source is read through, a Databricks metric view or a Snowflake\nsemantic view by its dialect, as the caller named it, with whether the\ncaller trusts its expressions: its logical tables are then the\nrelations of one part a request names, each the logical table's name.\nLeft out, the source's own tables, as before.",
+      "description": "The provider a run reads through: what it declared it answers\n([`ProviderCapabilities`]). The core sends it typed requests and reads\nits answers by what it declared; a built-in source declares what its\nSQL kit answers (`sdm-sql`'s `SqlKit`), and answers through the kit.",
       "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "dialect": {
-              "$ref": "#/$defs/Dialect"
-            },
-            "namespace": {
-              "type": "array",
-              "items": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            },
-            "view": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/ViewChoice"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "timestamp_encoding": {
-              "description": "A host's required lossless transport for timestamps that its\ndriver cannot preserve through native getters. The data layer\nowns the SQL projection; the host performs only the conversion\nexplicitly named by the resulting plan.",
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/SqlTimestampEncoding"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "provider": {
-              "type": "string",
-              "const": "sql"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "provider",
-            "dialect"
-          ]
-        },
         {
           "type": "object",
           "properties": {
@@ -14673,39 +14626,8 @@
         }
       ]
     },
-    "Dialect": {
-      "description": "A built-in SQL dialect, by the name the host gives it. The contract\nnames no dialect and knows none: which names a build\nserves is the data layer's, which refuses one it does not serve before\nthe run exists ([`DataLayer::capabilities`]).",
-      "type": "string"
-    },
-    "ViewChoice": {
-      "description": "The semantic model a SQL provider's source is read through\n([`ProviderChoice::Sql`]'s `view`): its name as the caller gave it, and\nwhether the caller trusts whoever authored it to run its expressions\n(`semantic_model(name, trust_expressions=...)`).",
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string"
-        },
-        "trust_expressions": {
-          "type": "boolean"
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "trust_expressions"
-      ]
-    },
-    "SqlTimestampEncoding": {
-      "description": "A driver's requested lossless SQL timestamp transport.",
-      "oneOf": [
-        {
-          "description": "Timestamps as signed microseconds: timezone-free wall fields from\nthe epoch's wall fields, or a zoned timestamp's physical instant\nfrom the Unix epoch. The core selects the source kind from actual\nwarehouse result metadata, independent of the session or JVM zone.",
-          "type": "string",
-          "const": "microseconds"
-        }
-      ]
-    },
     "ProviderCapabilities": {
-      "description": "What a provider answers: a host provider declares it, and the data\nlayer gives it for each SQL dialect it renders.",
+      "description": "What a provider answers, as it declares it: a built-in source declares\nwhat its SQL kit answers.",
       "type": "object",
       "properties": {
         "optional": {
@@ -15003,6 +14925,23 @@
           "type": "string",
           "const": "binary_utf8"
         }
+      ]
+    },
+    "ViewChoice": {
+      "description": "The semantic model a source is read through\n([`ProviderCapabilities::view`]): its name as the caller gave it, and\nwhether the caller trusts whoever authored it to run its expressions\n(`semantic_model(name, trust_expressions=...)`).",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "trust_expressions": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "trust_expressions"
       ]
     },
     "ExampleSource": {
@@ -15611,7 +15550,7 @@
       ]
     },
     "ProviderError": {
-      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class, and its message\nas a diagnostic for the data layer alone. What the failure means is the\ndata layer's to say ([`DataLayer::failure`]), from these facts; the\nmessage is never echoed into an error the core gives, since drivers\nquote values there.",
+      "description": "A provider's failure: its kind, whether trying again may succeed, and\nthe driver's own SQLSTATE, vendor code and error class, and its message\nas a diagnostic for the data layer alone. What the failure means is the\nsource's to say ([`ProviderError::facts`]), from these facts; the\nmessage is never echoed into an error the core gives, since drivers\nquote values there.",
       "type": "object",
       "properties": {
         "kind": {
@@ -15640,14 +15579,14 @@
           ]
         },
         "driver_message": {
-          "description": "The driver's message, passed through by the host unread (contract\nv28): an internal diagnostic only [`DataLayer::failure`] reads,\nwhere the old client reads a failure by its text (Snowflake's\n\"does not exist\", `SNOW/table.py:34-45`), and never echoed into a\npublic error. Left out, none.",
+          "description": "The driver's message, passed through by the host unread (contract\nv28): an internal diagnostic only a SQL kit's failure reading reads,\nwhere the old client reads a failure by its text (Snowflake's\n\"does not exist\", `SNOW/table.py:34-45`), and never echoed into a\npublic error. Left out, none.",
           "type": [
             "string",
             "null"
           ]
         },
         "facts": {
-          "description": "What the failure means, where the source says so itself (contract\nv76): a built-in source's SQL kit reads its engine's failure into\nthese, so the core reads every source's failure one way. Left out,\nthe core reads none ([`DataLayer::failure`]).",
+          "description": "What the failure means, where the source says so itself (contract\nv76): a built-in source's SQL kit reads its engine's failure into\nthese, so the core reads every source's failure one way. Left out,\nthe core reads none.",
           "anyOf": [
             {
               "$ref": "#/$defs/FailureFacts"
@@ -15710,7 +15649,7 @@
       ]
     },
     "FailureFacts": {
-      "description": "What a provider's failure says ([`DataLayer::failure`]): independent\nfacts, each read by the step that asked what it fits.",
+      "description": "What a provider's failure says ([`ProviderError::facts`]): independent\nfacts, each read by the step that asked what it fits.",
       "type": "object",
       "properties": {
         "not_found": {
@@ -17096,7 +17035,7 @@
           "const": "key_enforcement"
         },
         {
-          "description": "The definition of the one semantic model named (contract v28):\na Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake\nsemantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into\n[`CatalogAnswer::ViewDefinition`]. Only a SQL provider whose dialect\nreads views is asked it; every other dialect refuses it by name\n([`Sentence::ViewsUnread`]), and a host provider is never asked it.",
+          "description": "The definition of the one semantic model named (contract v28):\na Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake\nsemantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into\n[`CatalogAnswer::ViewDefinition`]. Only a source read through a\nsemantic model of a database whose dialect reads views is asked it;\nevery other dialect refuses it by name ([`Sentence::ViewsUnread`]).",
           "type": "string",
           "const": "view_definition"
         }
@@ -17571,38 +17510,8 @@
       ]
     },
     "FetchPlan": {
-      "description": "How a provider answers one request: SQL statements run\nin order on one session, the last one's rows the answer, or the typed\nrequest itself, passed to a host provider that answers it; either way\nwith the Arrow schema the whole plan returns, and answered with one\nattachment holding every row.",
+      "description": "How the provider answers one request: the typed request itself, which\nthe provider answers with the Arrow schema `expect` names, in one\nattachment holding every row.",
       "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "statements": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/SqlStatement"
-              }
-            },
-            "expect": {
-              "$ref": "#/$defs/ExpectedSchema"
-            },
-            "result_conversions": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/SqlResultConversion"
-              }
-            },
-            "plan": {
-              "type": "string",
-              "const": "sql"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "plan",
-            "statements",
-            "expect"
-          ]
-        },
         {
           "type": "object",
           "properties": {
@@ -17610,7 +17519,7 @@
               "$ref": "#/$defs/ExpectedSchema"
             },
             "key_sets": {
-              "description": "The key sets the request asks with, by attachment, in order:\nthe seeds of a `neighbors` or a `lookup`, then each `key_in`\nfilter's keys. The host takes them from the run, as it takes a\nSQL plan's, without reading the request for them.",
+              "description": "The key sets the request asks with, by attachment, in order:\nthe seeds of a `neighbors` or a `lookup`, then each `key_in`\nfilter's keys. The host takes them from the run without reading\nthe request for them.",
               "type": "array",
               "items": {
                 "$ref": "#/$defs/AttachmentId"
@@ -17625,90 +17534,6 @@
           "required": [
             "plan",
             "expect"
-          ]
-        }
-      ]
-    },
-    "SqlStatement": {
-      "description": "One statement a SQL provider runs.",
-      "type": "object",
-      "properties": {
-        "dialect": {
-          "$ref": "#/$defs/Dialect"
-        },
-        "text": {
-          "type": "string"
-        },
-        "params": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/SqlParam"
-          }
-        }
-      },
-      "additionalProperties": false,
-      "required": [
-        "dialect",
-        "text",
-        "params"
-      ]
-    },
-    "SqlParam": {
-      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-sql` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation. A dialect that binds its key sets as JSON\ntext names none: [`DataLayer::bind`] turns each into a `text` parameter.\n\nA `text` parameter (contract v28) binds the one text cell of a\none-row, one-column Arrow attachment: a key set the dialect writes as\nJSON text itself, past the control message's size ([`DataLayer::bind`]).\nIn a [`BoundFetch`] the attachment is a local reference the data layer\nchose; the core installs its batch in the run and names it here by the\nrun's own id before the step is sent.",
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "value": {
-              "$ref": "#/$defs/Scalar"
-            },
-            "param": {
-              "type": "string",
-              "const": "value"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "param",
-            "value"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "keys": {
-              "$ref": "#/$defs/KeySet"
-            },
-            "relation": {
-              "type": "string"
-            },
-            "param": {
-              "type": "string",
-              "const": "key_set"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "param",
-            "keys",
-            "relation"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "attachment": {
-              "$ref": "#/$defs/AttachmentId"
-            },
-            "param": {
-              "type": "string",
-              "const": "text"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "param",
-            "attachment"
           ]
         }
       ]
@@ -17755,67 +17580,6 @@
             "expect",
             "fields"
           ]
-        }
-      ]
-    },
-    "SqlResultConversion": {
-      "description": "A native result conversion selected by the SQL data layer.\nColumn positions are zero-based and names remain exactly the\nwarehouse's original output names, including duplicates.",
-      "oneOf": [
-        {
-          "description": "PostgreSQL zoned values read as text, including array elements and\nrange bounds, use canonical UTC without changing the session.\nThis policy applies to the whole result, not one projection.",
-          "type": "object",
-          "properties": {
-            "conversion": {
-              "type": "string",
-              "const": "zoned_text_utc"
-            }
-          },
-          "required": [
-            "conversion"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "column": {
-              "type": "integer",
-              "format": "uint32",
-              "minimum": 0
-            },
-            "name": {
-              "type": "string"
-            },
-            "source_kind": {
-              "$ref": "#/$defs/SqlTimestampKind"
-            },
-            "conversion": {
-              "type": "string",
-              "const": "timestamp_micros"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "conversion",
-            "column",
-            "name",
-            "source_kind"
-          ]
-        }
-      ]
-    },
-    "SqlTimestampKind": {
-      "description": "The timestamp meaning used by the core's SQL projection, retained\nthrough key-set binding and chunk re-rendering. A host transfers the\nprojected integer unchanged for either kind.",
-      "oneOf": [
-        {
-          "description": "A timestamp's physical instant, measured from the Unix epoch.",
-          "type": "string",
-          "const": "instant"
-        },
-        {
-          "description": "A timezone-free timestamp's civil fields, measured from the\nepoch's wall fields without assigning any local timezone.",
-          "type": "string",
-          "const": "wall_time"
         }
       ]
     },

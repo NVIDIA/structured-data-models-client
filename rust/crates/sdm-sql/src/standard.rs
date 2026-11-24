@@ -227,7 +227,10 @@ mod tests {
     /// read back by the reader every source's answer is read by.
     fn round_trip(part: DescribePart, answer: CatalogAnswer) {
         let (_, batch) = super::catalog(&answer).unwrap().unwrap();
-        assert_eq!(crate::read::host(part, &[batch]).unwrap(), answer);
+        assert_eq!(
+            sdm_contract::catalog_read::standard(part, &[batch]).unwrap(),
+            answer
+        );
     }
 
     #[test]

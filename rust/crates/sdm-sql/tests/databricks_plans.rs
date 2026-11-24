@@ -5,24 +5,20 @@
 //! Databricks catalog binding and sampling contracts, without recorded SQL.
 
 use sdm_contract::Scalar;
-use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, FetchPlan, ProviderChoice, Relation, SqlParam,
-    SqlStatement,
-};
-use sdm_sql::Data;
+use sdm_contract::data::{DataRequest, DescribePart, Relation};
+use sdm_sql::Sql;
+use sdm_sql::plan::{SqlChoice, SqlParam, SqlPlan, SqlStatement};
 
 fn relation(parts: &[&str]) -> Relation {
     Relation::of(parts.iter().map(|part| (*part).to_owned()).collect())
 }
 
 fn plan(request: &DataRequest) -> Vec<SqlStatement> {
-    let provider = serde_json::from_value::<ProviderChoice>(serde_json::json!({
+    let provider = serde_json::from_value::<SqlChoice>(serde_json::json!({
         "provider":"sql", "dialect":"databricks", "namespace":["main","shop"]
     }))
     .unwrap();
-    let FetchPlan::Sql { statements, .. } = Data::new().plan(request, &provider).unwrap() else {
-        panic!("SQL")
-    };
+    let SqlPlan { statements, .. } = Sql::new().plan(request, &provider).unwrap();
     assert!(statements.iter().all(|s| s.dialect.name() == "databricks"));
     statements
 }
@@ -118,8 +114,8 @@ fn qualified_identifiers_preserve_each_part_and_escape_backticks() {
             limit: 1,
         };
         assert!(
-            Data::new()
-                .plan(&request, &ProviderChoice::sql("databricks"))
+            Sql::new()
+                .plan(&request, &SqlChoice::new("databricks"))
                 .is_err()
         );
     }

@@ -993,7 +993,6 @@ const OTHER: &[(&str, &str)] = &[
     ("ControlMessage/call_model.body", "the endpoint's bytes"),
     ("ModelOutcome/response.body", "the endpoint's bytes"),
     ("ModelAnswer.detail", "the endpoint's or its SDK's text"),
-    ("SqlParam/text.attachment", "Arrow, with its schema"),
     ("Operation/materialize.indices", "Arrow, with its schema"),
     ("FetchOutcome/data.data", "Arrow, with its schema"),
     ("KeySet.attachment", "Arrow, with its schema"),

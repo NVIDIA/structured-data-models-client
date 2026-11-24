@@ -6,8 +6,8 @@
 //! a `lookup` holding more keys than the provider takes in one request
 //! (`max_keys_per_request`) split into requests of at most that many seeds
 //! each, whose answers, joined in order, are the request's
-//! (`AskState::Chunks`). Every host reads the same parts, so no host splits
-//! a key set itself.
+//! (the core's `AskState::Chunks`). Every host reads the same parts, so no
+//! host splits a key set itself.
 
 use std::collections::BTreeMap;
 
@@ -24,7 +24,7 @@ const PART: AttachmentId = AttachmentId(0);
 /// another's, and carry the seed's own batch position, so the parts'
 /// answers, in the seeds' order, are the request's. Any other request, and
 /// one whose seeds number no more than `max`, is asked whole.
-pub(crate) fn bind(
+pub fn bind(
     request: &DataRequest,
     plan: FetchPlan,
     keys: &BTreeMap<AttachmentId, KeyData>,
@@ -147,7 +147,10 @@ mod tests {
     }
 
     fn plan(request: &DataRequest) -> FetchPlan {
-        FetchPlan::host(ExpectedSchema::Discover {}, request)
+        FetchPlan {
+            expect: ExpectedSchema::Discover {},
+            key_sets: request.key_sets(),
+        }
     }
 
     fn batches(fetch: &BoundFetch) -> Vec<i64> {
@@ -169,7 +172,7 @@ mod tests {
         for fetch in &bound.fetches {
             // Each part's request and plan name its own seeds.
             assert_eq!(fetch.request.key_sets(), [PART]);
-            assert_eq!(fetch.plan.key_sets(), [PART]);
+            assert_eq!(fetch.plan.key_sets, [PART]);
         }
     }
 
@@ -179,7 +182,7 @@ mod tests {
             let bound = bind(request, plan(request), &keys(rows), max).unwrap();
             bound.fetches.len() == 1
                 && &bound.fetches[0].request == request
-                && bound.fetches[0].plan.key_sets() == [SEEDS]
+                && bound.fetches[0].plan.key_sets == [SEEDS]
                 && bound.fetches[0].batches.is_empty()
         };
         // A scan's key filter: parts would answer a key twice that the

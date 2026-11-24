@@ -13,11 +13,13 @@
 //! reads the table through them in every read where one is such a word,
 //! and by its name otherwise, as the reference does.
 
-use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderChoice};
-use sdm_sql::Data;
+use sdm_contract::data::DataRequest;
+
+use sdm_sql::Sql;
+use sdm_sql::plan::{SqlChoice, SqlPlan};
 use serde_json::{Value, json};
 
-fn databricks() -> ProviderChoice {
+fn databricks() -> SqlChoice {
     serde_json::from_value(json!({
         "provider": "sql", "dialect": "databricks", "namespace": ["cat", "sch"]
     }))
@@ -66,8 +68,8 @@ fn reads(table: &Value) -> Vec<Value> {
 
 fn texts(request: Value) -> String {
     let request: DataRequest = serde_json::from_value(request).unwrap();
-    match Data::new().plan(&request, &databricks()) {
-        Ok(FetchPlan::Sql { statements, .. }) => statements
+    match Sql::new().plan(&request, &databricks()) {
+        Ok(SqlPlan { statements, .. }) => statements
             .iter()
             .map(|s| s.text.clone())
             .collect::<Vec<_>>()

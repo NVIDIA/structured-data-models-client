@@ -9,7 +9,7 @@
 //! dialect's hooks ([`SqlDialect::key_rows`], [`SqlDialect::key_budget`]),
 //! so no provider writes or splits one.
 //!
-//! [`bind`] answers `DataLayer::bind` for every built-in dialect: a plan
+//! [`bind`] answers [`crate::Sql::bind`] for every built-in dialect: a plan
 //! binding no key set, or one whose dialect binds the core's Arrow key set
 //! as a relation (DuckDB, SQLite), is one fetch of the plan as it is; a key
 //! set the dialect writes as text is split as the old client splits it
@@ -30,13 +30,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+use crate::plan::{SqlParam, SqlPlan, SqlStatement};
 use arrow_array::cast::AsArray;
 use arrow_array::types::TimestampNanosecondType;
 use arrow_array::{Array, ArrayRef, Float64Array, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Field as ArrowField, Schema, SchemaRef};
 use sdm_contract::data::{
-    AttachmentId, BoundFetch, BoundRequest, DataRequest, FetchPlan, KeyData, SEED_BATCH, SEED_KEY,
-    SqlParam, SqlStatement,
+    AttachmentId, BoundFetch, BoundRequest, DataRequest, KeyData, SEED_BATCH, SEED_KEY,
 };
 use sdm_contract::types::ColumnType;
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
@@ -143,20 +143,17 @@ const COLUMN: &str = "keys";
 pub(crate) fn bind(
     dialect: &dyn SqlDialect,
     request: &DataRequest,
-    plan: FetchPlan,
+    plan: SqlPlan,
     keys: &BTreeMap<AttachmentId, KeyData>,
     float_text: fn(f64) -> String,
-    render: &dyn Fn(usize) -> Result<FetchPlan, CoreError>,
-) -> Result<BoundRequest, CoreError> {
+    render: &dyn Fn(usize) -> Result<SqlPlan, CoreError>,
+) -> Result<BoundRequest<SqlPlan>, CoreError> {
     let as_it_is = |plan| BoundRequest::whole(plan, request);
-    let FetchPlan::Sql {
+    let SqlPlan {
         statements,
         expect,
         result_conversions,
-    } = &plan
-    else {
-        return Ok(as_it_is(plan));
-    };
+    } = &plan;
     let named: BTreeSet<AttachmentId> = statements
         .iter()
         .flat_map(|statement| &statement.params)
@@ -198,22 +195,14 @@ pub(crate) fn bind(
             statements
         } else {
             rendered = render(offset)?;
-            match &rendered {
-                FetchPlan::Sql { statements, .. } => statements,
-                FetchPlan::Host { .. } => {
-                    return Err(CoreError::new(
-                        Sentence::Internal,
-                        "a chunk of a SQL plan rendered as a host's",
-                    ));
-                }
-            }
+            &rendered.statements
         };
         let statements = statements
             .iter()
             .map(|statement| chunked(statement, attachment, &after))
             .collect();
         fetches.push(BoundFetch {
-            plan: FetchPlan::Sql {
+            plan: SqlPlan {
                 result_conversions: result_conversions.clone(),
                 statements,
                 expect: expect.clone(),

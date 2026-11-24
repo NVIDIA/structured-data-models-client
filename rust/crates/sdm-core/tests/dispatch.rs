@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use sdm_contract::data::{
-    AttachmentId, DataLayer, DataRequest, DescribePart, Determinism, Dialect, ExpectedSchema,
-    FetchPlan, OptionalRequest, ProviderCapabilities, ProviderChoice, SqlStatement,
+    AttachmentId, DataLayer, DataRequest, DescribePart, Determinism, ExpectedSchema, FetchPlan,
+    OptionalRequest, ProviderCapabilities, ProviderChoice,
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
@@ -43,9 +43,27 @@ fn start(
     start_with_zones(root, start, attachments, Arc::new(NoZones))
 }
 
-/// The root a binding gets, over `sdm-sql`'s data layer.
+/// A root reading no database's own shapes.
 fn root() -> CompositionRoot {
-    CompositionRoot::new(Arc::new(sdm_sql::Data::new()))
+    CompositionRoot::default()
+}
+
+/// The root a binding gets, over `sdm-sql`'s reading of the built-in
+/// databases.
+fn databases() -> CompositionRoot {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    CompositionRoot::new(Arc::new(sdm_sql::Databases::new(&SPACES)))
+}
+
+/// A DuckDB source, as its SQL kit declares it.
+fn duckdb() -> ProviderChoice {
+    ProviderChoice::new(
+        sdm_sql::kit::SqlKit::new(sdm_sql::plan::SqlChoice::new("duckdb"), None)
+            .unwrap()
+            .capabilities()
+            .unwrap(),
+    )
 }
 
 fn facts() -> HostFacts {
@@ -210,7 +228,7 @@ fn every_operation_dispatches_to_a_run() {
     assert_eq!(validation.diagnostics[0].code, "PQL_SCHEMA_UNKNOWN_TABLE");
     assert_eq!(run.state(), RunState::Finished);
 
-    let host = ProviderChoice::Host {
+    let host = ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,
@@ -261,36 +279,13 @@ fn every_operation_dispatches_to_a_run() {
     );
 }
 
-/// A data layer that plans every request as one statement, to show that the
-/// root's one data layer is what every run plans through.
+/// A data layer holding every answer to the discovery marker, to show that
+/// the root's one data layer is what every run plans through.
 struct Fake;
 
 impl DataLayer for Fake {
-    fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
-        Ok(capabilities(&[OptionalRequest::CountRows]))
-    }
-
-    fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
-        Ok(FetchPlan::Sql {
-            result_conversions: Vec::new(),
-            statements: vec![SqlStatement {
-                dialect: Dialect::new("duckdb"),
-                text: "SELECT 1".into(),
-                params: vec![],
-            }],
-            expect: ExpectedSchema::Discover {},
-        })
-    }
-
-    fn read(
-        &self,
-        _: &DataRequest,
-        _: &ProviderChoice,
-        _: &[arrow_array::RecordBatch],
-    ) -> Result<sdm_contract::catalog::CatalogAnswer, CoreError> {
-        Ok(sdm_contract::catalog::CatalogAnswer::Tables(vec![
-            "fake".into(),
-        ]))
+    fn expected(&self, _: &ProviderCapabilities, _: &DataRequest) -> ExpectedSchema {
+        ExpectedSchema::Discover {}
     }
 }
 
@@ -349,28 +344,12 @@ fn named(err: &CoreError, field: &str) -> String {
 }
 
 #[test]
-fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
-    let root = root();
-    let duckdb = ProviderChoice::Sql {
-        timestamp_encoding: None,
-        dialect: Dialect::new("duckdb"),
-        namespace: Vec::new(),
-        view: None,
-    };
-    let access = root.data_access(&duckdb).unwrap();
-    // The dialect declares what sdm-sql renders for it: every request
-    // kind a count of rows and a scan among them (an
-    // undeclared optional request is refused by name before it is
-    // planned: a_host_provider_is_asked_only_for_what_it_declared).
-    let FetchPlan::Sql { statements, .. } = access.plan(&count()).unwrap() else {
-        panic!("DuckDB answers with SQL");
-    };
-    assert_eq!(statements[0].text, r#"SELECT COUNT(*) AS "rows" FROM "t""#);
-    let err = access.plan(&scan()).unwrap_err();
-    assert_eq!(err.code, ErrorCode::InvalidRequest);
-    assert_eq!(named(&err, "field"), "columns");
-    // It renders the catalog, each plan expecting the answer's
-    // fixed shape.
+fn the_root_s_data_layer_holds_a_source_to_its_database_s_shapes() {
+    let duckdb = duckdb();
+    let access = databases().data_access(&duckdb).unwrap();
+    // A built-in source declares what its kit writes: every optional
+    // request (an undeclared one is refused by name before it is planned:
+    // a_host_provider_is_asked_only_for_what_it_declared).
     assert_eq!(
         access.capabilities().optional,
         BTreeSet::from([
@@ -385,58 +364,43 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
             OptionalRequest::Lookup,
         ])
     );
+    // A request its SQL cannot write is refused by its kit, by name.
+    let kit = sdm_sql::kit::SqlKit::new(sdm_sql::plan::SqlChoice::new("duckdb"), None).unwrap();
+    let refused = kit.answer(&scan(), &BTreeMap::new(), |x| x.to_string(), &mut |_| {
+        panic!("the kit ran a scan it cannot write")
+    });
+    let Err(sdm_sql::kit::KitError::Refused(err)) = refused else {
+        panic!("the kit wrote a scan of no column");
+    };
+    assert_eq!(err.code, ErrorCode::InvalidRequest);
+    assert_eq!(named(&err, "field"), "columns");
+
+    // Its answers are held to its engine's shape, as its SQL returns them,
+    // and a catalog's to the standard shape its kit writes.
+    let engine = sdm_sql::Sql::new()
+        .plan(&count(), &sdm_sql::plan::SqlChoice::new("duckdb"))
+        .unwrap()
+        .expect;
+    assert_eq!(access.plan(&count()).unwrap().expect, engine);
     let tables = DataRequest::Describe {
         tables: vec![],
         part: DescribePart::Tables,
     };
-    let FetchPlan::Sql {
-        statements, expect, ..
-    } = access.plan(&tables).unwrap()
-    else {
-        panic!("DuckDB answers with SQL");
-    };
-    assert_eq!(statements.len(), 1);
-    // A catalog answer is in the dialect's own catalog's shape, which the
-    // data layer reads, not the contract's.
-    assert!(matches!(expect, ExpectedSchema::Schema { .. }));
-    assert_ne!(expect, tables.expected());
-
-    // Every dialect this build knows by name it renders (Snowflake's from
-    // ).
-    let snowflake = ProviderChoice::Sql {
-        timestamp_encoding: None,
-        dialect: Dialect::new("snowflake"),
-        namespace: Vec::new(),
-        view: None,
-    };
-    assert!(root.data_access(&snowflake).is_ok());
-    // A name the data layer does not know is refused the same way, and
-    // not repeated: the contract names no dialect, so it lets any through.
-    let unknown = ProviderChoice::Sql {
-        timestamp_encoding: None,
-        dialect: Dialect::new("a dialect\nof no name"),
-        namespace: Vec::new(),
-        view: None,
-    };
-    let err = root.data_access(&unknown).err().unwrap();
-    assert_eq!(
-        (err.kind, err.code),
-        (ErrorKind::Unsupported, ErrorCode::UnsupportedRequest)
-    );
-    assert!(!err.fields.contains_key("dialect"));
+    assert!(matches!(tables.expected(), ExpectedSchema::Schema { .. }));
+    assert_eq!(access.plan(&tables).unwrap().expect, tables.expected());
 
     // Swapping the data layer replaces the root's one value.
     let swapped = CompositionRoot::new(Arc::new(Fake));
     let access = swapped.data_access(&duckdb).unwrap();
-    let FetchPlan::Sql { statements, .. } = access.plan(&count()).unwrap() else {
-        panic!("not the swapped layer's plan");
-    };
-    assert_eq!(statements[0].text, "SELECT 1");
+    assert_eq!(
+        access.plan(&tables).unwrap().expect,
+        ExpectedSchema::Discover {}
+    );
 }
 
 #[test]
 fn a_host_provider_is_asked_only_for_what_it_declared() {
-    let host = ProviderChoice::Host {
+    let host = ProviderChoice {
         capabilities: capabilities(&[OptionalRequest::Preview]),
     };
     let access = root().data_access(&host).unwrap();
@@ -446,7 +410,7 @@ fn a_host_provider_is_asked_only_for_what_it_declared() {
     let pass = |request: DataRequest| {
         assert_eq!(
             access.plan(&request).unwrap(),
-            FetchPlan::Host {
+            FetchPlan {
                 key_sets: Vec::new(),
                 expect: request.expected()
             }
@@ -657,7 +621,7 @@ fn an_attachment_that_is_not_its_json_is_refused_without_its_text() {
 
 fn materialize(seed: Option<Seed>) -> Operation {
     Operation::Materialize(Materialize {
-        provider: ProviderChoice::Host {
+        provider: ProviderChoice {
             capabilities: ProviderCapabilities {
                 opaque_vendor: None,
                 compares_stored_times: false,
@@ -731,12 +695,7 @@ fn a_negative_seed_is_refused_by_the_core_and_a_seed_of_any_size_is_taken() {
 
 /// A start of `describe_source` naming `tables` (`[name, source]`).
 fn describe_named(tables: &[(&str, &str)]) -> Result<sdm_core::Run, CoreError> {
-    let operation = describe(ProviderChoice::Sql {
-        timestamp_encoding: None,
-        dialect: Dialect::new("duckdb"),
-        namespace: Vec::new(),
-        view: None,
-    });
+    let operation = describe(duckdb());
     let spec = SourceSpec {
         tables: tables
             .iter()

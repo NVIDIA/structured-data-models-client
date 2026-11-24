@@ -14,25 +14,23 @@
 //! writes no SQL and decides nothing: it runs the statements it is handed,
 //! with the batches it is handed, on one session per `answer`.
 //!
-//! The kit takes each step in the order the core's run takes it for a SQL
-//! provider today (`sdm-core`'s `Asker::fetch`): the plan; where the source
-//! needs one, a metadata read with empty key sets and the plan projected by
-//! it; the plan bound; each fetch run; the answers joined; the joined answer
-//! conformed. So a request answered through the kit runs exactly the
-//! statements the core's run asks of the host today.
+//! The kit takes each step in order: the plan; where the source needs one,
+//! a metadata read with empty key sets and the plan projected by it; the
+//! plan bound; each fetch run; the answers joined; the joined answer
+//! conformed.
 
 use std::collections::BTreeMap;
 
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use sdm_contract::data::{
-    AttachmentId, DataLayer, DataRequest, FailureFacts, FetchPlan, KeyData, ProviderCapabilities,
-    ProviderChoice, ProviderError, Relation,
+    AttachmentId, DataRequest, FailureFacts, KeyData, ProviderCapabilities, ProviderError, Relation,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::{CoreError, Detail, Sentence};
 
-use crate::Data;
+use crate::Sql;
+use crate::plan::{SqlChoice, SqlPlan};
 
 /// One fetch the kit asks the host's driver to run: the statements of
 /// `plan`, in order, on one session, binding `keys` where a statement names
@@ -41,8 +39,8 @@ use crate::Data;
 pub struct KitFetch<'a> {
     /// The request this fetch answers, or the part of it the fetch reads.
     pub request: &'a DataRequest,
-    /// The statements to run (always a SQL plan).
-    pub plan: &'a FetchPlan,
+    /// The statements to run.
+    pub plan: &'a SqlPlan,
     /// The key sets and text batches the statements bind, by the id each
     /// statement names them by.
     pub keys: &'a BTreeMap<AttachmentId, KeyData>,
@@ -77,8 +75,12 @@ impl From<CoreError> for KitError {
 /// the run, as the core keeps a run's, and never between runs.
 #[derive(Debug)]
 pub struct SqlKit {
-    data: Data,
-    provider: std::sync::Mutex<ProviderChoice>,
+    data: Sql,
+    provider: std::sync::Mutex<SqlChoice>,
+    /// Each catalog read's answer this run, by the plan that read it: an
+    /// identical catalog read is answered once a run, as the core answered
+    /// a SQL source's.
+    catalog: std::sync::Mutex<Vec<(SqlPlan, Result<Answered, KitError>)>>,
 }
 
 impl SqlKit {
@@ -87,29 +89,24 @@ impl SqlKit {
     /// SQL source this build writes, or names a semantic model its dialect
     /// cannot read.
     pub fn new(
-        provider: ProviderChoice,
+        provider: SqlChoice,
         spaces: Option<&'static crate::view_expr::Spaces>,
     ) -> Result<Self, CoreError> {
-        if !matches!(provider, ProviderChoice::Sql { .. }) {
-            return Err(CoreError::new(
-                Sentence::Internal,
-                "the SQL kit takes a SQL source, not a host provider",
-            ));
-        }
         let data = match spaces {
-            Some(spaces) => Data::reading_views(spaces),
-            None => Data::new(),
+            Some(spaces) => Sql::reading_views(spaces),
+            None => Sql::new(),
         };
         data.capabilities(&provider)?;
         Ok(SqlKit {
             data,
             provider: std::sync::Mutex::new(provider),
+            catalog: std::sync::Mutex::new(Vec::new()),
         })
     }
 
-    /// The source this kit answers for, as the core names it, its
-    /// namespace settled once the run asked it.
-    pub fn provider(&self) -> ProviderChoice {
+    /// The source this kit answers for, its namespace settled once the run
+    /// asked it.
+    pub fn provider(&self) -> SqlChoice {
         self.provider
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -131,7 +128,7 @@ impl SqlKit {
         declared.namespace.pop();
         declared.tries_upper_case_names = self.data.spellings(&provider, &probe).len() > 1;
         declared.namespace_first = self.data.unsettled(&provider);
-        declared.view = provider.view().cloned();
+        declared.view = provider.view.clone();
         Ok(declared)
     }
 
@@ -169,7 +166,30 @@ impl SqlKit {
                 .data
                 .project_result(&provider, request, &plan, &described.batches)?;
         }
-        let answered = self.run_bound(&provider, request, plan, keys, float_text, run)?;
+        let catalog_read = matches!(request, DataRequest::Describe { .. }).then(|| plan.clone());
+        let read_before = catalog_read.as_ref().and_then(|plan| {
+            self.catalog
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .iter()
+                .find(|(read, _)| read == plan)
+                .map(|(_, answered)| answered.clone())
+        });
+        let answered = match read_before {
+            Some(answered) => answered?,
+            None => {
+                // A failed read is kept too: the same read fails alike.
+                let answered = self.run_bound(&provider, request, plan, keys, float_text, run);
+                if let Some(plan) = catalog_read {
+                    self.catalog
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push((plan, answered.clone()));
+                }
+                answered?
+            }
+        };
+
         // A catalog answer is read from the dialect's own rows and written
         // in the standard shape every source answers in.
         if let DataRequest::Describe { part, .. } = request {
@@ -205,9 +225,10 @@ impl SqlKit {
     /// answers joined and read as the reference reads them.
     fn run_bound(
         &self,
-        provider: &ProviderChoice,
+        provider: &SqlChoice,
         request: &DataRequest,
-        plan: FetchPlan,
+        plan: SqlPlan,
+
         keys: &BTreeMap<AttachmentId, KeyData>,
         float_text: fn(f64) -> String,
         run: &mut dyn FnMut(KitFetch<'_>) -> Result<Answered, ProviderError>,

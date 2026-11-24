@@ -4,8 +4,9 @@
 
 //! Approved UTC windows on zoned warehouse timestamps, with wall clocks
 //! preserved for NTZ and DATE. No session state changes are permitted.
-use sdm_contract::data::{DataLayer, DataRequest, FetchPlan, ProviderChoice};
-use sdm_sql::Data;
+use sdm_contract::data::DataRequest;
+use sdm_sql::Sql;
+use sdm_sql::plan::{SqlChoice, SqlPlan};
 use serde_json::json;
 
 fn sql(dialect: &str, source_type: &str) -> String {
@@ -21,12 +22,7 @@ fn sql(dialect: &str, source_type: &str) -> String {
                    "upper": {"seed_column": "end", "inclusive": true}},
         "per_seed": null, "order": null
     })).unwrap();
-    let FetchPlan::Sql { statements, .. } = Data::new()
-        .plan(&request, &ProviderChoice::sql(dialect))
-        .unwrap()
-    else {
-        panic!("SQL")
-    };
+    let SqlPlan { statements, .. } = Sql::new().plan(&request, &SqlChoice::new(dialect)).unwrap();
     statements
         .into_iter()
         .map(|s| s.text)

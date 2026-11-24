@@ -9,25 +9,21 @@ use std::sync::Arc;
 
 use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
-use sdm_contract::data::{
-    AttachmentId, DataLayer, DataRequest, FetchPlan, KeyData, ProviderChoice, SqlResultConversion,
-    SqlTimestampKind,
-};
+use sdm_contract::data::{AttachmentId, DataRequest, KeyData};
 use sdm_contract::{Detail, Sentence};
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::{SqlChoice, SqlPlan, SqlResultConversion, SqlTimestampKind};
 use serde_json::json;
 
-fn provider(dialect: &str) -> ProviderChoice {
-    let mut provider = ProviderChoice::sql(dialect);
-    if let ProviderChoice::Sql { namespace, .. } = &mut provider {
-        *namespace = match dialect {
-            "postgres" => vec![Some("public".into())],
-            "databricks" | "snowflake" => {
-                vec![Some("catalog".into()), Some("schema".into())]
-            }
-            _ => Vec::new(),
-        };
-    }
+fn provider(dialect: &str) -> SqlChoice {
+    let mut provider = SqlChoice::new(dialect);
+    provider.namespace = match dialect {
+        "postgres" => vec![Some("public".into())],
+        "databricks" | "snowflake" => {
+            vec![Some("catalog".into()), Some("schema".into())]
+        }
+        _ => Vec::new(),
+    };
     provider
 }
 
@@ -52,7 +48,7 @@ fn postgres_alone_instructs_every_sql_result_to_encode_zoned_text_in_utc() {
             {
                 continue;
             }
-            let plan = Data::new().plan(&request, &provider(dialect)).unwrap();
+            let plan = Sql::new().plan(&request, &provider(dialect)).unwrap();
             let written = serde_json::to_value(plan).unwrap();
             if dialect == "postgres" {
                 assert_eq!(
@@ -106,7 +102,7 @@ fn chunked_keys(kind: &str) -> (DataRequest, BTreeMap<AttachmentId, KeyData>) {
 #[test]
 fn postgres_key_text_chunks_preserve_the_whole_result_policy() {
     let provider = provider("postgres");
-    let data = Data::new();
+    let data = Sql::new();
     for kind in ["lookup", "neighbors"] {
         let (request, keys) = chunked_keys(kind);
         let plan = data.plan(&request, &provider).unwrap();
@@ -115,14 +111,11 @@ fn postgres_key_text_chunks_preserve_the_whole_result_policy() {
             .unwrap();
         assert_eq!(bound.fetches.len(), 3, "{kind}");
         for (offset, fetch) in bound.fetches.into_iter().enumerate() {
-            let FetchPlan::Sql {
+            let SqlPlan {
                 statements,
                 result_conversions,
                 ..
-            } = fetch.plan
-            else {
-                panic!("a Postgres fetch is SQL");
-            };
+            } = fetch.plan;
             assert_eq!(result_conversions, vec![SqlResultConversion::ZonedTextUtc]);
             let batch = if offset == 0 {
                 "(r.ordinality - 1)::bigint".to_owned()
@@ -149,16 +142,13 @@ fn postgres_key_text_chunks_preserve_the_whole_result_policy() {
 #[test]
 fn postgres_does_not_accept_microseconds_by_also_naming_utc_text() {
     let provider = provider("postgres");
-    let data = Data::new();
+    let data = Sql::new();
     let (request, keys) = chunked_keys("neighbors");
     for include_utc_text in [false, true] {
         let mut plan = data.plan(&request, &provider).unwrap();
-        let FetchPlan::Sql {
+        let SqlPlan {
             result_conversions, ..
-        } = &mut plan
-        else {
-            panic!("a Postgres plan is SQL");
-        };
+        } = &mut plan;
         if !include_utc_text {
             result_conversions.clear();
         }

@@ -132,10 +132,10 @@ pub fn normalized_query(query: &str) -> Option<String> {
 }
 
 /// The composition root a binding starts its runs with: the one data layer,
-/// `sdm-sql`'s, built here where every binding reaches it (
-/// H14, E30).
+/// `sdm-sql`'s reading of the built-in databases, built here where every
+/// binding reaches it (H14, E30).
 pub fn default_root() -> CompositionRoot {
-    CompositionRoot::new(std::sync::Arc::new(sdm_sql::Data::reading_views(spaces())))
+    CompositionRoot::new(std::sync::Arc::new(sdm_sql::Databases::new(spaces())))
 }
 
 /// The white space the data layer reads a semantic model's text by: the

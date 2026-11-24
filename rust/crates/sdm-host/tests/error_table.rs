@@ -174,7 +174,7 @@ fn fetch_run() -> HostRun {
             filters: vec![],
             limit: None,
         },
-        plan: Some(FetchPlan::Host {
+        plan: Some(FetchPlan {
             key_sets: Vec::new(),
             expect: ExpectedSchema::Discover {},
         }),

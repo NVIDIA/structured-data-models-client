@@ -43,11 +43,14 @@ fn description_recording(case: &Case, extra_fetch: bool) -> Recording {
         .describe_source
         .as_ref()
         .unwrap();
+    // The source answers through its kit, which this recording records
+    // fetch by fetch, as a host's recorder does.
+    let kit = SqlSource::from_json(&spec.provider).unwrap();
     let start = ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
         facts: facts().unwrap(),
         operation: Operation::DescribeSource(DescribeSource {
-            provider: serde_json::from_value(spec.provider.clone()).unwrap(),
+            provider: kit.provider().unwrap(),
             source: AttachmentId(1),
             check_keys: spec.check_keys,
         }),
@@ -72,33 +75,40 @@ fn description_recording(case: &Case, extra_fetch: bool) -> Recording {
             ControlMessage::Step(Step::Fetch { requests }) => {
                 for step in requests {
                     assert!(fetches.len() < 100, "description did not finish");
-                    let fetched =
-                        duck::answer_logged(&connection, &step, &BTreeMap::new(), &mut log)
-                            .expect("the existing DuckDB provider must answer");
-                    let mut bytes = Vec::new();
-                    {
-                        let mut writer =
-                            arrow_ipc::writer::StreamWriter::try_new(&mut bytes, &fetched.schema)
+                    let answered = kit
+                        .answer(&step.request, &BTreeMap::new(), &mut |fetch| {
+                            let fetched = duck::run_plan(&connection, fetch.plan, fetch.keys, &mut log)
+                                .expect("the existing DuckDB provider must answer");
+                            let mut bytes = Vec::new();
+                            {
+                                let mut writer = arrow_ipc::writer::StreamWriter::try_new(
+                                    &mut bytes,
+                                    &fetched.schema,
+                                )
                                 .unwrap();
-                        for batch in &fetched.batches {
-                            writer.write(batch).unwrap();
-                        }
-                        writer.finish().unwrap();
-                    }
-                    let FetchPlan::Sql { statements, .. } = &step.plan else {
-                        panic!("the real DuckDB provider must receive SQL");
+                                for batch in &fetched.batches {
+                                    writer.write(batch).unwrap();
+                                }
+                                writer.finish().unwrap();
+                            }
+                            fetches.push(json!({
+                                "request": fetch.request,
+                                "plan": fetch.plan,
+                                "statements": fetch.plan.statements.iter().map(|s| &s.text).collect::<Vec<_>>(),
+                                "data": base64::engine::general_purpose::STANDARD.encode(bytes),
+                            }));
+                            Ok(Ok(fetched))
+                        })
+                        .unwrap();
+                    let Outcome::Data(fetched) = answered else {
+                        panic!("the kit must answer: {answered:?}");
                     };
-                    fetches.push(json!({
-                        "request": step.request,
-                        "plan": step.plan,
-                        "statements": statements.iter().map(|s| &s.text).collect::<Vec<_>>(),
-                        "data": base64::engine::general_purpose::STANDARD.encode(bytes),
-                    }));
+
                     handle
                         .reply(
                             &encode(&ControlMessage::FetchReply(FetchReply {
                                 id: step.id,
-                                outcome: FetchOutcome::Data {
+                                outcome: sdm_contract::run::FetchOutcome::Data {
                                     data: AttachmentId(1),
                                     continuation: None,
                                 },

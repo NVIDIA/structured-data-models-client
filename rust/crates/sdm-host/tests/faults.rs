@@ -93,7 +93,7 @@ fn fetching(expect: ExpectedSchema) -> HostRun {
             filters: vec![],
             limit: None,
         },
-        plan: Some(FetchPlan::Host {
+        plan: Some(FetchPlan {
             expect,
             key_sets: Vec::new(),
         }),

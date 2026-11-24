@@ -181,7 +181,7 @@ fn serving(limit: u64) -> Option<ModelEndpoint> {
 fn predict(calls: &[&[i64]], endpoint: Option<ModelEndpoint>) -> Run {
     let (state, attachments) = batched(calls);
     start(
-        &CompositionRoot::new(Arc::new(sdm_sql::Data::new())),
+        &CompositionRoot::default(),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

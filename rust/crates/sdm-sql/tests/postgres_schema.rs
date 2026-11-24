@@ -22,10 +22,9 @@
 //!   splits a name (row 20).
 
 use sdm_contract::catalog::CatalogAnswer;
-use sdm_contract::data::{
-    DataLayer, DataRequest, DescribePart, FetchPlan, ProviderChoice, Relation,
-};
-use sdm_sql::Data;
+use sdm_contract::data::{DataRequest, DescribePart, Relation};
+use sdm_sql::Sql;
+use sdm_sql::plan::{SqlChoice, SqlPlan};
 use serde_json::{Value, json};
 
 /// Every data request kind on every base (`contract/request-kinds.json`).
@@ -36,16 +35,16 @@ const KINDS: &str = include_str!("../../../../contract/request-kinds.json");
 /// schema and the table it binds.
 const REFERENCE_COLUMNS: &str = "SELECT c.column_name, c.data_type, c.udt_name,\n       c.numeric_scale, c.is_nullable, c.table_schema,\n       c.table_name,\n       pg_catalog.format_type(a.atttypid, a.atttypmod)\nFROM information_schema.columns c\nJOIN pg_catalog.pg_namespace n\n  ON n.nspname = c.table_schema\nJOIN pg_catalog.pg_class rel\n  ON rel.relnamespace = n.oid AND rel.relname = c.table_name\nJOIN pg_catalog.pg_attribute a\n  ON a.attrelid = rel.oid AND a.attname = c.column_name\n AND a.attnum > 0 AND NOT a.attisdropped\nWHERE c.table_schema = %s AND c.table_name = %s\nORDER BY c.ordinal_position";
 
-fn postgres(namespace: Value) -> ProviderChoice {
+fn postgres(namespace: Value) -> SqlChoice {
     serde_json::from_value(json!({
         "provider": "sql", "dialect": "postgres", "namespace": namespace
     }))
     .unwrap()
 }
 
-fn statements(request: &DataRequest, provider: &ProviderChoice) -> Vec<String> {
-    match Data::new().plan(request, provider) {
-        Ok(FetchPlan::Sql { statements, .. }) => statements.into_iter().map(|s| s.text).collect(),
+fn statements(request: &DataRequest, provider: &SqlChoice) -> Vec<String> {
+    match Sql::new().plan(request, provider) {
+        Ok(SqlPlan { statements, .. }) => statements.into_iter().map(|s| s.text).collect(),
         other => panic!("{request:?}: not planned as SQL: {other:?}"),
     }
 }
@@ -56,7 +55,7 @@ fn describe(part: DescribePart, tables: Vec<Relation>) -> DataRequest {
 
 #[test]
 fn a_source_given_no_schema_reads_the_session_s_once_and_reads_every_table_under_it() {
-    let data = Data::new();
+    let data = Sql::new();
     let given_none = postgres(json!([]));
     assert!(data.unsettled(&given_none));
     assert!(data.unsettled(&postgres(json!([null]))));
@@ -239,15 +238,9 @@ fn string_order_casts_are_kept_in_per_seed_and_final_order() {
         "window":null,"per_seed":2,
         "order":[{"column":"code","as_timestamp":false,"string_like":true,"descending":false,"nulls_last":true},{"column":"user_id","as_timestamp":false,"string_like":false,"descending":false,"nulls_last":true}]
     })).unwrap();
-    let sdm_contract::data::FetchPlan::Sql { statements, .. } = Data::new()
-        .plan(
-            &request,
-            &sdm_contract::data::ProviderChoice::sql("postgres"),
-        )
-        .unwrap()
-    else {
-        panic!("SQL")
-    };
+    let sdm_sql::plan::SqlPlan { statements, .. } = Sql::new()
+        .plan(&request, &sdm_sql::plan::SqlChoice::new("postgres"))
+        .unwrap();
     let text = &statements.last().unwrap().text;
     assert_eq!(
         text.matches("CAST(t.\"code\" AS text) ASC NULLS LAST")

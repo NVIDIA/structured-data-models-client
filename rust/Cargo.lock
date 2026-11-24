@@ -1779,6 +1779,7 @@ dependencies = [
  "arrow-select",
  "fancy-regex",
  "sdm-contract",
+ "serde",
  "serde_json",
 ]
 

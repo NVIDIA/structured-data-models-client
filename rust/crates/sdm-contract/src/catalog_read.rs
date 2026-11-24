@@ -3,25 +3,25 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Reading catalog answers into the contract's dialect-neutral
-//! [`CatalogAnswer`]: the column readers each dialect's
-//! reader is built of, and the reader of a host provider's answer, which
-//! is in the contract's own shape (`catalog_columns`).
+//! [`CatalogAnswer`]: the column readers each dialect's reader is built of,
+//! and the reader of the contract's own shape ([`standard`],
+//! `catalog_columns`), which every provider answers a `describe` in.
 //!
-//! The core calls a reader after check (b) held the answer to its plan's
-//! schema, so each column is there, of its type, and holds
-//! no null where the plan takes none. A reader still never panics on an
-//! answer that is not so: a column missing or of another type is
-//! `INTERNAL_ERROR`, naming the column.
+//! The core reads an answer after check (b) held it to its plan's schema,
+//! so each column is there, of its type, and holds no null where the plan
+//! takes none. A reader still never panics on an answer that is not so: a
+//! column missing or of another type is `INTERNAL_ERROR`, naming the
+//! column.
 
-use arrow_array::cast::AsArray;
-use arrow_array::types::Int64Type;
-use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, ListArray, RecordBatch, StringArray};
-use sdm_contract::catalog::{
+use crate::catalog::{
     CatalogAnswer, CatalogColumn, CatalogForeignKey, CatalogIndex, CatalogKey, IndexCoverage,
     KeyKind,
 };
-use sdm_contract::data::{DescribePart, catalog_columns as c, views_unread};
-use sdm_contract::{CoreError, Detail, Sentence};
+use crate::data::{DescribePart, catalog_columns as c, views_unread};
+use crate::error::{CoreError, Detail, Sentence};
+use arrow_array::cast::AsArray;
+use arrow_array::types::Int64Type;
+use arrow_array::{Array, ArrayRef, BooleanArray, Int64Array, ListArray, RecordBatch, StringArray};
 
 fn unread(name: &str, message: &str) -> CoreError {
     CoreError::new(Sentence::Internal, message).with_field("column", Detail::text(name))
@@ -41,31 +41,28 @@ fn retyped(name: &str) -> CoreError {
 }
 
 /// The text column `name` of `batch`.
-pub(crate) fn strings<'a>(
-    batch: &'a RecordBatch,
-    name: &str,
-) -> Result<&'a StringArray, CoreError> {
+pub fn strings<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a StringArray, CoreError> {
     column(batch, name)?
         .as_string_opt::<i32>()
         .ok_or_else(|| retyped(name))
 }
 
 /// The Boolean column `name` of `batch`.
-pub(crate) fn flags<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a BooleanArray, CoreError> {
+pub fn flags<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a BooleanArray, CoreError> {
     column(batch, name)?
         .as_boolean_opt()
         .ok_or_else(|| retyped(name))
 }
 
 /// The `int64` column `name` of `batch`.
-pub(crate) fn int64s<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a Int64Array, CoreError> {
+pub fn int64s<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a Int64Array, CoreError> {
     column(batch, name)?
         .as_primitive_opt::<Int64Type>()
         .ok_or_else(|| retyped(name))
 }
 
 /// The list-of-text column `name` of `batch`.
-pub(crate) fn lists<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ListArray, CoreError> {
+pub fn lists<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ListArray, CoreError> {
     let lists = column(batch, name)?
         .as_list_opt::<i32>()
         .ok_or_else(|| retyped(name))?;
@@ -79,7 +76,7 @@ pub(crate) fn lists<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ListAr
 /// answer by position (a warehouse's, whose catalog may name two columns
 /// alike): a string column of any width, or a column of nulls (a session
 /// with no current schema, a cell the row adapter had none of).
-pub(crate) fn text_at(batch: &RecordBatch, at: usize) -> Result<StringArray, CoreError> {
+pub fn text_at(batch: &RecordBatch, at: usize) -> Result<StringArray, CoreError> {
     let unread = || {
         CoreError::new(
             Sentence::Internal,
@@ -104,13 +101,13 @@ pub(crate) fn text_at(batch: &RecordBatch, at: usize) -> Result<StringArray, Cor
 }
 
 /// Row `row`'s text, `None` where it is null.
-pub(crate) fn text(strings: &StringArray, row: usize) -> Option<String> {
+pub fn text(strings: &StringArray, row: usize) -> Option<String> {
     (!strings.is_null(row)).then(|| strings.value(row).to_owned())
 }
 
 /// Row `row`'s names, in order, leaving out a null one; none where the
 /// list is null.
-pub(crate) fn names(lists: &ListArray, row: usize) -> Vec<String> {
+pub fn names(lists: &ListArray, row: usize) -> Vec<String> {
     if lists.is_null(row) {
         return vec![];
     }
@@ -164,23 +161,23 @@ fn optional_flags<'a>(
 
 /// The data type `name` names (`Dtype`'s own name), refused by name where
 /// it names none.
-fn dtype_named(name: &str) -> Result<sdm_contract::ops::Dtype, CoreError> {
+fn dtype_named(name: &str) -> Result<crate::ops::Dtype, CoreError> {
     serde_json::from_value(serde_json::Value::String(name.to_owned()))
         .map_err(|_| unread("dtype", "a column's dtype names no data type"))
 }
 
 /// Row `row`'s flag, false where it is null.
-pub(crate) fn flag(flags: &BooleanArray, row: usize) -> bool {
+pub fn flag(flags: &BooleanArray, row: usize) -> bool {
     !flags.is_null(row) && flags.value(row)
 }
 
 /// Each table's name, in order, from the text column `name`.
-pub(crate) fn tables(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
+pub fn tables(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
     Ok(CatalogAnswer::Tables(text_names(batches, name)?))
 }
 
 /// A `namespace` answer: parts in order, a row with none left out.
-pub(crate) fn namespace(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
+pub fn namespace(batches: &[RecordBatch], name: &str) -> Result<CatalogAnswer, CoreError> {
     Ok(CatalogAnswer::Namespace(text_names(batches, name)?))
 }
 
@@ -194,7 +191,7 @@ fn text_names(batches: &[RecordBatch], name: &str) -> Result<Vec<String>, CoreEr
 }
 
 /// The columns of a `columns` answer, by role.
-pub(crate) struct ColumnNames<'a> {
+pub struct ColumnNames<'a> {
     pub name: &'a str,
     pub declared_type: &'a str,
     pub not_null: &'a str,
@@ -202,7 +199,7 @@ pub(crate) struct ColumnNames<'a> {
 }
 
 /// Each column, in the table's order; a row with no name is left out.
-pub(crate) fn columns(
+pub fn columns(
     batches: &[RecordBatch],
     names: &ColumnNames<'_>,
 ) -> Result<CatalogAnswer, CoreError> {
@@ -231,7 +228,7 @@ pub(crate) fn columns(
 
 /// Each declared key: its kind, from the text column `kind` as `kind_of`
 /// reads it (a null kind is another kind), and its columns.
-pub(crate) fn keys(
+pub fn keys(
     batches: &[RecordBatch],
     kind: &str,
     columns: &str,
@@ -254,7 +251,7 @@ pub(crate) fn keys(
 }
 
 /// The columns of a `foreign_keys` answer, by role.
-pub(crate) struct ForeignKeyNames<'a> {
+pub struct ForeignKeyNames<'a> {
     pub key: &'a str,
     pub referenced_table: &'a str,
     pub columns: &'a str,
@@ -262,7 +259,7 @@ pub(crate) struct ForeignKeyNames<'a> {
 }
 
 /// Each column pair of each declared foreign key.
-pub(crate) fn foreign_keys(
+pub fn foreign_keys(
     batches: &[RecordBatch],
     names: &ForeignKeyNames<'_>,
 ) -> Result<CatalogAnswer, CoreError> {
@@ -284,12 +281,10 @@ pub(crate) fn foreign_keys(
     Ok(CatalogAnswer::ForeignKeys(found))
 }
 
-/// A host provider's answer, in the contract's own shape
-/// (`catalog_columns`), read as it is.
-pub(crate) fn host(
-    part: DescribePart,
-    batches: &[RecordBatch],
-) -> Result<CatalogAnswer, CoreError> {
+/// A provider's answer, in the contract's own shape (`catalog_columns`),
+/// read as it is. A semantic model's definition is not in it: its
+/// database's data layer reads it (`DataLayer::read_view`).
+pub fn standard(part: DescribePart, batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
     match part {
         // No view is read here: only a dialect that reads views answers it.
         DescribePart::ViewDefinition => Err(views_unread()),

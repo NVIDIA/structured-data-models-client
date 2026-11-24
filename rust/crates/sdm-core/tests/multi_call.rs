@@ -157,7 +157,7 @@ fn batched(calls: &[&[i64]]) -> (RequestState, Attachments) {
 
 fn predict(state: RequestState, attachments: Attachments) -> Result<Run, CoreError> {
     start(
-        &CompositionRoot::new(Arc::new(sdm_sql::Data::new())),
+        &CompositionRoot::default(),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

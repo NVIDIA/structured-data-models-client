@@ -50,8 +50,8 @@ use duckdb::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use duckdb::arrow::record_batch::RecordBatch;
 use rusqlite::types::{Value as Stored, ValueRef};
 use sdm_contract::ErrorKind;
-use sdm_contract::data::{AttachmentId, FetchPlan, ProviderError, SqlParam};
-use sdm_contract::run::FetchStep;
+use sdm_contract::data::{AttachmentId, ProviderError};
+use sdm_host::kit::{SqlParam, SqlPlan};
 
 use crate::driver::DriverLog;
 use crate::duck::Fetched;
@@ -132,13 +132,14 @@ impl Sqlite {
         self.ran.borrow().clone()
     }
 
-    /// The answer to one fetch step, its key sets bound from `keys` by
-    /// attachment id, recording in `log` the cursor, each binding and each
-    /// statement run with its result; the provider's error as the
-    /// contract carries it, never the driver's text.
-    pub fn answer_logged(
+    /// The answer to one fetch the kit asks, `plan`'s statements run in
+    /// order, its key sets bound from `keys` by attachment id, recording in
+    /// `log` the cursor, each binding and each statement run with its
+    /// result; the provider's error as the contract carries it, never the
+    /// driver's text.
+    pub fn run_plan(
         &self,
-        step: &FetchStep,
+        plan: &SqlPlan,
         keys: &BTreeMap<AttachmentId, Fetched>,
         log: &mut DriverLog,
     ) -> Result<Fetched, ProviderError> {
@@ -151,9 +152,7 @@ impl Sqlite {
             vendor_code: None,
             facts: None,
         };
-        let FetchPlan::Sql { statements, .. } = &step.plan else {
-            return Err(failed());
-        };
+        let statements = &plan.statements;
         let Some((last, before)) = statements.split_last() else {
             return Err(failed());
         };
@@ -533,8 +532,7 @@ mod tests {
     /// replaced on the next fetch.
     #[test]
     fn a_key_set_never_replaces_a_relation_the_provider_did_not_make() {
-        use sdm_contract::data::{DataRequest, Dialect, ProviderChoice};
-        use sdm_contract::run::ReplyId;
+        use sdm_contract::data::DataRequest;
 
         let source = Sqlite::in_memory().unwrap();
         let connection = source.connection();
@@ -551,31 +549,6 @@ mod tests {
                   {"name": "batch", "nullable": false, "type": {"type": "int64"}}]}}"#,
         )
         .unwrap();
-        let sqlite = ProviderChoice::Sql {
-            timestamp_encoding: None,
-            dialect: Dialect::new("sqlite"),
-            namespace: Vec::new(),
-            view: None,
-        };
-        let plan = sdm_host::default_root()
-            .data_access(&sqlite)
-            .unwrap()
-            .plan(&request)
-            .unwrap();
-        let FetchPlan::Sql { statements, .. } = &plan else {
-            panic!("not SQL");
-        };
-        let [SqlParam::KeySet { relation, .. }] = &statements[0].params[..] else {
-            panic!("no key set");
-        };
-        let relation = relation.clone();
-        let step = FetchStep {
-            id: ReplyId(1),
-            request,
-            plan,
-            continuation: None,
-            purpose: None,
-        };
         let schema = Arc::new(Schema::new(vec![
             Field::new("key", DataType::Int64, true),
             Field::new("batch", DataType::Int64, false),
@@ -595,6 +568,27 @@ mod tests {
                 batches: vec![batch],
             },
         )]);
+        // The statements SQLite's kit writes for the lookup.
+        let mut planned = None;
+        crate::sql_source::SqlSource::of("sqlite")
+            .answer(&request, &keys, &mut |fetch| {
+                planned = Some(fetch.plan.clone());
+                Ok(Err(ProviderError {
+                    error_class: None,
+                    driver_message: None,
+                    kind: ErrorKind::DataSource,
+                    retryable: false,
+                    sqlstate: None,
+                    vendor_code: None,
+                    facts: None,
+                }))
+            })
+            .unwrap();
+        let plan = planned.expect("a fetch");
+        let [SqlParam::KeySet { relation, .. }] = &plan.statements[0].params[..] else {
+            panic!("no key set");
+        };
+        let relation = relation.clone();
         let theirs = quoted(&relation);
         connection
             .execute_batch(&format!(
@@ -602,8 +596,7 @@ mod tests {
                  INSERT INTO temp.{theirs} VALUES ('keep me');"
             ))
             .unwrap();
-        let answer =
-            |source: &Sqlite| source.answer_logged(&step, &keys, &mut DriverLog::default());
+        let answer = |source: &Sqlite| source.run_plan(&plan, &keys, &mut DriverLog::default());
         assert!(answer(&source).is_err());
         let kept: String = connection
             .query_row(&format!("SELECT * FROM temp.{theirs}"), [], |row| {

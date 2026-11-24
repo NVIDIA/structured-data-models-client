@@ -12,11 +12,14 @@ use std::collections::BTreeMap;
 
 use sdm_contract::CoreError;
 use sdm_contract::data::{
-    AttachmentId, DataRequest, FailureFacts, KeyData, ProviderCapabilities, ProviderChoice,
-    ProviderError,
+    AttachmentId, DataRequest, FailureFacts, KeyData, ProviderCapabilities, ProviderError,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 pub use sdm_sql::kit::{Answered, KitError, KitFetch};
+pub use sdm_sql::plan::{
+    Dialect, SqlChoice, SqlParam, SqlPlan, SqlResultConversion, SqlStatement, SqlTimestampEncoding,
+    SqlTimestampKind,
+};
 
 use crate::ArrowData;
 use crate::admission::admit_from;
@@ -31,14 +34,15 @@ pub struct HostKit {
 impl HostKit {
     /// The kit of the built-in source `provider` names; refused by name
     /// where this build writes no SQL for it.
-    pub fn new(provider: ProviderChoice) -> Result<Self, CoreError> {
+    pub fn new(provider: SqlChoice) -> Result<Self, CoreError> {
         let kit = sdm_sql::kit::SqlKit::new(provider, Some(crate::spaces()))?;
         let vendor = kit.capabilities()?.opaque_vendor;
         Ok(HostKit { kit, vendor })
     }
 
-    /// The source the kit answers for, as the core names it.
-    pub fn provider(&self) -> ProviderChoice {
+    /// The source the kit answers for, its namespace settled once the run
+    /// asked it.
+    pub fn provider(&self) -> SqlChoice {
         self.kit.provider()
     }
 
@@ -146,9 +150,9 @@ fn to_json<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, crate::Outgoing> {
 }
 
 impl HostKit {
-    /// [`HostKit::new`] of a provider choice as the contract writes it.
+    /// [`HostKit::new`] of a source as JSON writes it.
     pub fn from_bytes(provider: &[u8]) -> Result<Self, crate::Outgoing> {
-        let provider: ProviderChoice = from_json(provider, "source")?;
+        let provider: SqlChoice = from_json(provider, "source")?;
         HostKit::new(provider).map_err(|error| refusal(&error))
     }
 

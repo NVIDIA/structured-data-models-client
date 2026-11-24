@@ -849,7 +849,6 @@ _SQL_ORCHESTRATION = {
     'dispatch.rs': (r'Operation::AddSqlColumn', r'crate::sql_column'),
     'lib.rs': (r'mod sql_column;',),
     'materialize/examples.rs': (r'ExampleSource::Sql',),
-    'rebind.rs': (r'sdm_contract::data::ProviderChoice::Sql',),
     'sql_column.rs': (
         r'sdm_contract::sql_column',
         r'sdm_contract::sql_column::\{\s*SqlColumn,\s*SqlColumnCall\s*\}',

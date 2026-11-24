@@ -6,21 +6,21 @@
 //! expectations for expressions, YAML values and parameter conversions.
 
 use sdm_contract::CoreError;
-use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{ViewKind, ViewTextAnswer, ViewTextAsk};
 use sdm_core::pql::yaml_rules;
 use sdm_core::{view_steps, view_words};
 use sdm_schema::view::metric;
 use sdm_schema::view::model::{self, Edge, MeasureNote, TimeColumnNote};
 use sdm_schema::view::yaml;
-use sdm_sql::Data;
+use sdm_sql::Sql;
+use sdm_sql::plan::SqlChoice;
 use sdm_sql::view_expr::metric::{self as data, DefaultRefusal, FilterRefusal};
 use sdm_sql::view_expr::{self, ExprDialect};
 
 /// The data layer's answers in Databricks's dialect, as the routine asks
-/// them (`DataLayer::view_text`).
+/// them (`Sql::view_text`).
 fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-    Data::reading_views(spaces()).view_text(&ProviderChoice::sql("databricks"), question)
+    Sql::reading_views(spaces()).view_text(&SqlChoice::new("databricks"), question)
 }
 
 /// The dialect's own words for a refusal's reason, as the routine asks.

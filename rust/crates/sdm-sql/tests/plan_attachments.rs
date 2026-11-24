@@ -2,16 +2,15 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! contract follow-up: a plan's attachments renamed by one method
-//! beside `FetchPlan::key_sets`, so the core names a bound fetch's batches
-//! by the run's ids without reading any plan's shape.
+//! A SQL plan's attachments renamed by one method beside
+//! `SqlPlan::key_sets`, so a bound fetch's batches are named by the ids the
+//! kit hands its host.
 
 use std::collections::BTreeMap;
 
 use sdm_contract::Scalar;
-use sdm_contract::data::{
-    AttachmentId, Dialect, ExpectedSchema, FetchPlan, KeySet, SqlParam, SqlStatement,
-};
+use sdm_contract::data::{AttachmentId, ExpectedSchema, KeySet};
+use sdm_sql::plan::{Dialect, SqlParam, SqlPlan, SqlStatement};
 
 fn key_set(id: u32) -> SqlParam {
     SqlParam::KeySet {
@@ -29,8 +28,8 @@ fn text(id: u32) -> SqlParam {
     }
 }
 
-fn plan(params: Vec<Vec<SqlParam>>) -> FetchPlan {
-    FetchPlan::Sql {
+fn plan(params: Vec<Vec<SqlParam>>) -> SqlPlan {
+    SqlPlan {
         result_conversions: Vec::new(),
         statements: params
             .into_iter()
@@ -67,21 +66,5 @@ fn each_attachment_a_plan_binds_is_renamed_where_the_map_names_it() {
     assert_eq!(
         renamed.key_sets(),
         [17, 18, 17, 2].map(AttachmentId).to_vec()
-    );
-}
-
-#[test]
-fn a_host_plan_binds_nothing_to_rename() {
-    let mut host = FetchPlan::Host {
-        key_sets: Vec::new(),
-        expect: ExpectedSchema::Discover {},
-    };
-    host.rename_attachments(&BTreeMap::from([(AttachmentId(1), AttachmentId(2))]));
-    assert_eq!(
-        host,
-        FetchPlan::Host {
-            key_sets: Vec::new(),
-            expect: ExpectedSchema::Discover {}
-        }
     );
 }

@@ -10,17 +10,13 @@
     reason = "test code: reads the core's sources, to hold the proposed sentences unsaid"
 )]
 
-use std::collections::BTreeMap;
-use std::sync::Arc;
-
-use arrow_array::{ArrayRef, Int64Array, RecordBatch};
-use arrow_schema::{DataType, Field as ArrowField, Schema, SchemaRef};
 use sdm_contract::catalog::{CatalogAnswer, ViewDefinition};
 use sdm_contract::data::{
-    AttachmentId, DataLayer, DataRequest, DescribePart, FailureFacts, FetchPlan, KeyData, KeySet,
-    ProviderCapabilities, ProviderChoice, ProviderError, Relation, SqlParam, SqlStatement,
-    ViewChoice,
+    AttachmentId, DataLayer, DataRequest, DescribePart, ProviderCapabilities, ProviderChoice,
+    ProviderError, ViewChoice,
 };
+use std::collections::BTreeMap;
+
 use sdm_contract::ops::Dtype;
 use sdm_contract::ops::{DescribedSource, ModelEndpoint, Predict, ViewNote};
 use sdm_contract::run::{ModelAnswer, ModelOutcome};
@@ -58,7 +54,7 @@ fn a_provider_error_carries_its_error_class_and_no_judgement() {
     }));
     assert_eq!(plain.error_class, None);
     assert!(written(&plain).get("error_class").is_none());
-    // What a failure means is the data layer's to say (`DataLayer::failure`),
+    // What a failure means is the source's to say (`ProviderError::facts`),
     // never the host's: a judgement the host sends is no field of the error.
     let judged = serde_json::from_value::<ProviderError>(json!({
         "kind": "data_source", "retryable": false, "sqlstate": "42703",
@@ -69,71 +65,44 @@ fn a_provider_error_carries_its_error_class_and_no_judgement() {
 
 // --- ProviderChoice: a semantic model ----------------------------------------------
 
+/// A source declaring `database`, as JSON writes its capabilities, with
+/// `more` fields added.
+fn declared(database: &str, more: serde_json::Value) -> ProviderCapabilities {
+    let mut fields = json!({
+        "optional": [], "max_keys_per_request": null, "sampling": "seeded_stable",
+        "max_seed": 1, "database": database
+    });
+    for (name, value) in more.as_object().unwrap() {
+        fields[name] = value.clone();
+    }
+    read(fields)
+}
+
 #[test]
-fn a_semantic_model_is_a_sql_provider_s_view_and_optional() {
-    let choice: ProviderChoice = read(json!({
-        "provider": "sql", "dialect": "databricks", "namespace": ["c", "s"],
-        "view": {"name": "sales_metrics", "trust_expressions": true}
-    }));
-    let ProviderChoice::Sql { view, .. } = &choice else {
-        unreachable!()
-    };
+fn a_semantic_model_is_a_source_s_declared_view_and_optional() {
+    let capabilities = declared(
+        "databricks",
+        json!({"view": {"name": "sales_metrics", "trust_expressions": true}}),
+    );
     assert_eq!(
-        view,
-        &Some(ViewChoice {
+        capabilities.view,
+        Some(ViewChoice {
             name: "sales_metrics".into(),
             trust_expressions: true,
         })
     );
-    assert_eq!(written(&choice)["view"]["name"], "sales_metrics");
-    let plain: ProviderChoice = read(json!({"provider": "sql", "dialect": "duckdb"}));
-    assert_eq!(plain, ProviderChoice::sql("duckdb"));
-    assert_eq!(
-        written(&plain),
-        json!({"provider": "sql", "dialect": "duckdb"})
-    );
+    assert_eq!(written(&capabilities)["view"]["name"], "sales_metrics");
+    let plain = declared("duckdb", json!({}));
+    assert_eq!(plain.view, None);
+    assert!(written(&plain).get("view").is_none());
     // The flag is the caller's, always written.
     assert!(
-        serde_json::from_value::<ProviderChoice>(json!({
-            "provider": "sql", "dialect": "snowflake", "view": {"name": "v"}
+        serde_json::from_value::<ProviderCapabilities>(json!({
+            "optional": [], "max_keys_per_request": null, "sampling": "seeded_stable",
+            "max_seed": 1, "view": {"name": "v"}
         }))
         .is_err()
     );
-}
-
-// --- SqlParam::Text: a key set's JSON as a one-cell text attachment ------------------
-
-#[test]
-fn a_text_parameter_names_its_attachment_and_the_step_lists_it() {
-    let param: SqlParam = read(json!({"param": "text", "attachment": 7}));
-    assert_eq!(
-        param,
-        SqlParam::Text {
-            attachment: AttachmentId(7)
-        }
-    );
-    assert_eq!(written(&param), json!({"param": "text", "attachment": 7}));
-    let plan = FetchPlan::Sql {
-        result_conversions: Vec::new(),
-        statements: vec![SqlStatement {
-            dialect: sdm_contract::data::Dialect::new("postgres"),
-            text: "SELECT 1".into(),
-            params: vec![
-                SqlParam::KeySet {
-                    keys: KeySet {
-                        attachment: AttachmentId(3),
-                        columns: vec![],
-                    },
-                    relation: "keys".into(),
-                },
-                param,
-            ],
-        }],
-        expect: sdm_contract::data::ExpectedSchema::Discover {},
-    };
-    // Every attachment a plan's statements bind, in order: what the fetch
-    // step lists for the host to take.
-    assert_eq!(plan.key_sets(), vec![AttachmentId(3), AttachmentId(7)]);
 }
 
 // --- DescribePart::ViewDefinition --------------------------------------------------
@@ -266,104 +235,21 @@ fn a_failed_model_call_hands_over_its_status_detail_and_codes() {
 
 // --- The DataLayer's new methods: each default today's, or a refusal by name ---------
 
-/// A data layer that answers only what every layer must.
+/// A data layer that reads no database.
 struct Bare;
 
-impl DataLayer for Bare {
-    fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
-        unreachable!()
-    }
-
-    fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
-        unreachable!()
-    }
-
-    fn read(
-        &self,
-        _: &DataRequest,
-        _: &ProviderChoice,
-        _: &[RecordBatch],
-    ) -> Result<CatalogAnswer, CoreError> {
-        unreachable!()
-    }
-}
-
-fn keys(values: &[i64]) -> KeyData {
-    let schema: SchemaRef = Arc::new(Schema::new(vec![ArrowField::new(
-        "key",
-        DataType::Int64,
-        false,
-    )]));
-    let column: ArrayRef = Arc::new(Int64Array::from(values.to_vec()));
-    KeyData {
-        batches: vec![RecordBatch::try_new(schema.clone(), vec![column]).unwrap()],
-        schema,
-    }
-}
-
-fn keyed_plan(attachments: &[u32]) -> FetchPlan {
-    FetchPlan::Sql {
-        result_conversions: Vec::new(),
-        statements: vec![SqlStatement {
-            dialect: sdm_contract::data::Dialect::new("postgres"),
-            text: "SELECT 1".into(),
-            params: attachments
-                .iter()
-                .map(|&id| SqlParam::KeySet {
-                    keys: KeySet {
-                        attachment: AttachmentId(id),
-                        columns: vec![],
-                    },
-                    relation: "keys".into(),
-                })
-                .collect(),
-        }],
-        expect: sdm_contract::data::ExpectedSchema::Discover {},
-    }
-}
+impl DataLayer for Bare {}
 
 #[test]
-fn a_failure_means_nothing_until_a_dialect_reads_it() {
-    let error: ProviderError = read(json!({
-        "kind": "data_source", "retryable": false, "sqlstate": "42P01",
-        "vendor_code": "2003", "error_class": "TABLE_OR_VIEW_NOT_FOUND"
-    }));
-    let facts = Bare.failure(&ProviderChoice::sql("databricks"), &error);
-    assert_eq!(facts, FailureFacts::default());
-    assert!(!facts.not_found && !facts.refuses_expression && facts.unusable.is_none());
-}
-
-#[test]
-fn a_relation_is_asked_as_given_until_a_dialect_spells_it_otherwise() {
-    let relation = Relation::of(vec!["db".into(), "s".into(), "orders".into()]);
-    let asked = Bare.spellings(&ProviderChoice::sql("snowflake"), &relation);
-    assert_eq!(asked, vec![relation]);
-}
-
-#[test]
-fn a_request_binds_in_one_fetch_as_the_core_made_its_key_sets() {
-    // bind's default ( simplified it): the plan as it is, binding the
-    // key sets the core made, under the ids it made them under.
+fn a_data_layer_reads_the_contract_s_shapes_by_default() {
     let request: DataRequest = read(json!({
-        "request": "describe", "tables": [{"source": ["t"]}], "part": "tables"
+        "request": "describe", "tables": [{"source": ["t"]}], "part": "columns"
     }));
-    let made = BTreeMap::from([
-        (AttachmentId(3), keys(&[1, 2])),
-        (AttachmentId(5), keys(&[3])),
-    ]);
-    let plan = keyed_plan(&[3, 5, 3]);
-    let bound = Bare
-        .bind(
-            &ProviderChoice::sql("duckdb"),
-            &request,
-            plan.clone(),
-            &made,
-            |x| x.to_string(),
-        )
-        .unwrap();
-    assert_eq!(bound.fetches.len(), 1);
-    assert_eq!(bound.fetches[0].plan, plan);
-    assert!(bound.fetches[0].batches.is_empty());
+    assert_eq!(
+        Bare.expected(&declared("duckdb", json!({})), &request),
+        request.expected()
+    );
+    assert_eq!(Bare.view_kind(&declared("databricks", json!({}))), None);
 }
 
 /// A data layer that reads views, saying the clause a reason names its
@@ -372,24 +258,11 @@ fn a_request_binds_in_one_fetch_as_the_core_made_its_key_sets() {
 struct Worded;
 
 impl DataLayer for Worded {
-    fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
-        unreachable!()
-    }
-
-    fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
-        unreachable!()
-    }
-
-    fn read(
+    fn view_text(
         &self,
-        _: &DataRequest,
-        _: &ProviderChoice,
-        _: &[RecordBatch],
-    ) -> Result<CatalogAnswer, CoreError> {
-        unreachable!()
-    }
-
-    fn view_text(&self, _: &ProviderChoice, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
+        _: &ProviderCapabilities,
+        ask: ViewTextAsk,
+    ) -> Result<ViewTextAnswer, CoreError> {
         Ok(match ask {
             ViewTextAsk::ReasonWords {
                 reason: ExprRefusal::DollarQuotes,
@@ -411,7 +284,7 @@ impl DataLayer for Worded {
 
 #[test]
 fn a_reason_that_names_the_warehouse_is_worded_by_the_dialect() {
-    let databricks = ProviderChoice::sql("databricks");
+    let databricks = declared("databricks", json!({}));
     // The same clause, whether the filter or a dropped column met it.
     let filter = FilterRefusal::Unsafe(ExprRefusal::DollarQuotes);
     let column = ExprVerdict {
@@ -449,7 +322,7 @@ fn a_reason_that_names_the_warehouse_is_worded_by_the_dialect() {
 
 #[test]
 fn a_view_column_s_declared_type_is_read_by_the_dialect_s_type_map() {
-    let databricks = ProviderChoice::sql("databricks");
+    let databricks = declared("databricks", json!({}));
     let read = |data_type: &str| {
         Worded
             .view_text(
@@ -520,7 +393,7 @@ fn a_serving_endpoint_s_refusal_carries_its_status_and_its_own_code() {
 fn a_view_s_text_is_refused_by_name_until_a_dialect_reads_views() {
     let refused = Bare
         .view_text(
-            &ProviderChoice::sql("duckdb"),
+            &declared("duckdb", json!({})),
             ViewTextAsk::TableReference {
                 name: "c.s.t".into(),
             },
@@ -793,13 +666,16 @@ fn view_errors_explain_trust_and_recovery() {
     );
 }
 
-/// A SQL choice's semantic model is read through its accessor (
-/// contract follow-up); a choice naming none, or a host provider, has none.
+/// A provider's semantic model is read through its accessor; a provider
+/// declaring none has none.
 #[test]
 fn a_choice_s_view_is_read_by_its_accessor() {
-    let read: sdm_contract::data::ProviderChoice = serde_json::from_value(serde_json::json!({
-        "provider": "sql", "dialect": "databricks",
-        "view": {"name": "c.s.v", "trust_expressions": true},
+    let read: ProviderChoice = serde_json::from_value(json!({
+        "provider": "host",
+        "capabilities": declared(
+            "databricks",
+            json!({"view": {"name": "c.s.v", "trust_expressions": true}}),
+        ),
     }))
     .unwrap();
     let view = read.view().unwrap();
@@ -808,7 +684,7 @@ fn a_choice_s_view_is_read_by_its_accessor() {
         ("c.s.v", true)
     );
     assert!(
-        sdm_contract::data::ProviderChoice::sql("databricks")
+        ProviderChoice::new(declared("databricks", json!({})))
             .view()
             .is_none()
     );
