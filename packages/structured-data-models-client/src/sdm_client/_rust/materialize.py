@@ -18,7 +18,7 @@ import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, errors, providers, results
+from sdm_client._rust import codec, errors, results
 from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
 from sdm_client._rust.run import run
 from sdm_client._rust.spec import held_schema
@@ -314,7 +314,13 @@ def gather(
 
     schema = materializer.schema
     anchor = options.get('anchor_time')
-    choice, provider = providers.for_source(schema.source)
+    source = schema.source
+    if source is None:
+        raise StructuredDataError(
+            'materializing from tables in place needs a source-backed schema',
+            code='UNSUPPORTED_REQUEST',
+        )
+    choice, provider = source._sdm_chosen()
     operation = {
         'op': 'materialize',
         'provider': choice,

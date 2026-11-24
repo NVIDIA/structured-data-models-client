@@ -164,9 +164,8 @@ def test_public_window_sums_keep_postgres_chronological_order(
     server: Server | None,
 ) -> None:
     import pandas as pd
-    from sdm_connectors import PostgresSource
 
-    from sdm_client import PredictiveQuery, Relationship, Schema
+    from sdm_client import PostgresSource, PredictiveQuery, Relationship, Schema
 
     if server is None:
         pytest.fail('needs the local Postgres test service')

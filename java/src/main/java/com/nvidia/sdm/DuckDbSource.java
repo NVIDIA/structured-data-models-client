@@ -4,7 +4,11 @@
 
 package com.nvidia.sdm;
 
+import com.nvidia.sdm.internal.Host;
+import com.nvidia.sdm.internal.Providers;
+import com.nvidia.sdm.internal.jdbc.JdbcProvider;
 import java.sql.Connection;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -12,7 +16,7 @@ import java.util.Objects;
  * {@code DuckDBSource}: each read runs on a cursor of its own ({@code duplicate()}), and the core's
  * statements read the tables of the connection's current schema.
  */
-public final class DuckDbSource implements JdbcSource {
+public final class DuckDbSource extends BuiltInSource {
   private final Connection connection;
 
   private DuckDbSource(Connection connection) {
@@ -24,9 +28,19 @@ public final class DuckDbSource implements JdbcSource {
     return new DuckDbSource(connection);
   }
 
-  @Override
+  /** The caller-owned connection, kept open while reading source data. */
   public Connection connection() {
     return connection;
+  }
+
+  @Override
+  Map<String, Object> sqlChoice() {
+    return Providers.sqlChoice("duckdb", null, false);
+  }
+
+  @Override
+  Host.Provider driver() {
+    return new JdbcProvider(connection, JdbcProvider.Driver.DUCKDB);
   }
 
   @Override

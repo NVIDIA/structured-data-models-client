@@ -23,7 +23,7 @@ def test_paused_duckdb_description_does_not_change_sqlite_description() -> None:
     import duckdb
     from sdm_client import Schema
     from sdm_client._rust.providers.duckdb import DuckDBProvider
-    from sdm_connectors import DuckDBSource, SQLiteSource
+    from sdm_client import DuckDBSource, SQLiteSource
 
     def sqlite_schema():
         with adbc_driver_sqlite.dbapi.connect() as connection:

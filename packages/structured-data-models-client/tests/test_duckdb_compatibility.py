@@ -10,9 +10,9 @@ from decimal import Decimal
 import duckdb
 import pyarrow as pa
 import pytest
-from sdm_connectors import DuckDBSource, read_table
+from sdm_connectors import read_table
 
-from sdm_client import KumoRelational, PredictiveQuery, Schema
+from sdm_client import DuckDBSource, KumoRelational, PredictiveQuery, Schema
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 
 

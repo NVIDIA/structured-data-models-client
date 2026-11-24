@@ -30,9 +30,13 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError
+from sdm_client import (
+    DuckDBSource,
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'

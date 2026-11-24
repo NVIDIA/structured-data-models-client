@@ -16,7 +16,6 @@ to that, by its imports and by running one with pandas unimportable.
 from __future__ import annotations
 
 import importlib
-import sys
 from typing import Any
 
 __all__ = [
@@ -26,26 +25,12 @@ __all__ = [
     'PostgresProvider',
     'SnowflakeProvider',
     'SqliteProvider',
-    'for_source',
-    'view_choice',
 ]
-
-#: Each kind of source the core reads (``Source.kind``): the built-in SQL
-#: dialect it renders for it, and the name of the provider class answering
-#: on its connection, read when the run starts.
-_BY_KIND: dict[str, tuple[str, str]] = {
-    'duckdb': ('duckdb', 'DuckDBProvider'),
-    'sqlite': ('sqlite', 'SqliteProvider'),
-    'postgres': ('postgres', 'PostgresProvider'),
-    'databricks-sql': ('databricks', 'DatabricksSqlProvider'),
-    'databricks-spark': ('databricks', 'DatabricksSparkProvider'),
-    'snowflake': ('snowflake', 'SnowflakeProvider'),
-}
 
 #: The module each provider class is written in. Every one of them imports the
 #: warehouse package, which is an optional dependency, so a module is imported
-#: when a run first names its kind of source rather than when this one is. A
-#: route over frames names none of them and needs none of the package.
+#: when a built-in source first names its provider rather than when this one
+#: is. A route over frames names none of them and needs none of the package.
 _WRITTEN_IN: dict[str, str] = {
     'DatabricksSparkProvider': 'databricks',
     'DatabricksSqlProvider': 'databricks',
@@ -70,83 +55,3 @@ def __getattr__(name: str) -> Any:
         f'sdm_client._rust.providers.{_WRITTEN_IN[name]}'
     )
     return getattr(module, name)
-
-
-def for_source(source: Any) -> tuple[dict[str, Any], Any]:
-    r"""The provider choice a run over ``source`` names, and the provider
-    answering its fetches, by the source's kind (``Source.kind``, design fix
-    F): its built-in SQL dialect, DuckDB's, SQLite's, Postgres's
-     or Databricks's (a SQL warehouse or a Spark session), on
-    its connection, or Snowflake's (a connector connection or a
-    Snowpark session's own).
-
-    The choice carries the source's namespace (contract v28,
-    ``Source.namespace_parts``, design fix C): the schema a
-    ``PostgresSource`` was given, the catalog and schema of a
-    ``DatabricksSource``, the database and schema of a ``SnowflakeSource``,
-    each ``None`` where the connection's current one
-    is meant, under which the core reads each table and lists the source's
-    tables, as the reference qualifies each read by them; left out where
-    the source names none.
-
-    A semantic model is read through the source it is
-    kept in, on that source's dialect and provider, and its choice names
-    the model (``view``): its name as given and whether its expressions
-    are trusted. The core reads the model afresh at every run, so the
-    choice is all a schema built from it keeps of it.
-
-    A :class:`~sdm_client.provider.ProviderSource`'s choice is a host
-    provider's, its capabilities as the caller's provider declares them,
-    and its provider asks the caller's of each fetch
-    (:mod:`sdm_client._rust.host_providers`).
-
-    Raises:
-        NativeBoundaryError: A semantic model whose underlying source has no core provider.
-    """
-    from sdm_client.provider import ProviderSource
-
-    if isinstance(source, ProviderSource):
-        from sdm_client._rust import host_providers
-
-        return host_providers.chosen(source.provider)
-    model = _model_of(source)
-    kept = source if model is None else model.source
-    choice: dict[str, Any] = {'provider': 'sql'}
-    if model is not None and kept.kind not in _BY_KIND:
-        from sdm_client._rust import NativeBoundaryError
-
-        raise NativeBoundaryError(
-            f'{source!r} is kept in a {kept.kind} source, which the core '
-            'has no provider for'
-        )
-    dialect, name = _BY_KIND[kept.kind]
-    made = getattr(sys.modules[__name__], name)
-    choice['dialect'] = dialect
-    parts = kept.namespace_parts()
-    if any(part is not None for part in parts):
-        choice['namespace'] = parts
-    if model is not None:
-        choice['view'] = view_choice(model)
-    from sdm_client._rust import sql_kit
-
-    return sql_kit.chosen(choice, made(kept.connection))
-
-
-def view_choice(model: Any) -> dict[str, Any]:
-    r"""The contract's ``ViewChoice`` of the semantic model ``model``: its
-    name as the caller gave it, which the core resolves against the
-    namespace, and whether its expressions are trusted."""
-    return {
-        'name': model.name,
-        'trust_expressions': bool(model.trust_expressions),
-    }
-
-
-#: The kinds of a semantic model (``SemanticModel.kind``), each read
-#: through the source it is kept in (``SemanticModel.source``).
-_MODEL_KINDS = frozenset({'databricks-metric-view', 'snowflake-semantic-view'})
-
-
-def _model_of(source: Any) -> Any:
-    r"""``source`` if it is a semantic model, else ``None``."""
-    return source if source.kind in _MODEL_KINDS else None

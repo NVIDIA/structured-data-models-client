@@ -25,9 +25,13 @@ import pytest
 duckdb = pytest.importorskip('duckdb')
 dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
-from sdm_connectors import DuckDBSource, SQLiteSource  # noqa: E402
-
-from sdm_client import PredictiveQuery, Relationship, Schema  # noqa: E402
+from sdm_client import (  # noqa: E402
+    DuckDBSource,
+    PredictiveQuery,
+    Relationship,
+    Schema,
+    SQLiteSource,
+)
 
 USERS = pd.DataFrame({'user_id': range(1, 21), 'age': range(20, 40)})
 # Every user has five visits on each of three days, so a day's visits tie on

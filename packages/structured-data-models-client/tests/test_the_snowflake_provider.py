@@ -26,13 +26,12 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
-from sdm_connectors import SnowflakeSource
 from sdm_connectors.providers import PlanNotRun
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.errors import NotSupportedError, ProgrammingError
 
+from sdm_client import SnowflakeSource
 from sdm_client._rust import run as rust_run
-from sdm_client._rust.providers import for_source
 from sdm_client._rust.providers.snowflake import SnowflakeProvider
 
 
@@ -286,30 +285,25 @@ def test_a_plan_the_provider_does_not_run_is_refused_before_anything_runs() -> (
 
 def test_a_snowflake_source_names_its_dialect_namespace_and_provider() -> None:
     connection = _Connection({})
-    choice, provider = for_source(
-        SnowflakeSource(connection, database='SALES', schema='public')
-    )
+    source = SnowflakeSource(connection, database='SALES', schema='public')
     # The parts as given, never upper-cased (``CN/sql.py:247``).
-    declared = choice['capabilities']
-    assert declared['database'] == 'snowflake'
-    assert declared['namespace'] == ['SALES', 'public']
-    assert not declared.get('namespace_first', False)
+    assert source._sql_choice() == {
+        'provider': 'sql',
+        'dialect': 'snowflake',
+        'namespace': ['SALES', 'public'],
+    }
+    _, provider = source._sdm_chosen()
     assert isinstance(provider._driver, SnowflakeProvider)
-    # A part left to the connection is asked for first.
-    choice, _ = for_source(SnowflakeSource(connection, database='SALES'))
-    assert choice['capabilities']['namespace_first'] is True
-    choice, _ = for_source(SnowflakeSource(connection))
-    assert choice['capabilities']['namespace_first'] is True
-    assert 'namespace' not in choice['capabilities']
+    choice = SnowflakeSource(connection, database='SALES')._sql_choice()
+    assert choice['namespace'] == ['SALES', None]
+    assert 'namespace' not in SnowflakeSource(connection)._sql_choice()
 
 
 def test_a_snowpark_session_is_read_through_its_own_connection() -> None:
     rows = pa.table({'user_id': pa.array([0, 1], pa.int8())})
     connection = _Connection({_SELECT: rows})
     source = SnowflakeSource(Session(connection), database='DB', schema='S')
-    assert source.kind == 'snowflake'
-    _, provider = for_source(source)
-    # The driver runs the statements the source's SQL kit hands it.
+    _, provider = source._sdm_chosen()
     answer = _arrow(provider._driver(_step((_SELECT, []))))
     assert answer.equals(rows)
     assert connection.calls == [(_SELECT, None, 'qmark')]

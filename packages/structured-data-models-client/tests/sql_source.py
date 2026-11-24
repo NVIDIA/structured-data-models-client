@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-r"""A caller's own :class:`~sdm_client.provider.DataProvider` over a SQL
+r"""A caller's own :class:`~sdm_client.Source` over a SQL
 engine, as a caller writes one for an engine the client has no connector
 for: each request it declares rendered as that engine's SQL, by an
 :class:`Engine` naming how the engine runs a query, qualifies a table and
@@ -41,7 +41,7 @@ class Engine:
     catalog: str = 'information_schema'
 
 
-class SqlDataProvider:
+class SqlSource(p.Source):
     r"""Answers ``describe``, ``scan`` and the optional requests declared,
     leaving the rest to the core's in-memory fallback."""
 

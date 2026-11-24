@@ -4,7 +4,11 @@
 
 package com.nvidia.sdm;
 
+import com.nvidia.sdm.internal.Host;
+import com.nvidia.sdm.internal.Providers;
+import com.nvidia.sdm.internal.jdbc.JdbcProvider;
 import java.sql.Connection;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -15,7 +19,7 @@ import java.util.Optional;
  * autocommit, else a savepoint inside the caller's), so a failed read leaves the connection
  * usable.
  */
-public final class PostgresSource implements JdbcSource {
+public final class PostgresSource extends BuiltInSource {
   private final Connection connection;
   private final String schema;
 
@@ -34,7 +38,7 @@ public final class PostgresSource implements JdbcSource {
     return new PostgresSource(connection, Objects.requireNonNull(schema, "schema"));
   }
 
-  @Override
+  /** The caller-owned connection, kept open while reading source data. */
   public Connection connection() {
     return connection;
   }
@@ -42,6 +46,16 @@ public final class PostgresSource implements JdbcSource {
   /** The schema the tables are read in, when one was given. */
   public Optional<String> schema() {
     return Optional.ofNullable(schema);
+  }
+
+  @Override
+  Map<String, Object> sqlChoice() {
+    return Providers.sqlChoice("postgres", null, false, schema);
+  }
+
+  @Override
+  Host.Provider driver() {
+    return new JdbcProvider(connection, JdbcProvider.Driver.POSTGRES);
   }
 
   @Override

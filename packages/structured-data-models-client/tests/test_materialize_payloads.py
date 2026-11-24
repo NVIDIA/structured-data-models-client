@@ -9,10 +9,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 from test_materialize_options import ANCHOR, QUERY, _connection, _materialize
 
-from sdm_client import PredictiveQuery, Request, Schema
+from sdm_client import DuckDBSource, PredictiveQuery, Request, Schema
 from sdm_client._rust.spec import held_schema
 from sdm_client.schema import _described_on_the_core
 

@@ -5,15 +5,6 @@
 from typing import TYPE_CHECKING, Any
 
 from sdm_connectors._version import __version__
-from sdm_connectors.source import (
-    DatabricksSource,
-    DuckDBSource,
-    PostgresSource,
-    SemanticModel,
-    SnowflakeSource,
-    Source,
-    SQLiteSource,
-)
 from sdm_connectors.sql import (
     ConnectorError,
     MissingBackendError,
@@ -42,14 +33,7 @@ def __dir__() -> list[str]:
 
 __all__ = [
     'ConnectorError',
-    'DatabricksSource',
-    'DuckDBSource',
     'MissingBackendError',
-    'PostgresSource',
-    'SQLiteSource',
-    'SemanticModel',
-    'SnowflakeSource',
-    'Source',
     '__version__',
     'quote_ident',
     'read',

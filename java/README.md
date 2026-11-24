@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The Java library uses the same Rust engine as Python, loaded from the JAR through JNI; see the [engine boundary diagrams](../docs/development/engine-boundaries.md).
 It describes the tables of a DuckDB, SQLite, Postgres or Databricks database through the caller's own JDBC connection, gathers a predictive query's request from them, and predicts with a model endpoint, each on the core, as the Python client does.
-Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
+Databricks metric views are read through `source.semanticModel(name)` (or `semanticModel(name, trustExpressions)`), a source of the same class, and `schema.conversionNotes()` explains their conversion in the core's words.
 The library is built and tested in CI, but it is not released: there is no Maven publication and no release JAR. Build it from source as below.
 
 ## Read semantic predictions
@@ -61,13 +61,14 @@ Readers return an owned Arrow `Table`; callers close it before their `BufferAllo
 
 | API | Responsibility |
 | --- | --- |
-| `Readers.readTable(Source, table, allocator)` | Read one named table on the caller's connection/session. |
-| `Readers.readQuery(Source, sql, allocator)` | Read the caller's SQL result on that same connection/session. |
+| `Readers.readTable(Connection, table, allocator)` | Read one named table on the caller's JDBC connection. |
+| `Readers.readQuery(Connection, sql, allocator)` | Read the caller's SQL result on that same connection. |
+| `Readers.readSparkTable(SparkSession, table, allocator)`, `readSparkQuery` | The same through the caller's Spark session. |
 | `Readers.read(URI, ReadOptions, allocator)` | Read local/file/S3 CSV or Parquet, including partitioned datasets. |
 | `DatabricksSparkSource.of(SparkSession, catalog, schema)` | Execute Rust's existing Databricks SQL through the caller's Spark session. |
 
-`Source` is the common source boundary; `JdbcSource` owns `connection()` and the four existing JDBC classes keep their concrete getters.
-This is an explicit pre-release change to `Source.connection()`, not a fake JDBC connection for Spark.
+`Source` is the one source type: an abstract class that the built-in sources extend, and that your own source extends.
+Each built-in source keeps its own getters, such as `connection()` or `session()`.
 `Schema.source()` continues returning the actual `Source`.
 Spark APIs use an optional/provided dependency; ordinary applications must work without Spark JARs.
 Java owns driver/session access and lossless Arrow conversion; Rust keeps schema, sampling and prediction policy.
@@ -246,20 +247,20 @@ A panic inside the core is contained: the call raises `INTERNAL_ERROR` with `det
 
 The core's log events reach SLF4J under the loggers its crates name (`sdm_core`, `sdm_host`, `sdm_sql` and their modules), and its warnings under `com.nvidia.sdm.warnings`, at `WARN`.
 
-## Your own data provider
+## Your own source
 
-A `ProviderSource` reads data through your own code instead of a database connection.
-Implement `com.nvidia.sdm.provider.DataProvider`: the core sends it typed requests (`DataRequest`), never SQL, and it answers each with Arrow rows.
-Every provider answers `describe` and `scan`; it declares any other request it answers in its `Capabilities`, and the core answers the rest in memory from `scan` when a fallback is declared.
+To read data through your own code instead of a database connection, extend `com.nvidia.sdm.Source`.
+The core sends it typed requests (`DataRequest`), never SQL, and it answers each with Arrow rows.
+Every source answers `describe` and `scan`; it declares any other request it answers in its `Capabilities`, and the core answers the rest in memory from `scan` when a fallback is declared.
 
 ```java
-DataProvider provider = new MyProvider();          // implements DataProvider
-Source source = ProviderSource.of(provider);
+Source source = new MySource();                    // extends Source
 Schema schema = Schema.fromSource(source, options);
 ```
 
-With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` with more than `n` seeds reaches the provider as several requests of at most `n` seeds each, whose answers the core joins.
-Python takes the same provider. [Your own data provider](../docs/reference/data-providers.md) covers both languages, with a complete example in each: the Java one is [`InMemoryProviderExampleTest.java`](src/test/java/com/nvidia/sdm/InMemoryProviderExampleTest.java).
+With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` with more than `n` seeds reaches the source as several requests of at most `n` seeds each, whose answers the core joins.
+Python takes the same source.
+[Your own source](../docs/reference/data-providers.md) covers both languages, with a complete example in each: the Java one is [`InMemoryProviderExampleTest.java`](src/test/java/com/nvidia/sdm/InMemoryProviderExampleTest.java).
 
 ## Build
 
@@ -309,11 +310,11 @@ The caller supplies private connection/endpoint configuration and a build proven
 
 `SnowflakeSource.of(connection, database, schema)` uses a caller-owned JDBC connection.
 Either namespace argument may be null to use its current value.
-Use `.semanticModel(name, false)` for an existing semantic view; Rust interprets its schema and writes sampling SQL.
+Use `.semanticModel(name)` for an existing semantic view; Rust interprets its schema and writes sampling SQL.
 The caller supplies `net.snowflake:snowflake-jdbc:4.4.0` and authentication.
 No connection settings are changed, and closing schemas or requests does not close the connection.
 
-`Readers.readTable(source, name, allocator)` and `Readers.readQuery(source, sql, allocator)` return owned Arrow tables usable with Tabular or Relational `Schema.fromData`.
+`Readers.readTable(connection, name, allocator)` and `Readers.readQuery(connection, sql, allocator)` return owned Arrow tables usable with Tabular or Relational `Schema.fromData`.
 Raw Snowflake `NUMBER` columns retain their declared decimal precision and scale, including integers beyond 64 bits and fractions that Python's connector converts to doubles.
 Rust applies the existing warehouse numeric conversion rules when these values enter source-backed Relational sampling.
 Timestamp values retain their precision; zoned timestamps carry the connection's current session timezone, read without changing it.

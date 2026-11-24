@@ -116,6 +116,8 @@
       "ColumnMetadata",
       "ContextDraw",
       "ContextReport",
+      "DatabricksSource",
+      "DuckDBSource",
       "ExplanationSummarizer",
       "ExplanationView",
       "Explanations",
@@ -134,17 +136,20 @@
       "Model",
       "ModelCapabilities",
       "NimRequestError",
+      "PostgresSource",
       "PredictionResult",
       "PredictiveQuery",
-      "ProviderSource",
       "RelationalTask",
       "Relationship",
       "RelationshipOrigin",
       "Request",
       "SDMClient",
       "SDMWarning",
+      "SQLiteSource",
       "SanitizationReport",
       "Schema",
+      "SnowflakeSource",
+      "Source",
       "SourceTable",
       "Split",
       "StructuredDataError",
@@ -210,6 +215,39 @@
         ],
         "public_methods": {},
         "signature": "(status: Literal['available', 'unavailable'], parts: tuple[sdm_client.context_report.ContextDraw, ...] = ()) -> None"
+      },
+      "DatabricksSource": {
+        "bases": [
+          "sdm_client.sources._BuiltInSource"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "capabilities": "(self) -> 'Capabilities'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'",
+          "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'DatabricksSource'"
+        },
+        "signature": "(connection: 'DatabricksConnection | pyspark.sql.SparkSession | pyspark.sql.connect.session.SparkSession', *, catalog: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
+      },
+      "DuckDBSource": {
+        "bases": [
+          "sdm_client.sources._BuiltInSource"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "capabilities": "(self) -> 'Capabilities'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
+        },
+        "signature": "(connection: 'DuckDBConnection') -> 'None'"
       },
       "ExplanationSummarizer": {
         "bases": [],
@@ -408,6 +446,22 @@
         "public_methods": {},
         "signature": "(status_code: 'int', *, code: 'str | None', message: 'str', details: 'dict[str, Any] | None' = None) -> 'None'"
       },
+      "PostgresSource": {
+        "bases": [
+          "sdm_client.sources._BuiltInSource"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "capabilities": "(self) -> 'Capabilities'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
+        },
+        "signature": "(connection: 'PostgresConnection', *, schema: 'str | None' = None) -> 'None'"
+      },
       "PredictionResult": {
         "bases": [],
         "kind": "class",
@@ -432,16 +486,6 @@
           "materialize": "(self, *, indices: 'Sequence[Any] | None' = None, predict: 'pd.DataFrame | None' = None, num_context_samples: 'int | None' = None, model: 'str | Model | None' = None, candidates: 'Sequence[Any] | None' = None, task: 'str | None' = None, **options: 'Any') -> 'Request'"
         },
         "signature": "(query: 'str', data: 'Schema | Mapping[str, pd.DataFrame]') -> 'None'"
-      },
-      "ProviderSource": {
-        "bases": [],
-        "kind": "class",
-        "public_attributes": [
-          "kind",
-          "provider"
-        ],
-        "public_methods": {},
-        "signature": "(provider: 'DataProvider') -> 'None'"
       },
       "RelationalTask": {
         "bases": [],
@@ -523,6 +567,22 @@
         "public_methods": {},
         "signature": null
       },
+      "SQLiteSource": {
+        "bases": [
+          "sdm_client.sources._BuiltInSource"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "capabilities": "(self) -> 'Capabilities'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
+        },
+        "signature": "(connection: 'SQLiteConnection') -> 'None'"
+      },
       "SanitizationReport": {
         "bases": [],
         "kind": "class",
@@ -545,7 +605,7 @@
           "check_consistent": "(self) -> 'None'",
           "from_data": "(tables: 'Mapping[str, pd.DataFrame]', *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None) -> 'Schema'",
           "from_relbench": "(name: 'str', *, cache_dir: 'str | Path | None' = None, offline: 'bool' = False) -> 'Schema'",
-          "from_source": "(source: 'Source | ProviderSource', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None, check_keys: 'bool' = True) -> 'Schema'",
+          "from_source": "(source: 'Source', tables: 'Mapping[str, str] | None' = None, *, primary_keys: 'Mapping[str, str | Sequence[str]] | None' = None, time_columns: 'Mapping[str, str | None] | None' = None, relationships: 'Sequence[Relationship] | None' = None, check_keys: 'bool' = True) -> 'Schema'",
           "infer_links": "(self) -> 'Schema'",
           "infer_metadata": "(self) -> 'Schema'",
           "link_report": "(self) -> 'LinkReport'",
@@ -558,12 +618,42 @@
           "to_mermaid": "(self, show_columns: 'bool' = True) -> 'str'",
           "visualize": "(self, path: 'Path | str | io.BytesIO | None' = None, show_columns: 'bool' = True, height: 'int' = 540) -> 'None'",
           "with_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
-          "with_source": "(self, source: 'Source | ProviderSource') -> 'Schema'",
+          "with_source": "(self, source: 'Source') -> 'Schema'",
           "with_sql_column": "(self, table: 'str', name: 'str', expression: 'str') -> 'Schema'",
           "without_relationship": "(self, relationship: 'Relationship') -> 'Schema'",
           "without_table": "(self, name: 'str') -> 'Schema'"
         },
-        "signature": "(tables: 'Mapping[str, Table | SourceTable]', relationships: 'Sequence[Relationship]' = (), *, source: 'Source | ProviderSource | None' = None) -> 'None'"
+        "signature": "(tables: 'Mapping[str, Table | SourceTable]', relationships: 'Sequence[Relationship]' = (), *, source: 'Source | None' = None) -> 'None'"
+      },
+      "SnowflakeSource": {
+        "bases": [
+          "sdm_client.sources._BuiltInSource"
+        ],
+        "kind": "class",
+        "public_attributes": [
+          "connection",
+          "namespace"
+        ],
+        "public_methods": {
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "capabilities": "(self) -> 'Capabilities'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'",
+          "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'SnowflakeSource'"
+        },
+        "signature": "(connection: 'SnowflakeConnection | snowflake.snowpark.Session', *, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
+      },
+      "Source": {
+        "bases": [
+          "abc.ABC"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "capabilities": "(self) -> 'Capabilities'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
+        },
+        "signature": "()"
       },
       "SourceTable": {
         "bases": [
@@ -697,7 +787,6 @@
       "CompareOp",
       "Count",
       "CountRows",
-      "DataProvider",
       "DataRequest",
       "Describe",
       "DescribePart",
@@ -719,7 +808,6 @@
       "OptionalRequest",
       "Preview",
       "ProviderFailure",
-      "ProviderSource",
       "Relation",
       "RepeatedKey",
       "SEED_BATCH",
@@ -728,6 +816,7 @@
       "Sampling",
       "Scan",
       "SeedBound",
+      "Source",
       "TableColumn",
       "TableKey",
       "TieTerm",
@@ -842,18 +931,6 @@
         ],
         "public_methods": {},
         "signature": "(table: 'Relation', filters: 'tuple[Filter, ...]') -> None"
-      },
-      "DataProvider": {
-        "bases": [
-          "typing.Protocol"
-        ],
-        "kind": "class",
-        "public_attributes": [],
-        "public_methods": {
-          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
-          "capabilities": "(self) -> 'Capabilities'"
-        },
-        "signature": "(*args, **kwargs)"
       },
       "DataRequest": {
         "kind": "Union"
@@ -1084,16 +1161,6 @@
         "public_methods": {},
         "signature": "(sqlstate: 'str | None' = None, vendor_code: 'str | None' = None, error_class: 'str | None' = None, message: 'str | None' = None) -> None"
       },
-      "ProviderSource": {
-        "bases": [],
-        "kind": "class",
-        "public_attributes": [
-          "kind",
-          "provider"
-        ],
-        "public_methods": {},
-        "signature": "(provider: 'DataProvider') -> 'None'"
-      },
       "Relation": {
         "bases": [],
         "kind": "class",
@@ -1167,6 +1234,19 @@
         "public_methods": {},
         "signature": "(seed_column: 'str', inclusive: 'bool') -> None"
       },
+      "Source": {
+        "bases": [
+          "abc.ABC"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "capabilities": "(self) -> 'Capabilities'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
+        },
+        "signature": "()"
+      },
       "TableColumn": {
         "bases": [],
         "kind": "class",
@@ -1218,14 +1298,7 @@
   "sdm_connectors": {
     "__all__": [
       "ConnectorError",
-      "DatabricksSource",
-      "DuckDBSource",
       "MissingBackendError",
-      "PostgresSource",
-      "SQLiteSource",
-      "SemanticModel",
-      "SnowflakeSource",
-      "Source",
       "__version__",
       "quote_ident",
       "read",
@@ -1242,39 +1315,6 @@
         "public_methods": {},
         "signature": "(message: 'str', *, code: 'str | None' = None, details: 'dict[str, Any] | None' = None) -> 'None'"
       },
-      "DatabricksSource": {
-        "bases": [
-          "sdm_connectors.source.Source"
-        ],
-        "kind": "class",
-        "public_attributes": [
-          "backend",
-          "connection",
-          "kind",
-          "namespace"
-        ],
-        "public_methods": {
-          "namespace_parts": "(self) -> 'list[str | None]'",
-          "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'SemanticModel'"
-        },
-        "signature": "(connection: 'DatabricksConnection | SparkSession', *, catalog: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
-      },
-      "DuckDBSource": {
-        "bases": [
-          "sdm_connectors.source.Source"
-        ],
-        "kind": "class",
-        "public_attributes": [
-          "backend",
-          "connection",
-          "kind",
-          "namespace"
-        ],
-        "public_methods": {
-          "namespace_parts": "(self) -> 'list[str | None]'"
-        },
-        "signature": "(connection: 'DuckDBConnection') -> 'None'"
-      },
       "MissingBackendError": {
         "bases": [
           "sdm_connectors.sql.ConnectorError",
@@ -1284,88 +1324,6 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": "(backend: 'str', driver: 'str') -> 'None'"
-      },
-      "PostgresSource": {
-        "bases": [
-          "sdm_connectors.source.Source"
-        ],
-        "kind": "class",
-        "public_attributes": [
-          "backend",
-          "connection",
-          "kind",
-          "namespace"
-        ],
-        "public_methods": {
-          "namespace_parts": "(self) -> 'list[str | None]'"
-        },
-        "signature": "(connection: 'PostgresConnection', *, schema: 'str | None' = None) -> 'None'"
-      },
-      "SQLiteSource": {
-        "bases": [
-          "sdm_connectors.source.Source"
-        ],
-        "kind": "class",
-        "public_attributes": [
-          "backend",
-          "connection",
-          "kind",
-          "namespace"
-        ],
-        "public_methods": {
-          "namespace_parts": "(self) -> 'list[str | None]'"
-        },
-        "signature": "(connection: 'SQLiteConnection') -> 'None'"
-      },
-      "SemanticModel": {
-        "bases": [
-          "sdm_connectors.source.Source"
-        ],
-        "kind": "class",
-        "public_attributes": [
-          "backend",
-          "connection",
-          "kind",
-          "name",
-          "namespace",
-          "source",
-          "trust_expressions"
-        ],
-        "public_methods": {
-          "namespace_parts": "(self) -> 'list[str | None]'"
-        },
-        "signature": "(source: 'DatabricksSource | SnowflakeSource', name: 'str', *, trust_expressions: 'bool' = False) -> 'None'"
-      },
-      "SnowflakeSource": {
-        "bases": [
-          "sdm_connectors.source.Source"
-        ],
-        "kind": "class",
-        "public_attributes": [
-          "backend",
-          "connection",
-          "kind",
-          "namespace"
-        ],
-        "public_methods": {
-          "namespace_parts": "(self) -> 'list[str | None]'",
-          "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'SemanticModel'"
-        },
-        "signature": "(connection: 'SnowflakeConnection | SnowparkSession', *, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
-      },
-      "Source": {
-        "bases": [],
-        "kind": "class",
-        "public_attributes": [
-          "backend",
-          "connection",
-          "kind",
-          "namespace"
-        ],
-        "public_methods": {
-          "namespace_parts": "(self) -> 'list[str | None]'"
-        },
-        "signature": "(connection: 'Any' = None, *args: 'Any', **namespace: 'Any') -> 'Source'"
       },
       "__version__": {
         "kind": "str",

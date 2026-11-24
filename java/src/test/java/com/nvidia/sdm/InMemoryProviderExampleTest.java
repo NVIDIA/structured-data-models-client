@@ -7,7 +7,6 @@ package com.nvidia.sdm;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.nvidia.sdm.provider.Capabilities;
-import com.nvidia.sdm.provider.DataProvider;
 import com.nvidia.sdm.provider.DataRequest;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -87,8 +86,8 @@ class InMemoryProviderExampleTest {
     return tables;
   }
 
-  /** The provider: {@code describe} and {@code scan}, and a fallback for everything else. */
-  static final class InMemoryProvider implements DataProvider {
+  /** The source: {@code describe} and {@code scan}, and a fallback for everything else. */
+  static final class InMemorySource extends Source {
     @Override
     public Capabilities capabilities() {
       // The client answers every request not declared here in memory, from scans.
@@ -162,7 +161,7 @@ class InMemoryProviderExampleTest {
 
   @Test
   void theDocumentedProviderAnswersAQuery() throws Exception {
-    Source source = ProviderSource.of(new InMemoryProvider());
+    Source source = new InMemorySource();
     var schema =
         com.nvidia.sdm.Schema.fromSource(
                 source,

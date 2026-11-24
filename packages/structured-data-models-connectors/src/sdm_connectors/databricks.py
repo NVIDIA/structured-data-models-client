@@ -79,7 +79,7 @@ def warehouse(
     connection it gets back::
 
         from databricks.sdk import WorkspaceClient
-        from sdm_connectors import DatabricksSource
+        from sdm_client import DatabricksSource
         from sdm_connectors.databricks import warehouse
 
         connection = warehouse(warehouse_id, workspace=WorkspaceClient())
@@ -194,7 +194,7 @@ def lakebase(
     caller closes the connection it gets back::
 
         from databricks.sdk import WorkspaceClient
-        from sdm_connectors import PostgresSource
+        from sdm_client import PostgresSource
         from sdm_connectors.databricks import lakebase
 
         workspace = WorkspaceClient()

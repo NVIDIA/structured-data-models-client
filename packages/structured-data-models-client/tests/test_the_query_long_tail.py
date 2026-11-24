@@ -22,9 +22,8 @@ import pytest
 
 duckdb = pytest.importorskip('duckdb')
 
-from sdm_connectors import DuckDBSource  # noqa: E402
-
 from sdm_client import (  # noqa: E402
+    DuckDBSource,  # noqa: E402
     KumoRelational,
     PredictiveQuery,
     Request,

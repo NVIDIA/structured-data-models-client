@@ -148,9 +148,9 @@ The compatibility ledger in `tests/compatibility/manifest.json` records supporte
 
 ### Product (ships to users)
 
-- `packages/structured-data-models-client/`: the public `sdm_client` API.
+- `packages/structured-data-models-client/`: the public `sdm_client` API, including `Source` (`provider.py`) and the built-in sources (`sources.py`).
   - `src/sdm_client/_rust/`: the Python host of the Rust core: the run loop, the message codec, the error table, and `providers/`, which run the core's SQL on the user's DuckDB, SQLite or Postgres connection.
-- `packages/structured-data-models-connectors/`: `sdm_connectors`, the `Source` classes and the driver helpers in `backends/`.
+- `packages/structured-data-models-connectors/`: `sdm_connectors`, the file and table readers, the Databricks connection helpers and the driver helpers in `backends/`.
 - `packages/structured-data-models-api/`: `sdm_api`, the wire types generated from the model's OpenAPI file.
 - `rust/`: the Rust core; see [`rust/README.md`](rust/README.md).
   - `rust/crates/`: the library crates (all but `sdm-testkit` ship).
@@ -191,7 +191,7 @@ It hands the host steps, "run these SQL statements" or "send this request body",
 The paths below are under `packages/` for Python and under `rust/crates/` for Rust.
 
 1. **Connect a source.**
-   Python: `sdm_connectors/source.py` (`DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource`, `SnowflakeSource`).
+   Python: `sdm_client/sources.py` (`DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource`, `SnowflakeSource`), or a caller's own subclass of `sdm_client.Source`.
    Rust: none; the connection stays in the host, and `sdm_client/_rust/providers/` runs the core's SQL on it.
 2. **Describe the schema** (`Schema.from_source`).
    Python: `sdm_client/schema.py` and the source adapters pass schema inputs and Arrow data to the core.

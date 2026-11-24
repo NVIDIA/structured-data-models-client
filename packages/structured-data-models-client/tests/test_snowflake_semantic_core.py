@@ -17,10 +17,14 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
-from sdm_connectors import SnowflakeSource
 from sdm_connectors.providers import text as binding_text
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError
+from sdm_client import (
+    PredictiveQuery,
+    Schema,
+    SnowflakeSource,
+    StructuredDataError,
+)
 from sdm_client._rust import providers
 
 FIXTURE = (

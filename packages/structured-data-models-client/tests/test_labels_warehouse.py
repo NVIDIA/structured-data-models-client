@@ -24,7 +24,7 @@ def test_live_ground_truth_without_a_model(connector):
         pytest.skip(
             'set SDM_LABELS_WAREHOUSE_CONFIG to a private source configuration'
         )
-    from sdm_connectors import DatabricksSource, SnowflakeSource
+    from sdm_client import DatabricksSource, SnowflakeSource
 
     settings = json.loads(Path(config_path).read_text())['sources'][connector]
     driver, source_type = {

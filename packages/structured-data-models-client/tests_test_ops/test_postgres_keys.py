@@ -13,9 +13,8 @@ import warnings
 import psycopg
 import pytest
 from psycopg import sql
-from sdm_connectors import PostgresSource
 
-from sdm_client import PredictiveQuery, Schema
+from sdm_client import PostgresSource, PredictiveQuery, Schema
 
 
 @pytest.mark.parametrize('source_type', ['REAL', 'DOUBLE PRECISION'])

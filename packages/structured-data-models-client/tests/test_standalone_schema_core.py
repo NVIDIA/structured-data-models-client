@@ -148,7 +148,8 @@ def test_bulk_binding_does_not_reenter_standalone_checks(
         schema = Schema.from_data({'items': pd.DataFrame({'id': [1, 2]})})
     else:
         import duckdb
-        from sdm_connectors import DuckDBSource
+
+        from sdm_client import DuckDBSource
 
         with duckdb.connect() as connection:
             connection.execute('CREATE TABLE items(id INTEGER PRIMARY KEY)')
@@ -164,8 +165,8 @@ def test_source_schema_declarations_and_missing_dtype(
     monkeypatch, catalog_facts
 ):
     import duckdb
-    from sdm_connectors import DuckDBSource
 
+    from sdm_client import DuckDBSource
     from sdm_client.schema import _described_on_the_core
 
     def fail(*args, **kwargs):

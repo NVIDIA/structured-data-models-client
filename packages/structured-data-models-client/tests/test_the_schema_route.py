@@ -18,9 +18,8 @@ from typing import Any
 
 import duckdb
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import Relationship, Schema, StructuredDataError
+from sdm_client import DuckDBSource, Relationship, Schema, StructuredDataError
 from sdm_client._rust import providers
 from sdm_client.schema import _described_on_the_core
 

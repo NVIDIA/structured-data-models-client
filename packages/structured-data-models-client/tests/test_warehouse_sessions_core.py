@@ -11,13 +11,14 @@ from datetime import datetime, timedelta
 import duckdb
 import pytest
 from adbc_driver_sqlite import dbapi as sqlite
-from sdm_connectors import DuckDBSource, SQLiteSource
 
 from sdm_client import (
+    DuckDBSource,
     KumoRelational,
     PredictiveQuery,
     Schema,
     SDMClient,
+    SQLiteSource,
 )
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire.keys import _named_by, keys_in

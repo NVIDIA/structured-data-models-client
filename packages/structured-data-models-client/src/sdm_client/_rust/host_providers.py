@@ -2,8 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 r"""The bridge between the core's host-provider messages and a caller's
-:class:`~sdm_client.provider.DataProvider`: the provider choice a
-:class:`~sdm_client.provider.ProviderSource` names, each fetch's request
+:class:`~sdm_client.provider.Source`: the provider choice it names, each
+fetch's request
 read into the public request types with the key sets it carries, the
 schema its answer must have, and what a failure tells the core.
 
@@ -30,17 +30,17 @@ __all__ = [
 ]
 
 
-def chosen(provider: p.DataProvider) -> tuple[dict[str, Any], HostProvider]:
-    r"""The core's provider choice for ``provider``, and the run loop's
+def chosen(source: p.Source) -> tuple[dict[str, Any], HostProvider]:
+    r"""The core's provider choice for ``source``, and the run loop's
     provider answering its fetches. Its capabilities are read once."""
-    declared = provider.capabilities()
+    declared = source.capabilities()
     if not isinstance(declared, p.Capabilities):
         raise TypeError(
-            'DataProvider.capabilities() must return a Capabilities, got '
+            'Source.capabilities() must return a Capabilities, got '
             f'{type(declared).__name__}'
         )
     choice = {'provider': 'host', 'capabilities': capabilities(declared)}
-    return choice, HostProvider(provider)
+    return choice, HostProvider(source)
 
 
 def capabilities(declared: p.Capabilities) -> dict[str, Any]:
@@ -67,38 +67,35 @@ def capabilities(declared: p.Capabilities) -> dict[str, Any]:
 
 
 class HostProvider:
-    r"""The run loop's provider over a caller's provider: each fetch step
+    r"""The run loop's provider over a caller's source: each fetch step
     read into a request and its expected schema, and asked of it."""
 
-    def __init__(self, provider: p.DataProvider) -> None:
-        self._provider = provider
+    def __init__(self, source: p.Source) -> None:
+        self._source = source
 
     def __call__(
         self, step: dict[str, Any], keys: Mapping[int, Any] | None = None
     ) -> Any:
         request = read_request(step['request'], keys or {})
         expected = expected_schema(step['plan'].get('expect'))
-        answer = self._provider.answer(request, expected)
+        answer = self._source.answer(request, expected)
         if not hasattr(answer, '__arrow_c_stream__'):
             raise TypeError(
-                f'DataProvider.answer() returned a {type(answer).__name__}; '
+                f'Source.answer() returned a {type(answer).__name__}; '
                 'it returns an object exporting an Arrow stream '
                 '(__arrow_c_stream__), such as a pyarrow Table'
             )
         return answer
 
     def error_fields(self, error: Exception) -> dict[str, Any] | None:
-        r"""What ``error`` tells the core, by the provider's ``failure``,
-        where it has one: the run loop reads the failure's attributes
-        otherwise, as it does where the hook fails or answers with anything
-        but a :class:`~sdm_client.provider.ProviderFailure`, so the
-        provider's own failure is always the one the operation reports."""
-        read = getattr(self._provider, 'failure', None)
-        if not callable(read):
-            return None
+        r"""What ``error`` tells the core, by the source's ``failure``: the
+        run loop reads the failure's attributes where it says nothing, as
+        it does where the hook fails or answers with anything but a
+        :class:`~sdm_client.provider.ProviderFailure`, so the source's own
+        failure is always the one the operation reports."""
         try:
-            told = read(error)
-        except Exception:  # noqa: BLE001 - the provider's failure stands
+            told = self._source.failure(error)
+        except Exception:  # noqa: BLE001 - the source's failure stands
             return None
         if not isinstance(told, p.ProviderFailure):
             return None

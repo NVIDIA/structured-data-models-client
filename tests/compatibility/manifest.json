@@ -4297,7 +4297,7 @@
         "python": [
           "sdm_connectors.read",
           "sdm_connectors.read_table",
-          "sdm_connectors.SnowflakeSource",
+          "SnowflakeSource",
           "SnowflakeSource.semantic_model"
         ],
         "java": [
@@ -4332,11 +4332,11 @@
           "packages/structured-data-models-connectors/tests/test_reader.py::test_read_local_still_rejects_a_remote_uri_given_as_a_path",
           "packages/structured-data-models-connectors/tests/test_reader.py::test_the_duckdb_backend_refuses_a_missing_database",
           "packages/structured-data-models-connectors/tests/test_reader.py::test_the_duckdb_backend_opens_an_in_memory_database",
-          "packages/structured-data-models-connectors/tests/test_source.py::test_a_semantic_model_is_a_source_kept_in_databricks_or_snowflake",
-          "packages/structured-data-models-connectors/tests/test_source.py::test_a_semantic_model_trusts_only_built_in_functions_by_default",
-          "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_gives_its_namespace_parts_in_its_class_order",
-          "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-          "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_says_its_kind"
+          "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_semantic_model_is_a_source_of_the_same_class",
+          "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+          "packages/structured-data-models-client/tests/test_built_in_sources.py::test_both_databricks_connections_are_read_by_their_own_driver",
+          "packages/structured-data-models-client/tests/test_built_in_sources.py::test_what_a_source_cannot_be_is_refused",
+          "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#parquetPreservesTimezoneNanosecondsAndNulls",
@@ -4445,13 +4445,13 @@
       "id": "data-providers",
       "apis": {
         "python": [
-          "ProviderSource",
-          "provider.DataProvider",
+          "Source",
+          "provider.Source",
           "provider.Capabilities",
           "provider.DataRequest"
         ],
         "java": [
-          "ProviderSource"
+          "Source"
         ]
       },
       "tests": {
@@ -4459,17 +4459,19 @@
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#declaredFilterKindsGoOnTheWireAndNoneLeavesTheFieldOut",
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#valueFiltersAreReadAsTypedFiltersNestedAndAll",
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#hasRowsIsReadWithItsTableAndNestedFilters",
-          "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachRequestIsReadAsTheSharedVectorsSay",
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachCapabilitiesDeclaredIsSentAsTheSharedVectorsSay"
         ],
         "python": [
           "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
           "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
-          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_source_is_abstract_and_is_not_pickled",
           "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
           "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
-          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one"
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_schema_over_a_source_is_not_pickled_whatever_the_source",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_an_object_that_only_looks_like_a_source_is_refused"
         ]
       },
       "gate": "local",
@@ -6075,7 +6077,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "a8f1bb429a9473563fef10c17c3e59605e8e744f6cc9c308b315e2fccdf8d777",
+  "public_api_snapshot_sha256": "bc745f31b98a4ddae15a68b23288ccfe4bae70e0058713bfce5717b5d3b039d4",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -6273,6 +6275,131 @@
           {
             "test": "packages/structured-data-models-client/tests/test_context_filters_in_the_source.py::test_a_condition_the_source_is_not_sent_is_drawn_again_larger",
             "behavior": "Public report access gives each part's draws, rows drawn, candidates, kept examples, the stop reason and whether conditions went to the source."
+          }
+        ]
+      },
+      "sdm_client.DatabricksSource": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          },
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_what_a_source_cannot_be_is_refused",
+            "behavior": "A built-in source refuses a connection of another driver, an empty namespace name, and a semantic model without a name or a boolean trust flag, each by its ConnectorError code."
+          }
+        ]
+      },
+      "sdm_client.DatabricksSource.answer": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.DatabricksSource.capabilities": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.DatabricksSource.connection": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
+      "sdm_client.DatabricksSource.failure": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.DatabricksSource.namespace": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
+      "sdm_client.DatabricksSource.semantic_model": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_semantic_model_is_a_source_of_the_same_class",
+            "behavior": "A semantic model is a source of its source's class, on the same connection and namespace, naming the view and whether its expressions are trusted."
+          }
+        ]
+      },
+      "sdm_client.DuckDBSource": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          },
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_what_a_source_cannot_be_is_refused",
+            "behavior": "A built-in source refuses a connection of another driver, an empty namespace name, and a semantic model without a name or a boolean trust flag, each by its ConnectorError code."
+          }
+        ]
+      },
+      "sdm_client.DuckDBSource.answer": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.DuckDBSource.capabilities": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.DuckDBSource.connection": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
+      "sdm_client.DuckDBSource.failure": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.DuckDBSource.namespace": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
           }
         ]
       },
@@ -6666,6 +6793,64 @@
       "sdm_client.NimRequestError": {
         "capability": "errors"
       },
+      "sdm_client.PostgresSource": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          },
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_what_a_source_cannot_be_is_refused",
+            "behavior": "A built-in source refuses a connection of another driver, an empty namespace name, and a semantic model without a name or a boolean trust flag, each by its ConnectorError code."
+          }
+        ]
+      },
+      "sdm_client.PostgresSource.answer": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.PostgresSource.capabilities": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.PostgresSource.connection": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
+      "sdm_client.PostgresSource.failure": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.PostgresSource.namespace": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
       "sdm_client.PredictionResult": {
         "capability": "results-merge",
         "assertions": [
@@ -6719,33 +6904,6 @@
       },
       "sdm_client.PredictiveQuery.materialize": {
         "capability": "direct-dtypes-options"
-      },
-      "sdm_client.ProviderSource": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
-            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
-          }
-        ]
-      },
-      "sdm_client.ProviderSource.kind": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
-            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
-          }
-        ]
-      },
-      "sdm_client.ProviderSource.provider": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
-            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
-          }
-        ]
       },
       "sdm_client.RelationalTask": {
         "capability": "custom-examples",
@@ -6909,6 +7067,64 @@
       "sdm_client.SDMWarning": {
         "capability": "errors"
       },
+      "sdm_client.SQLiteSource": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          },
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_what_a_source_cannot_be_is_refused",
+            "behavior": "A built-in source refuses a connection of another driver, an empty namespace name, and a semantic model without a name or a boolean trust flag, each by its ConnectorError code."
+          }
+        ]
+      },
+      "sdm_client.SQLiteSource.answer": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.SQLiteSource.capabilities": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.SQLiteSource.connection": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
+      "sdm_client.SQLiteSource.failure": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.SQLiteSource.namespace": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
       "sdm_client.SanitizationReport": {
         "capability": "sanitization-reports",
         "assertions": [
@@ -6959,7 +7175,7 @@
         "assertions": [
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one",
-            "behavior": "A schema is built from a ProviderSource over a caller's own provider, which declares no keys, with the keys the caller names."
+            "behavior": "A schema is built from a caller's own Source, which declares no keys, with the keys the caller names."
           }
         ]
       },
@@ -7123,6 +7339,109 @@
           {
             "test": "packages/structured-data-models-client/tests/test_schema_refinement.py::test_table_and_link_edits_are_atomic_and_keep_original",
             "behavior": "Public table/relationship edits preserve the original schema, remove dependent relationships, and reject invalid edits atomically."
+          }
+        ]
+      },
+      "sdm_client.SnowflakeSource": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          },
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_what_a_source_cannot_be_is_refused",
+            "behavior": "A built-in source refuses a connection of another driver, an empty namespace name, and a semantic model without a name or a boolean trust flag, each by its ConnectorError code."
+          }
+        ]
+      },
+      "sdm_client.SnowflakeSource.answer": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.SnowflakeSource.capabilities": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.SnowflakeSource.connection": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
+      "sdm_client.SnowflakeSource.failure": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
+            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+          }
+        ]
+      },
+      "sdm_client.SnowflakeSource.namespace": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
+            "behavior": "Each built-in source is a Source over the connection it is given, keeps its namespace, and names its dialect and namespace parts in its SQL choice."
+          }
+        ]
+      },
+      "sdm_client.SnowflakeSource.semantic_model": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_semantic_model_is_a_source_of_the_same_class",
+            "behavior": "A semantic model is a source of its source's class, on the same connection and namespace, naming the view and whether its expressions are trusted."
+          }
+        ]
+      },
+      "sdm_client.Source": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_source_is_abstract_and_is_not_pickled",
+            "behavior": "A Source is abstract until capabilities and answer are given, and neither a source nor a schema over one is pickled."
+          }
+        ]
+      },
+      "sdm_client.Source.answer": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A caller's source answers the core's requests; its failure is the operation's PROVIDER_ERROR."
+          }
+        ]
+      },
+      "sdm_client.Source.capabilities": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A caller's source answers the core's requests; its failure is the operation's PROVIDER_ERROR."
+          }
+        ]
+      },
+      "sdm_client.Source.failure": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
+            "behavior": "What a source's failure hook says reaches the core as the failure's facts; a source that says nothing leaves them to the run loop."
           }
         ]
       },
@@ -7546,33 +7865,6 @@
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
             "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
-          }
-        ]
-      },
-      "sdm_client.provider.DataProvider": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
-            "behavior": "A caller's provider answers the core's requests; its failure is the operation's PROVIDER_ERROR."
-          }
-        ]
-      },
-      "sdm_client.provider.DataProvider.answer": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
-            "behavior": "A caller's provider answers the core's requests; its failure is the operation's PROVIDER_ERROR."
-          }
-        ]
-      },
-      "sdm_client.provider.DataProvider.capabilities": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
-            "behavior": "A caller's provider answers the core's requests; its failure is the operation's PROVIDER_ERROR."
           }
         ]
       },
@@ -8080,33 +8372,6 @@
           }
         ]
       },
-      "sdm_client.provider.ProviderSource": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
-            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
-          }
-        ]
-      },
-      "sdm_client.provider.ProviderSource.kind": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
-            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
-          }
-        ]
-      },
-      "sdm_client.provider.ProviderSource.provider": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_source_takes_a_provider_and_is_not_pickled",
-            "behavior": "A provider source takes only a data provider, compares by it, names its kind and refuses to be pickled."
-          }
-        ]
-      },
       "sdm_client.provider.Relation": {
         "capability": "data-providers",
         "assertions": [
@@ -8233,6 +8498,42 @@
           }
         ]
       },
+      "sdm_client.provider.Source": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_source_is_abstract_and_is_not_pickled",
+            "behavior": "A Source is abstract until capabilities and answer are given, and neither a source nor a schema over one is pickled."
+          }
+        ]
+      },
+      "sdm_client.provider.Source.answer": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A caller's source answers the core's requests; its failure is the operation's PROVIDER_ERROR."
+          }
+        ]
+      },
+      "sdm_client.provider.Source.capabilities": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A caller's source answers the core's requests; its failure is the operation's PROVIDER_ERROR."
+          }
+        ]
+      },
+      "sdm_client.provider.Source.failure": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_failure_tells_the_core_what_the_provider_says_of_it",
+            "behavior": "What a source's failure hook says reaches the core as the failure's facts; a source that says nothing leaves them to the run loop."
+          }
+        ]
+      },
       "sdm_client.provider.TableColumn": {
         "capability": "data-providers",
         "assertions": [
@@ -8299,233 +8600,8 @@
       "sdm_connectors.ConnectorError": {
         "capability": "errors"
       },
-      "sdm_connectors.DatabricksSource": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DatabricksSource.backend": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DatabricksSource.connection": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DatabricksSource.kind": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.DatabricksSource.namespace": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DatabricksSource.namespace_parts": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.DatabricksSource.semantic_model": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DuckDBSource": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DuckDBSource.backend": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DuckDBSource.connection": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DuckDBSource.kind": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.DuckDBSource.namespace": {
-        "capability": "readers"
-      },
-      "sdm_connectors.DuckDBSource.namespace_parts": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
       "sdm_connectors.MissingBackendError": {
         "capability": "errors"
-      },
-      "sdm_connectors.PostgresSource": {
-        "capability": "readers"
-      },
-      "sdm_connectors.PostgresSource.backend": {
-        "capability": "readers"
-      },
-      "sdm_connectors.PostgresSource.connection": {
-        "capability": "readers"
-      },
-      "sdm_connectors.PostgresSource.kind": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.PostgresSource.namespace": {
-        "capability": "readers"
-      },
-      "sdm_connectors.PostgresSource.namespace_parts": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.SQLiteSource": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SQLiteSource.backend": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SQLiteSource.connection": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SQLiteSource.kind": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.SQLiteSource.namespace": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SQLiteSource.namespace_parts": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.SemanticModel": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SemanticModel.backend": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SemanticModel.connection": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SemanticModel.kind": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_says_its_kind",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.SemanticModel.name": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SemanticModel.namespace": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SemanticModel.namespace_parts": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_each_source_gives_its_namespace_parts_in_its_class_order",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.SemanticModel.source": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SemanticModel.trust_expressions": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SnowflakeSource": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SnowflakeSource.backend": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SnowflakeSource.connection": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SnowflakeSource.kind": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.SnowflakeSource.namespace": {
-        "capability": "readers"
-      },
-      "sdm_connectors.SnowflakeSource.namespace_parts": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.SnowflakeSource.semantic_model": {
-        "capability": "readers"
-      },
-      "sdm_connectors.Source": {
-        "capability": "readers"
-      },
-      "sdm_connectors.Source.backend": {
-        "capability": "readers"
-      },
-      "sdm_connectors.Source.connection": {
-        "capability": "readers"
-      },
-      "sdm_connectors.Source.kind": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
-      },
-      "sdm_connectors.Source.namespace": {
-        "capability": "readers"
-      },
-      "sdm_connectors.Source.namespace_parts": {
-        "capability": "readers",
-        "assertions": [
-          {
-            "test": "packages/structured-data-models-connectors/tests/test_source.py::test_a_source_is_the_class_that_fits_its_connection",
-            "behavior": "Public source kind and ordered namespace parts match explicit backend-specific expectations for constructed and inferred source objects."
-          }
-        ]
       },
       "sdm_connectors.__version__": {
         "capability": "release-metadata",
@@ -9093,6 +9169,15 @@
       "com.nvidia.sdm.DatabricksSource#public boolean trustExpressions();": {
         "capability": "readers"
       },
+      "com.nvidia.sdm.DatabricksSource#public com.nvidia.sdm.DatabricksSource semanticModel(java.lang.String);": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
+            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
+          }
+        ]
+      },
       "com.nvidia.sdm.DatabricksSource#public com.nvidia.sdm.DatabricksSource semanticModel(java.lang.String, boolean);": {
         "capability": "readers"
       },
@@ -9122,6 +9207,15 @@
       },
       "com.nvidia.sdm.DatabricksSparkSource#public boolean trustExpressions();": {
         "capability": "readers"
+      },
+      "com.nvidia.sdm.DatabricksSparkSource#public com.nvidia.sdm.DatabricksSparkSource semanticModel(java.lang.String);": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
+            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
+          }
+        ]
       },
       "com.nvidia.sdm.DatabricksSparkSource#public com.nvidia.sdm.DatabricksSparkSource semanticModel(java.lang.String, boolean);": {
         "capability": "readers"
@@ -9491,12 +9585,6 @@
       },
       "com.nvidia.sdm.InferenceConfig$Builder#public com.nvidia.sdm.InferenceConfig$Builder targetTransforms(java.util.List<java.lang.String>);": {
         "capability": "typed-inference-settings"
-      },
-      "com.nvidia.sdm.JdbcSource": {
-        "capability": "readers"
-      },
-      "com.nvidia.sdm.JdbcSource#public abstract java.sql.Connection connection();": {
-        "capability": "readers"
       },
       "com.nvidia.sdm.LabelsOptions": {
         "capability": "labels-only"
@@ -9870,69 +9958,6 @@
       "com.nvidia.sdm.PredictiveQuery#public static com.nvidia.sdm.PredictiveQuery parse(java.lang.String);": {
         "capability": "direct-dtypes-options"
       },
-      "com.nvidia.sdm.ProviderSource": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
-            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ProviderSource#public com.nvidia.sdm.ProviderSource(com.nvidia.sdm.provider.DataProvider);": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
-            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ProviderSource#public com.nvidia.sdm.provider.DataProvider provider();": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
-            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ProviderSource#public final boolean equals(java.lang.Object);": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
-            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ProviderSource#public final int hashCode();": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
-            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ProviderSource#public final java.lang.String toString();": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
-            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
-          }
-        ]
-      },
-      "com.nvidia.sdm.ProviderSource#public static com.nvidia.sdm.ProviderSource of(com.nvidia.sdm.provider.DataProvider);": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore",
-            "behavior": "A provider source carries its provider, compares by it, and hands the core the value filters the provider declares."
-          }
-        ]
-      },
       "com.nvidia.sdm.ReadOptions": {
         "capability": "readers"
       },
@@ -10029,11 +10054,41 @@
       "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table read(java.nio.file.Path, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
         "capability": "readers"
       },
-      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readQuery(com.nvidia.sdm.Source, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
-        "capability": "readers"
+      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readQuery(java.sql.Connection, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ReadersTest.java#jdbcReadsUseTheCallerConnectionAndKeepItOpen",
+            "behavior": "A JDBC connection's table and query are read with exact values, and the caller's connection stays open."
+          }
+        ]
       },
-      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readTable(com.nvidia.sdm.Source, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
-        "capability": "readers"
+      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readSparkQuery(org.apache.spark.sql.SparkSession, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java#callerSessionTypedRowsAndBoundNativeSqlStayIntact",
+            "behavior": "A Spark session's table and query are read with exact values, and the session stays open."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readSparkTable(org.apache.spark.sql.SparkSession, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/SparkReadersTest.java#callerSessionTypedRowsAndBoundNativeSqlStayIntact",
+            "behavior": "A Spark session's table and query are read with exact values, and the session stays open."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Readers#public static org.apache.arrow.vector.table.Table readTable(java.sql.Connection, java.lang.String, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "readers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/ReadersTest.java#jdbcReadsUseTheCallerConnectionAndKeepItOpen",
+            "behavior": "A JDBC connection's table and query are read with exact values, and the caller's connection stays open."
+          }
+        ]
       },
       "com.nvidia.sdm.RelBenchOptions": {
         "capability": "relbench"
@@ -10524,6 +10579,15 @@
       "com.nvidia.sdm.SnowflakeSource#public boolean trustExpressions();": {
         "capability": "readers"
       },
+      "com.nvidia.sdm.SnowflakeSource#public com.nvidia.sdm.SnowflakeSource semanticModel(java.lang.String);": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
+            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
+          }
+        ]
+      },
       "com.nvidia.sdm.SnowflakeSource#public com.nvidia.sdm.SnowflakeSource semanticModel(java.lang.String, boolean);": {
         "capability": "readers"
       },
@@ -10550,6 +10614,42 @@
       },
       "com.nvidia.sdm.Source": {
         "capability": "readers"
+      },
+      "com.nvidia.sdm.Source#protected com.nvidia.sdm.Source();": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
+            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Source#public abstract com.nvidia.sdm.provider.Capabilities capabilities();": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
+            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Source#public abstract org.apache.arrow.vector.ipc.ArrowReader answer(com.nvidia.sdm.provider.DataRequest, java.util.Optional<org.apache.arrow.vector.types.pojo.Schema>, org.apache.arrow.memory.BufferAllocator) throws java.lang.Exception;": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
+            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
+          }
+        ]
+      },
+      "com.nvidia.sdm.Source#public com.nvidia.sdm.provider.ProviderFailure failure(java.lang.Exception);": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
+            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
+          }
+        ]
       },
       "com.nvidia.sdm.SqliteSource": {
         "capability": "readers"
@@ -10981,17 +11081,17 @@
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "api_contracts/data-providers",
-      "reason": "Callers' own data providers, in Java (ProviderSource, before this change) and now Python (sdm_client.ProviderSource and sdm_client.provider): the group maps both languages to the shared host-provider vectors and to end-to-end providers over DuckDB and Trino; a key set past a provider's limit is split by the core for both."
+      "reason": "Callers' own data providers, in Java (ProviderSource, before this change) and now Python (sdm_client.ProviderSource and sdm_client.provider): the group maps both languages to the shared host-provider vectors and to end-to-end providers over DuckDB and Trino; a key set past a provider's limit is split by the core for both. Source redesign: the group names Source in both languages, with the tests that a Source is abstract, that a schema over any source refuses to pickle, and that an object only shaped like a source is refused."
     },
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "api_inventory",
-      "reason": "Adds the context report types and accessors and MaterializeOptions.Builder.contextTimeLimit, and maps ProviderSource's existing declarations to data-providers. Adds the Python data provider API (sdm_client.ProviderSource and sdm_client.provider)."
+      "reason": "Adds the context report types and accessors and MaterializeOptions.Builder.contextTimeLimit, and maps ProviderSource's existing declarations to data-providers. Adds the Python data provider API (sdm_client.ProviderSource and sdm_client.provider). The source redesign makes Source the one public source type in both languages: DataProvider becomes the abstract Source (sdm_client.Source, com.nvidia.sdm.Source), ProviderSource, JdbcSource, SemanticModel and sdm_connectors' source classes are removed, the built-in Python sources are mapped from sdm_connectors to sdm_client under readers, Java gains semanticModel(name) and Readers over a Connection or a Spark session, each new or changed symbol with its own behavior assertion."
     },
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "public_api_snapshot_sha256",
-      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report, whose stop reasons include time_limit. It now records sdm_client.provider, the Python data provider API, and sdm_client.ProviderSource."
+      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report, whose stop reasons include time_limit. It now records sdm_client.provider, the Python data provider API, and sdm_client.ProviderSource. The source redesign records sdm_client.Source and the built-in sources in sdm_client, and drops ProviderSource, DataProvider and every sdm_connectors source."
     },
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
@@ -11082,6 +11182,11 @@
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "api_contracts/direct-dtypes-options",
       "reason": "Both clients take exact_url and bearer_token (Java exactUrl, bearerToken) for an endpoint that serves predictions at one URL, such as a hosted model in the NVIDIA API catalog, in place of recognising the catalog's URL; the group gains the Java test of both options."
+    },
+    {
+      "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
+      "record": "api_contracts/readers",
+      "reason": "Source redesign: the built-in Python sources moved to sdm_client, so the group names SnowflakeSource there and gains the built-in source tests moved from the connectors package to test_built_in_sources.py; its ownership names sdm_client/sources.py."
     }
   ],
   "capabilities": [

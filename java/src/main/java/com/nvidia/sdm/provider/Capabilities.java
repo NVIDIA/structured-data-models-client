@@ -10,7 +10,7 @@ import java.util.OptionalLong;
 import java.util.Set;
 
 /**
- * What a {@link DataProvider} answers, and how.
+ * What a {@link com.nvidia.sdm.Source} answers, and how.
  *
  * <p>Every provider answers {@code describe} and {@code scan}. Each other request is answered by
  * the provider when declared in {@link #optional}; otherwise the core answers it itself, in

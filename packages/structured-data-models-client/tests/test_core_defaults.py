@@ -35,7 +35,7 @@ def test_public_source_flow_defaults_to_core_without_old_packages(
     sys.meta_path.insert(0, RefuseOld())
 
     from sdm_client import KumoRelational, PredictiveQuery, SDMClient, Schema
-    from sdm_connectors import DuckDBSource, SQLiteSource
+    from sdm_client import DuckDBSource, SQLiteSource
 
     if {backend!r} == 'duckdb':
         import duckdb

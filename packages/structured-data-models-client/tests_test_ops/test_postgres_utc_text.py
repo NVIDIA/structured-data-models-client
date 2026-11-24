@@ -19,9 +19,8 @@ import pytest
 from psycopg import sql
 from psycopg.types.multirange import Multirange
 from psycopg.types.range import Range
-from sdm_connectors import PostgresSource
 
-from sdm_client import PredictiveQuery, Schema
+from sdm_client import PostgresSource, PredictiveQuery, Schema
 from sdm_client._rust.providers.postgres_arrow import rows_arrow
 
 

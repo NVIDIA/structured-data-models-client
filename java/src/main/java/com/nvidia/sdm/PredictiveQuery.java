@@ -87,11 +87,11 @@ public final class PredictiveQuery {
         return materializer.labels(this, options);
       }
     }
-    Providers.Chosen chosen = Providers.of(schema.source());
+    Providers.Chosen chosen = schema.source().chosen();
     try (Host.Finished finished = Host.run(
         Map.of("op", "labels_source", "provider", chosen.choice(), "schema", 1, "input", 2),
         Map.of(1, Host.attachment(schema.toHeld()), 2, Host.attachment(options.input(text))),
-        new Host.Call(chosen.provider(), null, Providers.held(schema.source())))) {
+        new Host.Call(chosen.provider(), null, schema.source().held()))) {
       return labelTable(finished);
     }
   }
@@ -195,7 +195,7 @@ public final class PredictiveQuery {
             finished.arrow(((Number) result.get("predict")).intValue()), request, text);
       }
     }
-    Providers.Chosen chosen = Providers.of(schema.source());
+    Providers.Chosen chosen = schema.source().chosen();
     Object anchor = options.anchorTime();
     Map<String, Object> operation = new LinkedHashMap<>();
     operation.put("op", "materialize");
@@ -219,7 +219,7 @@ public final class PredictiveQuery {
       attachments.put(4, Host.attachment(candidates(options.candidates())));
     }
     Map<String, Function<Map<String, Object>, Object>> held =
-        new LinkedHashMap<>(Providers.held(schema.source()));
+        new LinkedHashMap<>(schema.source().held());
     held.put("query", fields -> text);
     try (Host.Finished finished =
         Host.run(operation, attachments, new Host.Call(chosen.provider(), null, held))) {

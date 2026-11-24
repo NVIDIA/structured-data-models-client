@@ -23,7 +23,6 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
-from sdm_connectors import SnowflakeSource
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.errors import (
     Error,
@@ -36,6 +35,7 @@ from sdm_client import (
     PredictiveQuery,
     Schema,
     SDMClient,
+    SnowflakeSource,
     StructuredDataError,
 )
 
