@@ -4477,7 +4477,7 @@
         "paths": [
           "java/src/main/java/com/nvidia/sdm/internal/HostProviders.java",
           "packages/structured-data-models-client/src/sdm_client/_rust/host_providers.py",
-          "rust/crates/sdm-data/src/host_parts.rs"
+          "rust/crates/sdm-sql/src/host_parts.rs"
         ],
         "operations": [],
         "host_only_reason": "A caller's own provider answers the core's data requests in Java or Python; the operations are the ones every source answers."

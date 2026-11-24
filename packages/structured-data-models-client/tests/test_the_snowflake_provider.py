@@ -290,16 +290,17 @@ def test_a_snowflake_source_names_its_dialect_namespace_and_provider() -> None:
         SnowflakeSource(connection, database='SALES', schema='public')
     )
     # The parts as given, never upper-cased (``CN/sql.py:247``).
-    assert choice == {
-        'provider': 'sql',
-        'dialect': 'snowflake',
-        'namespace': ['SALES', 'public'],
-    }
-    assert isinstance(provider, SnowflakeProvider)
+    declared = choice['capabilities']
+    assert declared['database'] == 'snowflake'
+    assert declared['namespace'] == ['SALES', 'public']
+    assert not declared.get('namespace_first', False)
+    assert isinstance(provider._driver, SnowflakeProvider)
+    # A part left to the connection is asked for first.
     choice, _ = for_source(SnowflakeSource(connection, database='SALES'))
-    assert choice['namespace'] == ['SALES', None]
+    assert choice['capabilities']['namespace_first'] is True
     choice, _ = for_source(SnowflakeSource(connection))
-    assert 'namespace' not in choice
+    assert choice['capabilities']['namespace_first'] is True
+    assert 'namespace' not in choice['capabilities']
 
 
 def test_a_snowpark_session_is_read_through_its_own_connection() -> None:
@@ -308,7 +309,8 @@ def test_a_snowpark_session_is_read_through_its_own_connection() -> None:
     source = SnowflakeSource(Session(connection), database='DB', schema='S')
     assert source.kind == 'snowflake'
     _, provider = for_source(source)
-    answer = _arrow(provider(_step((_SELECT, []))))
+    # The driver runs the statements the source's SQL kit hands it.
+    answer = _arrow(provider._driver(_step((_SELECT, []))))
     assert answer.equals(rows)
     assert connection.calls == [(_SELECT, None, 'qmark')]
 

@@ -377,13 +377,17 @@ def test_the_provider_choice_names_the_dialect_and_the_namespace(
 ) -> None:
     source = _sources()[name]
     chosen, provider = providers.for_source(source)
-    assert chosen == {
-        'provider': 'sql',
-        'dialect': 'databricks',
-        'namespace': choice,
-    }
-    assert type(provider) is made
-    assert provider._connection is source.connection
+    # The core sees a source answering typed requests, declaring its
+    # engine and the namespace it was given; one part left to the
+    # connection is asked for first.
+    assert chosen['provider'] == 'host'
+    declared = chosen['capabilities']
+    assert declared['database'] == 'databricks'
+    assert declared.get('namespace_first', False) == (None in choice)
+    if None not in choice:
+        assert declared['namespace'] == choice
+    assert type(provider._driver) is made
+    assert provider._driver._connection is source.connection
 
 
 def _error(module: str, name: str, **attributes: Any) -> type[Exception]:
