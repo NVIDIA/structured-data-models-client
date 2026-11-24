@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from sdm_client._rust import codec
+from sdm_client._rust import codec, host_providers
 from sdm_client._rust.frame_materialize import _graph
 from sdm_client._rust.materialize import _anchor
 from sdm_client._rust.run import run
@@ -61,7 +61,7 @@ def extract(
                 {1: _graph(materializer), 2: codec.attachment(call)},
             )
     else:
-        choice, provider = schema.source._sdm_chosen()
+        choice, provider = host_providers.chosen(schema.source)
         finished = run(
             {
                 'op': 'labels_source',

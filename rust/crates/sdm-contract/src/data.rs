@@ -1709,26 +1709,12 @@ impl FetchPlan {
 }
 
 /// The data-layer port: what the core reads of a source by the database it
-/// declares ([`ProviderCapabilities::database`]): the shape a built-in
-/// database answers in, and the semantic models a source is read through.
-/// Everything else the core reads of a provider is what the provider
-/// declared; `sdm_host::default_root` plugs in the built-in databases'.
+/// declares ([`ProviderCapabilities::database`]): the semantic models a
+/// source is read through. Every source answers every request in the
+/// contract's own shapes ([`DataRequest::expected`]), a built-in database's
+/// too; everything else the core reads of a provider is what the provider
+/// declared. `sdm_host::default_root` plugs in the built-in databases'.
 pub trait DataLayer: Send + Sync {
-    /// The schema the provider's answer to `request` must have. A source of
-    /// a built-in database answers in its engine's own shape (SQLite's key
-    /// counts as `int64`, a time bound of the column's own type,
-    /// Snowflake's upper-cased names), as its SQL returns it, and a
-    /// `describe` in the contract's shape. By default the contract's fixed
-    /// shape ([`DataRequest::expected`]).
-    fn expected(
-        &self,
-        capabilities: &ProviderCapabilities,
-        request: &DataRequest,
-    ) -> ExpectedSchema {
-        let _ = capabilities;
-        request.expected()
-    }
-
     /// The kind of semantic model the provider reads, known before its
     /// definition is fetched. None by default: no semantic model is read.
     fn view_kind(&self, capabilities: &ProviderCapabilities) -> Option<crate::view::ViewKind> {
@@ -1899,9 +1885,11 @@ pub mod results {
     pub const KEY_ROWS: &str = "n";
     pub const KEY_DISTINCT: &str = "d";
     pub const KEY_MISSING: &str = "z";
-    /// `time_bounds`: one row per column, its position in the request and
-    /// its smallest and largest `CAST(column AS TIMESTAMP)`, NULL when no
-    /// row holds a value.
+    /// `time_bounds`: one row per column, its position in the request (an
+    /// integer of either width) and its smallest and largest value, each
+    /// of the column's own time type (a timestamp of any unit or zone, a
+    /// date, or text as a source with no time type stores it), NULL when
+    /// no row holds a value.
     pub const BOUNDS_POSITION: &str = "table_index";
     pub const BOUNDS_MIN: &str = "min_date";
     pub const BOUNDS_MAX: &str = "max_date";
@@ -1968,17 +1956,14 @@ impl DataRequest {
     /// fixed for the requests whose answer the contract shapes ([`results`],
     /// and [`catalog_columns`] for a `describe`), a discovery marker for
     /// those whose columns are the source's own (a preview, a scan, a
-    /// sample, neighbors, a lookup, the column ranges, whose smallest and
-    /// largest values are of each column's type, which the core checks the
-    /// shape of itself, and a repeated key, of the key's types) and for a
-    /// count no provider renders yet.
+    /// sample, neighbors, a lookup, the column ranges and the time bounds,
+    /// whose smallest and largest values are of each column's own type,
+    /// which the core checks the shape of itself, and a repeated key, of
+    /// the key's types) and for a count no provider renders yet. Every
+    /// source answers in these shapes; none answers in an engine's own.
     pub fn expected(&self) -> ExpectedSchema {
         use ColumnType::{Bool, Int32, Int64, Utf8};
         use catalog_columns as c;
-        let timestamp = || ColumnType::Timestamp {
-            unit: Unit::Us,
-            zone: None,
-        };
         let names = || ColumnType::List {
             item: Box::new(field(c::LIST_ITEM, Utf8, true)),
         };
@@ -2044,14 +2029,10 @@ impl DataRequest {
                 field(results::KEY_DISTINCT, Int64, false),
                 field(results::KEY_MISSING, Int64, false),
             ],
-            DataRequest::TimeBounds { .. } => vec![
-                field(results::BOUNDS_POSITION, Int32, false),
-                field(results::BOUNDS_MIN, timestamp(), true),
-                field(results::BOUNDS_MAX, timestamp(), true),
-            ],
             DataRequest::Scan { .. }
             | DataRequest::Preview { .. }
             | DataRequest::CountRows { .. }
+            | DataRequest::TimeBounds { .. }
             | DataRequest::ColumnRanges { .. }
             | DataRequest::RepeatedKey { .. }
             | DataRequest::SampleEntities { .. }
@@ -2063,6 +2044,22 @@ impl DataRequest {
             optional: Vec::new(),
         }
     }
+}
+
+/// A `time_bounds` answer with each bound a zone-less microsecond
+/// timestamp: one of the shapes the core reads bounds in (it reads a
+/// bound of any time type, a date or text alike), and the one the
+/// in-memory fallback answers in.
+pub fn microsecond_time_bounds() -> Vec<Field> {
+    let timestamp = || ColumnType::Timestamp {
+        unit: Unit::Us,
+        zone: None,
+    };
+    vec![
+        field(results::BOUNDS_POSITION, ColumnType::Int32, false),
+        field(results::BOUNDS_MIN, timestamp(), true),
+        field(results::BOUNDS_MAX, timestamp(), true),
+    ]
 }
 
 /// A field of `name`, of `column_type`, with no metadata.

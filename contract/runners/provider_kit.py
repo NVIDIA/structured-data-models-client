@@ -67,10 +67,12 @@ FORMAT = 'sdm-provider-kit/1'
 DATABASES = ('duckdb', 'sqlite', 'postgres')
 FAULTS = ('truncate', 'silent_capability')
 #: Each database's Python provider: module and class.
+#: Each database's built-in source, and the namespace it is read under: a
+#: Postgres read names its schema, the case database's ``public``.
 PROVIDERS = {
-    'duckdb': ('sdm_client._rust.providers.duckdb', 'DuckDBProvider'),
-    'sqlite': ('sdm_client._rust.providers.sqlite', 'SqliteProvider'),
-    'postgres': ('sdm_client._rust.providers.postgres', 'PostgresProvider'),
+    'duckdb': ('DuckDBSource', {}),
+    'sqlite': ('SQLiteSource', {}),
+    'postgres': ('PostgresSource', {'schema': 'public'}),
 }
 
 
@@ -238,9 +240,12 @@ def _resolved(case: dict[str, Any], by_id: dict[str, Any]) -> dict[str, Any]:
     return by_id[named] if named else case
 
 
-def _fetch(case: dict[str, Any], source: dict[str, Any], database: str) -> Any:
-    r"""The test-only fetch of ``case``: its request, the provider whose
-    plan the core makes, and what the case changes of what it declares."""
+def _fetch(
+    case: dict[str, Any], source: dict[str, Any], choice: dict[str, Any]
+) -> Any:
+    r"""The test-only fetch of ``case``: its request, the provider choice
+    of the database's built-in source, and what the case changes of what it
+    declares."""
     request = dict(source['request'])
     if 'seeds' in source:
         request['seeds'] = {
@@ -253,13 +258,7 @@ def _fetch(case: dict[str, Any], source: dict[str, Any], database: str) -> Any:
     capabilities = case.get('capabilities', {})
     fetch: dict[str, Any] = {
         'request': request,
-        # A Postgres read names its schema, the case database's ``public``,
-        # as every run names the session's.
-        'provider': {
-            'provider': 'sql',
-            'dialect': database,
-            **({'namespace': ['public']} if database == 'postgres' else {}),
-        },
+        'provider': choice,
         'echo': True,
         'undeclared': list(capabilities.get('withhold', [])),
     }
@@ -290,19 +289,21 @@ def run_case(
 ) -> dict[str, Any]:
     r"""What ``case`` gave on ``database``'s provider: the fetches, and the
     answer or the error."""
-    import importlib
-
     import pyarrow as pa
-    from sdm_client._rust import codec
+    import sdm_client
+    from sdm_client._rust import codec, host_providers
     from sdm_client._rust.run import run
     from sdm_client.errors import StructuredDataError
 
     source = _resolved(case, by_id)
-    module, name = PROVIDERS[database]
-    provider = getattr(importlib.import_module(module), name)(connected)
+    # The database's built-in source, reached as the core reaches every
+    # source: its declared capabilities, and the provider asking it.
+    name, namespace = PROVIDERS[database]
+    built_in = getattr(sdm_client, name)(connected, **namespace)
+    choice, provider = host_providers.chosen(built_in)
     path = ProviderPath(provider, page_rows, fault, case.get('inject'))
     attachments: dict[int, Any] = {
-        1: codec.attachment(_fetch(case, source, database))
+        1: codec.attachment(_fetch(case, source, choice))
     }
     operation: dict[str, Any] = {'op': 'test', 'test': 'fetch', 'fetch': 1}
     if 'seeds' in source:

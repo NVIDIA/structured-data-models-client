@@ -93,6 +93,9 @@ def _neutral(value: Any) -> Any:
             out['filter'] = _FILTERS[type(value).__name__]
         for name in value.__dataclass_fields__:
             field = getattr(value, name)
+            if name in _LATER and field is None:
+                # Fields the shared vectors' first cases predate.
+                continue
             out[name] = (
                 (
                     field.value
@@ -105,6 +108,10 @@ def _neutral(value: Any) -> Any:
         return out
     raise TypeError(type(value))
 
+
+#: Fields of the public types the vectors' decoded forms leave out where
+#: they say nothing; the round trips hold them.
+_LATER = ('key_dtype', 'source_type')
 
 _FILTERS = {
     'KeyIn': 'key_in',
@@ -126,6 +133,8 @@ def _scalars(value: Any) -> Any:
 
 
 def _scalar(value: Any) -> Any:
+    if isinstance(value, p.Value):
+        return _scalar(value.value)
     if value is None:
         return None
     if isinstance(value, bool):
@@ -219,6 +228,89 @@ def test_each_capabilities_declared_is_sent_as_the_shared_vectors_say(
     if 'fallback' in declared:
         declared['fallback'] = p.Fallback(**declared['fallback'])
     assert host.capabilities(p.Capabilities(**declared)) == case['wire']
+
+
+ROUND_TRIPS = VECTORS['round_trips']
+
+
+def _named_alike(
+    written: Any, keys: dict[int, Any], given: dict[int, Any]
+) -> Any:
+    r"""``written`` with each key set's attachment the one the core gave
+    its rows under: a written request numbers its key sets anew."""
+    by_reader = {id(reader): at for at, reader in given.items()}
+    renamed = {at: by_reader[id(reader)] for at, reader in keys.items()}
+
+    def rename(node: Any) -> Any:
+        if isinstance(node, dict):
+            out = {name: rename(item) for name, item in node.items()}
+            if 'attachment' in node and 'columns' in node:
+                out['attachment'] = renamed[node['attachment']]
+            return out
+        if isinstance(node, list):
+            return [rename(item) for item in node]
+        return node
+
+    return rename(written)
+
+
+def _readers() -> dict[int, pa.RecordBatchReader]:
+    return {at: table.to_reader() for at, table in _keys().items()}
+
+
+@pytest.mark.parametrize(
+    'case',
+    VECTORS['requests'] + ROUND_TRIPS['requests'],
+    ids=[c['name'] for c in VECTORS['requests'] + ROUND_TRIPS['requests']],
+)
+def test_each_request_read_and_written_again_is_the_request_sent(
+    case: dict[str, Any],
+) -> None:
+    given = _readers()
+    read = host.read_request(case['wire'], given)
+    written, keys = host.write_request(read)
+    assert _named_alike(written, keys, given) == case['wire']
+    # Each key set written is the one read, rows and all.
+    for reader in keys.values():
+        assert any(reader is r for r in given.values())
+
+
+@pytest.mark.parametrize(
+    'case',
+    ROUND_TRIPS['capabilities'],
+    ids=[c['name'] for c in ROUND_TRIPS['capabilities']],
+)
+def test_each_capabilities_read_and_written_again_are_the_ones_sent(
+    case: dict[str, Any],
+) -> None:
+    read = host.read_capabilities(case['wire'])
+    assert host.capabilities(read) == case['wire']
+
+
+@pytest.mark.parametrize(
+    'case',
+    ROUND_TRIPS['failures'],
+    ids=[c['name'] for c in ROUND_TRIPS['failures']],
+)
+def test_each_failure_read_and_written_again_tells_the_same(
+    case: dict[str, Any],
+) -> None:
+    told = {k: v for k, v in case['wire'].items() if v is not None}
+    assert host.failure(host.read_failure(case['wire'])) == told
+
+
+def test_a_value_keeps_its_exact_type() -> None:
+    read = host.read_request(ROUND_TRIPS['requests'][0]['wire'], _readers())
+    assert isinstance(read, p.Scan)
+    first = read.filters[9]
+    assert isinstance(first, p.Compare)
+    assert first.value == p.Value(2**64 - 1, pa.uint64())
+    zoned = read.filters[27]
+    assert isinstance(zoned, p.Compare)
+    assert zoned.value.type == pa.timestamp('ns', tz='America/New_York')
+    assert read.table.columns[1] == p.RelationColumn(
+        'total', expression='price * quantity'
+    )
 
 
 # --- the public types ----------------------------------------------------

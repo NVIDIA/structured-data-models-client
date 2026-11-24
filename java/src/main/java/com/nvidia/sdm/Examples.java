@@ -22,8 +22,8 @@ final class Examples {
         owner=new RelationalMaterializer(schema); attachments.put(1,owner.graph());
         source=Map.of("source","frames","graph",1); call=Host.Call.none();
       } else {
-        Providers.Chosen chosen=schema.source().chosen(); attachments.put(1,Host.attachment(schema.toHeld()));
-        source=Map.of("source","sql","provider",chosen.choice(),"schema",1); call=new Host.Call(chosen.provider(),null,schema.source().held());
+        SourceRun chosen=SourceRun.of(schema.source()); attachments.put(1,Host.attachment(schema.toHeld()));
+        source=Map.of("source","sql","provider",chosen.choice(),"schema",1); call=new Host.Call(chosen.provider(),null,chosen.held());
       }
       Map<String,Object> operation=Map.of("op","materialize_examples","source",source,"input",2,"context",3,"predict",4,"inference",5);
       try(Host.Finished finished=ArrowFrames.run(operation,attachments,tables,call)) {

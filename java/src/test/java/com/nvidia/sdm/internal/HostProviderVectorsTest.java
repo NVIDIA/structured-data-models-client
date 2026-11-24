@@ -159,6 +159,120 @@ class HostProviderVectorsTest {
     assertEquals(vector.get("wire"), Json.read(Json.write(wire)), (String) vector.get("name"));
   }
 
+  // --- round trips ------------------------------------------------------------------------------
+
+  @SuppressWarnings("unchecked")
+  static Stream<Map<String, Object>> trips(String part) {
+    Map<String, Object> trips = (Map<String, Object>) VECTORS.get("round_trips");
+    return ((List<Object>) trips.get(part)).stream().map(c -> (Map<String, Object>) c);
+  }
+
+  static Stream<Map<String, Object>> everyRequest() {
+    return Stream.concat(requests(), trips("requests"));
+  }
+
+  static Stream<Map<String, Object>> capabilityTrips() {
+    return trips("capabilities");
+  }
+
+  static Stream<Map<String, Object>> failureTrips() {
+    return trips("failures");
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("everyRequest")
+  @SuppressWarnings("unchecked")
+  void eachRequestReadAndWrittenAgainIsTheRequestSent(Map<String, Object> vector)
+      throws Exception {
+    Map<Integer, ArrowReader> given = new LinkedHashMap<>();
+    try {
+      Map<String, Object> wire = (Map<String, Object>) vector.get("wire");
+      DataRequest read =
+          HostProviders.Requests.read(wire, id -> given.computeIfAbsent(id, this::keySet));
+      Map<Integer, ArrowReader> keys = new LinkedHashMap<>();
+      Map<String, Object> written = HostProviders.Requests.write(read, keys);
+      // A written request numbers its key sets anew: each is named back by the id the core gave
+      // its rows under, the very reader read.
+      Map<Long, Long> renamed = new LinkedHashMap<>();
+      keys.forEach(
+          (at, reader) ->
+              given.forEach(
+                  (id, original) -> {
+                    if (original == reader) renamed.put((long) at, (long) id);
+                  }));
+      assertEquals(keys.size(), renamed.size(), (String) vector.get("name"));
+      assertEquals(
+          wire, renamed(Json.read(Json.write(written)), renamed), (String) vector.get("name"));
+    } finally {
+      for (ArrowReader reader : given.values()) reader.close();
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Object renamed(Object node, Map<Long, Long> renamed) {
+    if (node instanceof Map<?, ?> map) {
+      Map<String, Object> out = new LinkedHashMap<>();
+      map.forEach((name, item) -> out.put((String) name, renamed(item, renamed)));
+      if (map.containsKey("attachment") && map.containsKey("columns")) {
+        out.put("attachment", renamed.get(((Number) map.get("attachment")).longValue()));
+      }
+      return out;
+    }
+    if (node instanceof List<?> list) {
+      List<Object> out = new ArrayList<>();
+      for (Object item : list) out.add(renamed(item, renamed));
+      return out;
+    }
+    return node;
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("capabilityTrips")
+  @SuppressWarnings("unchecked")
+  void eachCapabilitiesReadAndWrittenAgainAreTheOnesSent(Map<String, Object> vector)
+      throws Exception {
+    Map<String, Object> wire = (Map<String, Object>) vector.get("wire");
+    Capabilities read = HostProviders.readCapabilities(wire);
+    assertEquals(
+        wire, Json.read(Json.write(HostProviders.capabilities(read))), (String) vector.get("name"));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("failureTrips")
+  @SuppressWarnings("unchecked")
+  void eachFailureReadAndWrittenAgainTellsTheSame(Map<String, Object> vector) throws Exception {
+    Map<String, Object> wire = (Map<String, Object>) vector.get("wire");
+    Map<String, Object> told = new LinkedHashMap<>();
+    wire.forEach(
+        (name, given) -> {
+          if (given != null) told.put(name, given);
+        });
+    assertEquals(
+        told,
+        Json.read(Json.write(HostProviders.failure(HostProviders.readFailure(wire)))),
+        (String) vector.get("name"));
+  }
+
+  @org.junit.jupiter.api.Test
+  @SuppressWarnings("unchecked")
+  void aValueKeepsItsExactType() throws Exception {
+    Map<String, Object> wire =
+        (Map<String, Object>) trips("requests").findFirst().orElseThrow().get("wire");
+    DataRequest.Scan read = (DataRequest.Scan) HostProviders.Requests.read(wire, this::keySet);
+    DataRequest.Compare first = (DataRequest.Compare) read.filters().get(9);
+    assertEquals(
+        new DataRequest.Value(new BigInteger("18446744073709551615"), new ArrowType.Int(64, false)),
+        first.value());
+    DataRequest.Compare zoned = (DataRequest.Compare) read.filters().get(27);
+    assertEquals(
+        new ArrowType.Timestamp(
+            org.apache.arrow.vector.types.TimeUnit.NANOSECOND, "America/New_York"),
+        zoned.value().type());
+    assertEquals(
+        new DataRequest.RelationColumn("total", Optional.empty(), Optional.of("price * quantity")),
+        read.table().columns().get(1));
+  }
+
   // --- the vectors' key sets ---------------------------------------------------------------------
 
   @SuppressWarnings("unchecked")
@@ -220,6 +334,10 @@ class HostProviderVectorsTest {
     for (var component : record.getClass().getRecordComponents()) {
       Object field = component.getAccessor().invoke(record);
       String name = snake(component.getName());
+      if (LATER.contains(name) && Optional.empty().equals(field)) {
+        // Fields the shared vectors' first cases predate.
+        continue;
+      }
       out.put(
           name,
           switch (name) {
@@ -234,6 +352,9 @@ class HostProviderVectorsTest {
     }
     return out;
   }
+
+  /** Fields the vectors' decoded forms leave out where they say nothing; round trips hold them. */
+  private static final List<String> LATER = List.of("key_dtype", "source_type");
 
   private static final Map<String, String> FILTERS =
       Map.of(
@@ -272,6 +393,7 @@ class HostProviderVectorsTest {
       DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS");
 
   private static Object scalar(Object value) {
+    if (value instanceof DataRequest.Value typed) return scalar(typed.value());
     if (value == null) return null;
     if (value instanceof Boolean b) return Map.of("bool", b);
     if (value instanceof Long || value instanceof Integer || value instanceof BigInteger)

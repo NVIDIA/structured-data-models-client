@@ -10,9 +10,9 @@
 //! ([`kit::SqlKit`]), over [`Sql`]: the source's statements rendered in its
 //! dialect ([`plan::SqlPlan`]), its key sets bound as the dialect binds
 //! them, its answers read as the reference reads them, and its catalog's
-//! answers read into neutral facts. [`Databases`] is the core's data
-//! layer: the shape a source's engine answers in and the semantic models
-//! it is read through, by the database it declares.
+//! answers read into neutral facts, and written in the contract's own
+//! shapes. [`Databases`] is the core's data layer: the semantic models a
+//! source is read through, by the database it declares.
 //!
 //! [`sql`] shares statement construction through its dialect trait, while each
 //! connector module supplies its differences.
@@ -149,9 +149,9 @@ pub struct Sql {
 }
 
 /// The core's data layer over the built-in databases, by the database a
-/// source declares ([`ProviderCapabilities::database`]): the shape its
-/// engine answers in, and the semantic models it is read through, with the
-/// white space their checks read text by.
+/// source declares ([`ProviderCapabilities::database`]): the semantic
+/// models it is read through, with the white space their checks read text
+/// by.
 #[derive(Debug, Clone, Copy)]
 pub struct Databases {
     spaces: &'static view_expr::Spaces,
@@ -175,25 +175,6 @@ impl Databases {
 }
 
 impl DataLayer for Databases {
-    fn expected(
-        &self,
-        capabilities: &ProviderCapabilities,
-        request: &DataRequest,
-    ) -> ExpectedSchema {
-        match (view_dialect(capabilities), request) {
-            // A catalog's answer is in the standard shape every source
-            // answers in (the kit writes its dialect's rows so), but for a
-            // semantic model's definition, in its database's own.
-            (Some(dialect), DataRequest::Describe { part, .. })
-                if *part == DescribePart::ViewDefinition =>
-            {
-                dialect.expected(request)
-            }
-            (Some(_), DataRequest::Describe { .. }) | (None, _) => request.expected(),
-            (Some(dialect), _) => dialect.expected(request),
-        }
-    }
-
     fn view_kind(
         &self,
         capabilities: &ProviderCapabilities,

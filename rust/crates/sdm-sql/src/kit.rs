@@ -73,9 +73,20 @@ impl From<CoreError> for KitError {
 /// semantic model it reads through, and the timestamp transport its driver
 /// needs. One kit answers one run: the namespace it settles is kept for
 /// the run, as the core keeps a run's, and never between runs.
+/// Runs a step of the kit that recurses once per level of a value (a JSON
+/// value read as the reference reads it) on a stack deep enough for any
+/// value: the caller's thread may have a small one (a JVM's).
+pub type OnDeepStack = fn(&mut dyn FnMut());
+
+/// Runs `step` where it is called: the stack of a kit given none.
+fn on_this_stack(step: &mut dyn FnMut()) {
+    step();
+}
+
 #[derive(Debug)]
 pub struct SqlKit {
     data: Sql,
+    on_deep_stack: OnDeepStack,
     provider: std::sync::Mutex<SqlChoice>,
     /// Each catalog read's answer this run, by the plan that read it: an
     /// identical catalog read is answered once a run, as the core answered
@@ -99,9 +110,19 @@ impl SqlKit {
         data.capabilities(&provider)?;
         Ok(SqlKit {
             data,
+            on_deep_stack: on_this_stack,
             provider: std::sync::Mutex::new(provider),
             catalog: std::sync::Mutex::new(Vec::new()),
         })
+    }
+
+    /// This kit, reading the values of each answer (its conforming, which
+    /// recurses once per level of a JSON value) through `on_deep_stack`.
+    /// The answer read stays the caller's, released on its own stack.
+    #[must_use]
+    pub fn reading_values_on(mut self, on_deep_stack: OnDeepStack) -> Self {
+        self.on_deep_stack = on_deep_stack;
+        self
     }
 
     /// The source this kit answers for, its namespace settled once the run
@@ -218,7 +239,14 @@ impl SqlKit {
                 });
             }
         }
-        Ok(answered)
+        // Every other answer whose shape the contract fixes, in that shape
+        // too, as every source answers it.
+        Ok(
+            match crate::standard::fixed(request, &answered.schema, &answered.batches)? {
+                Some((schema, batches)) => Answered { schema, batches },
+                None => answered,
+            },
+        )
     }
 
     /// `plan` bound as the source binds it, each fetch run in order, their
@@ -292,15 +320,27 @@ impl SqlKit {
                 "a request bound into no fetch",
             ))
         })?;
-        Ok(
-            match self
-                .data
-                .conform(provider, &whole.schema, &whole.batches, float_text)?
-            {
-                Some((schema, batches)) => Answered { schema, batches },
-                None => whole,
-            },
-        )
+        // Its values read as the reference reads them, on a stack deep
+        // enough for any value; `whole`, the driver's answer, is kept here
+        // and released on this stack, never the deep one.
+        let mut conformed = None;
+        (self.on_deep_stack)(&mut || {
+            conformed =
+                Some(
+                    self.data
+                        .conform(provider, &whole.schema, &whole.batches, float_text),
+                );
+        });
+        let conformed = conformed.ok_or_else(|| {
+            KitError::Refused(CoreError::new(
+                Sentence::Internal,
+                "an answer's values were not read",
+            ))
+        })??;
+        Ok(match conformed {
+            Some((schema, batches)) => Answered { schema, batches },
+            None => whole,
+        })
     }
 
     /// What the driver's failure `error` tells the core.

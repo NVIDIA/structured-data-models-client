@@ -135,18 +135,13 @@ def _watched(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     from sdm_client import DuckDBSource
 
     asked: list[str] = []
-    real = DuckDBSource._sdm_chosen
+    real = DuckDBSource.answer
 
-    def watched(given):
-        choice, provider = real(given)
+    def watched(source, request, expected):
+        asked.append(request.name)
+        return real(source, request, expected)
 
-        def answering(request, keys):
-            asked.append(request['request']['request'])
-            return provider(request, keys)
-
-        return choice, answering
-
-    monkeypatch.setattr(DuckDBSource, '_sdm_chosen', watched)
+    monkeypatch.setattr(DuckDBSource, 'answer', watched)
     return asked
 
 

@@ -1152,12 +1152,11 @@ fn snowflake_declares_what_the_old_clients_sampler_does() {
     assert_eq!(capabilities.database.as_deref(), Some("snowflake"));
     assert!(capabilities.reads_tables_as_they_stand);
     // The key counts in the case Snowflake folds an unquoted alias to,
-    // which the core holds the source's answer to.
+    // which the kit writes in the contract's shape.
     let key_counts: DataRequest = serde_json::from_value(json!({"request": "key_counts", "keys": [
         {"table": table("users"), "columns": ["user_id"]}]}))
     .unwrap();
     let expect = kit(&named()).plan(&key_counts).unwrap().expect;
-    assert_eq!(layer().expected(&capabilities, &key_counts), expect);
     let ExpectedSchema::Schema { fields, .. } = expect else {
         panic!("no schema expected");
     };

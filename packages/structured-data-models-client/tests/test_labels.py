@@ -157,19 +157,14 @@ def test_provider_ground_truth(connector, monkeypatch):
             Relationship('orders', 'item_id', 'items', 'item_id'),
         ]
         watched = type(data.source)
-        original_provider = watched._sdm_chosen
+        original_answer = watched.answer
         requests = []
 
-        def observed(source):
-            choice, provider = original_provider(source)
+        def observed(source, request, expected):
+            requests.append({'request': request.name})
+            return original_answer(source, request, expected)
 
-            def answer(request, keys):
-                requests.append(request['request'])
-                return provider(request, keys)
-
-            return choice, answer
-
-        monkeypatch.setattr(watched, '_sdm_chosen', observed)
+        monkeypatch.setattr(watched, 'answer', observed)
         zero = PredictiveQuery(
             'PREDICT users.value FOR EACH users.user_id', data
         ).labels(0)

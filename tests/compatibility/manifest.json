@@ -4336,7 +4336,7 @@
           "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_a_source_over_its_connection",
           "packages/structured-data-models-client/tests/test_built_in_sources.py::test_both_databricks_connections_are_read_by_their_own_driver",
           "packages/structured-data-models-client/tests/test_built_in_sources.py::test_what_a_source_cannot_be_is_refused",
-          "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly"
+          "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#parquetPreservesTimezoneNanosecondsAndNulls",
@@ -4349,7 +4349,8 @@
           "java/src/test/java/com/nvidia/sdm/ReadersTest.java#ordinaryJavaWorksWithoutSparkOrSnowflakeRuntime",
           "java/src/test/java/com/nvidia/sdm/SparkSourceTest.java#aCallersSessionReadsTypedRowsAndBoundNativeSqlIntact",
           "java/src/test/java/com/nvidia/sdm/SnowflakeTest.java#sourceUsesExistingCoreDialectNamespaceAndViewWithoutChangingConnection",
-          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#customS3EndpointIsScopedAndValidated"
+          "java/src/test/java/com/nvidia/sdm/ReadersTest.java#customS3EndpointIsScopedAndValidated",
+          "java/src/test/java/com/nvidia/sdm/BuiltInSourceAnswerTest.java#aBuiltInSourceAnswersDirectlyWhatARunReceives"
         ]
       },
       "gate": "local",
@@ -4461,7 +4462,12 @@
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#hasRowsIsReadWithItsTableAndNestedFilters",
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
           "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachRequestIsReadAsTheSharedVectorsSay",
-          "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachCapabilitiesDeclaredIsSentAsTheSharedVectorsSay"
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachCapabilitiesDeclaredIsSentAsTheSharedVectorsSay",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachRequestReadAndWrittenAgainIsTheRequestSent",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachCapabilitiesReadAndWrittenAgainAreTheOnesSent",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#eachFailureReadAndWrittenAgainTellsTheSame",
+          "java/src/test/java/com/nvidia/sdm/internal/HostProviderVectorsTest.java#aValueKeepsItsExactType",
+          "java/src/test/java/com/nvidia/sdm/BuiltInSourceAnswerTest.java#aBuiltInSourceAnswersDirectlyWhatARunReceives"
         ],
         "python": [
           "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
@@ -4471,7 +4477,11 @@
           "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
           "packages/structured-data-models-client/tests/test_data_providers.py::test_a_lookup_asked_in_parts_is_answered_as_one",
           "packages/structured-data-models-client/tests/test_data_providers.py::test_a_schema_over_a_source_is_not_pickled_whatever_the_source",
-          "packages/structured-data-models-client/tests/test_data_providers.py::test_an_object_that_only_looks_like_a_source_is_refused"
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_an_object_that_only_looks_like_a_source_is_refused",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_value_keeps_its_exact_type"
         ]
       },
       "gate": "local",
@@ -4479,7 +4489,9 @@
         "paths": [
           "java/src/main/java/com/nvidia/sdm/internal/HostProviders.java",
           "packages/structured-data-models-client/src/sdm_client/_rust/host_providers.py",
-          "rust/crates/sdm-sql/src/host_parts.rs"
+          "rust/crates/sdm-data/src/parts.rs",
+          "packages/structured-data-models-client/src/sdm_client/_rust/sql_kit.py",
+          "java/src/main/java/com/nvidia/sdm/internal/KitRun.java"
         ],
         "operations": [],
         "host_only_reason": "A caller's own provider answers the core's data requests in Java or Python; the operations are the ones every source answers."
@@ -6077,7 +6089,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "bc745f31b98a4ddae15a68b23288ccfe4bae70e0058713bfce5717b5d3b039d4",
+  "public_api_snapshot_sha256": "8ee637593930eff8cbe44cb1f706658a6b726af06f8a7fbe87edae3d3c21581b",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -6295,8 +6307,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -6304,8 +6316,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -6322,8 +6334,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -6362,8 +6374,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -6371,8 +6383,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -6389,8 +6401,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -6810,8 +6822,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -6819,8 +6831,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -6837,8 +6849,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -7084,8 +7096,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -7093,8 +7105,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -7111,8 +7123,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -7359,8 +7371,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -7368,8 +7380,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -7386,8 +7398,8 @@
         "capability": "readers",
         "assertions": [
           {
-            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_is_not_asked_directly",
-            "behavior": "A built-in source's capabilities and answer are refused with UNSUPPORTED_REQUEST: the library answers it with its own SQL."
+            "test": "packages/structured-data-models-client/tests/test_built_in_sources.py::test_a_built_in_source_answers_directly_what_a_run_receives",
+            "behavior": "A built-in source is asked through the same capabilities, answer and failure as any source: asked directly, it answers each request of a run exactly what the core received from it in the run."
           }
         ]
       },
@@ -7661,6 +7673,15 @@
           }
         ]
       },
+      "sdm_client.provider.ArrowStream": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_value_keeps_its_exact_type",
+            "behavior": "A value of a request keeps its exact Arrow type, so a request read and written again is the one the core sent."
+          }
+        ]
+      },
       "sdm_client.provider.BATCH_COLUMN": {
         "capability": "data-providers",
         "assertions": [
@@ -7688,6 +7709,51 @@
           }
         ]
       },
+      "sdm_client.provider.Capabilities.ask_namespace_first": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.column_types_are_affinities": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.compares_stored_times": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.derived_relations": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.engine": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.Capabilities.fallback": {
         "capability": "data-providers",
         "assertions": [
@@ -7697,12 +7763,48 @@
           }
         ]
       },
+      "sdm_client.provider.Capabilities.fallback_text_order": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.Capabilities.filters": {
         "capability": "data-providers",
         "assertions": [
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
             "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.index_advice": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.key_enforcement": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.keys_optional": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
           }
         ]
       },
@@ -7724,12 +7826,48 @@
           }
         ]
       },
+      "sdm_client.provider.Capabilities.namespace": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.nan_is_missing": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.neighbor_lookback": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.Capabilities.null_order": {
         "capability": "data-providers",
         "assertions": [
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
             "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.opaque_vendor": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
           }
         ]
       },
@@ -7742,12 +7880,66 @@
           }
         ]
       },
+      "sdm_client.provider.Capabilities.reread_tables_every_run": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.retry_upper_case_names": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.sample_by_key_type": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.sample_by_row_count": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.Capabilities.sampling": {
         "capability": "data-providers",
         "assertions": [
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_declared_is_sent_as_the_shared_vectors_say",
             "behavior": "Declared capabilities reach the core as the shared vectors write them, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.semantic_model": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Capabilities.text_times": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
           }
         ]
       },
@@ -7985,6 +8177,141 @@
           }
         ]
       },
+      "sdm_client.provider.FailureFacts": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureFacts.denied": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureFacts.not_found": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureFacts.reason": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureFacts.refuses_expression": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureFacts.unusable": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason.COLUMN_UNRESOLVED": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason.DIVISION_BY_ZERO": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason.OUT_OF_RANGE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason.PERMISSION_DENIED": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason.SYNTAX_REJECTED": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason.TABLE_UNRESOLVED": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason.TYPES_INCOMPATIBLE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.FailureReason.VALUE_NOT_CONVERTED": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.Fallback": {
         "capability": "data-providers",
         "assertions": [
@@ -8084,6 +8411,33 @@
           }
         ]
       },
+      "sdm_client.provider.IndexAdvice": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.IndexAdvice.LEADING_COLUMN": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.IndexAdvice.SINGLE_COLUMN": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.IsNull": {
         "capability": "data-providers",
         "assertions": [
@@ -8126,6 +8480,15 @@
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
             "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.KeySet.columns": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
           }
         ]
       },
@@ -8345,6 +8708,15 @@
           }
         ]
       },
+      "sdm_client.provider.ProviderFailure.facts": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.ProviderFailure.message": {
         "capability": "data-providers",
         "assertions": [
@@ -8381,12 +8753,66 @@
           }
         ]
       },
+      "sdm_client.provider.Relation.columns": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Relation.filter": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Relation.found": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.Relation.table": {
         "capability": "data-providers",
         "assertions": [
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
             "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.RelationColumn": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.RelationColumn.column": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.RelationColumn.expression": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
           }
         ]
       },
@@ -8432,6 +8858,15 @@
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
             "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.SampleEntities.key_dtype": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
           }
         ]
       },
@@ -8498,6 +8933,24 @@
           }
         ]
       },
+      "sdm_client.provider.SemanticModel": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.SemanticModel.trust_expressions": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.Source": {
         "capability": "data-providers",
         "assertions": [
@@ -8534,6 +8987,15 @@
           }
         ]
       },
+      "sdm_client.provider.SqlLimit": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
+          }
+        ]
+      },
       "sdm_client.provider.TableColumn": {
         "capability": "data-providers",
         "assertions": [
@@ -8549,6 +9011,51 @@
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
             "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TextOrder": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TextOrder.BINARY_UTF8": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TextTimes": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TextTimes.CLIENT_RULES": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.TextTimes.VALUE_BY_VALUE": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_capabilities_read_and_written_again_are_the_ones_sent",
+            "behavior": "Every capability a source declares, each source trait among them, is read from and written to the contract exactly, in both languages."
           }
         ]
       },
@@ -8588,12 +9095,57 @@
           }
         ]
       },
+      "sdm_client.provider.Unusable": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Unusable.FORBIDDEN": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Unusable.MISSING": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_failure_read_and_written_again_tells_the_same",
+            "behavior": "A source's failure, with the facts it means, is read from and written to the contract exactly, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Value": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_value_keeps_its_exact_type",
+            "behavior": "A value of a request keeps its exact Arrow type, so a request read and written again is the one the core sent."
+          }
+        ]
+      },
       "sdm_client.provider.Window": {
         "capability": "data-providers",
         "assertions": [
           {
             "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_is_read_as_the_shared_vectors_say",
             "behavior": "Each request and filter the core sends is read into the public types as the shared vectors say, in both languages."
+          }
+        ]
+      },
+      "sdm_client.provider.Window.source_type": {
+        "capability": "data-providers",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_each_request_read_and_written_again_is_the_request_sent",
+            "behavior": "Every request, filter, value type and derived relation is read into the public types and written back exactly as the core sent it, in both languages."
           }
         ]
       },
@@ -10597,15 +11149,6 @@
       "com.nvidia.sdm.Source": {
         "capability": "readers"
       },
-      "com.nvidia.sdm.Source#protected com.nvidia.sdm.Source();": {
-        "capability": "data-providers",
-        "assertions": [
-          {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
-            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
-          }
-        ]
-      },
       "com.nvidia.sdm.Source#public abstract com.nvidia.sdm.provider.Capabilities capabilities();": {
         "capability": "data-providers",
         "assertions": [
@@ -10624,12 +11167,12 @@
           }
         ]
       },
-      "com.nvidia.sdm.Source#public com.nvidia.sdm.provider.ProviderFailure failure(java.lang.Exception);": {
+      "com.nvidia.sdm.Source#public default com.nvidia.sdm.provider.ProviderFailure failure(java.lang.Exception);": {
         "capability": "data-providers",
         "assertions": [
           {
-            "test": "java/src/test/java/com/nvidia/sdm/internal/HostProviderFiltersTest.java#aSourcesDeclaredFiltersReachTheCore",
-            "behavior": "A caller's own Source declares its capabilities, and the value filters it declares reach the core."
+            "test": "java/src/test/java/com/nvidia/sdm/BuiltInSourceAnswerTest.java#aBuiltInSourceAnswersDirectlyWhatARunReceives",
+            "behavior": "A source's failure is read by its failure method, a default every source may override, as a built-in source does."
           }
         ]
       },
@@ -11063,17 +11606,17 @@
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "api_contracts/data-providers",
-      "reason": "Callers' own data providers, in Java (ProviderSource, before this change) and now Python (sdm_client.ProviderSource and sdm_client.provider): the group maps both languages to the shared host-provider vectors and to end-to-end providers over DuckDB and Trino; a key set past a provider's limit is split by the core for both. Source redesign: the group names Source in both languages, with the tests that a Source is abstract, that a schema over any source refuses to pickle, and that an object only shaped like a source is refused."
+      "reason": "Callers' own data providers, in Java (ProviderSource, before this change) and now Python (sdm_client.ProviderSource and sdm_client.provider): the group maps both languages to the shared host-provider vectors and to end-to-end providers over DuckDB and Trino; a key set past a provider's limit is split by the core for both. Source redesign: the group names Source in both languages, with the tests that a Source is abstract, that a schema over any source refuses to pickle, and that an object only shaped like a source is refused. The group gains the lossless round trips of every request, capability and failure, in both languages, and the per-run SQL kit of the built-in sources."
     },
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "api_inventory",
-      "reason": "Adds the context report types and accessors and MaterializeOptions.Builder.contextTimeLimit, and maps ProviderSource's existing declarations to data-providers. Adds the Python data provider API (sdm_client.ProviderSource and sdm_client.provider). The source redesign makes Source the one public source type in both languages: DataProvider becomes the abstract Source (sdm_client.Source, com.nvidia.sdm.Source), ProviderSource, JdbcSource, SemanticModel and sdm_connectors' source classes are removed, the built-in Python sources are mapped from sdm_connectors to sdm_client under readers, Java gains semanticModel(name) and Readers over a Connection or a Spark session, each new or changed symbol with its own behavior assertion."
+      "reason": "Adds the context report types and accessors and MaterializeOptions.Builder.contextTimeLimit, and maps ProviderSource's existing declarations to data-providers. Adds the Python data provider API (sdm_client.ProviderSource and sdm_client.provider). The source redesign makes Source the one public source type in both languages: DataProvider becomes the abstract Source (sdm_client.Source, com.nvidia.sdm.Source), ProviderSource, JdbcSource, SemanticModel and sdm_connectors' source classes are removed, the built-in Python sources are mapped from sdm_connectors to sdm_client under readers, Java gains semanticModel(name) and Readers over a Connection or a Spark session, each new or changed symbol with its own behavior assertion. One path for every source: Capabilities gains the source traits the core reads (namespace, ask_namespace_first, retry_upper_case_names, column_types_are_affinities, reread_tables_every_run, engine, semantic_model and the engine traits the built-in sources declare), requests carry each value as a Value with its Arrow type, derived relations, key set schemas, window source types and key dtypes, and failures their FailureFacts; Java Source is an interface, its failure a default method, and JdbcSource is gone, as Python has no such type."
     },
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "public_api_snapshot_sha256",
-      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report, whose stop reasons include time_limit. It now records sdm_client.provider, the Python data provider API, and sdm_client.ProviderSource. The source redesign records sdm_client.Source and the built-in sources in sdm_client, and drops ProviderSource, DataProvider and every sdm_connectors source."
+      "reason": "The Python public surface gains ContextReport, ContextDraw and Request.context_report, whose stop reasons include time_limit. It now records sdm_client.provider, the Python data provider API, and sdm_client.ProviderSource. The source redesign records sdm_client.Source and the built-in sources in sdm_client, and drops ProviderSource, DataProvider and every sdm_connectors source. The provider module gains the source traits of Capabilities, Value, RelationColumn, SemanticModel, FailureFacts and their enumerations, and ArrowStream, the type Source.answer returns."
     },
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
@@ -11168,7 +11711,7 @@
     {
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "api_contracts/readers",
-      "reason": "Source redesign: the built-in Python sources moved to sdm_client, so the group names SnowflakeSource there and gains the built-in source tests moved from the connectors package to test_built_in_sources.py; its ownership names sdm_client/sources.py."
+      "reason": "Source redesign: the built-in Python sources moved to sdm_client, so the group names SnowflakeSource there and gains the built-in source tests moved from the connectors package to test_built_in_sources.py; its ownership names sdm_client/sources.py. The built-in sources answer capabilities and answer themselves; the group gains the Java test that a built-in source asked directly answers what a run receives."
     }
   ],
   "capabilities": [

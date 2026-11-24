@@ -454,3 +454,76 @@ fn a_namespace_left_to_the_connection_is_settled_once_and_kept_for_the_run() {
         panic!("the namespace read");
     }
 }
+
+/// A key count of `k` of the table named by `parts`.
+fn key_counts(parts: &str) -> DataRequest {
+    serde_json::from_str(&format!(
+        r#"{{"request":"key_counts","keys":[{{"table":{{"source":[{parts}]}},"columns":["k"]}}]}}"#
+    ))
+    .unwrap()
+}
+
+/// An engine's answer to the key counts: one row, each column of `names`
+/// an `int64`, as SQLite and Snowflake answer them.
+fn engine_counts(names: [&str; 4]) -> Answered {
+    let schema: SchemaRef = Arc::new(Schema::new(
+        names
+            .iter()
+            .map(|name| Field::new(*name, DataType::Int64, false))
+            .collect::<Vec<_>>(),
+    ));
+    let batch = RecordBatch::try_new(
+        Arc::clone(&schema),
+        [0, 7, 5, 1]
+            .into_iter()
+            .map(|v| Arc::new(Int64Array::from(vec![v])) as arrow_array::ArrayRef)
+            .collect(),
+    )
+    .unwrap();
+    Answered {
+        schema,
+        batches: vec![batch],
+    }
+}
+
+#[test]
+fn every_kit_answers_the_key_counts_in_the_contract_s_shape() {
+    use sdm_contract::data::ExpectedSchema;
+    let ExpectedSchema::Schema { fields, .. } = key_counts(r#""t""#).expected() else {
+        panic!("the key counts expect a fixed schema");
+    };
+    let standard = Schema::new(fields.iter().map(|f| f.to_arrow()).collect::<Vec<_>>());
+    for (dialect, names, parts) in [
+        ("sqlite", ["k", "n", "d", "z"], r#""t""#),
+        ("snowflake", ["K", "N", "D", "Z"], r#""DB","PUBLIC","T""#),
+        ("duckdb", ["k", "n", "d", "z"], r#""t""#),
+    ] {
+        let request = key_counts(parts);
+        let kit = SqlKit::new(choice(dialect), None).unwrap();
+        let (answered, _) = ask(&kit, &request, &BTreeMap::new(), |_, _| {
+            Ok(engine_counts(names))
+        });
+        let answered = answered.unwrap_or_else(|e| panic!("{dialect}: {e:?}"));
+        assert_eq!(answered.schema.as_ref(), &standard, "{dialect}");
+        let batch = &answered.batches[0];
+        assert_eq!(batch.num_rows(), 1, "{dialect}");
+        let rows = batch
+            .column(1)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        assert_eq!(rows.value(0), 7, "{dialect}");
+    }
+}
+
+#[test]
+fn a_key_count_answer_of_another_shape_is_refused_by_name() {
+    let kit = SqlKit::new(choice("sqlite"), None).unwrap();
+    let (answered, _) = ask(&kit, &key_counts(r#""t""#), &BTreeMap::new(), |_, _| {
+        Ok(rows(0))
+    });
+    let Err(KitError::Refused(error)) = answered else {
+        panic!("a key count of three columns is refused");
+    };
+    assert_eq!(error.code, sdm_contract::ErrorCode::ProviderSchemaMismatch);
+}

@@ -6,7 +6,8 @@
 //! in ([`sdm_contract::data::catalog_columns`]), the optional facts
 //! included (contract v76): what a built-in source answers through the kit
 //! once its dialect's own catalog rows are read, so the core reads every
-//! source's catalog one way.
+//! source's catalog one way; and every other answer whose shape the
+//! contract fixes ([`fixed`]), in that shape.
 
 use std::sync::Arc;
 
@@ -15,7 +16,8 @@ use arrow_array::{ArrayRef, RecordBatch};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use sdm_contract::catalog::{CatalogAnswer, IndexCoverage, KeyKind};
 use sdm_contract::data::catalog_columns as c;
-use sdm_contract::{CoreError, Sentence};
+use sdm_contract::data::{DataRequest, ExpectedSchema};
+use sdm_contract::{CoreError, Detail, Sentence};
 
 fn names_type() -> DataType {
     DataType::List(Arc::new(Field::new(c::LIST_ITEM, DataType::Utf8, true)))
@@ -212,6 +214,65 @@ pub(crate) fn catalog(
         CatalogAnswer::ViewDefinition(_) => return Ok(None),
     };
     Ok(Some(written))
+}
+
+/// The answer to a request other than a `describe` whose shape the
+/// contract fixes ([`DataRequest::expected`]: the key counts), written in
+/// that shape: each column, by its position, under the contract's name and
+/// cast to its type, as a dialect's statement answers it under the names
+/// and types its engine gives (SQLite's integers all `int64`, Snowflake's
+/// names upper-cased). `None` for a request of no fixed shape, or an
+/// answer already in it; refused by name where the answer has another
+/// number of columns, or a value its column's type does not hold.
+pub fn fixed(
+    request: &DataRequest,
+    schema: &SchemaRef,
+    batches: &[RecordBatch],
+) -> Result<Option<(SchemaRef, Vec<RecordBatch>)>, CoreError> {
+    if matches!(request, DataRequest::Describe { .. }) {
+        return Ok(None);
+    }
+    let ExpectedSchema::Schema { fields, .. } = request.expected() else {
+        return Ok(None);
+    };
+    let standard = Arc::new(Schema::new(
+        fields.iter().map(|f| f.to_arrow()).collect::<Vec<_>>(),
+    ));
+    if schema.as_ref() == standard.as_ref() {
+        return Ok(None);
+    }
+    let mismatch = |reason: &str| {
+        CoreError::new(
+            Sentence::ProviderSchemaMismatch,
+            format!("the provider's data does not match the expected schema: {reason}"),
+        )
+        .with_field("check", Detail::text("expected"))
+        .with_field("reason", Detail::text(reason))
+    };
+    if schema.fields().len() != standard.fields().len() {
+        return Err(mismatch("the answer has another number of columns"));
+    }
+    let options = arrow_cast::CastOptions {
+        safe: false,
+        ..Default::default()
+    };
+    let written = batches
+        .iter()
+        .map(|batch| {
+            let columns = batch
+                .columns()
+                .iter()
+                .zip(standard.fields())
+                .map(|(column, field)| {
+                    arrow_cast::cast_with_options(column, field.data_type(), &options)
+                        .map_err(|_| mismatch("a value its column's type does not hold"))
+                })
+                .collect::<Result<Vec<ArrayRef>, CoreError>>()?;
+            RecordBatch::try_new(Arc::clone(&standard), columns)
+                .map_err(|_| mismatch("a column holds a null where none is allowed"))
+        })
+        .collect::<Result<Vec<_>, CoreError>>()?;
+    Ok(Some((standard, written)))
 }
 
 #[cfg(test)]

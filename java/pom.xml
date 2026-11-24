@@ -422,7 +422,25 @@
                 <breakBuildOnBinaryIncompatibleModifications>true</breakBuildOnBinaryIncompatibleModifications>
                 <breakBuildOnSourceIncompatibleModifications>true</breakBuildOnSourceIncompatibleModifications>
                 <ignoreMissingClasses>false</ignoreMissingClasses>
+                <ignoreMissingClassesByRegularExpressions>
+                  <!-- The removed JdbcSource (excluded below), which the baseline's sources name. -->
+                  <ignoreMissingClassesByRegularExpression>^com\.nvidia\.sdm\.JdbcSource$</ignoreMissingClassesByRegularExpression>
+                </ignoreMissingClassesByRegularExpressions>
                 <reproducibleReport>true</reproducibleReport>
+                <!-- The one-path redesign's reviewed breaks against v2-candidate (owner-approved: the
+                     Java API has no users yet); each element is named, nothing broader. -->
+                <excludes>
+                  <!-- Removed: Python has no JDBC-only source type; a built-in source is a Source like any other. -->
+                  <exclude>com.nvidia.sdm.JdbcSource</exclude>
+                  <!-- Removed: readers take a connection, as Python's do; a Source is read through answer(). -->
+                  <exclude>com.nvidia.sdm.Readers#readTable(com.nvidia.sdm.Source,java.lang.String,org.apache.arrow.memory.BufferAllocator)</exclude>
+                  <!-- Removed: as readTable; a query runs on the caller's connection, as in Python. -->
+                  <exclude>com.nvidia.sdm.Readers#readQuery(com.nvidia.sdm.Source,java.lang.String,org.apache.arrow.memory.BufferAllocator)</exclude>
+                  <!-- Added to the formerly sealed interface: the one source SPI every source, built-in or the caller's, implements. -->
+                  <exclude>com.nvidia.sdm.Source#capabilities()</exclude>
+                  <!-- Added with capabilities(): the typed request every source answers in Arrow. -->
+                  <exclude>com.nvidia.sdm.Source#answer(com.nvidia.sdm.provider.DataRequest,java.util.Optional,org.apache.arrow.memory.BufferAllocator)</exclude>
+                </excludes>
               </parameter>
             </configuration>
           </plugin>

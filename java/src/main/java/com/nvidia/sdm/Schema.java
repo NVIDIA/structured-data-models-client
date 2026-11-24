@@ -7,7 +7,6 @@ package com.nvidia.sdm;
 import com.nvidia.sdm.internal.Host;
 import com.nvidia.sdm.internal.Json;
 import com.nvidia.sdm.internal.NativeCore;
-import com.nvidia.sdm.internal.Providers;
 import com.nvidia.sdm.internal.Results;
 import com.nvidia.sdm.internal.Wording;
 import java.nio.charset.StandardCharsets;
@@ -191,7 +190,7 @@ public final class Schema {
   public static Schema fromSource(Source source, FromSourceOptions options) {
     Objects.requireNonNull(source, "source");
     Objects.requireNonNull(options, "options");
-    Providers.Chosen chosen = source.chosen();
+    SourceRun chosen = SourceRun.of(source);
     Map<String, Object> operation = new LinkedHashMap<>();
     operation.put("op", "describe_source");
     operation.put("provider", chosen.choice());
@@ -201,7 +200,7 @@ public final class Schema {
     attachments.put(1, Host.attachment(options.spec()));
     // The source, which only this host holds, as the core's sentence of a source with no table
     // names it.
-    Map<String, Function<Map<String, Object>, Object>> held = source.held();
+    Map<String, Function<Map<String, Object>, Object>> held = chosen.held();
     try (Host.Finished finished =
         Host.run(operation, attachments, new Host.Call(chosen.provider(), null, held))) {
       Results.Described described =
@@ -435,13 +434,13 @@ public final class Schema {
     if (source == null) {
       throw new StructuredDataException("rebinding requires a source-backed schema", "UNSUPPORTED_REQUEST", Map.of(), null);
     }
-    Providers.Chosen previous = source.chosen();
-    Providers.Chosen chosen = replacement.chosen();
+    SourceRun previous = SourceRun.of(source);
+    SourceRun chosen = SourceRun.of(replacement);
     Map<String, Object> operation = Map.of("op", "rebind_source", "provider", chosen.choice(),
-        "previous_provider", previous.choice(), "source_kind", replacement.kind(),
-        "previous_source_kind", source.kind(), "schema", 1);
+        "previous_provider", previous.choice(), "source_kind", chosen.kind(),
+        "previous_source_kind", previous.kind(), "schema", 1);
     try (Host.Finished finished = Host.run(operation, Map.of(1, Host.attachment(toHeld())),
-        new Host.Call(chosen.provider(), null, replacement.held()))) {
+        new Host.Call(chosen.provider(), null, chosen.held()))) {
       Results.Described answer = (Results.Described) Results.expect(finished.result(), "describe_source");
       Schema result = described(read(finished.bytes(answer.description())), replacement);
       Schema noted = new Schema(result.tables, result.relationships, replacement, conversionNotes);
@@ -460,10 +459,10 @@ public final class Schema {
     if (source == null) {
       throw new StructuredDataException("SQL columns require a source-backed schema", "UNSUPPORTED_REQUEST", Map.of(), null);
     }
-    Providers.Chosen chosen = source.chosen();
+    SourceRun chosen = SourceRun.of(source);
     Map<String, Object> operation = Map.of("op", "add_sql_column", "provider", chosen.choice(), "schema", 1, "input", 2);
     Map<Integer, Object> attachments = Map.of(1, Host.attachment(toHeld()), 2, Host.attachment(Map.of("table", table, "name", name, "expression", expression)));
-    try (Host.Finished finished = Host.run(operation, attachments, new Host.Call(chosen.provider(), null, source.held()))) {
+    try (Host.Finished finished = Host.run(operation, attachments, new Host.Call(chosen.provider(), null, chosen.held()))) {
       Results.Described answer = (Results.Described) Results.expect(finished.result(), "describe_source");
       Schema result = described(read(finished.bytes(answer.description())), source);
       Schema noted = new Schema(result.tables, result.relationships, source, conversionNotes);

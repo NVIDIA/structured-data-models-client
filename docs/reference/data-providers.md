@@ -2,7 +2,8 @@
 
 A `Source` is where a schema's data is read.
 The built-in sources (`DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource`, `SnowflakeSource`, and in Java `DatabricksSparkSource`) read a database through your connection, with SQL the library writes.
-To read data through your own code instead, subclass `Source`.
+They are sources like any other: the client reaches every source through the same `capabilities()` and `answer()`, and a built-in source asked directly answers exactly what an operation over it receives.
+To read data through your own code instead, subclass `Source` in Python or implement it in Java.
 Do that for an engine the client has no built-in source for, or to control exactly how each read runs.
 Python and Java take the same source, with the same requests, in each language's own types.
 
@@ -93,7 +94,7 @@ def holds(table, condition):
         ):
             if bound is not None:
                 op = inclusive_op if bound.inclusive else exclusive_op
-                mask = pc.and_(mask, op(column, pa.scalar(bound.value, column.type)))
+                mask = pc.and_(mask, op(column, pa.scalar(bound.value.value, column.type)))
         return mask
     raise NotImplementedError(type(condition).__name__)
 
@@ -111,11 +112,11 @@ request = PredictiveQuery(
 print(request.context_report)
 ```
 
-The same source in Java extends `com.nvidia.sdm.Source`, whose `answer` returns an `ArrowReader`.
+The same source in Java implements `com.nvidia.sdm.Source`, whose `answer` returns an `ArrowReader`.
 The complete, runnable version is [`InMemoryProviderExampleTest.java`](../../java/src/test/java/com/nvidia/sdm/InMemoryProviderExampleTest.java); its core is:
 
 ```java
-class InMemorySource extends Source {
+class InMemorySource implements Source {
   public Capabilities capabilities() {
     return Capabilities.builder().fallback(10_000_000, 1L << 31).build();
   }
@@ -156,8 +157,15 @@ var schema =
 Without a fallback, every request the source does not declare fails with `UNSUPPORTED_REQUEST`, so a source answering only `describe` and `scan` declares one.
 Declaring `sample_entities` lets the source draw samples itself, which matters for a large table: the fallback reads the whole table to sample it.
 
-`expected` is the exact schema the answer must have, for the requests whose answer the client shapes: `describe`, `key_counts` and `time_bounds`.
+`expected` is the exact schema the answer must have, for the requests whose answer the client shapes: `describe` and `key_counts`.
 For the others it is empty, and the answer holds the columns the request names, in order, typed as the source stores them.
+Every source answers in these shapes, the built-in sources included.
+
+A `time_bounds` answer has one row per column asked, in order: `table_index`, the column's position in the request (an `int32` or `int64`), then `min_date` and `max_date`, its smallest and largest value, null where no row holds one.
+Each bound is of the column's own type: a timestamp of any unit or zone, a date, or text, as a source with no time type stores it.
+The client reads a timestamp with a zone at its UTC instant, a date at its midnight, and text by the reading `Capabilities.text_times` declares.
+
+The client reads `capabilities()` once at the start of each operation, before any request of it, so a source may keep what it learns within one operation, as the built-in sources keep the namespace they settle.
 
 A `scan` or `preview` with a `limit` asks for at most that many rows, any of them.
 
@@ -176,6 +184,35 @@ Each `describe` request asks for one part of the catalog, for the tables it name
 An empty answer is valid for `keys`, `foreign_keys` and `namespace`.
 A source that declares no primary or foreign keys, such as Trino, still works: name the keys, time columns and relationships when building the schema, as the example does.
 Keys and time columns given to `Schema.from_source` override what the source declares, and relationships given replace them.
+
+## Describing the source
+
+Beyond the requests it answers, `Capabilities` describes the source to the client.
+Each default is a plain source of tables, so a source declares only what differs.
+
+| Python | Java | Declares |
+|---|---|---|
+| `namespace` | `namespace` | The namespace a table named by one part is read under, outermost first |
+| `ask_namespace_first` | `askNamespaceFirst` | Ask the source its namespace (`describe` of `namespace`, answered in full) before reading a table named by one part |
+| `retry_upper_case_names` | `retryUpperCaseNames` | Try a table the catalog does not find again upper-cased |
+| `column_types_are_affinities` | `columnTypesAreAffinities` | A column's declared type is only an affinity; its type is read from its values |
+| `reread_tables_every_run` | `rereadTablesEveryRun` | Each run reads the tables as they stand, not as a given schema holds them |
+| `engine` | `engine` | The database engine, by the name messages use (`duckdb`, `sqlite`, `postgres`, `databricks`, `snowflake`); its semantic models are read in that engine's SQL |
+| `semantic_model` | `semanticModel` | The semantic model the source is read through: its name, and whether its expressions are trusted |
+| `derived_relations` | `derivedRelations` | The source reads a derived relation (`Relation.columns`, `Relation.filter`) |
+| `text_times` | `textTimes` | How the client reads a time stored as text |
+| `index_advice` | `indexAdvice` | Which indexes serve the sampler's reads, for its warning of missing ones |
+| `sample_by_row_count` | `sampleByRowCount` | Size a sample by the table's rows, which the client counts first |
+| `sample_by_key_type` | `sampleByKeyType` | Order a seeded sample by the key's data type, which the client names |
+| `neighbor_lookback` | `neighborLookback` | Look back from each seed only as far as the table's rate of rows says |
+| `keys_optional` | `keysOptional` | Read a failed read of declared keys as no declared keys |
+| `key_enforcement` | `keyEnforcement` | The catalog answers which tables enforce their keys |
+| `compares_stored_times` | `comparesStoredTimes` | Compare a window's bounds with the stored text of its column |
+| `nan_is_missing` | `nanIsMissing` | Read a NaN as missing, and `-0.0` as `0.0` |
+| `opaque_vendor` | `opaqueVendor` | The vendor whose opaque Arrow extension types the source hands over |
+| `fallback_text_order` | `fallbackTextOrder` | How the source compares text, where the fallback compares it |
+
+A built-in source's `capabilities()` returns what its engine declares, in the same type.
 
 ## Filters
 
@@ -196,12 +233,13 @@ Each seed's rows carry the seed's own batch position, so the client joins the an
 ## Errors
 
 A source's exception fails the operation with `PROVIDER_ERROR`.
-A source may also override `failure(error)`, returning a `ProviderFailure` with the SQLSTATE, vendor code, error class and message it reads from its error; by default, the client reads a database driver's `sqlstate` and `vendor_code` attributes.
+A source may also override `failure(error)`, returning a `ProviderFailure` with the SQLSTATE, vendor code, error class and message it reads from its error, and the `FailureFacts` it means, such as a table not found or access denied; by default, the client reads a database driver's `sqlstate` and `vendor_code` attributes.
+A built-in source refuses a request its database's SQL cannot answer with the client's own error, which the operation fails with.
 The message is kept internal and never shown to end users.
 
 ## Values
 
-Values in requests are plain values of each language.
+Each value in a request is a `Value`: a plain value of each language, `value`, with the Arrow `type` the client holds it as, such as `int64` or `timestamp[us, tz=UTC]`.
 
 | Value | Python | Java |
 |---|---|---|
@@ -211,7 +249,7 @@ Values in requests are plain values of each language.
 | Text, bytes | `str`, `bytes` | `String`, `byte[]` |
 | Dates | `datetime.date` | `LocalDate` |
 | Timestamps without a zone, a wall clock | `datetime.datetime` | `LocalDateTime` |
-| Timestamps with a zone, an instant | `datetime.datetime` in that zone | `Instant` |
+| Timestamps with a zone, an instant | `datetime.datetime` in that zone | `Instant`, its zone in its `type` |
 | Durations | `datetime.timedelta` | `Duration` |
 | Times of day | `datetime.time` | `LocalTime` |
 
@@ -220,5 +258,5 @@ A nanosecond timestamp or duration is a `pandas.Timestamp` or `pandas.Timedelta`
 A date or timestamp outside the years `datetime` holds, 1 to 9999, is a `numpy.datetime64`.
 So a time bound is never shifted, and a source never reads fewer rows than a filter holds for.
 
-The library calls a source from the thread that runs the operation, one request at a time.
+The library reads a source's `capabilities()` once as each operation starts, then calls `answer()` from the thread that runs the operation, one request at a time.
 It never closes the source, and a source, or a schema over one, cannot be pickled or saved.

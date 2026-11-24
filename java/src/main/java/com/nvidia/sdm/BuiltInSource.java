@@ -5,22 +5,27 @@
 package com.nvidia.sdm;
 
 import com.nvidia.sdm.internal.Host;
-import com.nvidia.sdm.internal.Providers;
+import com.nvidia.sdm.internal.KitRun;
 import com.nvidia.sdm.provider.Capabilities;
 import com.nvidia.sdm.provider.DataRequest;
-import java.util.LinkedHashMap;
+import com.nvidia.sdm.provider.ProviderFailure;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.arrow.vector.types.pojo.Schema;
 
 /**
- * What every built-in source shares: the core writes the SQL for its database, and the driver's
- * provider runs it on the caller's connection. Not part of the API.
+ * What every built-in source shares: a connection, the namespace its tables live in, the semantic
+ * model it reads, and the driver that runs the SQL the library writes for its database, as
+ * Python's {@code _BuiltInSource}. Not part of the API.
+ *
+ * <p>Each operation's answers are its own: {@link #capabilities}, which every operation reads once
+ * as it starts, opens a fresh SQL kit for the operation on the calling thread, and {@link #answer}
+ * answers through it. The kit settles a namespace left to the connection once, and reads an
+ * identical catalog read once, within that operation only.
  */
-abstract sealed class BuiltInSource extends Source
+abstract sealed class BuiltInSource implements Source
     permits DuckDbSource,
         SqliteSource,
         PostgresSource,
@@ -28,27 +33,39 @@ abstract sealed class BuiltInSource extends Source
         SnowflakeSource,
         DatabricksSparkSource {
 
-  /** Refused: a built-in source is answered by the library's own SQL, never asked directly. */
+  /** The operation each thread is answering. */
+  private final ThreadLocal<KitRun> runs = new ThreadLocal<>();
+
+  BuiltInSource() {}
+
+  /**
+   * What this source answers, as the library's SQL for its database declares it. Read as an
+   * operation starts, it starts the operation's answers: a namespace left to the connection is
+   * settled afresh, and the catalog read anew.
+   */
   @Override
   public final Capabilities capabilities() {
-    throw notAsked();
+    return open().capabilities();
   }
 
-  /** Refused: a built-in source is answered by the library's own SQL, never asked directly. */
+  /**
+   * Answers {@code request} with the library's SQL for this database, run on the connection, in the
+   * contract's shape ({@code expected}, where the request fixes one), within the operation {@link
+   * #capabilities} started on this thread.
+   *
+   * @throws StructuredDataException a request this database's SQL cannot answer, refused by name
+   * @throws Exception the driver's failure, as it raised it
+   */
   @Override
   public final ArrowReader answer(
-      DataRequest request, Optional<Schema> expected, BufferAllocator allocator) {
-    throw notAsked();
+      DataRequest request, Optional<Schema> expected, BufferAllocator allocator) throws Exception {
+    return current().answer(request, allocator);
   }
 
-  private StructuredDataException notAsked() {
-    return new StructuredDataException(
-        getClass().getSimpleName()
-            + " is answered by the library's own SQL for its database; pass it where a source is"
-            + " taken, such as Schema.fromSource, rather than asking it directly",
-        "UNSUPPORTED_REQUEST",
-        Map.of(),
-        null);
+  /** What the driver's failure tells the core: its codes, and what it means on this database. */
+  @Override
+  public final ProviderFailure failure(Exception failure) {
+    return current().failure(failure);
   }
 
   /**
@@ -61,26 +78,16 @@ abstract sealed class BuiltInSource extends Source
   /** The provider running the kit's statements on the caller's connection or session. */
   abstract Host.Provider driver();
 
-  @Override
-  final Providers.Chosen chosen() {
-    return Providers.sql(sqlChoice(), driver());
+  /** A fresh operation's answers on this thread. */
+  private KitRun open() {
+    KitRun run = new KitRun(sqlChoice(), driver());
+    runs.set(run);
+    return run;
   }
 
-  @Override
-  final Map<String, Function<Map<String, Object>, Object>> held() {
-    Map<String, Function<Map<String, Object>, Object>> held = new LinkedHashMap<>(super.held());
-    if (readsSemanticModel()) {
-      held.put("semantic_model", fields -> this);
-    }
-    return Map.copyOf(held);
-  }
-
-  @Override
-  final String kind() {
-    return super.kind() + (readsSemanticModel() ? ".semantic_model" : "");
-  }
-
-  private boolean readsSemanticModel() {
-    return sqlChoice().containsKey("view");
+  /** The operation this thread is answering; a fresh one where none was started. */
+  private KitRun current() {
+    KitRun run = runs.get();
+    return run != null ? run : open();
   }
 }

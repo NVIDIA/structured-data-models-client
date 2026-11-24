@@ -231,10 +231,80 @@ def test_the_repr_names_where_not_how() -> None:
     )
 
 
-def test_a_built_in_source_is_not_asked_directly() -> None:
-    source = PostgresSource(_postgres())
-    with pytest.raises(StructuredDataError, match='own SQL') as error:
-        source.capabilities()
-    assert error.value.code == 'UNSUPPORTED_REQUEST'
-    with pytest.raises(StructuredDataError, match='own SQL'):
-        source.answer(None, None)  # type: ignore[arg-type]
+def _shop(connection: Any) -> None:
+    for statement in (
+        'CREATE TABLE users (user_id BIGINT PRIMARY KEY, age BIGINT, '
+        'country VARCHAR)',
+        "INSERT INTO users SELECT i, 20 + i % 50, ['US', 'DE', 'IN'][1 + i % 3] "
+        'FROM range(40) t(i)',
+        'CREATE TABLE orders (order_id BIGINT PRIMARY KEY, user_id BIGINT '
+        'REFERENCES users (user_id), price DOUBLE, ts TIMESTAMP)',
+        'INSERT INTO orders SELECT i, i % 40, 10 + i * 1.5, TIMESTAMP '
+        "'2023-06-01' + to_days(CAST(i AS INTEGER)) FROM range(400) t(i)",
+    ):
+        connection.execute(statement)
+
+
+def test_a_built_in_source_answers_directly_what_a_run_receives(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    r"""A built-in source is asked through the same ``capabilities`` and
+    ``answer`` as any source: asked directly, it answers each request of a
+    run exactly what the core received from it in the run."""
+    import pandas as pd
+    import pyarrow as pa
+
+    from sdm_client import PredictiveQuery, Schema
+    from sdm_client._rust import host_providers as host
+
+    connection = _duckdb(tmp_path)
+    _shop(connection)
+    source = DuckDBSource(connection)
+    received: list[tuple[dict[str, Any], dict[int, pa.Table], pa.Table]] = []
+    asked = host.HostProvider.__call__
+
+    def recorded(provider: Any, step: Any, keys: Any = None) -> Any:
+        # Each key set and the answer, read whole, so each can be read again.
+        tables = {
+            at: host._reader(given).read_all()
+            for at, given in (keys or {}).items()
+        }
+        answer = pa.table(asked(provider, step, tables))
+        received.append((step, tables, answer))
+        return answer
+
+    monkeypatch.setattr(host.HostProvider, '__call__', recorded)
+    schema = Schema.from_source(source, {'users': 'users', 'orders': 'orders'})
+    PredictiveQuery(
+        'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id', schema
+    ).materialize(indices=[0, 1, 2], anchor_time=pd.Timestamp('2024-03-01'))
+    monkeypatch.undo()
+
+    kinds = {step['request']['request'] for step, _, _ in received}
+    assert {'describe', 'time_bounds', 'neighbors'} <= kinds, kinds
+    # The same requests, asked directly, in a fresh operation.
+    assert source.capabilities() == host.read_capabilities(
+        host.chosen(source)[0]['capabilities']
+    )
+    for step, tables, answer in received:
+        request = host.read_request(step['request'], tables)
+        expected = host.expected_schema(step['plan'].get('expect'))
+        direct = pa.table(source.answer(request, expected))
+        # The same rows of the same schema; a request of no order, in any.
+        assert direct.schema == answer.schema, step['request']
+        assert sorted(map(repr, direct.to_pylist())) == sorted(
+            map(repr, answer.to_pylist())
+        ), step['request']
+
+
+def test_a_built_in_source_refuses_by_name_what_its_sql_cannot_answer(
+    tmp_path: Path,
+) -> None:
+    from sdm_client import provider as p
+
+    source = DuckDBSource(_duckdb(tmp_path))
+    # A scan of no column is no statement DuckDB's SQL writes.
+    request = p.Scan(p.Relation(('t',)), (), (), None)
+    with pytest.raises(StructuredDataError) as refused:
+        source.answer(request, None)
+    assert refused.value.code == 'INVALID_REQUEST'

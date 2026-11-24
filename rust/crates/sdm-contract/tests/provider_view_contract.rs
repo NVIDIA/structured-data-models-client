@@ -241,14 +241,7 @@ struct Bare;
 impl DataLayer for Bare {}
 
 #[test]
-fn a_data_layer_reads_the_contract_s_shapes_by_default() {
-    let request: DataRequest = read(json!({
-        "request": "describe", "tables": [{"source": ["t"]}], "part": "columns"
-    }));
-    assert_eq!(
-        Bare.expected(&declared("duckdb", json!({})), &request),
-        request.expected()
-    );
+fn a_data_layer_reads_no_semantic_model_by_default() {
     assert_eq!(Bare.view_kind(&declared("databricks", json!({}))), None);
 }
 

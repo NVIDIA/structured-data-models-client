@@ -226,9 +226,9 @@
           "namespace"
         ],
         "public_methods": {
-          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'ArrowStream'",
           "capabilities": "(self) -> 'Capabilities'",
-          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure'",
           "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'DatabricksSource'"
         },
         "signature": "(connection: 'DatabricksConnection | pyspark.sql.SparkSession | pyspark.sql.connect.session.SparkSession', *, catalog: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
@@ -243,9 +243,9 @@
           "namespace"
         ],
         "public_methods": {
-          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'ArrowStream'",
           "capabilities": "(self) -> 'Capabilities'",
-          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure'"
         },
         "signature": "(connection: 'DuckDBConnection') -> 'None'"
       },
@@ -456,9 +456,9 @@
           "namespace"
         ],
         "public_methods": {
-          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'ArrowStream'",
           "capabilities": "(self) -> 'Capabilities'",
-          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure'"
         },
         "signature": "(connection: 'PostgresConnection', *, schema: 'str | None' = None) -> 'None'"
       },
@@ -577,9 +577,9 @@
           "namespace"
         ],
         "public_methods": {
-          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'ArrowStream'",
           "capabilities": "(self) -> 'Capabilities'",
-          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure'"
         },
         "signature": "(connection: 'SQLiteConnection') -> 'None'"
       },
@@ -635,9 +635,9 @@
           "namespace"
         ],
         "public_methods": {
-          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'ArrowStream'",
           "capabilities": "(self) -> 'Capabilities'",
-          "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'",
+          "failure": "(self, error: 'Exception') -> 'ProviderFailure'",
           "semantic_model": "(self, name: 'str', *, trust_expressions: 'bool' = False) -> 'SnowflakeSource'"
         },
         "signature": "(connection: 'SnowflakeConnection | snowflake.snowpark.Session', *, database: 'str | None' = None, schema: 'str | None' = None) -> 'None'"
@@ -649,7 +649,7 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {
-          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'ArrowStream'",
           "capabilities": "(self) -> 'Capabilities'",
           "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
         },
@@ -779,6 +779,7 @@
       "AllBut",
       "AllOf",
       "AnyOf",
+      "ArrowStream",
       "BATCH_COLUMN",
       "Bound",
       "Capabilities",
@@ -790,11 +791,14 @@
       "DataRequest",
       "Describe",
       "DescribePart",
+      "FailureFacts",
+      "FailureReason",
       "Fallback",
       "Filter",
       "FilterKind",
       "HasRows",
       "In",
+      "IndexAdvice",
       "IsNull",
       "KeyCounts",
       "KeyIn",
@@ -809,6 +813,7 @@
       "Preview",
       "ProviderFailure",
       "Relation",
+      "RelationColumn",
       "RepeatedKey",
       "SEED_BATCH",
       "SEED_KEY",
@@ -816,12 +821,18 @@
       "Sampling",
       "Scan",
       "SeedBound",
+      "SemanticModel",
       "Source",
+      "SqlLimit",
       "TableColumn",
       "TableKey",
+      "TextOrder",
+      "TextTimes",
       "TieTerm",
       "TimeBounds",
       "TimeRange",
+      "Unusable",
+      "Value",
       "Window"
     ],
     "members": {
@@ -846,6 +857,15 @@
         "public_methods": {},
         "signature": "(filters: 'tuple[Filter, ...]') -> None"
       },
+      "ArrowStream": {
+        "bases": [
+          "typing.Protocol"
+        ],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(*args, **kwargs)"
+      },
       "BATCH_COLUMN": {
         "kind": "str",
         "value": "__kumo_batch__"
@@ -855,22 +875,41 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {},
-        "signature": "(value: 'Any', inclusive: 'bool') -> None"
+        "signature": "(value: 'Value', inclusive: 'bool') -> None"
       },
       "Capabilities": {
         "bases": [],
         "kind": "class",
         "public_attributes": [
+          "ask_namespace_first",
+          "column_types_are_affinities",
+          "compares_stored_times",
+          "derived_relations",
+          "engine",
           "fallback",
+          "fallback_text_order",
           "filters",
+          "index_advice",
+          "key_enforcement",
+          "keys_optional",
           "max_keys_per_request",
           "max_seed",
+          "namespace",
+          "nan_is_missing",
+          "neighbor_lookback",
           "null_order",
+          "opaque_vendor",
           "optional",
-          "sampling"
+          "reread_tables_every_run",
+          "retry_upper_case_names",
+          "sample_by_key_type",
+          "sample_by_row_count",
+          "sampling",
+          "semantic_model",
+          "text_times"
         ],
         "public_methods": {},
-        "signature": "(optional: 'frozenset[OptionalRequest]' = frozenset(), max_keys_per_request: 'int | None' = None, sampling: 'Sampling' = <Sampling.SEEDED_STABLE: 'seeded_stable'>, max_seed: 'int' = 9223372036854775807, null_order: 'NullOrder | None' = <NullOrder.LAST: 'last'>, fallback: 'Fallback | None' = None, filters: 'frozenset[FilterKind]' = frozenset()) -> None"
+        "signature": "(optional: 'frozenset[OptionalRequest]' = frozenset(), max_keys_per_request: 'int | None' = None, sampling: 'Sampling' = <Sampling.SEEDED_STABLE: 'seeded_stable'>, max_seed: 'int' = 9223372036854775807, null_order: 'NullOrder | None' = <NullOrder.LAST: 'last'>, fallback: 'Fallback | None' = None, filters: 'frozenset[FilterKind]' = frozenset(), fallback_text_order: 'TextOrder | None' = None, text_times: 'TextTimes | None' = None, index_advice: 'IndexAdvice | None' = None, engine: 'str | None' = None, namespace: 'tuple[str, ...]' = (), ask_namespace_first: 'bool' = False, retry_upper_case_names: 'bool' = False, column_types_are_affinities: 'bool' = False, reread_tables_every_run: 'bool' = False, semantic_model: 'SemanticModel | None' = None, derived_relations: 'bool' = False, sample_by_row_count: 'bool' = False, sample_by_key_type: 'bool' = False, neighbor_lookback: 'bool' = False, keys_optional: 'bool' = False, key_enforcement: 'bool' = False, compares_stored_times: 'bool' = False, nan_is_missing: 'bool' = False, opaque_vendor: 'str | None' = None) -> None"
       },
       "ColumnRanges": {
         "bases": [
@@ -888,7 +927,7 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {},
-        "signature": "(column: 'str', op: 'CompareOp', value: 'Any') -> None"
+        "signature": "(column: 'str', op: 'CompareOp', value: 'Value') -> None"
       },
       "CompareOp": {
         "bases": [
@@ -976,6 +1015,47 @@
         ],
         "public_methods": {}
       },
+      "FailureFacts": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "denied",
+          "not_found",
+          "reason",
+          "refuses_expression",
+          "unusable"
+        ],
+        "public_methods": {},
+        "signature": "(not_found: 'bool' = False, refuses_expression: 'bool' = False, unusable: 'Unusable | None' = None, denied: 'bool' = False, reason: 'FailureReason | None' = None) -> None"
+      },
+      "FailureReason": {
+        "bases": [
+          "builtins.str",
+          "enum.Enum"
+        ],
+        "kind": "class",
+        "members": {
+          "COLUMN_UNRESOLVED": "column_unresolved",
+          "DIVISION_BY_ZERO": "division_by_zero",
+          "OUT_OF_RANGE": "out_of_range",
+          "PERMISSION_DENIED": "permission_denied",
+          "SYNTAX_REJECTED": "syntax_rejected",
+          "TABLE_UNRESOLVED": "table_unresolved",
+          "TYPES_INCOMPATIBLE": "types_incompatible",
+          "VALUE_NOT_CONVERTED": "value_not_converted"
+        },
+        "public_attributes": [
+          "COLUMN_UNRESOLVED",
+          "DIVISION_BY_ZERO",
+          "OUT_OF_RANGE",
+          "PERMISSION_DENIED",
+          "SYNTAX_REJECTED",
+          "TABLE_UNRESOLVED",
+          "TYPES_INCOMPATIBLE",
+          "VALUE_NOT_CONVERTED"
+        ],
+        "public_methods": {}
+      },
       "Fallback": {
         "bases": [],
         "kind": "class",
@@ -1022,7 +1102,23 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {},
-        "signature": "(column: 'str', values: 'tuple[Any, ...]') -> None"
+        "signature": "(column: 'str', values: 'tuple[Value, ...]') -> None"
+      },
+      "IndexAdvice": {
+        "bases": [
+          "builtins.str",
+          "enum.Enum"
+        ],
+        "kind": "class",
+        "members": {
+          "LEADING_COLUMN": "leading_column",
+          "SINGLE_COLUMN": "single_column"
+        },
+        "public_attributes": [
+          "LEADING_COLUMN",
+          "SINGLE_COLUMN"
+        ],
+        "public_methods": {}
       },
       "IsNull": {
         "bases": [],
@@ -1052,9 +1148,11 @@
       "KeySet": {
         "bases": [],
         "kind": "class",
-        "public_attributes": [],
+        "public_attributes": [
+          "columns"
+        ],
         "public_methods": {},
-        "signature": "(columns: 'tuple[str, ...]', reader: 'pa.RecordBatchReader') -> None"
+        "signature": "(schema: 'pa.Schema', reader: 'pa.RecordBatchReader') -> None"
       },
       "Lookup": {
         "bases": [
@@ -1154,21 +1252,35 @@
         "kind": "class",
         "public_attributes": [
           "error_class",
+          "facts",
           "message",
           "sqlstate",
           "vendor_code"
         ],
         "public_methods": {},
-        "signature": "(sqlstate: 'str | None' = None, vendor_code: 'str | None' = None, error_class: 'str | None' = None, message: 'str | None' = None) -> None"
+        "signature": "(sqlstate: 'str | None' = None, vendor_code: 'str | None' = None, error_class: 'str | None' = None, message: 'str | None' = None, facts: 'FailureFacts | None' = None) -> None"
       },
       "Relation": {
         "bases": [],
         "kind": "class",
         "public_attributes": [
+          "columns",
+          "filter",
+          "found",
           "table"
         ],
         "public_methods": {},
-        "signature": "(parts: 'tuple[str, ...]') -> None"
+        "signature": "(parts: 'tuple[str, ...]', columns: 'tuple[RelationColumn, ...]' = (), filter: 'str | None' = None, found: 'bool' = False) -> None"
+      },
+      "RelationColumn": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "column",
+          "expression"
+        ],
+        "public_methods": {},
+        "signature": "(name: 'str', column: 'str | None' = None, expression: 'str | None' = None) -> None"
       },
       "RepeatedKey": {
         "bases": [
@@ -1195,10 +1307,11 @@
         ],
         "kind": "class",
         "public_attributes": [
+          "key_dtype",
           "name"
         ],
         "public_methods": {},
-        "signature": "(table: 'Relation', key: 'tuple[str, ...]', n: 'int', seed: 'int', columns: 'tuple[str, ...]', filters: 'tuple[Filter, ...]', rows: 'int | None') -> None"
+        "signature": "(table: 'Relation', key: 'tuple[str, ...]', n: 'int', seed: 'Value', columns: 'tuple[str, ...]', filters: 'tuple[Filter, ...]', rows: 'int | None', key_dtype: 'str | None' = None) -> None"
       },
       "Sampling": {
         "bases": [
@@ -1234,6 +1347,15 @@
         "public_methods": {},
         "signature": "(seed_column: 'str', inclusive: 'bool') -> None"
       },
+      "SemanticModel": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "trust_expressions"
+        ],
+        "public_methods": {},
+        "signature": "(name: 'str', trust_expressions: 'bool' = False) -> None"
+      },
       "Source": {
         "bases": [
           "abc.ABC"
@@ -1241,11 +1363,18 @@
         "kind": "class",
         "public_attributes": [],
         "public_methods": {
-          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'Any'",
+          "answer": "(self, request: 'DataRequest', expected: 'pa.Schema | None') -> 'ArrowStream'",
           "capabilities": "(self) -> 'Capabilities'",
           "failure": "(self, error: 'Exception') -> 'ProviderFailure | None'"
         },
         "signature": "()"
+      },
+      "SqlLimit": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [],
+        "public_methods": {},
+        "signature": "(expression: 'str') -> None"
       },
       "TableColumn": {
         "bases": [],
@@ -1260,6 +1389,36 @@
         "public_attributes": [],
         "public_methods": {},
         "signature": "(table: 'Relation', columns: 'tuple[str, ...]', label: 'int', unique: 'bool') -> None"
+      },
+      "TextOrder": {
+        "bases": [
+          "builtins.str",
+          "enum.Enum"
+        ],
+        "kind": "class",
+        "members": {
+          "BINARY_UTF8": "binary_utf8"
+        },
+        "public_attributes": [
+          "BINARY_UTF8"
+        ],
+        "public_methods": {}
+      },
+      "TextTimes": {
+        "bases": [
+          "builtins.str",
+          "enum.Enum"
+        ],
+        "kind": "class",
+        "members": {
+          "CLIENT_RULES": "client_rules",
+          "VALUE_BY_VALUE": "value_by_value"
+        },
+        "public_attributes": [
+          "CLIENT_RULES",
+          "VALUE_BY_VALUE"
+        ],
+        "public_methods": {}
       },
       "TieTerm": {
         "bases": [],
@@ -1286,12 +1445,37 @@
         "public_methods": {},
         "signature": "(column: 'str', lower: 'Bound | None', upper: 'Bound | None') -> None"
       },
-      "Window": {
+      "Unusable": {
+        "bases": [
+          "builtins.str",
+          "enum.Enum"
+        ],
+        "kind": "class",
+        "members": {
+          "FORBIDDEN": "forbidden",
+          "MISSING": "missing"
+        },
+        "public_attributes": [
+          "FORBIDDEN",
+          "MISSING"
+        ],
+        "public_methods": {}
+      },
+      "Value": {
         "bases": [],
         "kind": "class",
         "public_attributes": [],
         "public_methods": {},
-        "signature": "(column: 'str', lower: 'SeedBound | None', upper: 'SeedBound | None') -> None"
+        "signature": "(value: 'Any', type: 'pa.DataType') -> None"
+      },
+      "Window": {
+        "bases": [],
+        "kind": "class",
+        "public_attributes": [
+          "source_type"
+        ],
+        "public_methods": {},
+        "signature": "(column: 'str', lower: 'SeedBound | None', upper: 'SeedBound | None', source_type: 'str | None' = None) -> None"
       }
     }
   },

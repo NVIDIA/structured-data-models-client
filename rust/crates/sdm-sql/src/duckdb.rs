@@ -126,13 +126,20 @@ const IN_CURRENT_SCHEMA: &str =
     "database_name = current_database() AND schema_name = current_schema()";
 
 /// The schema DuckDB's answer to `request` has: its catalog's own for a
-/// `describe`, what the contract fixes for every other request
-/// (`DataRequest::expected`).
+/// `describe`, each time bound cast to a microsecond timestamp, and what
+/// the contract fixes for every other request (`DataRequest::expected`).
 fn expected(request: &DataRequest) -> ExpectedSchema {
     use ColumnType::{Bool, Int32, Int64, Utf8};
     use catalog as c;
-    let DataRequest::Describe { part, .. } = request else {
-        return request.expected();
+    let part = match request {
+        DataRequest::Describe { part, .. } => part,
+        DataRequest::TimeBounds { .. } => {
+            return ExpectedSchema::Schema {
+                fields: sdm_contract::data::microsecond_time_bounds(),
+                optional: Vec::new(),
+            };
+        }
+        _ => return request.expected(),
     };
     let names = || ColumnType::List {
         item: Box::new(field(c::LIST_ITEM, Utf8, true)),

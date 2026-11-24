@@ -80,6 +80,14 @@ fn rendered(request: &DataRequest) -> String {
             let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();
             assert_eq!(names, catalog_columns(*part));
         }
+        // Each bound cast to a microsecond timestamp, as the reference casts it.
+        DataRequest::TimeBounds { .. } => assert_eq!(
+            expect,
+            ExpectedSchema::Schema {
+                fields: sdm_contract::data::microsecond_time_bounds(),
+                optional: Vec::new(),
+            }
+        ),
         _ => assert_eq!(expect, request.expected()),
     }
     assert_eq!(statements.len(), 1);
@@ -329,55 +337,6 @@ fn a_scan_and_a_count_of_rows_render() {
     }];
     let err = Sql::new().plan(&scan(ranged, None), &duckdb()).unwrap_err();
     assert_eq!(err.code, ErrorCode::UnsupportedRequest);
-}
-
-/// A source of a built-in database answers the core in its engine's own
-/// shape, as its SQL returns it, but a `describe` in the standard shape
-/// every source answers in (`Databases::expected`); a source declaring no
-/// database in the contract's fixed shapes.
-#[test]
-fn a_source_s_answer_shape_is_its_database_s() {
-    use sdm_contract::data::DataLayer;
-    let databases = sdm_sql::Databases::new(spaces());
-    let declared = sdm_sql::kit::SqlKit::new(duckdb(), None)
-        .unwrap()
-        .capabilities()
-        .unwrap();
-    let mut caller = declared.clone();
-    caller.database = None;
-    let key_counts = DataRequest::KeyCounts {
-        keys: vec![TableKey {
-            unique: false,
-            table: "t".into(),
-            columns: vec!["k".into()],
-            label: None,
-        }],
-    };
-    for request in [
-        describe(&["t"], DescribePart::Columns),
-        key_counts.clone(),
-        preview("t", &["c"]),
-    ] {
-        assert_eq!(databases.expected(&caller, &request), request.expected());
-    }
-    assert_eq!(
-        databases.expected(&declared, &describe(&["t"], DescribePart::Columns)),
-        describe(&["t"], DescribePart::Columns).expected()
-    );
-    assert_eq!(
-        databases.expected(&declared, &key_counts),
-        Sql::new().plan(&key_counts, &duckdb()).unwrap().expect
-    );
-    assert!(matches!(
-        describe(&["t"], DescribePart::Keys).expected(),
-        ExpectedSchema::Schema { .. }
-    ));
-}
-
-fn spaces() -> &'static sdm_sql::view_expr::Spaces {
-    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
-        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(char::is_whitespace));
-    &SPACES
 }
 
 /// A table whose name, in any case, is the one the seeds are bound by is

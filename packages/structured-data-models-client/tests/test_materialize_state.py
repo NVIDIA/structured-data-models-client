@@ -536,42 +536,37 @@ class _Located:
         # A built-in source's statements are written by its SQL kit, below
         # the core's typed request: each fetch the kit hands the driver is
         # one plan, of the purpose of the step that asked it.
-        from sdm_client._rust import sql_kit
+        from sdm_client._rust import host_providers, sql_kit
 
-        self._call = sql_kit.KitProvider.__call__
-        answer = self._call
+        self._call = host_providers.HostProvider.__call__
+        self._fetch = sql_kit.KitRun._run
+        answer, fetched = self._call, self._fetch
+        asking: dict[str, Any] = {'purpose': None}
 
         def call(provider: Any, step: Any, keys: Any = None) -> Any:
-            driver = provider._driver
-
-            def recording(fetch: Any, binds: Any) -> Any:
-                located.requests.append(
-                    {
-                        'plan': fetch['plan'],
-                        'request': fetch['request'],
-                        'purpose': step.get('purpose'),
-                    }
-                )
-                if step.get('purpose') == 'locate':
-                    located.statements += len(
-                        fetch['plan'].get('statements', [])
-                    )
-                return driver(fetch, binds)
-
-            provider._driver = recording
+            asking['purpose'] = step.get('purpose')
             try:
                 return answer(provider, step, keys)
             finally:
-                provider._driver = driver
+                asking['purpose'] = None
 
-        sql_kit.KitProvider.__call__ = call
+        def recording(kit: Any, plan: bytes, request: bytes, binds: Any) -> Any:
+            fetch = {'plan': json.loads(plan), 'request': json.loads(request)}
+            located.requests.append({**fetch, 'purpose': asking['purpose']})
+            if asking['purpose'] == 'locate':
+                located.statements += len(fetch['plan'].get('statements', []))
+            return fetched(kit, plan, request, binds)
+
+        host_providers.HostProvider.__call__ = call  # type: ignore[method-assign]
+        sql_kit.KitRun._run = recording  # type: ignore[method-assign]
         return self
 
     def __exit__(self, *_: Any) -> None:
-        from sdm_client._rust import run, sql_kit
+        from sdm_client._rust import host_providers, run, sql_kit
 
         run.native = self._native
-        sql_kit.KitProvider.__call__ = self._call
+        host_providers.HostProvider.__call__ = self._call  # type: ignore[method-assign]
+        sql_kit.KitRun._run = self._fetch  # type: ignore[method-assign]
 
 
 def _calls(

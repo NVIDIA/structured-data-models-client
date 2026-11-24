@@ -4,12 +4,14 @@
 
 package com.nvidia.sdm.provider;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
 import org.apache.arrow.vector.ipc.ArrowReader;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.Field;
+import org.apache.arrow.vector.types.pojo.Schema;
 
 /**
  * One request the core sends a {@link com.nvidia.sdm.Source}: the Java view of the contract's {@code
@@ -19,12 +21,14 @@ import org.apache.arrow.vector.ipc.ArrowReader;
  * ({@link Neighbors}, {@link Lookup}) answers with the seed's {@code batch} position first, as
  * documented on each.
  *
- * <p>Values ({@link Bound#value}, {@link SampleEntities#seed}) are plain Java values: {@code
- * null}, {@link Boolean}, {@link Byte}, {@link Short}, {@link Integer}, {@link Long}, {@link
- * java.math.BigInteger} (unsigned 64-bit), {@link Float}, {@link Double}, {@link
- * java.math.BigDecimal}, {@link String}, {@code byte[]}, {@link java.time.LocalDate}, {@link
- * java.time.Instant} (a timestamp with a time zone), {@link java.time.LocalDateTime} (a timestamp
- * without one), {@link java.time.Duration} or {@link java.time.LocalTime}.
+ * <p>Each value ({@link Bound#value}, {@link Compare#value}, {@link In#values}, {@link
+ * SampleEntities#seed}) is a {@link Value}: a plain Java value with the Arrow type the core holds it
+ * as. The plain values are {@code null}, {@link Boolean}, {@link Byte}, {@link Short}, {@link
+ * Integer}, {@link Long}, {@link java.math.BigInteger} (unsigned 64-bit), {@link Float}, {@link
+ * Double}, {@link java.math.BigDecimal}, {@link String}, {@code byte[]}, {@link
+ * java.time.LocalDate}, {@link java.time.Instant} (a timestamp with a time zone, which its type
+ * names), {@link java.time.LocalDateTime} (a timestamp without one), {@link java.time.Duration} or
+ * {@link java.time.LocalTime}.
  */
 public sealed interface DataRequest {
 
@@ -110,8 +114,10 @@ public sealed interface DataRequest {
   }
 
   /**
-   * One row per column, in order: its position, and its smallest and largest value as a timestamp
-   * in microseconds (schema given as {@code expected}).
+   * One row per column, in order: {@code table_index}, its position (an {@code int32} or {@code
+   * int64}), then {@code min_date} and {@code max_date}, its smallest and largest value, null where
+   * no row holds one, each of the column's own type: a timestamp of any unit or zone, a date, or
+   * text as a source with no time type stores it (read by {@code Capabilities.textTimes}).
    */
   record TimeBounds(List<TableColumn> columns) implements DataRequest {
     public TimeBounds {
@@ -150,21 +156,28 @@ public sealed interface DataRequest {
 
   /**
    * A sample of {@code n} entities of {@code table} by {@code key}, drawn with {@code seed}: {@code
-   * columns} in order, from the rows meeting every filter.
+   * columns} in order, from the rows meeting every filter. {@code rows} is the table's row count,
+   * where the core counted it ({@code Capabilities.sampleByRowCount}); {@code keyDtype} the
+   * schema's data type of a key of one column, where the source samples by it ({@code
+   * Capabilities.sampleByKeyType}).
    */
   record SampleEntities(
       Relation table,
       List<String> key,
       long n,
-      Object seed,
+      Value seed,
       List<String> columns,
       List<Filter> filters,
-      OptionalLong rows)
+      OptionalLong rows,
+      Optional<String> keyDtype)
       implements DataRequest {
     public SampleEntities {
       key = List.copyOf(key);
       columns = List.copyOf(columns);
       filters = List.copyOf(filters);
+      Objects.requireNonNull(seed, "seed");
+      Objects.requireNonNull(rows, "rows");
+      Objects.requireNonNull(keyDtype, "keyDtype");
     }
 
     public String name() {
@@ -220,18 +233,57 @@ public sealed interface DataRequest {
 
   // --- parts of requests -----------------------------------------------------------------------
 
-  /** A table, by its name's parts, each quoted alone ({@code ["main", "t"]} is {@code t} of {@code main}). */
-  record Relation(List<String> parts) {
+  /**
+   * A table, by its name's parts, each quoted alone ({@code ["main", "t"]} is {@code t} of {@code
+   * main}).
+   *
+   * <p>A source declaring {@code Capabilities.derivedRelations} may be asked for a derived relation,
+   * as a semantic model's definition gives one: its {@code columns}, each a name with the source
+   * column or SQL expression it reads, and a {@code filter}, an SQL condition every row of it holds.
+   * Both are text of the source's own SQL. With {@code found}, the columns are the ones the source's
+   * catalog found, each read by its own name, and the source may read the table through them.
+   */
+  record Relation(
+      List<String> parts, List<RelationColumn> columns, Optional<String> filter, boolean found) {
     public Relation {
       parts = List.copyOf(parts);
+      columns = List.copyOf(columns);
+      Objects.requireNonNull(filter, "filter");
       if (parts.isEmpty()) {
         throw new IllegalArgumentException("a relation has at least one name part");
       }
     }
 
+    /** The table {@code parts} names, read whole. */
+    public Relation(List<String> parts) {
+      this(parts, List.of(), Optional.empty(), false);
+    }
+
     /** The last part: the table's own name. */
     public String table() {
       return parts.get(parts.size() - 1);
+    }
+  }
+
+  /**
+   * A column of a derived {@link Relation}: its name, and what it reads, exactly one of a column of
+   * the source ({@code column}) or an expression in the source's own SQL ({@code expression}).
+   */
+  record RelationColumn(String name, Optional<String> column, Optional<String> expression) {
+    public RelationColumn {
+      Objects.requireNonNull(name, "name");
+      Objects.requireNonNull(column, "column");
+      Objects.requireNonNull(expression, "expression");
+    }
+  }
+
+  /**
+   * A value of a request: the plain Java value, and the Arrow type the core holds it as, such as
+   * {@code new ArrowType.Int(64, true)}.
+   */
+  record Value(Object value, ArrowType type) {
+    public Value {
+      Objects.requireNonNull(type, "type");
     }
   }
 
@@ -272,12 +324,16 @@ public sealed interface DataRequest {
    * return rows it does not hold for, but must never leave out a row it holds for. The library
    * checks every row it keeps by the query's own rules.
    */
-  record Compare(String column, CompareOp op, Object value) implements Filter {}
+  record Compare(String column, CompareOp op, Value value) implements Filter {
+    public Compare {
+      Objects.requireNonNull(value, "value");
+    }
+  }
 
   /** A value filter: the row's {@code column} equals one of {@code values}; a null equals none. */
-  record In(String column, List<Object> values) implements Filter {
+  record In(String column, List<Value> values) implements Filter {
     public In {
-      values = java.util.Collections.unmodifiableList(new ArrayList<>(values));
+      values = List.copyOf(values);
     }
   }
 
@@ -342,24 +398,48 @@ public sealed interface DataRequest {
   }
 
   /** A bound on a value. */
-  record Bound(Object value, boolean inclusive) {}
+  record Bound(Value value, boolean inclusive) {
+    public Bound {
+      Objects.requireNonNull(value, "value");
+    }
+  }
 
   /**
-   * A set of keys, as Arrow rows: {@code columns} names what each column means to the request. A
-   * provider reads {@code reader} once; the library closes it.
+   * A set of keys, as Arrow rows: {@code schema} declares its columns, each with what the core notes
+   * of it in its field metadata (such as the joined key's declared type), which a source may ignore.
+   * A provider reads {@code reader} once; the library closes it.
    */
-  record KeySet(List<String> columns, ArrowReader reader) {
+  record KeySet(Schema schema, ArrowReader reader) {
     public KeySet {
-      columns = List.copyOf(columns);
+      Objects.requireNonNull(schema, "schema");
       Objects.requireNonNull(reader, "reader");
+    }
+
+    /** The key set's column names, in order: what each column means to the request. */
+    public List<String> columns() {
+      return schema.getFields().stream().map(Field::getName).toList();
     }
   }
 
   /**
    * Which of a seed's rows count: the row's {@code column} against the seed's own time columns,
-   * named by {@link SeedBound#seedColumn} in the seed key set.
+   * named by {@link SeedBound#seedColumn} in the seed key set. {@code sourceType} is the column's
+   * type as the source's catalog declares it, where the core read it.
    */
-  record Window(String column, Optional<SeedBound> lower, Optional<SeedBound> upper) {}
+  record Window(
+      String column,
+      Optional<SeedBound> lower,
+      Optional<SeedBound> upper,
+      Optional<String> sourceType) {
+    public Window {
+      Objects.requireNonNull(sourceType, "sourceType");
+    }
+
+    /** The window of {@code column} between {@code lower} and {@code upper}. */
+    public Window(String column, Optional<SeedBound> lower, Optional<SeedBound> upper) {
+      this(column, lower, upper, Optional.empty());
+    }
+  }
 
   /** A window bound: the seed column holding it, and whether it is inclusive. */
   record SeedBound(String seedColumn, boolean inclusive) {}
@@ -375,6 +455,9 @@ public sealed interface DataRequest {
    * {@code value} is the number as written.
    */
   record AllBut(String value) implements NeighborLimit {}
+
+  /** As many rows per seed as {@code expression}, in the source's own SQL, says. */
+  record SqlLimit(String expression) implements NeighborLimit {}
 
   /** One term of a row order. */
   record TieTerm(

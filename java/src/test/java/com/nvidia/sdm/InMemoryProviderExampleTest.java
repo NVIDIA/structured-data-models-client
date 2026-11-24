@@ -87,7 +87,7 @@ class InMemoryProviderExampleTest {
   }
 
   /** The source: {@code describe} and {@code scan}, and a fallback for everything else. */
-  static final class InMemorySource extends Source {
+  static final class InMemorySource implements Source {
     @Override
     public Capabilities capabilities() {
       // The client answers every request not declared here in memory, from scans.
@@ -148,9 +148,9 @@ class InMemoryProviderExampleTest {
       if (filter instanceof DataRequest.TimeRange f) {
         LocalDateTime at = (LocalDateTime) table.columns().get(f.column()).get(row);
         Predicate<DataRequest.Bound> above =
-            b -> b.inclusive() ? !at.isBefore(wall(b.value())) : at.isAfter(wall(b.value()));
+            b -> b.inclusive() ? !at.isBefore(wall(b.value().value())) : at.isAfter(wall(b.value().value()));
         Predicate<DataRequest.Bound> below =
-            b -> b.inclusive() ? !at.isAfter(wall(b.value())) : at.isBefore(wall(b.value()));
+            b -> b.inclusive() ? !at.isAfter(wall(b.value().value())) : at.isBefore(wall(b.value().value()));
         return at != null
             && f.lower().map(above::test).orElse(true)
             && f.upper().map(below::test).orElse(true);

@@ -18,7 +18,7 @@
 
 use std::path::PathBuf;
 
-use sdm_contract::data::{DataLayer, DataRequest};
+use sdm_contract::data::DataLayer;
 use sdm_testkit::bases;
 use sdm_testkit::case::{self, Case};
 use sdm_testkit::host::{self, Answer, Observed};
@@ -133,16 +133,10 @@ fn two_schema_tables_over_one_source_predict_as_two_sources() {
 
 #[test]
 fn the_swapped_layer_reads_no_database() {
-    // Even a source declaring a built-in database is held to the
-    // contract's shapes, and read through no semantic model.
+    // Even a source declaring a built-in database is read through no
+    // semantic model.
     let mut declared = Memory::capabilities();
     declared.database = Some("duckdb".into());
-    let request: DataRequest = serde_json::from_value(json!({
-        "request": "key_counts",
-        "keys": [{"table": {"source": ["t"]}, "columns": ["k"], "unique": false}],
-    }))
-    .unwrap();
-    assert_eq!(HostLayer.expected(&declared, &request), request.expected());
     assert_eq!(HostLayer.view_kind(&declared), None);
 }
 

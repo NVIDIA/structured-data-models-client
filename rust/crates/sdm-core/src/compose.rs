@@ -218,8 +218,8 @@ impl DataAccess {
     }
 
     /// How `request` is answered: the provider's plan, as
-    /// [`DataAccess::plan`] gives it, its answer of the shape the
-    /// provider's database answers in (`DataLayer::expected`), or, for an
+    /// [`DataAccess::plan`] gives it, its answer of the contract's shape
+    /// ([`DataRequest::expected`]), alike for every source, or, for an
     /// optional request the provider did not declare while it declares the
     /// in-memory fallback's limits, the fallback within them (design
     /// choice 1), which the core answers from the rows `scan`s read.
@@ -249,7 +249,7 @@ impl DataAccess {
             return Ok(Route::Fallback(limits));
         }
         self.seeded_within(request)?;
-        let expect = self.layer.expected(&self.capabilities, request);
+        let expect = request.expected();
         Ok(Route::Plan(FetchPlan::of(expect, request)))
     }
 

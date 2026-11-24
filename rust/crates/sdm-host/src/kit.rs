@@ -35,7 +35,11 @@ impl HostKit {
     /// The kit of the built-in source `provider` names; refused by name
     /// where this build writes no SQL for it.
     pub fn new(provider: SqlChoice) -> Result<Self, CoreError> {
-        let kit = sdm_sql::kit::SqlKit::new(provider, Some(crate::spaces()))?;
+        // Each answer's values are read on the adapter's grown stack, as
+        // the core read a fetch's: a JSON value recurses once per level,
+        // and a host's thread (a JVM's) may have a small stack.
+        let kit = sdm_sql::kit::SqlKit::new(provider, Some(crate::spaces()))?
+            .reading_values_on(|step| sdm_core::pql::on_adapter_stack(step));
         let vendor = kit.capabilities()?.opaque_vendor;
         Ok(HostKit { kit, vendor })
     }

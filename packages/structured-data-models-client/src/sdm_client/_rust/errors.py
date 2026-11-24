@@ -681,6 +681,16 @@ def raise_from_core(
     ) from None
 
 
+def refusal(control: bytes, attachments: dict[int, Any]) -> StructuredDataError:
+    r"""The exception a source raises to refuse a request by name with the
+    core's error ``control`` holds: the error the operation fails with,
+    carrying the core's error as the contract writes it, which the run
+    hands back to the core as the source's refusal."""
+    error = error_from_core(control, attachments)
+    error._refusal = codec.read(control, attachments)['error']
+    return error
+
+
 def numpy_warns_on_cast_overflow() -> bool:
     r"""Whether the installed NumPy warns when a cast to float32 overflows
     (``RuntimeWarning: overflow encountered in cast``), as it does from

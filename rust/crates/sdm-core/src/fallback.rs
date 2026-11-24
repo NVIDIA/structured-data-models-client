@@ -9,8 +9,9 @@
 //! rows `scan`s read, instead of refused (`DataAccess::route`). The answer
 //! has the shape the request's pushdown gives, so the body that asked reads
 //! it as it reads the provider's: the requested columns with the fields the
-//! scan's admission gave them, and the contract's fixed columns
-//! (`DataRequest::expected`) for `key_counts` and `time_bounds`.
+//! scan's admission gave them, the contract's fixed columns
+//! (`DataRequest::expected`) for `key_counts`, and microsecond timestamps
+//! (`microsecond_time_bounds`) for `time_bounds`.
 //!
 //! Limits fail loudly by name, never by reading on or cutting short: each
 //! scan asks for one row past what is left of `max_rows`, so no scan moves
@@ -351,7 +352,10 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                 Arc::new(Int64Array::from(d)),
                 Arc::new(Int64Array::from(z)),
             ];
-            held.finish(Out::fixed(request, columns)?)
+            let ExpectedSchema::Schema { fields, .. } = request.expected() else {
+                return Err(internal("the key counts expect no fixed columns").into());
+            };
+            held.finish(Out::fixed(&fields, columns))
         }
         DataRequest::TimeBounds { columns } => {
             let (mut positions, mut lows, mut highs) = (vec![], vec![], vec![]);
@@ -370,7 +374,8 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                 Arc::new(TimestampMicrosecondArray::from(lows)),
                 Arc::new(TimestampMicrosecondArray::from(highs)),
             ];
-            held.finish(Out::fixed(request, columns)?)
+            let fields = sdm_contract::data::microsecond_time_bounds();
+            held.finish(Out::fixed(&fields, columns))
         }
         DataRequest::SampleEntities {
             table,
@@ -926,18 +931,14 @@ impl Out {
         Ok(())
     }
 
-    /// The contract's fixed columns of `request`'s answer, holding
-    /// `columns`.
-    fn fixed(request: &DataRequest, columns: Vec<ArrayRef>) -> Result<Out, CoreError> {
-        let ExpectedSchema::Schema { fields, .. } = request.expected() else {
-            return Err(internal("a request of fixed columns expects none"));
-        };
+    /// An answer of the fixed columns `fields`, holding `columns`.
+    fn fixed(fields: &[sdm_contract::types::Field], columns: Vec<ArrayRef>) -> Out {
         let fields: Vec<Field> = fields.iter().map(|f| f.to_arrow()).collect();
-        Ok(Out {
+        Out {
             received: fields.clone(),
             fields,
             columns,
-        })
+        }
     }
 
     fn finish(self) -> Result<ArrowData, CoreError> {

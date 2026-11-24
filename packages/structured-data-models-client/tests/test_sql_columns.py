@@ -187,7 +187,9 @@ def test_engine_projection_preserves_filtered_aliases_and_indexed_key(source):
         ],
         'filter': 'quantity > 10',
     }
-    choice, provider = source._sdm_chosen()
+    from sdm_client._rust import host_providers
+
+    choice, provider = host_providers.chosen(source)
     described = run(
         {
             'op': 'describe_source',

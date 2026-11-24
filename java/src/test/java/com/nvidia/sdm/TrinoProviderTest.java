@@ -217,7 +217,7 @@ class TrinoProviderTest {
   }
 
   /** A caller's provider over Trino: what a caller writes once for an engine of its own. */
-  final class TrinoSource extends Source {
+  final class TrinoSource implements Source {
     private final Set<FilterKind> kinds;
 
     TrinoSource(Set<FilterKind> kinds) {
@@ -253,7 +253,7 @@ class TrinoProviderTest {
                 + sample.key().stream()
                     .map(k -> "CAST(" + quoted(k) + " AS VARCHAR), '|'")
                     .collect(Collectors.joining(", "))
-                + ", '" + sample.seed() + "'))) LIMIT " + sample.n(),
+                + ", '" + sample.seed().value() + "'))) LIMIT " + sample.n(),
             allocator);
       throw new UnsupportedOperationException(request.name());
     }
@@ -308,15 +308,15 @@ class TrinoProviderTest {
       if (filter instanceof DataRequest.NotNull f) return quoted(f.column()) + " IS NOT NULL";
       if (filter instanceof DataRequest.IsNull f) return quoted(f.column()) + " IS NULL";
       if (filter instanceof DataRequest.Compare f)
-        return quoted(f.column()) + " " + operator(f.op()) + " " + literal(f.value());
+        return quoted(f.column()) + " " + operator(f.op()) + " " + literal(f.value().value());
       if (filter instanceof DataRequest.In f)
         return quoted(f.column()) + " IN ("
-            + f.values().stream().map(TrinoProviderTest::literal).collect(Collectors.joining(", "))
+            + f.values().stream().map(v -> literal(v.value())).collect(Collectors.joining(", "))
             + ")";
       if (filter instanceof DataRequest.TimeRange f) {
         var bounds = new ArrayList<String>();
-        f.lower().ifPresent(b -> bounds.add(quoted(f.column()) + (b.inclusive() ? " >= " : " > ") + literal(b.value())));
-        f.upper().ifPresent(b -> bounds.add(quoted(f.column()) + (b.inclusive() ? " <= " : " < ") + literal(b.value())));
+        f.lower().ifPresent(b -> bounds.add(quoted(f.column()) + (b.inclusive() ? " >= " : " > ") + literal(b.value().value())));
+        f.upper().ifPresent(b -> bounds.add(quoted(f.column()) + (b.inclusive() ? " <= " : " < ") + literal(b.value().value())));
         return bounds.isEmpty() ? null : String.join(" AND ", bounds);
       }
       if (filter instanceof DataRequest.AllOf f) return joined(f.filters(), " AND ", false);

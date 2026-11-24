@@ -20,8 +20,9 @@ rows read. The seeds of a :class:`Neighbors` or :class:`Lookup` holding
 more keys than ``Capabilities.max_keys_per_request`` reach the source
 already split into several requests.
 
-Values in requests are plain Python values, exactly as the core holds
-them: ``int``, ``float``, ``bool``, ``str``, :class:`~decimal.Decimal`,
+Each value in a request is a :class:`Value`: a plain Python value with
+the Arrow type the core holds it as. The plain values are
+``int``, ``float``, ``bool``, ``str``, :class:`~decimal.Decimal`,
 ``bytes``, :class:`datetime.date`, :class:`datetime.time`, and
 :class:`datetime.datetime` and :class:`datetime.timedelta` for timestamps
 and durations. A nanosecond timestamp or duration is a
@@ -31,8 +32,10 @@ types keeping nanoseconds, and a time of day with nanoseconds a
 years :mod:`datetime` holds is a :class:`numpy.datetime64`. A timestamp
 without a zone is a wall clock; one with a zone, an instant in that zone.
 
-The library calls a source from the thread that runs the operation, one
-request at a time.
+The library reads a source's :meth:`Source.capabilities` once at the start
+of each operation, before any request of it, and then calls
+:meth:`Source.answer` from the thread that runs the operation, one request
+at a time.
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ import abc
 import enum
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -54,6 +57,7 @@ __all__ = [
     'AllBut',
     'AllOf',
     'AnyOf',
+    'ArrowStream',
     'Bound',
     'Capabilities',
     'ColumnRanges',
@@ -64,11 +68,14 @@ __all__ = [
     'DataRequest',
     'Describe',
     'DescribePart',
+    'FailureFacts',
+    'FailureReason',
     'Fallback',
     'Filter',
     'FilterKind',
     'HasRows',
     'In',
+    'IndexAdvice',
     'IsNull',
     'KeyCounts',
     'KeyIn',
@@ -82,17 +89,24 @@ __all__ = [
     'Preview',
     'ProviderFailure',
     'Relation',
+    'RelationColumn',
     'RepeatedKey',
     'SampleEntities',
     'Sampling',
     'Scan',
     'SeedBound',
+    'SemanticModel',
     'Source',
+    'SqlLimit',
     'TableColumn',
     'TableKey',
+    'TextOrder',
+    'TextTimes',
     'TieTerm',
     'TimeBounds',
     'TimeRange',
+    'Unusable',
+    'Value',
     'Window',
 ]
 
@@ -181,6 +195,66 @@ class NullOrder(str, enum.Enum):
     LAST = 'last'
 
 
+class TextTimes(str, enum.Enum):
+    r"""How the core reads a time the source stores as text."""
+
+    #: Each value on its own, as pandas reads one (``to_datetime``).
+    VALUE_BY_VALUE = 'value_by_value'
+    #: By the client's date rules, mixed offsets read at UTC.
+    CLIENT_RULES = 'client_rules'
+
+
+class IndexAdvice(str, enum.Enum):
+    r"""Which of the source's indexes serve the sampler's reads, for its
+    warning of the indexes it finds missing."""
+
+    #: An index over exactly the one column read.
+    SINGLE_COLUMN = 'single_column'
+    #: Any index whose first column is the read's first column.
+    LEADING_COLUMN = 'leading_column'
+
+
+class TextOrder(str, enum.Enum):
+    r"""How the source compares text, where the core compares it for the
+    source in memory (``Capabilities.fallback_text_order``)."""
+
+    #: By the exact UTF-8 bytes: no locale, case folding or normalization.
+    BINARY_UTF8 = 'binary_utf8'
+
+
+class Unusable(str, enum.Enum):
+    r"""Why a table the source failed to read cannot be used."""
+
+    #: It does not exist, or the caller may not see it.
+    MISSING = 'missing'
+    #: The caller may not read it.
+    FORBIDDEN = 'forbidden'
+
+
+class FailureReason(str, enum.Enum):
+    r"""What went wrong, where a source's failure says."""
+
+    VALUE_NOT_CONVERTED = 'value_not_converted'
+    DIVISION_BY_ZERO = 'division_by_zero'
+    OUT_OF_RANGE = 'out_of_range'
+    COLUMN_UNRESOLVED = 'column_unresolved'
+    TABLE_UNRESOLVED = 'table_unresolved'
+    PERMISSION_DENIED = 'permission_denied'
+    SYNTAX_REJECTED = 'syntax_rejected'
+    TYPES_INCOMPATIBLE = 'types_incompatible'
+
+
+@runtime_checkable
+class ArrowStream(Protocol):
+    r"""Any object exporting an Arrow stream through the Arrow PyCapsule
+    interface: a pyarrow ``Table`` or ``RecordBatchReader``, a DuckDB or
+    Polars result."""
+
+    def __arrow_c_stream__(
+        self, requested_schema: object | None = None
+    ) -> object: ...
+
+
 # --- capabilities and failures --------------------------------------------
 
 
@@ -198,6 +272,22 @@ class Fallback:
 
 
 @dataclass(frozen=True)
+class SemanticModel:
+    r"""The semantic model a source is read through: its name, and whether
+    its expressions calling functions other than pure built-ins are kept
+    (they run as SQL under the caller's credentials)."""
+
+    name: str
+    trust_expressions: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name:
+            raise ValueError('a semantic model needs its name')
+        if not isinstance(self.trust_expressions, bool):
+            raise TypeError('trust_expressions is True or False')
+
+
+@dataclass(frozen=True)
 class Capabilities:
     r"""What a :class:`Source` answers, and how.
 
@@ -206,6 +296,11 @@ class Capabilities:
     otherwise the core answers it itself, in memory, from the rows a scan
     reads, within ``fallback``'s limits, or refuses it with
     ``UNSUPPORTED_REQUEST`` when no fallback is declared.
+
+    The rest describe the source to the core: how it names its tables, what
+    its column types mean, and how it reads what the core asks. Each
+    default is a plain source of tables; the built-in sources declare their
+    engine's.
 
     Attributes:
         optional: The optional requests the source answers itself.
@@ -223,6 +318,54 @@ class Capabilities:
             scan; the core sends it no other kind, and checks every row it
             keeps itself, so a source may return more rows than a value
             filter holds for but never fewer.
+        fallback_text_order: How the source compares text, where the core's
+            in-memory fallback compares text for it; ``None``, and such a
+            comparison is refused by name.
+        text_times: How the core reads a time the source stores as text;
+            ``None``, and it refuses to.
+        index_advice: Which indexes serve the sampler's reads; ``None``,
+            and the core neither reads the source's indexes nor warns of
+            missing ones.
+        engine: The database engine the source is, by the name messages
+            name it by (``'duckdb'``, ``'sqlite'``, ``'postgres'``,
+            ``'databricks'``, ``'snowflake'``); its semantic models are read
+            in that engine's SQL. ``None`` for any other.
+        namespace: The namespace a table named by one part is read under,
+            outermost first, such as ``('main', 'sales')``.
+        ask_namespace_first: Whether the core asks the source its namespace
+            (a :class:`Describe` of :attr:`DescribePart.NAMESPACE`, answered
+            in full) before it reads a table named by one part.
+        retry_upper_case_names: Whether a table the catalog does not find
+            as named is tried again upper-cased, as an engine folding
+            unquoted names does.
+        column_types_are_affinities: Whether a column's declared type is
+            only an affinity, so its type is read from its values.
+        reread_tables_every_run: Whether each run reads the tables as they
+            stand, rather than as a schema given to it holds them.
+        semantic_model: The semantic model the source is read through.
+        derived_relations: Whether the source reads a derived
+            :class:`Relation`.
+        sample_by_row_count: Whether the source sizes a sample by the
+            table's rows, which the core counts first and names on each
+            :class:`SampleEntities`.
+        sample_by_key_type: Whether the source orders a seeded sample by
+            the key's data type, which the core names on each
+            :class:`SampleEntities`.
+        neighbor_lookback: Whether neighbor reads by a foreign key over a
+            table with a time column look back from each seed only as far
+            as the table's rate of rows says, as warehouse samplers do.
+        keys_optional: Whether a failed read of a table's declared keys is
+            read as no declared keys, rather than failing the description.
+        key_enforcement: Whether the catalog answers which tables enforce
+            their keys (:attr:`DescribePart.KEY_ENFORCEMENT`).
+        compares_stored_times: Whether the source compares a window's
+            bounds with the stored text of the window's column, which the
+            core reads once and names on each bound's seed column.
+        nan_is_missing: Whether a NaN the source answers is read as
+            missing, and ``-0.0`` as ``0.0``.
+        opaque_vendor: The vendor whose opaque Arrow extension types
+            (``arrow.opaque``) the source hands over, read by that vendor's
+            layout; ``None``, and such a column is read as its storage.
     """
 
     optional: frozenset[OptionalRequest] = frozenset()
@@ -232,6 +375,25 @@ class Capabilities:
     null_order: NullOrder | None = NullOrder.LAST
     fallback: Fallback | None = None
     filters: frozenset[FilterKind] = frozenset()
+    fallback_text_order: TextOrder | None = None
+    text_times: TextTimes | None = None
+    index_advice: IndexAdvice | None = None
+    engine: str | None = None
+    namespace: tuple[str, ...] = ()
+    ask_namespace_first: bool = False
+    retry_upper_case_names: bool = False
+    column_types_are_affinities: bool = False
+    reread_tables_every_run: bool = False
+    semantic_model: SemanticModel | None = None
+    derived_relations: bool = False
+    sample_by_row_count: bool = False
+    sample_by_key_type: bool = False
+    neighbor_lookback: bool = False
+    keys_optional: bool = False
+    key_enforcement: bool = False
+    compares_stored_times: bool = False
+    nan_is_missing: bool = False
+    opaque_vendor: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -239,8 +401,15 @@ class Capabilities:
         )
         object.__setattr__(self, 'filters', _members(self.filters, FilterKind))
         object.__setattr__(self, 'sampling', Sampling(self.sampling))
-        if self.null_order is not None:
-            object.__setattr__(self, 'null_order', NullOrder(self.null_order))
+        for name, kind in (
+            ('null_order', NullOrder),
+            ('fallback_text_order', TextOrder),
+            ('text_times', TextTimes),
+            ('index_advice', IndexAdvice),
+        ):
+            given = getattr(self, name)
+            if given is not None:
+                object.__setattr__(self, name, kind(given))
         if self.max_keys_per_request is not None and not _positive(
             self.max_keys_per_request
         ):
@@ -251,6 +420,63 @@ class Capabilities:
             self.fallback, Fallback
         ):
             raise TypeError('fallback must be a Fallback')
+        if isinstance(self.namespace, str):
+            raise TypeError('namespace is a sequence of name parts')
+        object.__setattr__(self, 'namespace', tuple(self.namespace))
+        for part in self.namespace:
+            if not isinstance(part, str) or not part:
+                raise ValueError('each namespace part is a non-empty string')
+        for name in ('engine', 'opaque_vendor'):
+            given = getattr(self, name)
+            if given is not None and (not isinstance(given, str) or not given):
+                raise ValueError(f'{name} is a non-empty string or None')
+        if self.semantic_model is not None and not isinstance(
+            self.semantic_model, SemanticModel
+        ):
+            raise TypeError('semantic_model must be a SemanticModel')
+        for name in (
+            'ask_namespace_first',
+            'retry_upper_case_names',
+            'column_types_are_affinities',
+            'reread_tables_every_run',
+            'derived_relations',
+            'sample_by_row_count',
+            'sample_by_key_type',
+            'neighbor_lookback',
+            'keys_optional',
+            'key_enforcement',
+            'compares_stored_times',
+            'nan_is_missing',
+        ):
+            if not isinstance(getattr(self, name), bool):
+                raise TypeError(f'{name} is True or False')
+
+
+@dataclass(frozen=True)
+class FailureFacts:
+    r"""What a source's failure means, as the core reads it.
+
+    Attributes:
+        not_found: The table asked for does not exist under the name asked;
+            a name tried in another spelling is tried next.
+        refuses_expression: The source refused an expression it was asked
+            to read, for what it says or reads.
+        unusable: Why a table that failed to be read cannot be used.
+        denied: The source denied the caller access to what was asked.
+        reason: What went wrong, where the failure says.
+    """
+
+    not_found: bool = False
+    refuses_expression: bool = False
+    unusable: Unusable | None = None
+    denied: bool = False
+    reason: FailureReason | None = None
+
+    def __post_init__(self) -> None:
+        if self.unusable is not None:
+            object.__setattr__(self, 'unusable', Unusable(self.unusable))
+        if self.reason is not None:
+            object.__setattr__(self, 'reason', FailureReason(self.reason))
 
 
 @dataclass(frozen=True)
@@ -264,26 +490,80 @@ class ProviderFailure:
         error_class: The source's own error class name, where it has one.
         message: The internal diagnostic; logged by the core, never shown
             to end users.
+        facts: What the failure means, where the source reads it itself;
+            ``None``, and the core reads only what the SQL standard's codes
+            say (a SQLSTATE of ``42501`` is a denial).
     """
 
     sqlstate: str | None = None
     vendor_code: str | None = None
     error_class: str | None = None
     message: str | None = None
+    facts: FailureFacts | None = None
+
+    def __post_init__(self) -> None:
+        if self.facts is not None and not isinstance(self.facts, FailureFacts):
+            raise TypeError('facts must be a FailureFacts')
 
 
 # --- parts of requests ----------------------------------------------------
 
 
 @dataclass(frozen=True)
+class Value:
+    r"""A value of a request: the plain Python value, and the Arrow type
+    the core holds it as.
+
+    Attributes:
+        value: The value (see the module's description of each type's).
+        type: Its Arrow type, such as ``pa.int64()`` or
+            ``pa.timestamp('us', tz='UTC')``.
+    """
+
+    value: Any
+    type: pa.DataType
+
+
+@dataclass(frozen=True)
+class RelationColumn:
+    r"""A column of a derived :class:`Relation`: its name, and what it
+    reads, exactly one of a column of the source (``column``) or an
+    expression in the source's own SQL (``expression``)."""
+
+    name: str
+    column: str | None = None
+    expression: str | None = None
+
+
+@dataclass(frozen=True)
 class Relation:
     r"""A table, by its name's parts, each quoted alone
-    (``('main', 't')`` is ``t`` of ``main``)."""
+    (``('main', 't')`` is ``t`` of ``main``).
+
+    A source declaring ``Capabilities.derived_relations`` may be asked for a
+    derived relation, as a semantic model's definition gives one: its
+    ``columns``, each a name with the source column or SQL expression it
+    reads, and a ``filter``, an SQL condition every row of it holds. Both
+    are text of the source's own SQL. With ``found``, the columns are the
+    ones the source's catalog found, each read by its own name, and the
+    source may read the table through them.
+
+    Attributes:
+        parts: The name's parts, outermost first.
+        columns: The relation's columns, where it is derived; empty for
+            the table's own.
+        filter: The condition every row holds; ``None`` for every row.
+        found: Whether ``columns`` are the ones the catalog found.
+    """
 
     parts: tuple[str, ...]
+    columns: tuple[RelationColumn, ...] = ()
+    filter: str | None = None
+    found: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, 'parts', tuple(self.parts))
+        object.__setattr__(self, 'columns', tuple(self.columns))
         if not self.parts:
             raise ValueError('a relation has at least one name part')
 
@@ -295,18 +575,30 @@ class Relation:
 
 @dataclass(frozen=True, eq=False)
 class KeySet:
-    r"""A set of keys the core sent: its column names, and its rows as a
-    pyarrow stream, which can be read once."""
+    r"""A set of keys the core sent: its columns, and its rows as a
+    pyarrow stream, which can be read once.
 
-    columns: tuple[str, ...]
+    Attributes:
+        schema: The key set's columns, as the core declares them, each with
+            what the core notes of it in its field metadata (such as the
+            joined key's declared type), which a source may ignore.
+        reader: The key set's rows.
+    """
+
+    schema: pa.Schema
     reader: pa.RecordBatchReader
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        r"""The key set's column names, in order."""
+        return tuple(self.schema.names)
 
 
 @dataclass(frozen=True)
 class Bound:
     r"""A bound on a value."""
 
-    value: Any
+    value: Value
     inclusive: bool
 
 
@@ -321,11 +613,14 @@ class SeedBound:
 @dataclass(frozen=True)
 class Window:
     r"""Which of a seed's rows count: the row's ``column`` against the
-    seed's own time columns, named in the seed key set."""
+    seed's own time columns, named in the seed key set. ``source_type`` is
+    the column's type as the source's catalog declares it, where the core
+    read it."""
 
     column: str
     lower: SeedBound | None
     upper: SeedBound | None
+    source_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -343,7 +638,15 @@ class AllBut:
     value: str
 
 
-NeighborLimit = Count | AllBut
+@dataclass(frozen=True)
+class SqlLimit:
+    r"""As many rows per seed as ``expression``, in the source's own SQL,
+    says, as a query writes one."""
+
+    expression: str
+
+
+NeighborLimit = Count | AllBut | SqlLimit
 
 
 @dataclass(frozen=True)
@@ -409,7 +712,7 @@ class Compare:
 
     column: str
     op: CompareOp
-    value: Any
+    value: Value
 
 
 @dataclass(frozen=True)
@@ -417,7 +720,7 @@ class In:
     r"""The row's ``column`` equals one of ``values``."""
 
     column: str
-    values: tuple[Any, ...]
+    values: tuple[Value, ...]
 
 
 @dataclass(frozen=True)
@@ -530,9 +833,12 @@ class KeyCounts(_Request):
 
 @dataclass(frozen=True)
 class TimeBounds(_Request):
-    r"""One row per column, in order: its position, and its smallest and
-    largest value as a timestamp in microseconds (schema given as
-    ``expected``)."""
+    r"""One row per column, in order: ``table_index``, its position (an
+    ``int32`` or ``int64``), then ``min_date`` and ``max_date``, its
+    smallest and largest value, null where no row holds one, each of the
+    column's own type: a timestamp of any unit or zone, a date, or text as
+    a source with no time type stores it (read by
+    ``Capabilities.text_times``)."""
 
     columns: tuple[TableColumn, ...]
     name = 'time_bounds'
@@ -563,15 +869,19 @@ class RepeatedKey(_Request):
 class SampleEntities(_Request):
     r"""A sample of ``n`` entities of ``table`` by ``key``, drawn with
     ``seed``: ``columns`` in order, from the rows meeting every filter.
-    ``rows`` is the table's row count, where the core counted it."""
+    ``rows`` is the table's row count, where the core counted it
+    (``Capabilities.sample_by_row_count``); ``key_dtype`` the schema's data
+    type of a key of one column, where the source samples by it
+    (``Capabilities.sample_by_key_type``)."""
 
     table: Relation
     key: tuple[str, ...]
     n: int
-    seed: int
+    seed: Value
     columns: tuple[str, ...]
     filters: tuple[Filter, ...]
     rows: int | None
+    key_dtype: str | None = None
     name = 'sample_entities'
 
 
@@ -640,8 +950,9 @@ class Source(abc.ABC):
     The built-in sources (:class:`~sdm_client.DuckDBSource`,
     :class:`~sdm_client.PostgresSource`, :class:`~sdm_client.SQLiteSource`,
     :class:`~sdm_client.DatabricksSource`,
-    :class:`~sdm_client.SnowflakeSource`) are sources too, each answered by
-    the library's own SQL for its database.
+    :class:`~sdm_client.SnowflakeSource`) are sources like any other: each
+    answers these requests with the library's own SQL for its database, and
+    the core reaches every source the same way.
 
     A source holds live data access, so a source, and a schema over one,
     cannot be pickled. The library never closes it.
@@ -649,22 +960,24 @@ class Source(abc.ABC):
 
     @abc.abstractmethod
     def capabilities(self) -> Capabilities:
-        r"""What this source answers; read once per operation."""
+        r"""What this source answers; read once at the start of each
+        operation, before any request of it."""
 
     @abc.abstractmethod
-    def answer(self, request: DataRequest, expected: pa.Schema | None) -> Any:
+    def answer(
+        self, request: DataRequest, expected: pa.Schema | None
+    ) -> ArrowStream:
         r"""Answers one request with every row it asks for.
 
         Args:
             request: The request.
             expected: The exact schema the answer must have, where the
-                request fixes one (:class:`Describe`, :class:`KeyCounts`,
-                :class:`TimeBounds`); otherwise ``None``, and the answer
-                holds the columns the request names, in order, typed as the
-                source stores them.
+                request fixes one (:class:`Describe`, :class:`KeyCounts`);
+                otherwise ``None``, and the answer holds the columns the
+                request names, in order, typed as the source stores them.
 
         Returns:
-            Any object exporting an Arrow stream (``__arrow_c_stream__``):
+            Any object exporting an Arrow stream (:class:`ArrowStream`):
             a pyarrow ``Table`` or ``RecordBatchReader``, or a DuckDB or
             Polars result.
 
@@ -681,14 +994,6 @@ class Source(abc.ABC):
         attributes, as database drivers set them, and its message are read.
         """
         return None
-
-    def _sdm_chosen(self) -> tuple[dict[str, Any], Any]:
-        r"""The core's provider choice for this source, and the run loop's
-        provider answering its fetches. Not part of the API: a built-in
-        source answers through its SQL kit instead."""
-        from sdm_client._rust import host_providers
-
-        return host_providers.chosen(self)
 
     def __reduce__(self) -> Any:
         raise TypeError(

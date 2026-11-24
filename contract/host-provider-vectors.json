@@ -1,5 +1,5 @@
 {
-  "description": "A caller-written data provider's view of the core's messages, shared by the Rust, Java and Python tests. Each request's wire is the contract's DataRequest JSON, which Rust reads and writes back unchanged; each host reads it, with the key sets named, into its public request types, which a test writes as decoded: relations as their name's parts, key sets as their columns and rows, and values tagged by kind. Each capabilities case is what a host declares, in the neutral form, and the contract's ProviderCapabilities JSON it sends.",
+  "description": "A data source's view of the core's messages, shared by the Rust, Java and Python tests. Each request's wire is the contract's DataRequest JSON, which Rust reads and writes back unchanged; each host reads it, with the key sets named, into its public request types, which a test writes as decoded: relations as their name's parts, key sets as their columns and rows, and values tagged by kind. Each capabilities case is what a host declares, in the neutral form, and the contract's ProviderCapabilities JSON it sends. Each round trip is a wire every host reads into its public types and writes back unchanged, its key sets renumbered by the order it names them in: every request, filter, value type and derived relation, each ProviderCapabilities field, and each ProviderError's fields and facts a source tells.",
   "key_sets": {
     "3": {
       "fields": [["key", "int64"], ["batch", "int64"]],
@@ -318,5 +318,1041 @@
         "index_advice": null
       }
     }
-  ]
+  ],
+  "round_trips": {
+    "requests": [
+      {
+        "name": "a scan of a derived relation with every filter and value",
+        "wire": {
+          "request": "scan",
+          "table": {
+            "source": [
+              "main",
+              "sales",
+              "orders"
+            ],
+            "columns": [
+              {
+                "name": "id",
+                "column": "order_id"
+              },
+              {
+                "name": "total",
+                "expression": "price * quantity"
+              }
+            ],
+            "filter": "region = 'EU'"
+          },
+          "columns": [
+            "id",
+            "total"
+          ],
+          "filters": [
+            {
+              "filter": "compare",
+              "column": "c0",
+              "op": "eq",
+              "value": {
+                "t": "null"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c1",
+              "op": "eq",
+              "value": {
+                "t": "bool",
+                "v": false
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c2",
+              "op": "eq",
+              "value": {
+                "t": "i8",
+                "v": "-128"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c3",
+              "op": "eq",
+              "value": {
+                "t": "i16",
+                "v": "32767"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c4",
+              "op": "eq",
+              "value": {
+                "t": "i32",
+                "v": "-7"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c5",
+              "op": "eq",
+              "value": {
+                "t": "i64",
+                "v": "9223372036854775807"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c6",
+              "op": "eq",
+              "value": {
+                "t": "u8",
+                "v": "255"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c7",
+              "op": "eq",
+              "value": {
+                "t": "u16",
+                "v": "65535"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c8",
+              "op": "eq",
+              "value": {
+                "t": "u32",
+                "v": "4294967295"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c9",
+              "op": "eq",
+              "value": {
+                "t": "u64",
+                "v": "18446744073709551615"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c10",
+              "op": "eq",
+              "value": {
+                "t": "f32",
+                "v": "0.1"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c11",
+              "op": "eq",
+              "value": {
+                "t": "f32",
+                "v": "3e38"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c12",
+              "op": "eq",
+              "value": {
+                "t": "f64",
+                "v": "0.1"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c13",
+              "op": "eq",
+              "value": {
+                "t": "f64",
+                "v": "-0.0"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c14",
+              "op": "eq",
+              "value": {
+                "t": "f64",
+                "v": "123.0"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c15",
+              "op": "eq",
+              "value": {
+                "t": "f64",
+                "v": "1e-7"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c16",
+              "op": "eq",
+              "value": {
+                "t": "f64",
+                "v": "1.5e16"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c17",
+              "op": "eq",
+              "value": {
+                "t": "f64",
+                "v": "0.0001"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c18",
+              "op": "eq",
+              "value": {
+                "t": "f64",
+                "v": "NaN"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c19",
+              "op": "eq",
+              "value": {
+                "t": "f64",
+                "v": "-inf"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c20",
+              "op": "eq",
+              "value": {
+                "t": "d128",
+                "p": 38,
+                "s": 4,
+                "v": "-12345678901234567890123456789012345678"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c21",
+              "op": "eq",
+              "value": {
+                "t": "d256",
+                "p": 76,
+                "s": 0,
+                "v": "9999999999999999999999999999999999999999999999999999999999999999999999999999"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c22",
+              "op": "eq",
+              "value": {
+                "t": "utf8",
+                "v": "a'b \"c\" é"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c23",
+              "op": "eq",
+              "value": {
+                "t": "binary",
+                "v": "AAEC/w=="
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c24",
+              "op": "eq",
+              "value": {
+                "t": "date32",
+                "v": "-719162"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c25",
+              "op": "eq",
+              "value": {
+                "t": "ts",
+                "v": "1704067200123456",
+                "unit": "us",
+                "zone": null
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c26",
+              "op": "eq",
+              "value": {
+                "t": "ts",
+                "v": "1704067200123456",
+                "unit": "us",
+                "zone": "+05:30"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c27",
+              "op": "eq",
+              "value": {
+                "t": "ts",
+                "v": "1704067200123456789",
+                "unit": "ns",
+                "zone": "America/New_York"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c28",
+              "op": "eq",
+              "value": {
+                "t": "ts",
+                "v": "-1",
+                "unit": "ns",
+                "zone": null
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c29",
+              "op": "eq",
+              "value": {
+                "t": "duration",
+                "unit": "us",
+                "v": "-90000000"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c30",
+              "op": "eq",
+              "value": {
+                "t": "duration",
+                "unit": "ns",
+                "v": "1500"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c31",
+              "op": "eq",
+              "value": {
+                "t": "time64",
+                "unit": "us",
+                "v": "3723000004"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c32",
+              "op": "eq",
+              "value": {
+                "t": "time64",
+                "unit": "ns",
+                "v": "3723000004000"
+              }
+            },
+            {
+              "filter": "compare",
+              "column": "c33",
+              "op": "eq",
+              "value": {
+                "t": "time64",
+                "unit": "ns",
+                "v": "3723000004001"
+              }
+            },
+            {
+              "filter": "in",
+              "column": "mixed",
+              "values": [
+                {
+                  "t": "i8",
+                  "v": "-128"
+                },
+                {
+                  "t": "i16",
+                  "v": "32767"
+                },
+                {
+                  "t": "i32",
+                  "v": "-7"
+                },
+                {
+                  "t": "i64",
+                  "v": "9223372036854775807"
+                },
+                {
+                  "t": "u8",
+                  "v": "255"
+                },
+                {
+                  "t": "u16",
+                  "v": "65535"
+                },
+                {
+                  "t": "u32",
+                  "v": "4294967295"
+                },
+                {
+                  "t": "u64",
+                  "v": "18446744073709551615"
+                },
+                {
+                  "t": "f32",
+                  "v": "0.1"
+                },
+                {
+                  "t": "f32",
+                  "v": "3e38"
+                }
+              ]
+            },
+            {
+              "filter": "key_in",
+              "columns": [
+                "id"
+              ],
+              "keys": {
+                "attachment": 4,
+                "columns": [
+                  {
+                    "name": "id",
+                    "type": {
+                      "type": "int64"
+                    },
+                    "nullable": true,
+                    "metadata": {
+                      "sdm:key_declared_type": "NUMBER(38,0)"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "filter": "not_null",
+              "column": "id"
+            },
+            {
+              "filter": "is_null",
+              "column": "gone"
+            },
+            {
+              "filter": "any_of",
+              "filters": [
+                {
+                  "filter": "compare",
+                  "column": "a",
+                  "op": "lt",
+                  "value": {
+                    "t": "i64",
+                    "v": "1"
+                  }
+                },
+                {
+                  "filter": "all_of",
+                  "filters": [
+                    {
+                      "filter": "compare",
+                      "column": "b",
+                      "op": "ne",
+                      "value": {
+                        "t": "utf8",
+                        "v": "x"
+                      }
+                    },
+                    {
+                      "filter": "is_null",
+                      "column": "c"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "filter": "time_range",
+              "column": "at",
+              "lower": {
+                "value": {
+                  "t": "ts",
+                  "v": "1",
+                  "unit": "ns",
+                  "zone": null
+                },
+                "inclusive": true
+              },
+              "upper": null
+            },
+            {
+              "filter": "has_rows",
+              "column": "id",
+              "table": {
+                "source": [
+                  "orders"
+                ],
+                "columns": [
+                  {
+                    "name": "uid",
+                    "column": "uid"
+                  }
+                ],
+                "found": true
+              },
+              "key": "uid",
+              "filters": [
+                {
+                  "filter": "time_range",
+                  "column": "placed",
+                  "lower": null,
+                  "upper": {
+                    "value": {
+                      "t": "ts",
+                      "v": "1704067200000000",
+                      "unit": "us",
+                      "zone": "UTC"
+                    },
+                    "inclusive": false
+                  }
+                },
+                {
+                  "filter": "compare",
+                  "column": "kind",
+                  "op": "ge",
+                  "value": {
+                    "t": "utf8",
+                    "v": "paid"
+                  }
+                }
+              ],
+              "at_least": 3
+            }
+          ],
+          "limit": null
+        }
+      },
+      {
+        "name": "a sample by the key type and the row count",
+        "wire": {
+          "request": "sample_entities",
+          "table": {
+            "source": [
+              "users"
+            ]
+          },
+          "key": [
+            "id"
+          ],
+          "n": 40,
+          "seed": {
+            "t": "d128",
+            "p": 20,
+            "s": 0,
+            "v": "18446744073709551616"
+          },
+          "columns": [
+            "id"
+          ],
+          "filters": [],
+          "key_dtype": "int",
+          "rows": 120000
+        }
+      },
+      {
+        "name": "neighbors limited by an expression, the window typed",
+        "wire": {
+          "request": "neighbors",
+          "table": {
+            "source": [
+              "orders"
+            ]
+          },
+          "key": [
+            "uid"
+          ],
+          "columns": [
+            "oid"
+          ],
+          "seeds": {
+            "attachment": 3,
+            "columns": [
+              {
+                "name": "key",
+                "type": {
+                  "type": "int64"
+                },
+                "nullable": true,
+                "metadata": {
+                  "sdm:key_declared_type": "BIGINT",
+                  "sdm:key_unique": "true"
+                }
+              },
+              {
+                "name": "batch",
+                "type": {
+                  "type": "int64"
+                },
+                "nullable": false,
+                "metadata": {
+                  "sdm:count_unread": "true"
+                }
+              }
+            ]
+          },
+          "window": {
+            "column": "placed",
+            "source_type": "TIMESTAMP_TZ",
+            "lower": null,
+            "upper": {
+              "seed_column": "end",
+              "inclusive": true
+            }
+          },
+          "per_seed": {
+            "sql_expression": "GREATEST(1, 2)"
+          },
+          "order": [
+            {
+              "string_like": true,
+              "column": "oid",
+              "as_timestamp": false,
+              "descending": true,
+              "nulls_last": false
+            }
+          ]
+        }
+      },
+      {
+        "name": "neighbors limited by a count",
+        "wire": {
+          "request": "neighbors",
+          "table": {
+            "source": [
+              "orders"
+            ]
+          },
+          "key": [
+            "uid"
+          ],
+          "columns": [],
+          "seeds": {
+            "attachment": 3,
+            "columns": [
+              {
+                "name": "key",
+                "type": {
+                  "type": "int64"
+                },
+                "nullable": true,
+                "metadata": {
+                  "sdm:key_declared_type": "BIGINT",
+                  "sdm:key_unique": "true"
+                }
+              },
+              {
+                "name": "batch",
+                "type": {
+                  "type": "int64"
+                },
+                "nullable": false,
+                "metadata": {
+                  "sdm:count_unread": "true"
+                }
+              }
+            ]
+          },
+          "window": null,
+          "per_seed": 5,
+          "order": [
+            {
+              "column": "placed",
+              "as_timestamp": true,
+              "descending": false,
+              "nulls_last": true
+            }
+          ]
+        }
+      },
+      {
+        "name": "a lookup of a derived relation",
+        "wire": {
+          "request": "lookup",
+          "table": {
+            "source": [
+              "main",
+              "sales",
+              "orders"
+            ],
+            "columns": [
+              {
+                "name": "id",
+                "column": "order_id"
+              },
+              {
+                "name": "total",
+                "expression": "price * quantity"
+              }
+            ],
+            "filter": "region = 'EU'"
+          },
+          "key": [
+            "id"
+          ],
+          "columns": [
+            "total"
+          ],
+          "seeds": {
+            "attachment": 3,
+            "columns": [
+              {
+                "name": "key",
+                "type": {
+                  "type": "int64"
+                },
+                "nullable": true,
+                "metadata": {
+                  "sdm:key_declared_type": "BIGINT",
+                  "sdm:key_unique": "true"
+                }
+              },
+              {
+                "name": "batch",
+                "type": {
+                  "type": "int64"
+                },
+                "nullable": false,
+                "metadata": {
+                  "sdm:count_unread": "true"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "a count of the rows a key set holds",
+        "wire": {
+          "request": "count_rows",
+          "table": {
+            "source": [
+              "orders"
+            ],
+            "columns": [
+              {
+                "name": "uid",
+                "column": "uid"
+              }
+            ],
+            "found": true
+          },
+          "filters": [
+            {
+              "filter": "key_in",
+              "columns": [
+                "uid"
+              ],
+              "keys": {
+                "attachment": 4,
+                "columns": [
+                  {
+                    "name": "id",
+                    "type": {
+                      "type": "int64"
+                    },
+                    "nullable": true
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "a view definition of a qualified view",
+        "wire": {
+          "request": "describe",
+          "tables": [
+            {
+              "source": [
+                "main",
+                "sales",
+                "metrics"
+              ]
+            }
+          ],
+          "part": "view_definition"
+        }
+      },
+      {
+        "name": "key counts labelled out of order",
+        "wire": {
+          "request": "key_counts",
+          "keys": [
+            {
+              "table": {
+                "source": [
+                  "main",
+                  "sales",
+                  "orders"
+                ],
+                "columns": [
+                  {
+                    "name": "id",
+                    "column": "order_id"
+                  },
+                  {
+                    "name": "total",
+                    "expression": "price * quantity"
+                  }
+                ],
+                "filter": "region = 'EU'"
+              },
+              "columns": [
+                "id"
+              ],
+              "label": 3,
+              "unique": true
+            },
+            {
+              "table": {
+                "source": [
+                  "users"
+                ]
+              },
+              "columns": [
+                "a",
+                "b"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "time bounds of two tables",
+        "wire": {
+          "request": "time_bounds",
+          "columns": [
+            {
+              "table": {
+                "source": [
+                  "orders"
+                ],
+                "columns": [
+                  {
+                    "name": "uid",
+                    "column": "uid"
+                  }
+                ],
+                "found": true
+              },
+              "column": "placed"
+            },
+            {
+              "table": {
+                "source": [
+                  "users"
+                ]
+              },
+              "column": "joined"
+            }
+          ]
+        }
+      },
+      {
+        "name": "a preview, the ranges and a repeated key",
+        "wire": {
+          "request": "preview",
+          "table": {
+            "source": [
+              "main",
+              "sales",
+              "orders"
+            ],
+            "columns": [
+              {
+                "name": "id",
+                "column": "order_id"
+              },
+              {
+                "name": "total",
+                "expression": "price * quantity"
+              }
+            ],
+            "filter": "region = 'EU'"
+          },
+          "columns": [
+            "id"
+          ],
+          "limit": 1000
+        }
+      },
+      {
+        "name": "column ranges",
+        "wire": {
+          "request": "column_ranges",
+          "table": {
+            "source": [
+              "t"
+            ]
+          },
+          "columns": [
+            "a",
+            "b"
+          ]
+        }
+      },
+      {
+        "name": "a repeated key",
+        "wire": {
+          "request": "repeated_key",
+          "table": {
+            "source": [
+              "main",
+              "sales",
+              "orders"
+            ],
+            "columns": [
+              {
+                "name": "id",
+                "column": "order_id"
+              },
+              {
+                "name": "total",
+                "expression": "price * quantity"
+              }
+            ],
+            "filter": "region = 'EU'"
+          },
+          "key": [
+            "id",
+            "total"
+          ]
+        }
+      }
+    ],
+    "capabilities": [
+      {
+        "name": "the defaults",
+        "wire": {
+          "optional": [],
+          "max_keys_per_request": null,
+          "sampling": "seeded_stable",
+          "max_seed": 9223372036854775807,
+          "text_times": null,
+          "null_order": "last",
+          "index_advice": null
+        }
+      },
+      {
+        "name": "every field declared",
+        "wire": {
+          "optional": [
+            "count_rows",
+            "key_counts",
+            "lookup",
+            "neighbors",
+            "preview"
+          ],
+          "filters": [
+            "any_of",
+            "compare",
+            "in"
+          ],
+          "max_keys_per_request": 1000,
+          "sampling": "unseeded",
+          "max_seed": 4294967295,
+          "text_times": "client_rules",
+          "null_order": "first",
+          "index_advice": "leading_column",
+          "fallback": {
+            "max_rows": 10,
+            "max_bytes": 20
+          },
+          "fallback_text_order": "binary_utf8",
+          "derived_relations": true,
+          "sample_rows": true,
+          "neighbor_lookback": true,
+          "keys_optional": true,
+          "key_enforcement": true,
+          "opaque_vendor": "DuckDB",
+          "compares_stored_times": true,
+          "samples_by_key_dtype": true,
+          "reads_nan_as_missing": true,
+          "database": "snowflake",
+          "column_affinities": true,
+          "reads_tables_as_they_stand": true,
+          "namespace": [
+            "SALES",
+            "PUBLIC"
+          ],
+          "tries_upper_case_names": true,
+          "namespace_first": true,
+          "view": {
+            "name": "SALES_SEMANTICS",
+            "trust_expressions": true
+          }
+        }
+      },
+      {
+        "name": "a single-column index advice, no null order",
+        "wire": {
+          "optional": [
+            "time_bounds"
+          ],
+          "max_keys_per_request": null,
+          "sampling": "seeded_stable",
+          "max_seed": 0,
+          "text_times": "value_by_value",
+          "null_order": null,
+          "index_advice": "single_column"
+        }
+      }
+    ],
+    "failures": [
+      {
+        "name": "a failure saying nothing more",
+        "wire": {
+          "sqlstate": null,
+          "vendor_code": null
+        }
+      },
+      {
+        "name": "a failure with every fact",
+        "wire": {
+          "sqlstate": "42P01",
+          "vendor_code": "2003",
+          "error_class": "TABLE_OR_VIEW_NOT_FOUND",
+          "driver_message": "no such table",
+          "facts": {
+            "not_found": true,
+            "refuses_expression": true,
+            "unusable": "forbidden",
+            "denied": true,
+            "reason": "types_incompatible"
+          }
+        }
+      },
+      {
+        "name": "a failure with no fact",
+        "wire": {
+          "sqlstate": "22012",
+          "vendor_code": null,
+          "facts": {
+            "not_found": false,
+            "refuses_expression": false,
+            "unusable": null,
+            "denied": false,
+            "reason": null
+          }
+        }
+      }
+    ]
+  }
 }

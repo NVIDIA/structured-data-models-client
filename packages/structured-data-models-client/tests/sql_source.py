@@ -91,7 +91,9 @@ class SqlSource(p.Source):
             key = ", '|', ".join(
                 f'CAST({_quoted(k)} AS VARCHAR)' for k in request.key
             )
-            order = self._engine.hashed(f"concat({key}, '|{request.seed}')")
+            order = self._engine.hashed(
+                f"concat({key}, '|{request.seed.value}')"
+            )
             return self._engine.query(
                 f'SELECT {_columns(request.columns)} FROM '
                 f'{self._table(request.table)}{self._where(request.filters)} '
@@ -186,21 +188,21 @@ class SqlSource(p.Source):
         if isinstance(filter, p.IsNull):
             return f'{_quoted(filter.column)} IS NULL'
         if isinstance(filter, p.Compare):
-            return f'{_quoted(filter.column)} {_OPERATORS[filter.op]} {_literal(filter.value)}'
+            return f'{_quoted(filter.column)} {_OPERATORS[filter.op]} {_literal(filter.value.value)}'
         if isinstance(filter, p.In):
-            values = ', '.join(_literal(v) for v in filter.values)
+            values = ', '.join(_literal(v.value) for v in filter.values)
             return f'{_quoted(filter.column)} IN ({values})'
         if isinstance(filter, p.TimeRange):
             bounds = []
             if filter.lower is not None:
                 sign = '>=' if filter.lower.inclusive else '>'
                 bounds.append(
-                    f'{_quoted(filter.column)} {sign} {_literal(filter.lower.value)}'
+                    f'{_quoted(filter.column)} {sign} {_literal(filter.lower.value.value)}'
                 )
             if filter.upper is not None:
                 sign = '<=' if filter.upper.inclusive else '<'
                 bounds.append(
-                    f'{_quoted(filter.column)} {sign} {_literal(filter.upper.value)}'
+                    f'{_quoted(filter.column)} {sign} {_literal(filter.upper.value.value)}'
                 )
             return ' AND '.join(bounds) or None
         if isinstance(filter, p.AllOf):

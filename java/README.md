@@ -66,7 +66,7 @@ Readers return an owned Arrow `Table`; callers close it before their `BufferAllo
 | `Readers.read(URI, ReadOptions, allocator)` | Read local/file/S3 CSV or Parquet, including partitioned datasets. |
 | `DatabricksSparkSource.of(SparkSession, catalog, schema)` | Execute Rust's existing Databricks SQL through the caller's Spark session. |
 
-`Source` is the one source type: an abstract class that the built-in sources extend, and that your own source extends.
+`Source` is the one source type: an interface that the built-in sources implement, and that your own source implements.
 Each built-in source keeps its own getters, such as `connection()` or `session()`.
 `Schema.source()` continues returning the actual `Source`.
 Spark APIs use an optional/provided dependency; ordinary applications must work without Spark JARs.
@@ -248,14 +248,18 @@ The core's log events reach SLF4J under the loggers its crates name (`sdm_core`,
 
 ## Your own source
 
-To read data through your own code instead of a database connection, extend `com.nvidia.sdm.Source`.
+To read data through your own code instead of a database connection, implement `com.nvidia.sdm.Source`.
 The core sends it typed requests (`DataRequest`), never SQL, and it answers each with Arrow rows.
 Every source answers `describe` and `scan`; it declares any other request it answers in its `Capabilities`, and the core answers the rest in memory from `scan` when a fallback is declared.
+`Capabilities` also describes the source to the core, each default a plain source of tables: its namespace and whether to ask for it first, upper-cased name retries, column types that are only affinities, its engine, its semantic model, and the other traits the built-in sources declare.
 
 ```java
-Source source = new MySource();                    // extends Source
+Source source = new MySource();                    // implements Source
 Schema schema = Schema.fromSource(source, options);
 ```
+
+The built-in sources are reached the same way: `capabilities()`, read as each operation starts, opens the operation's answers, and `answer(request, expected, allocator)` asked directly returns exactly what an operation over the source receives.
+Each value in a request is a `DataRequest.Value`, the plain Java value with the Arrow type the core holds it as.
 
 With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` with more than `n` seeds reaches the source as several requests of at most `n` seeds each, whose answers the core joins.
 Python takes the same source.

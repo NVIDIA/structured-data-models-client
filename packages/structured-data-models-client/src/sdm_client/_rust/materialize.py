@@ -18,7 +18,7 @@ import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, errors, results
+from sdm_client._rust import codec, errors, host_providers, results
 from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
 from sdm_client._rust.run import run
 from sdm_client._rust.spec import held_schema
@@ -320,7 +320,7 @@ def gather(
             'materializing from tables in place needs a source-backed schema',
             code='UNSUPPORTED_REQUEST',
         )
-    choice, provider = source._sdm_chosen()
+    choice, provider = host_providers.chosen(source)
     operation = {
         'op': 'materialize',
         'provider': choice,

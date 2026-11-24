@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use sdm_contract::data::{
-    AttachmentId, DataLayer, DataRequest, DescribePart, Determinism, ExpectedSchema, FetchPlan,
+    AttachmentId, DataRequest, DescribePart, Determinism, ExpectedSchema, FetchPlan,
     OptionalRequest, ProviderCapabilities, ProviderChoice,
 };
 use sdm_contract::facts::PlatformFacts;
@@ -279,16 +279,6 @@ fn every_operation_dispatches_to_a_run() {
     );
 }
 
-/// A data layer holding every answer to the discovery marker, to show that
-/// the root's one data layer is what every run plans through.
-struct Fake;
-
-impl DataLayer for Fake {
-    fn expected(&self, _: &ProviderCapabilities, _: &DataRequest) -> ExpectedSchema {
-        ExpectedSchema::Discover {}
-    }
-}
-
 fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
     ProviderCapabilities {
         opaque_vendor: None,
@@ -344,7 +334,7 @@ fn named(err: &CoreError, field: &str) -> String {
 }
 
 #[test]
-fn the_root_s_data_layer_holds_a_source_to_its_database_s_shapes() {
+fn a_built_in_source_is_held_to_the_contract_s_shapes() {
     let duckdb = duckdb();
     let access = databases().data_access(&duckdb).unwrap();
     // A built-in source declares what its kit writes: every optional
@@ -375,27 +365,23 @@ fn the_root_s_data_layer_holds_a_source_to_its_database_s_shapes() {
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     assert_eq!(named(&err, "field"), "columns");
 
-    // Its answers are held to its engine's shape, as its SQL returns them,
-    // and a catalog's to the standard shape its kit writes.
-    let engine = sdm_sql::Sql::new()
-        .plan(&count(), &sdm_sql::plan::SqlChoice::new("duckdb"))
-        .unwrap()
-        .expect;
-    assert_eq!(access.plan(&count()).unwrap().expect, engine);
+    // Its answers are held to the contract's shapes, as every source's
+    // are: its kit writes its engine's answers in them.
+    let key_counts = DataRequest::KeyCounts {
+        keys: vec![sdm_contract::data::TableKey {
+            table: "t".into(),
+            columns: vec!["k".into()],
+            label: None,
+            unique: false,
+        }],
+    };
     let tables = DataRequest::Describe {
         tables: vec![],
         part: DescribePart::Tables,
     };
-    assert!(matches!(tables.expected(), ExpectedSchema::Schema { .. }));
-    assert_eq!(access.plan(&tables).unwrap().expect, tables.expected());
-
-    // Swapping the data layer replaces the root's one value.
-    let swapped = CompositionRoot::new(Arc::new(Fake));
-    let access = swapped.data_access(&duckdb).unwrap();
-    assert_eq!(
-        access.plan(&tables).unwrap().expect,
-        ExpectedSchema::Discover {}
-    );
+    for request in [count(), key_counts, tables] {
+        assert_eq!(access.plan(&request).unwrap().expect, request.expected());
+    }
 }
 
 #[test]

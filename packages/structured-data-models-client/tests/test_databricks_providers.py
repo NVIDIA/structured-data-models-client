@@ -380,10 +380,14 @@ def test_the_provider_choice_names_the_dialect_and_the_namespace(
         'dialect': 'databricks',
         'namespace': choice,
     }
-    chosen, provider = source._sdm_chosen()
+    from sdm_client._rust import host_providers
+
+    chosen, _ = host_providers.chosen(source)
     assert chosen['provider'] == 'host'
-    assert type(provider._driver) is made
-    assert provider._driver._connection is source.connection
+    # The operation the choice started answers on the source's driver.
+    driver = source._current()._driver
+    assert type(driver) is made
+    assert driver._connection is source.connection
 
 
 def _error(module: str, name: str, **attributes: Any) -> type[Exception]:

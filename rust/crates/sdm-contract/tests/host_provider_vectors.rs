@@ -14,7 +14,7 @@
 
 use std::path::Path;
 
-use sdm_contract::data::{DataRequest, ExpectedSchema, ProviderCapabilities};
+use sdm_contract::data::{DataRequest, ExpectedSchema, FailureFacts, ProviderCapabilities};
 use serde_json::Value;
 
 fn vectors() -> Value {
@@ -75,5 +75,63 @@ fn each_expected_schema_and_capabilities_is_the_contract_s() {
     for case in cases(&vectors, "capabilities") {
         let _: ProviderCapabilities = serde_json::from_value(case["wire"].clone())
             .unwrap_or_else(|e| panic!("{}: {e}", case["name"]));
+    }
+}
+
+/// Each round trip the hosts' tests read into their public types and write
+/// back is the contract's own: a request, the capabilities and a failure's
+/// facts the core writes exactly so.
+#[test]
+fn each_round_trip_is_written_as_the_core_writes_it() {
+    let vectors = vectors();
+    let trips = &vectors["round_trips"];
+    for case in cases(trips, "requests") {
+        let wire = &case["wire"];
+        let read: DataRequest = serde_json::from_value(wire.clone())
+            .unwrap_or_else(|e| panic!("{}: {e}", case["name"]));
+        assert_eq!(
+            &serde_json::to_value(&read).unwrap(),
+            wire,
+            "{}",
+            case["name"]
+        );
+        for id in read.key_sets() {
+            assert!(vectors["key_sets"].get(id.0.to_string()).is_some());
+        }
+    }
+    // The hosts write a set of names sorted, which the core reads in any
+    // order; every field is written as the core writes it.
+    let sorted = |mut wire: Value| {
+        for set in ["optional", "filters"] {
+            if let Some(names) = wire.get_mut(set).and_then(Value::as_array_mut) {
+                names.sort_by_key(|name| name.as_str().unwrap_or_default().to_owned());
+            }
+        }
+        wire
+    };
+    for case in cases(trips, "capabilities") {
+        let wire = &case["wire"];
+        let read: ProviderCapabilities = serde_json::from_value(wire.clone())
+            .unwrap_or_else(|e| panic!("{}: {e}", case["name"]));
+        assert_eq!(
+            sorted(serde_json::to_value(&read).unwrap()),
+            sorted(wire.clone()),
+            "{}",
+            case["name"]
+        );
+    }
+    for case in cases(trips, "failures") {
+        let facts = &case["wire"]["facts"];
+        if facts.is_null() {
+            continue;
+        }
+        let read: FailureFacts = serde_json::from_value(facts.clone())
+            .unwrap_or_else(|e| panic!("{}: {e}", case["name"]));
+        assert_eq!(
+            &serde_json::to_value(&read).unwrap(),
+            facts,
+            "{}",
+            case["name"]
+        );
     }
 }

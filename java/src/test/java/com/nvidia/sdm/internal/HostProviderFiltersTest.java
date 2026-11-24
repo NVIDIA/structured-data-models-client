@@ -13,8 +13,8 @@ import com.nvidia.sdm.provider.DataRequest;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.OptionalLong;
 import java.util.Set;
+import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.junit.jupiter.api.Test;
 
 /** A provider's value filters: declared on the wire, and read back as typed filters. */
@@ -28,17 +28,10 @@ class HostProviderFiltersTest {
             .build();
     assertEquals(List.of("compare", "in"), HostProviders.capabilities(declared).get("filters"));
 
-    // The constructor from before value filters declares none, and the wire leaves them out.
-    Capabilities older =
-        new Capabilities(
-            Set.of(),
-            OptionalLong.empty(),
-            Capabilities.Sampling.SEEDED_STABLE,
-            1,
-            Optional.empty(),
-            Optional.empty());
-    assertEquals(Set.of(), older.filters());
-    assertFalse(HostProviders.capabilities(older).containsKey("filters"));
+    // Capabilities declaring no value filter leave the field out.
+    Capabilities none = Capabilities.builder().maxSeed(1).build();
+    assertEquals(Set.of(), none.filters());
+    assertFalse(HostProviders.capabilities(none).containsKey("filters"));
   }
 
   @Test
@@ -83,10 +76,16 @@ class HostProviderFiltersTest {
             new DataRequest.NotNull("id"),
             new DataRequest.AnyOf(
                 List.of(
-                    new DataRequest.Compare("age", DataRequest.CompareOp.GT, 76L),
+                    new DataRequest.Compare(
+                        "age",
+                        DataRequest.CompareOp.GT,
+                        new DataRequest.Value(76L, new ArrowType.Int(64, true))),
                     new DataRequest.IsNull("age"),
                     new DataRequest.AllOf(
-                        List.of(new DataRequest.In("name", List.of("ann"))))))),
+                        List.of(new DataRequest.In(
+                                "name",
+                                List.of(
+                                    new DataRequest.Value("ann", ArrowType.Utf8.INSTANCE)))))))),
         scan.filters());
   }
 

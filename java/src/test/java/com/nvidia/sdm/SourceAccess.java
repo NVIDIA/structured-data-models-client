@@ -5,6 +5,7 @@
 package com.nvidia.sdm;
 
 import com.nvidia.sdm.internal.Host;
+import com.nvidia.sdm.internal.HostProviders;
 import com.nvidia.sdm.internal.Providers;
 import java.util.Map;
 import java.util.function.Function;
@@ -13,14 +14,14 @@ import java.util.function.Function;
 public final class SourceAccess {
   private SourceAccess() {}
 
-  /** The provider choice and provider a run over {@code source} names. */
+  /** The provider choice and provider a run over {@code source} names, every source's alike. */
   public static Providers.Chosen chosen(Source source) {
-    return source.chosen();
+    return HostProviders.chosen(source);
   }
 
   /** The host values the core's sentences name of {@code source}. */
   public static Map<String, Function<Map<String, Object>, Object>> held(Source source) {
-    return source.held();
+    return SourceRun.of(source).held();
   }
 
   /** A built-in source's SQL choice, before its kit declares it. */

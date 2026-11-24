@@ -61,18 +61,11 @@ public final class Host {
         throws Exception;
 
     /**
-     * The facts {@code failure} tells the core ({@code ProviderError}'s {@code sqlstate}, {@code
-     * vendor_code}, {@code error_class} and internal {@code driver_message}), each where it says one: a driver's {@link
-     * java.sql.SQLException}'s state and vendor code, by default.
+     * The fields of the contract's {@code ProviderError} {@code failure} tells the core ({@code
+     * sqlstate}, {@code vendor_code}, {@code error_class}, internal {@code driver_message} and
+     * {@code facts}), each where it says one: a driver's {@link java.sql.SQLException}'s state and
+     * vendor code, by default.
      */
-    /**
-     * What the failure {@code provided} (the contract's {@code ProviderError}) means, where the
-     * source reads it itself, as the contract's {@code FailureFacts}; null where it reads none.
-     */
-    default Map<String, Object> facts(Map<String, Object> provided) throws Exception {
-      return null;
-    }
-
     default Map<String, Object> failure(Exception failure) {
       Map<String, Object> facts = new LinkedHashMap<>();
       if (failure instanceof java.sql.SQLException sql) {
@@ -487,7 +480,7 @@ public final class Host {
       outcome.put("outcome", "data");
       outcome.put("data", 1);
       attached.put(1, stream);
-    } catch (SqlKitProvider.Refused refused) {
+    } catch (HostProviders.Refused refused) {
       // The source refused the request by name, with an error the core gives.
       outcome.put("outcome", "refused");
       outcome.put("error", refused.error());
@@ -496,28 +489,7 @@ public final class Host {
       cancel(run);
       throw e;
     } catch (Exception failure) {
-      Map<String, Object> provided = new LinkedHashMap<>();
-      provided.put("kind", "data_source");
-      provided.put("retryable", failure instanceof java.sql.SQLTransientException);
-      // Internal facts go to the core; its public provider error sanitizes driver text.
-      Map<String, Object> facts = provider.failure(failure);
-      provided.put("sqlstate", facts.get("sqlstate"));
-      provided.put("vendor_code", facts.get("vendor_code"));
-      if (facts.get("error_class") != null) {
-        provided.put("error_class", facts.get("error_class"));
-      }
-      if (facts.get("driver_message") != null) {
-        provided.put("driver_message", facts.get("driver_message"));
-      }
-      // What the failure means, where the source reads it itself.
-      try {
-        Map<String, Object> meaning = provider.facts(provided);
-        if (meaning != null) {
-          provided.put("facts", meaning);
-        }
-      } catch (Exception unread) {
-        // Unread facts leave the failure as the driver said it.
-      }
+      Map<String, Object> provided = providerError(failure, provider.failure(failure));
       outcome.put("outcome", "error");
       outcome.put("error", provided);
       driverClass = failure.getClass().getName();
@@ -545,6 +517,26 @@ public final class Host {
       }
     }
     return driverClass;
+  }
+
+  /**
+   * A source's failure as the contract's {@code ProviderError}: of the kind {@code data_source},
+   * retryable where the driver says so, with the fields {@code told} names (its SQLSTATE, vendor
+   * code, error class, internal driver message, and what it means, each where it says one).
+   * Internal facts go to the core; its public provider error sanitizes driver text.
+   */
+  static Map<String, Object> providerError(Exception failure, Map<String, Object> told) {
+    Map<String, Object> provided = new LinkedHashMap<>();
+    provided.put("kind", "data_source");
+    provided.put("retryable", failure instanceof java.sql.SQLTransientException);
+    provided.put("sqlstate", told.get("sqlstate"));
+    provided.put("vendor_code", told.get("vendor_code"));
+    for (String field : List.of("error_class", "driver_message", "facts")) {
+      if (told.get(field) != null) {
+        provided.put(field, told.get(field));
+      }
+    }
+    return provided;
   }
 
   /**

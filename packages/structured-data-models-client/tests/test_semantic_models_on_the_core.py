@@ -60,7 +60,7 @@ def test_a_metric_view_s_choice_names_the_model_on_its_source() -> None:
     sources = _sources()
     choice, provider = (
         sources['model']._sql_choice(),
-        sources['model']._sdm_chosen()[1]._driver,
+        sources['model']._open()._driver,
     )
     assert choice == {
         'provider': 'sql',
@@ -73,7 +73,7 @@ def test_a_metric_view_s_choice_names_the_model_on_its_source() -> None:
 
     choice, provider = (
         sources['trusted']._sql_choice(),
-        sources['trusted']._sdm_chosen()[1]._driver,
+        sources['trusted']._open()._driver,
     )
     assert choice == {
         'provider': 'sql',
@@ -96,7 +96,7 @@ def test_a_snowflake_semantic_view_uses_its_source_provider() -> None:
     model = SnowflakeSource(
         _snowflake(), database='SALES', schema='PUBLIC'
     ).semantic_model('SALES_SEMANTICS')
-    choice, provider = model._sql_choice(), model._sdm_chosen()[1]._driver
+    choice, provider = model._sql_choice(), model._open()._driver
     assert choice == {
         'provider': 'sql',
         'dialect': 'snowflake',
