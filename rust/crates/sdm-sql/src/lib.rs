@@ -121,10 +121,10 @@ fn rendered(dialect: &Dialect) -> Result<&'static dyn SqlDialect, CoreError> {
     sql::dialect(dialect.name()).ok_or_else(|| no_dialect(dialect))
 }
 
-/// The dialect whose semantic models a source is read through: a SQL
-/// provider's own, or, for a source answering typed requests, the one its
-/// declared database names (contract v76). Only a semantic model's
-/// definition and text are read by it; such a source writes its own SQL.
+/// The dialect a source answers as: a SQL provider's own, or, for a source
+/// answering typed requests, the one its declared database names (contract
+/// v76): its semantic models' definitions and text, and the shape of its
+/// answers, are read by it. Such a source writes its own SQL.
 fn view_dialect(provider: &ProviderChoice) -> Option<&'static dyn SqlDialect> {
     match provider {
         ProviderChoice::Sql { .. } => sql_dialect(provider),
@@ -436,8 +436,12 @@ impl DataLayer for Data {
                 facts.denied = failure::denied(error);
                 facts
             }
-            // A source that says what its failure means says it itself.
-            None => error.facts.clone().unwrap_or_default(),
+            // A source that says what its failure means says it itself;
+            // otherwise only the SQL standard's codes are read.
+            None => error
+                .facts
+                .clone()
+                .unwrap_or_else(|| FailureFacts::standard(error)),
         }
     }
 
@@ -625,7 +629,14 @@ impl Data {
         conversions: &[SqlResultConversion],
     ) -> Result<FetchPlan, CoreError> {
         match provider {
-            ProviderChoice::Host { .. } => Ok(FetchPlan::host(request.expected(), request)),
+            // A source declaring a database this build writes answers as
+            // that engine answers (a built-in source through its kit): its
+            // answer is held to the engine's own shape, as a SQL plan's is;
+            // any other source's to the contract's.
+            ProviderChoice::Host { .. } => Ok(FetchPlan::host(
+                view_dialect(provider).map_or_else(|| request.expected(), |d| d.expected(request)),
+                request,
+            )),
             ProviderChoice::Sql {
                 dialect, namespace, ..
             } => {

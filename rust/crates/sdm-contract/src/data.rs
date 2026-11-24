@@ -1998,7 +1998,10 @@ pub trait DataLayer: Send + Sync {
     /// and a host provider's: every failure stays the provider's error.
     fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
         let _ = provider;
-        error.facts.clone().unwrap_or_default()
+        error
+            .facts
+            .clone()
+            .unwrap_or_else(|| FailureFacts::standard(error))
     }
 
     /// The name forms the catalog read of `relation` tries, in order, kept
@@ -2084,6 +2087,17 @@ pub struct FailureFacts {
     /// What went wrong, where the engine's failure says (contract v76):
     /// what an expression's or a join key count's failure is reported as.
     pub reason: Option<FailureReason>,
+}
+
+impl FailureFacts {
+    /// What a failure whose source says nothing of its meaning tells by the
+    /// SQL standard's own codes alone: SQLSTATE `42501` denies access.
+    pub fn standard(error: &ProviderError) -> Self {
+        FailureFacts {
+            denied: error.sqlstate.as_deref() == Some("42501"),
+            ..FailureFacts::default()
+        }
+    }
 }
 
 /// What went wrong in a source's failure ([`FailureFacts::reason`]), as the

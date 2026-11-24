@@ -221,9 +221,10 @@ fn a_databricks_failure_says_its_facts() {
             refuses_expression: true,
             unusable: Some(Unusable::Missing),
             denied: false,
-            reason: None,
+            reason: Some(sdm_contract::data::FailureReason::TableUnresolved),
         }
     );
+    assert!(facts(Some("42501"), None).denied);
     assert_eq!(
         facts(Some("42501"), None).unusable,
         Some(Unusable::Forbidden)
@@ -241,9 +242,14 @@ fn a_databricks_failure_says_its_facts() {
     assert_eq!(facts(Some("08001"), None), FailureFacts::default());
     assert_eq!(facts(None, None), FailureFacts::default());
     let duckdb = ProviderChoice::sql("duckdb");
+    // Only the SQL standard's reading of the code, for an engine that reads
+    // nothing more of its failures.
     assert_eq!(
         Data::new().failure(&duckdb, &failed(Some("42P01"), None)),
-        FailureFacts::default()
+        FailureFacts {
+            reason: Some(sdm_contract::data::FailureReason::TableUnresolved),
+            ..FailureFacts::default()
+        }
     );
 }
 
