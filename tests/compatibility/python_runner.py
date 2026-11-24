@@ -204,7 +204,7 @@ def tables_of(fixture):
 
 def source_tables(stack, connector, config, fixture):
     """Remote fixtures are pre-provisioned; this runner never changes them."""
-    import sdm_connectors as sources
+    import sdm_client as sources
 
     tables = tables_of(fixture)
     if connector == 'memory':
