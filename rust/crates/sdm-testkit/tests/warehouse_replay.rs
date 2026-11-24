@@ -100,6 +100,7 @@ fn recording(leg: &str, core: &Value) -> Value {
         vendor_code: None,
         error_class: None,
         driver_message: None,
+        facts: None,
     };
     let mut fetches = Vec::new();
     loop {

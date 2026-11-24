@@ -645,6 +645,7 @@ fn raised_in_run() -> sdm_contract::data::ProviderError {
         vendor_code: None,
         error_class: None,
         driver_message: None,
+        facts: None,
     }
 }
 

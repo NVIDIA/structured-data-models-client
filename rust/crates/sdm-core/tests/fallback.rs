@@ -767,6 +767,7 @@ fn a_scan_the_provider_fails_is_the_requests_failure() {
                 retryable: true,
                 sqlstate: Some("08006".into()),
                 vendor_code: None,
+                facts: None,
             })
         },
     );

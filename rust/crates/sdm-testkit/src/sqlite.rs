@@ -149,6 +149,7 @@ impl Sqlite {
             retryable: false,
             sqlstate: None,
             vendor_code: None,
+            facts: None,
         };
         let FetchPlan::Sql { statements, .. } = &step.plan else {
             return Err(failed());

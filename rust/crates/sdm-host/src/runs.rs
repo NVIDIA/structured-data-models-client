@@ -163,6 +163,7 @@ fn producer_failed() -> ProviderError {
         retryable: false,
         sqlstate: None,
         vendor_code: None,
+        facts: None,
     }
 }
 
@@ -410,6 +411,19 @@ impl HostRun {
                         FetchOutcome::Error { error } => {
                             check_attachments(&[], &attachments)?;
                             FetchResult::Error(error)
+                        }
+                        FetchOutcome::Refused { error } => {
+                            check_attachments(&[], &attachments)?;
+                            // Only an error the core's table holds is the
+                            // source's to give; any other is the host's
+                            // defect.
+                            if !error.holds_to_table() {
+                                return Err(CoreError::new(
+                                    Sentence::Internal,
+                                    "a source refused a request with an error the core does not give",
+                                ));
+                            }
+                            FetchResult::Refused(error)
                         }
                     };
                     run.submit_fetch(reply.id, result)

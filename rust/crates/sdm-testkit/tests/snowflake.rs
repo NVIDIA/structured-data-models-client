@@ -961,6 +961,7 @@ fn said(vendor_code: Option<&str>, sqlstate: Option<&str>, message: Option<&str>
         vendor_code: vendor_code.map(str::to_owned),
         error_class: None,
         driver_message: message.map(str::to_owned),
+        facts: None,
     }
 }
 

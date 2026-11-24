@@ -1045,6 +1045,7 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_sqlKitAnswer0<'ca
                     vendor_code: None,
                     error_class: None,
                     driver_message: None,
+                    facts: None,
                 }
             })
         });

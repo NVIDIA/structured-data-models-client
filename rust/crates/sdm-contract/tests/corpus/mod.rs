@@ -397,6 +397,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     retryable: true,
                     sqlstate: Some("42P01".into()),
                     vendor_code: None,
+                    facts: None,
                 },
             },
         }),
@@ -493,6 +494,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     retryable: true,
                     sqlstate: Some("08006".into()),
                     vendor_code: Some("57P01".into()),
+                    facts: None,
                 })),
         },
         ControlMessage::Warnings {

@@ -413,7 +413,11 @@ impl<'r, 'a> Metric<'r, 'a> {
                 Ok(read) => read,
                 Err(error) => {
                     if self.reading.data.failure(&error).refuses_expression {
-                        return Ok(Some(failure_text(&error, ReadTask::Expression)));
+                        return Ok(Some(failure_text(
+                            &error,
+                            &self.reading.data.failure(&error),
+                            ReadTask::Expression,
+                        )));
                     }
                     return Err(failed(&error, "preview"));
                 }
@@ -951,7 +955,11 @@ pub(super) async fn convert(
                         let found = match found {
                             Ok(found) => found,
                             Err(error) => {
-                                uncounted = failure_text(&error, ReadTask::JoinKeys);
+                                uncounted = failure_text(
+                                    &error,
+                                    &reading.data.failure(&error),
+                                    ReadTask::JoinKeys,
+                                );
                                 held.clear();
                                 break;
                             }
@@ -972,7 +980,9 @@ pub(super) async fn convert(
                     counts = Some(held);
                 }
             }
-            Err(error) => uncounted = failure_text(&error, ReadTask::JoinKeys),
+            Err(error) => {
+                uncounted = failure_text(&error, &reading.data.failure(&error), ReadTask::JoinKeys)
+            }
         }
     }
 

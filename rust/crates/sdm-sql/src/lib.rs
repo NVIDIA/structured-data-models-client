@@ -18,6 +18,7 @@
 mod blake2b;
 mod databricks;
 mod duckdb;
+mod failure;
 mod host_parts;
 mod json;
 mod key_text;
@@ -410,7 +411,16 @@ impl DataLayer for Data {
     }
 
     fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
-        sql_dialect(provider).map_or_else(FailureFacts::default, |dialect| dialect.failure(error))
+        match sql_dialect(provider) {
+            Some(dialect) => {
+                let mut facts = dialect.failure(error);
+                facts.reason = failure::reason(error);
+                facts.denied = failure::denied(error);
+                facts
+            }
+            // A source that says what its failure means says it itself.
+            None => error.facts.clone().unwrap_or_default(),
+        }
     }
 
     fn view_text(

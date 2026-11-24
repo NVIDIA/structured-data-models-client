@@ -251,6 +251,7 @@ pub fn answer_logged(
         retryable: false,
         sqlstate: None,
         vendor_code: None,
+        facts: None,
     };
     let FetchPlan::Sql { statements, .. } = &step.plan else {
         // A host plan is a host provider's to answer; this one runs SQL.

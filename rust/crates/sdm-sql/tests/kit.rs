@@ -288,7 +288,7 @@ fn a_databricks_source_needing_microsecond_timestamps_reads_the_result_schema_fi
 }
 
 #[test]
-fn a_driver_failure_is_the_provider_s_error_unread() {
+fn a_driver_failure_is_the_provider_s_error_with_what_it_means() {
     let kit = SqlKit::new(choice("duckdb"), None).unwrap();
     let failed = ProviderError {
         kind: ErrorKind::DataSource,
@@ -297,12 +297,27 @@ fn a_driver_failure_is_the_provider_s_error_unread() {
         vendor_code: None,
         error_class: None,
         driver_message: None,
+        facts: None,
     };
     let (result, _) = ask(&kit, &lookup(r#""users""#), &seeds(1), |_, _| {
         Err(failed.clone())
     });
     match result {
-        Err(KitError::Provider(error)) => assert_eq!(error, failed),
+        Err(KitError::Provider(error)) => {
+            let facts = error.facts.clone().expect("the engine's reading");
+            assert_eq!(
+                facts.reason,
+                Some(sdm_contract::data::FailureReason::TableUnresolved)
+            );
+            assert!(!facts.denied);
+            assert_eq!(
+                ProviderError {
+                    facts: None,
+                    ..error
+                },
+                failed
+            );
+        }
         other => panic!("{other:?}"),
     }
 }

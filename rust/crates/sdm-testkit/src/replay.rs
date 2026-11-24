@@ -268,6 +268,7 @@ impl Replay<'_> {
                         retryable: false,
                         sqlstate: None,
                         vendor_code: Some(PAST_THE_RECORDING.to_owned()),
+                        facts: None,
                     }),
                 });
             }

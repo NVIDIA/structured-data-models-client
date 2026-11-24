@@ -205,6 +205,7 @@ fn failed(sqlstate: Option<&str>, class: Option<&str>) -> ProviderError {
         sqlstate: sqlstate.map(str::to_owned),
         vendor_code: None,
         error_class: class.map(str::to_owned),
+        facts: None,
     }
 }
 
@@ -219,6 +220,8 @@ fn a_databricks_failure_says_its_facts() {
             not_found: false,
             refuses_expression: true,
             unusable: Some(Unusable::Missing),
+            denied: false,
+            reason: None,
         }
     );
     assert_eq!(

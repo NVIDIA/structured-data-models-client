@@ -206,7 +206,12 @@ impl SqlKit {
                 plan: &fetch.plan,
                 keys: &bound_keys,
             })
-            .map_err(KitError::Provider)?;
+            .map_err(|mut error| {
+                // What the failure means, read by the engine that failed,
+                // so the core reads it as it reads every source's.
+                error.facts = Some(self.data.failure(&self.provider, &error));
+                KitError::Provider(error)
+            })?;
             joined = Some(match joined {
                 None => answered,
                 Some(mut earlier) => {

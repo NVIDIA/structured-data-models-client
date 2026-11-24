@@ -77,6 +77,7 @@ impl HostKit {
                             vendor_code: None,
                             error_class: None,
                             driver_message: None,
+                            facts: None,
                         })
                     }
                 }
@@ -192,6 +193,7 @@ impl HostKit {
                         vendor_code: None,
                         error_class: None,
                         driver_message: None,
+                        facts: None,
                     });
                 }
             };

@@ -277,6 +277,7 @@ fn a_later_chunk_failing_fails_the_request() {
                 retryable: false,
                 sqlstate: Some("42501".into()),
                 vendor_code: None,
+                facts: None,
             })
         } else {
             answer(step, &payload)
@@ -504,6 +505,7 @@ fn chunked_postgres(answers: Vec<FetchResult>) -> Option<Reply> {
             sqlstate: None,
             vendor_code: None,
             driver_message: None,
+            facts: None,
         }))),
     }
 }

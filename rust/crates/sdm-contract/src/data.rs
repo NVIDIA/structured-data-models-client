@@ -1985,8 +1985,8 @@ pub trait DataLayer: Send + Sync {
     /// as the old client's separate predicates do. None set, the default
     /// and a host provider's: every failure stays the provider's error.
     fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
-        let _ = (provider, error);
-        FailureFacts::default()
+        let _ = provider;
+        error.facts.clone().unwrap_or_default()
     }
 
     /// The name forms the catalog read of `relation` tries, in order, kept
@@ -2052,7 +2052,8 @@ pub fn views_unread() -> CoreError {
 
 /// What a provider's failure says ([`DataLayer::failure`]): independent
 /// facts, each read by the step that asked what it fits.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
 pub struct FailureFacts {
     /// The relation asked for does not exist under the name asked (Snowflake
     /// errno 2003): a spelling retry tries the next form.
@@ -2065,11 +2066,33 @@ pub struct FailureFacts {
     /// says (Databricks `42P01`, `42501` or a permission error class): a
     /// join over it is dropped with that reason.
     pub unusable: Option<Unusable>,
+    /// The source denied the caller access to what was asked (SQLSTATE
+    /// `42501`, or the engine's permission error) (contract v76).
+    pub denied: bool,
+    /// What went wrong, where the engine's failure says (contract v76):
+    /// what an expression's or a join key count's failure is reported as.
+    pub reason: Option<FailureReason>,
+}
+
+/// What went wrong in a source's failure ([`FailureFacts::reason`]), as the
+/// old client names the classes of a warehouse's errors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FailureReason {
+    ValueNotConverted,
+    DivisionByZero,
+    OutOfRange,
+    ColumnUnresolved,
+    TableUnresolved,
+    PermissionDenied,
+    SyntaxRejected,
+    TypesIncompatible,
 }
 
 /// Why a table cannot be used ([`FailureFacts::unusable`]), as the old
 /// client's Databricks reader says it (`unusable_table_reason`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum Unusable {
     /// It does not exist, or the caller may not see it: Unity Catalog
     /// answers both alike.
@@ -2359,4 +2382,10 @@ pub struct ProviderError {
     /// public error. Left out, none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub driver_message: Option<String>,
+    /// What the failure means, where the source says so itself (contract
+    /// v76): a built-in source's SQL kit reads its engine's failure into
+    /// these, so the core reads every source's failure one way. Left out,
+    /// the core reads none ([`DataLayer::failure`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facts: Option<FailureFacts>,
 }

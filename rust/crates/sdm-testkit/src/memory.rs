@@ -154,6 +154,7 @@ fn failed(kind: ErrorKind) -> ProviderError {
         retryable: false,
         sqlstate: None,
         vendor_code: None,
+        facts: None,
     }
 }
 

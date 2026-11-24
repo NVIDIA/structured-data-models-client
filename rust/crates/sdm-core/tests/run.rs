@@ -92,6 +92,7 @@ fn failed() -> FetchResult {
         retryable: false,
         sqlstate: Some("42P01".into()),
         vendor_code: None,
+        facts: None,
     })
 }
 

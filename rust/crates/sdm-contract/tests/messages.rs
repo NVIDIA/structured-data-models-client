@@ -375,6 +375,7 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
             retryable,
             sqlstate: Some("40001".into()),
             vendor_code: Some("1213".into()),
+            facts: None,
         });
         assert_eq!(error.code, ErrorCode::ProviderError);
         assert_eq!(error.kind, ErrorKind::DataSource);

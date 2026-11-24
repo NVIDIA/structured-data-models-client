@@ -212,8 +212,8 @@ async fn read_definition(reading: &Reading<'_>, view: &ViewChoice) -> Result<Des
             let facts = reading.data.failure(&failed);
             let missing =
                 facts.unusable == Some(sdm_contract::data::Unusable::Missing) || facts.not_found;
-            let denied = facts.unusable == Some(sdm_contract::data::Unusable::Forbidden)
-                || failed.sqlstate.as_deref() == Some("42501");
+            let denied =
+                facts.unusable == Some(sdm_contract::data::Unusable::Forbidden) || facts.denied;
             if (missing || denied) && reading.data.view_kind() == Some(ViewKind::Semantic) {
                 let name = relation.dotted();
                 return Err(CoreError::new(
@@ -656,36 +656,23 @@ pub(crate) enum ReadTask {
 /// A finite diagnosis from known codes, with the operation the core requested.
 /// Driver messages and unrecognized free-text fields remain internal (H17,
 /// ). Table and column context is added by the existing message site.
-pub(crate) fn failure_text(error: &ProviderError, task: ReadTask) -> String {
-    let class = error
-        .error_class
-        .as_deref()
-        .and_then(|c| c.split('.').next());
+pub(crate) fn failure_text(
+    error: &ProviderError,
+    facts: &sdm_contract::data::FailureFacts,
+    task: ReadTask,
+) -> String {
+    use sdm_contract::data::FailureReason as R;
     let state = error.sqlstate.as_deref();
-    let reason = match (class, state) {
-        (Some("CAST_INVALID_INPUT" | "CANNOT_PARSE_TIMESTAMP"), _)
-        | (_, Some("22018" | "22007")) => Some("a value could not be converted"),
-        (Some("DIVIDE_BY_ZERO" | "INTERVAL_DIVIDED_BY_ZERO"), _) | (_, Some("22012")) => {
-            Some("division by zero occurred")
-        }
-        (Some("CAST_OVERFLOW" | "NUMERIC_VALUE_OUT_OF_RANGE" | "ARITHMETIC_OVERFLOW"), _)
-        | (_, Some("22003" | "22008")) => Some("a value was outside the supported range"),
-        (Some("UNRESOLVED_COLUMN" | "COLUMN_NOT_FOUND" | "UNRESOLVED_FIELD"), _)
-        | (_, Some("42703" | "42S22")) => Some("a referenced column could not be resolved"),
-        (Some("TABLE_OR_VIEW_NOT_FOUND"), _) | (_, Some("42P01" | "42S02")) => {
-            Some("a referenced table or view could not be resolved")
-        }
-        (Some("INSUFFICIENT_PERMISSIONS" | "PERMISSION_DENIED"), _) | (_, Some("42501")) => {
-            Some("permission was denied")
-        }
-        (Some("PARSE_SYNTAX_ERROR"), _) | (_, Some("42601")) => {
-            Some("the expression's syntax was not accepted")
-        }
-        (Some("DATATYPE_MISMATCH"), _) | (_, Some("42804")) => {
-            Some("the expression used incompatible types")
-        }
-        _ => None,
-    };
+    let reason = facts.reason.map(|reason| match reason {
+        R::ValueNotConverted => "a value could not be converted",
+        R::DivisionByZero => "division by zero occurred",
+        R::OutOfRange => "a value was outside the supported range",
+        R::ColumnUnresolved => "a referenced column could not be resolved",
+        R::TableUnresolved => "a referenced table or view could not be resolved",
+        R::PermissionDenied => "permission was denied",
+        R::SyntaxRejected => "the expression's syntax was not accepted",
+        R::TypesIncompatible => "the expression used incompatible types",
+    });
     let (during, action) = match task {
         ReadTask::Expression => ("evaluating the expression", "evaluate the expression"),
         ReadTask::JoinKeys => ("counting the join keys", "count the join keys"),

@@ -93,6 +93,7 @@ impl Source {
                                 retryable: false,
                                 sqlstate: None,
                                 vendor_code: None,
+                                facts: None,
                             }
                         })?;
                     sets.insert(*id, batch);
@@ -263,6 +264,7 @@ impl ProviderPath<'_> {
                 retryable,
                 sqlstate: None,
                 vendor_code: None,
+                facts: None,
             });
         }
         let token = match &step.continuation {

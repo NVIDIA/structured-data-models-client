@@ -304,6 +304,7 @@ fn refusal(sqlstate: &str) -> FetchResult {
         sqlstate: Some(sqlstate.to_owned()),
         vendor_code: None,
         error_class: None,
+        facts: None,
     })
 }
 

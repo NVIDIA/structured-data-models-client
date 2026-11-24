@@ -234,6 +234,8 @@ impl SqlDialect for Databricks {
             not_found: false,
             refuses_expression: state.is_some_and(|s| s.starts_with("22") || s.starts_with("42")),
             unusable,
+            denied: false,
+            reason: None,
         }
     }
 

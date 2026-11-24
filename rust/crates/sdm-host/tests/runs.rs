@@ -420,6 +420,7 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
         retryable: false,
         sqlstate: None,
         vendor_code: None,
+        facts: None,
     };
     run.reply(
         &fetch_reply(second, FetchOutcome::Error { error }),
@@ -780,4 +781,60 @@ fn a_run_resolves_zones_through_its_host_s_roots() {
 fn a_host_run_can_be_shared_between_threads() {
     fn shared<T: Send + Sync>() {}
     shared::<HostRun>();
+}
+
+#[test]
+fn a_source_s_named_refusal_is_the_operation_s_error_and_only_one_the_core_gives() {
+    // A refusal the core's table holds reaches the operation as itself.
+    let run = host_run(fetching_run());
+    let first = fetch_id(&run.next().unwrap());
+    let refusal = sdm_contract::CoreError::new(
+        sdm_contract::Sentence::Undeclared,
+        "the data source does not take this request",
+    )
+    .with_field("request", sdm_contract::Detail::text("lookup"));
+    run.reply(
+        &fetch_reply(
+            first,
+            FetchOutcome::Refused {
+                error: refusal.clone(),
+            },
+        ),
+        no_attachments(),
+    )
+    .unwrap();
+    let second = fetch_id(&run.next().unwrap());
+    run.reply(
+        &fetch_reply(second, FetchOutcome::Refused { error: refusal }),
+        no_attachments(),
+    )
+    .unwrap();
+    let Step::Done {
+        result: OperationResult::ValidateQuery(validation),
+    } = step(&run.next().unwrap())
+    else {
+        panic!("done");
+    };
+    let seen: Vec<&str> = validation
+        .diagnostics
+        .iter()
+        .map(|d| d.code.as_str())
+        .collect();
+    assert_eq!(seen, ["refused"; 2]);
+
+    // One whose kind its code does not carry is the host's defect.
+    let run = host_run(fetching_run());
+    let first = fetch_id(&run.next().unwrap());
+    let mut outside = sdm_contract::CoreError::new(
+        sdm_contract::Sentence::Undeclared,
+        "the data source does not take this request",
+    );
+    outside.kind = ErrorKind::Internal;
+    let refused = run
+        .reply(
+            &fetch_reply(first, FetchOutcome::Refused { error: outside }),
+            no_attachments(),
+        )
+        .unwrap_err();
+    assert!(!refused.control.is_empty());
 }
