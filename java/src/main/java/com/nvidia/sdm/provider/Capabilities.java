@@ -304,9 +304,9 @@ public final class Capabilities {
   }
 
   /**
-   * Starts from: no optional requests, no key limit, seeded-stable sampling, any non-negative {@code
-   * long} seed, nulls last, no fallback, no value filters, and a plain source of tables (every other
-   * trait off or empty).
+   * Starts from: no optional requests, no key limit, seeded-stable sampling, seeds up to {@code
+   * Long.MAX_VALUE}, nulls last, no fallback, no value filters, and a plain source of tables (every
+   * other trait off or empty).
    */
   public static final class Builder {
     private final Set<OptionalRequest> optional = EnumSet.noneOf(OptionalRequest.class);
@@ -363,7 +363,7 @@ public final class Capabilities {
       return this;
     }
 
-    /** The largest sampling seed the source takes. */
+    /** The largest sampling seed the source takes, a non-negative {@code long}. */
     public Builder maxSeed(long value) {
       return maxSeed(BigInteger.valueOf(value));
     }
@@ -422,7 +422,7 @@ public final class Capabilities {
      * read in that engine's SQL.
      */
     public Builder engine(String name) {
-      engine = Optional.ofNullable(name).filter(given -> !given.isEmpty());
+      engine = Optional.ofNullable(nonEmpty("engine", name));
       return this;
     }
 
@@ -538,8 +538,15 @@ public final class Capabilities {
      * read by that vendor's layout.
      */
     public Builder opaqueVendor(String vendor) {
-      opaqueVendor = Optional.ofNullable(vendor).filter(given -> !given.isEmpty());
+      opaqueVendor = Optional.ofNullable(nonEmpty("opaqueVendor", vendor));
       return this;
+    }
+
+    private static String nonEmpty(String name, String given) {
+      if (given != null && given.isEmpty()) {
+        throw new IllegalArgumentException(name + " is a non-empty string or null");
+      }
+      return given;
     }
 
     public Capabilities build() {

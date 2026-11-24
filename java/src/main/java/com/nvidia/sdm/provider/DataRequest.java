@@ -77,7 +77,7 @@ public sealed interface DataRequest {
     }
   }
 
-  /** The first {@code limit} rows of {@code table}, used to infer column types. */
+  /** At most {@code limit} rows of {@code table}, any of them, {@code columns} in order. */
   record Preview(Relation table, List<String> columns, long limit) implements DataRequest {
     public Preview {
       columns = List.copyOf(columns);

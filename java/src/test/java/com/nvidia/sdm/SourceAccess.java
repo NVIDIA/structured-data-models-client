@@ -5,7 +5,6 @@
 package com.nvidia.sdm;
 
 import com.nvidia.sdm.internal.Host;
-import com.nvidia.sdm.internal.HostProviders;
 import com.nvidia.sdm.internal.Providers;
 import java.util.Map;
 import java.util.function.Function;
@@ -16,7 +15,7 @@ public final class SourceAccess {
 
   /** The provider choice and provider a run over {@code source} names, every source's alike. */
   public static Providers.Chosen chosen(Source source) {
-    return HostProviders.chosen(source);
+    return SourceRun.of(source).chosen();
   }
 
   /** The host values the core's sentences name of {@code source}. */

@@ -13,15 +13,20 @@ import java.util.function.Function;
 
 /**
  * An operation's reach of its source, every source's alike: the core's provider choice and the
- * provider the core asks through ({@link HostProviders#chosen}, which reads the source's
- * capabilities as the operation starts), and the host values the core's sentences name of it. Not
+ * provider the core asks through ({@link HostProviders#chosen}, which reads the capabilities of the
+ * source the operation asks as it starts), and the host values the core's sentences name of it. Not
  * part of the API.
  */
 record SourceRun(Source source, Providers.Chosen chosen) {
 
-  /** The operation over {@code source} starting. */
+  /**
+   * The operation over {@code source} starting. A built-in source is asked through its operation's
+   * own answers ({@link BuiltInSource#operation}, a fresh SQL kit), so what the kit keeps within an
+   * operation is that operation's alone; any other source is asked itself.
+   */
   static SourceRun of(Source source) {
-    return new SourceRun(source, HostProviders.chosen(source));
+    Source asked = source instanceof BuiltInSource builtIn ? builtIn.operation() : source;
+    return new SourceRun(source, HostProviders.chosen(asked));
   }
 
   /** The core's provider choice. */

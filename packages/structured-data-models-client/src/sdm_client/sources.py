@@ -22,7 +22,6 @@ A source never closes its connection. It belongs to whoever opened it.
 
 from __future__ import annotations
 
-import threading
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, ClassVar, NoReturn, TypeGuard
 
@@ -131,11 +130,12 @@ class _BuiltInSource(Source):
     tables live in, the semantic model it reads, and the driver that runs
     the SQL the library writes for its database. Not part of the API.
 
-    Each operation's answers are its own: :meth:`capabilities`, which every
-    operation reads once as it starts, opens a fresh SQL kit for the
-    operation on the calling thread, and :meth:`answer` answers through it.
-    The kit settles a namespace left to the connection once, and reads an
-    identical catalog read once, within that operation only.
+    Each operation's answers are its own: the core reaches a built-in
+    source through :meth:`_operation`, a fresh SQL kit for that operation,
+    which settles a namespace left to the connection once and reads an
+    identical catalog read once, within that operation only. Asked
+    directly, :meth:`capabilities`, :meth:`answer` and :meth:`failure` each
+    answer through a kit of their own.
     """
 
     #: The database recognised by the connection (``_backend_of``).
@@ -157,8 +157,6 @@ class _BuiltInSource(Source):
     #: The semantic model read, by name, and whether its expressions are
     #: trusted; ``None`` for the tables themselves.
     _view: tuple[str, bool] | None = None
-    #: The operation each thread is answering, its kit (``current``).
-    _runs: threading.local
 
     def _bind(self, connection: Any, namespace: Mapping[str, Any]) -> None:
         try:
@@ -182,7 +180,6 @@ class _BuiltInSource(Source):
                 )
         self._connection = connection
         self._namespace = given
-        self._runs = threading.local()
 
     @property
     def connection(self) -> Any:
@@ -198,46 +195,36 @@ class _BuiltInSource(Source):
 
     def capabilities(self) -> Capabilities:
         r"""What this source answers, as the library's SQL for its database
-        declares it. Read as an operation starts, it starts the operation's
-        answers: a namespace left to the connection is settled afresh, and
-        the catalog read anew."""
-        return self._open().capabilities()
+        declares it."""
+        return self._operation().capabilities()
 
     def answer(
         self, request: DataRequest, expected: pa.Schema | None
     ) -> ArrowStream:
         r"""Answers ``request`` with the library's SQL for this database, run
         on the connection, in the contract's shape (``expected``, where the
-        request fixes one), within the operation :meth:`capabilities`
-        started on this thread.
+        request fixes one).
 
         Raises:
             StructuredDataError: A request this database's SQL cannot
                 answer, refused by name.
             Exception: The driver's failure, as it raised it.
         """
-        return self._current().answer(request)
+        return self._operation().answer(request, expected)
 
     def failure(self, error: Exception) -> ProviderFailure:
         r"""What the driver's failure ``error`` tells the core: its SQLSTATE
         and vendor code, and what it means on this database."""
-        return self._current().failure(error)
+        return self._operation().failure(error)
 
-    def _open(self) -> KitRun:
-        r"""A fresh operation's answers on this thread."""
+    def _operation(self) -> KitRun:
+        r"""One operation's answers: a fresh SQL kit over the connection,
+        the source the core asks for that operation."""
         from sdm_client._rust import providers
         from sdm_client._rust.sql_kit import KitRun
 
         driver = getattr(providers, self._driver)
-        run = KitRun(self._sql_choice(), driver(self._connection))
-        self._runs.current = run
-        return run
-
-    def _current(self) -> KitRun:
-        r"""The operation this thread is answering; a fresh one where none
-        was started (the source asked directly)."""
-        run: KitRun | None = getattr(self._runs, 'current', None)
-        return run if run is not None else self._open()
+        return KitRun(self._sql_choice(), driver(self._connection))
 
     def _sql_choice(self) -> dict[str, Any]:
         r"""The contract's SQL choice of this source: its dialect, the
@@ -269,7 +256,6 @@ class _BuiltInSource(Source):
         model = object.__new__(type(self))
         model.__dict__.update(self.__dict__)
         model._view = (name, trust_expressions)
-        model._runs = threading.local()
         return model
 
     def __repr__(self) -> str:

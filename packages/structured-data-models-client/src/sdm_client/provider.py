@@ -21,7 +21,9 @@ more keys than ``Capabilities.max_keys_per_request`` reach the source
 already split into several requests.
 
 Each value in a request is a :class:`Value`: a plain Python value with
-the Arrow type the core holds it as. The plain values are
+the Arrow type the core holds it as, which a source needs to write it
+exactly (an integer's width and sign, a decimal's precision, a time's
+unit and zone, the type of a null). The plain values are ``None``,
 ``int``, ``float``, ``bool``, ``str``, :class:`~decimal.Decimal`,
 ``bytes``, :class:`datetime.date`, :class:`datetime.time`, and
 :class:`datetime.datetime` and :class:`datetime.timedelta` for timestamps
@@ -309,7 +311,8 @@ class Capabilities:
             requests, whose answers the core joins. ``None`` is no limit.
         sampling: Whether a sample drawn with the same seed is the same
             rows every time.
-        max_seed: The largest sampling seed the source takes.
+        max_seed: The largest sampling seed the source takes, an unsigned
+            64-bit integer.
         null_order: Where the source puts nulls when it orders rows;
             ``None``, and the core never asks it for rows in an order.
         fallback: The limits within which the core answers undeclared
@@ -414,8 +417,8 @@ class Capabilities:
             self.max_keys_per_request
         ):
             raise ValueError('max_keys_per_request must be a positive integer')
-        if not _integer(self.max_seed) or self.max_seed < 0:
-            raise ValueError('max_seed must be a non-negative integer')
+        if not _integer(self.max_seed) or not 0 <= self.max_seed < 2**64:
+            raise ValueError('max_seed must be an unsigned 64-bit integer')
         if self.fallback is not None and not isinstance(
             self.fallback, Fallback
         ):

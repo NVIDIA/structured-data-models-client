@@ -292,7 +292,7 @@ def test_a_snowflake_source_names_its_dialect_namespace_and_provider() -> None:
         'dialect': 'snowflake',
         'namespace': ['SALES', 'public'],
     }
-    assert isinstance(source._open()._driver, SnowflakeProvider)
+    assert isinstance(source._operation()._driver, SnowflakeProvider)
     choice = SnowflakeSource(connection, database='SALES')._sql_choice()
     assert choice['namespace'] == ['SALES', None]
     assert 'namespace' not in SnowflakeSource(connection)._sql_choice()
@@ -302,7 +302,7 @@ def test_a_snowpark_session_is_read_through_its_own_connection() -> None:
     rows = pa.table({'user_id': pa.array([0, 1], pa.int8())})
     connection = _Connection({_SELECT: rows})
     source = SnowflakeSource(Session(connection), database='DB', schema='S')
-    answer = _arrow(source._open()._driver(_step((_SELECT, []))))
+    answer = _arrow(source._operation()._driver(_step((_SELECT, []))))
     assert answer.equals(rows)
     assert connection.calls == [(_SELECT, None, 'qmark')]
 

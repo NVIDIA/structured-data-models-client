@@ -297,6 +297,37 @@ def test_a_built_in_source_answers_directly_what_a_run_receives(
         ), step['request']
 
 
+def test_each_operation_over_a_built_in_source_has_its_own_kit(
+    tmp_path: Path,
+) -> None:
+    r"""Two operations over one source, on one thread or several, never
+    share what an operation's SQL kit keeps (its settled namespace and
+    catalog reads), and asking the source directly in between changes
+    neither: the core asks each operation's own kit."""
+    import threading
+
+    from sdm_client._rust import host_providers as host
+    from sdm_client._rust.sql_kit import KitRun
+
+    connection = _duckdb(tmp_path)
+    _shop(connection)
+    source = DuckDBSource(connection)
+    _, first = host.chosen(source)
+    source.capabilities()
+    elsewhere: list[Any] = []
+    thread = threading.Thread(
+        target=lambda: elsewhere.append(host.chosen(source))
+    )
+    thread.start()
+    thread.join()
+    _, second = host.chosen(source)
+    kits = [first._source, second._source, elsewhere[0][1]._source]
+    assert all(isinstance(kit, KitRun) for kit in kits)
+    assert len({id(kit) for kit in kits}) == 3
+    # A custom source is asked itself.
+    assert host.operation(first._source) is first._source
+
+
 def test_a_built_in_source_refuses_by_name_what_its_sql_cannot_answer(
     tmp_path: Path,
 ) -> None:

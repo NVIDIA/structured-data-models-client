@@ -4,13 +4,16 @@
 
 package com.nvidia.sdm.internal;
 
+import com.nvidia.sdm.Source;
 import com.nvidia.sdm.provider.Capabilities;
 import com.nvidia.sdm.provider.DataRequest;
 import com.nvidia.sdm.provider.ProviderFailure;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ipc.ArrowReader;
+import org.apache.arrow.vector.types.pojo.Schema;
 
 /**
  * One operation's answers of a built-in source, as Python's {@code sql_kit.KitRun}: its SQL kit,
@@ -18,10 +21,11 @@ import org.apache.arrow.vector.ipc.ArrowReader;
  * source's driver ({@code driver}), which runs the statements it is handed and writes no SQL.
  *
  * <p>The kit is one per operation: it settles the namespace a source leaves to its connection
- * once, and reads an identical catalog read once, for that operation only. A built-in source opens
- * one where every source's operation starts, its {@code capabilities()}. Not part of the API.
+ * once, and reads an identical catalog read once, for that operation only. The core asks it in
+ * place of the built-in source for that operation, through the same {@link Source} methods as any
+ * other source. Not part of the API.
  */
-public final class KitRun {
+public final class KitRun implements Source {
   private final NativeSqlKit kit;
   private final Host.Provider driver;
 
@@ -39,6 +43,7 @@ public final class KitRun {
   }
 
   /** What the source answers, as its kit declares it. */
+  @Override
   @SuppressWarnings("unchecked")
   public Capabilities capabilities() {
     try {
@@ -49,13 +54,15 @@ public final class KitRun {
   }
 
   /**
-   * The answer to {@code request}, in the contract's shape, its vectors allocated from {@code
-   * allocator}.
+   * The answer to {@code request}, in the contract's shape, which the kit writes itself, so {@code
+   * expected} is not read; its vectors allocated from {@code allocator}.
    *
    * @throws NativeError the kit refused the request by name, the error the operation fails with
    * @throws Exception the driver's failure, as it raised it
    */
-  public ArrowReader answer(DataRequest request, BufferAllocator allocator) throws Exception {
+  @Override
+  public ArrowReader answer(
+      DataRequest request, Optional<Schema> expected, BufferAllocator allocator) throws Exception {
     Map<Integer, ArrowReader> keys = new LinkedHashMap<>();
     byte[] asked = Json.write(HostProviders.Requests.write(request, keys));
     NativeArrow answer =
@@ -82,6 +89,7 @@ public final class KitRun {
    * What the driver's failure tells the core: what the driver reads of it, and what it means, as
    * the kit reads it.
    */
+  @Override
   @SuppressWarnings("unchecked")
   public ProviderFailure failure(Exception failure) {
     Map<String, Object> provided = Host.providerError(failure, driver.failure(failure));

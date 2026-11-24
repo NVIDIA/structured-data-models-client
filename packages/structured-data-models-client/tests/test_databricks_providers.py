@@ -382,10 +382,10 @@ def test_the_provider_choice_names_the_dialect_and_the_namespace(
     }
     from sdm_client._rust import host_providers
 
-    chosen, _ = host_providers.chosen(source)
+    chosen, provider = host_providers.chosen(source)
     assert chosen['provider'] == 'host'
     # The operation the choice started answers on the source's driver.
-    driver = source._current()._driver
+    driver = provider._source._driver
     assert type(driver) is made
     assert driver._connection is source.connection
 

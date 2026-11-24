@@ -8,8 +8,9 @@ request on the source's driver.
 
 The kit is one per operation: it settles the namespace a source leaves to
 its connection once, and reads an identical catalog read once, for that
-operation only. A built-in source opens one where every source's
-operation starts, its :meth:`~sdm_client.provider.Source.capabilities`.
+operation only. The core asks it in place of the built-in source for that
+operation (:func:`sdm_client._rust.host_providers.chosen`), through the
+same :class:`~sdm_client.provider.Source` methods as any other source.
 
 The driver's provider (``sdm_client._rust.providers``) runs the statements
 the kit hands it on the caller's connection; it writes no SQL and decides
@@ -20,16 +21,19 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sdm_client import provider as p
 from sdm_client._rust import errors, host_providers
 from sdm_client._rust.run import native, provider_error
 
+if TYPE_CHECKING:
+    import pyarrow as pa
+
 __all__ = ['KitRun']
 
 
-class KitRun:
+class KitRun(p.Source):
     r"""One operation of the built-in source whose SQL choice is ``choice``
     (the contract's ``SqlChoice``), its statements run by ``driver``."""
 
@@ -43,8 +47,11 @@ class KitRun:
             json.loads(self._kit.capabilities())
         )
 
-    def answer(self, request: p.DataRequest) -> p.ArrowStream:
-        r"""The answer to ``request``, in the contract's shape.
+    def answer(
+        self, request: p.DataRequest, expected: pa.Schema | None
+    ) -> p.ArrowStream:
+        r"""The answer to ``request``, in the contract's shape, which the
+        kit writes itself, so ``expected`` is not read.
 
         Raises:
             StructuredDataError: The kit refused the request by name, the
@@ -65,7 +72,10 @@ class KitRun:
         r"""What the driver's failure ``error`` tells the core: what the
         driver reads of it, and what it means, as the kit reads it."""
         provided = provider_error(error, self._driver)
-        facts = json.loads(self._kit.failure(json.dumps(provided).encode()))
+        try:
+            facts = json.loads(self._kit.failure(json.dumps(provided).encode()))
+        except Exception:  # noqa: BLE001 - the driver's own fields stand
+            return host_providers.read_failure(provided)
         return host_providers.read_failure({**provided, 'facts': facts})
 
     def _run(self, plan: bytes, request: bytes, binds: dict[int, Any]) -> Any:

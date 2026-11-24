@@ -43,6 +43,7 @@ __all__ = [
     'chosen',
     'expected_schema',
     'failure',
+    'operation',
     'read_capabilities',
     'read_failure',
     'read_request',
@@ -53,9 +54,11 @@ __all__ = [
 
 
 def chosen(source: p.Source) -> tuple[dict[str, Any], HostProvider]:
-    r"""The core's provider choice for ``source``, and the run loop's
-    provider answering its fetches. Its capabilities are read once, at
-    the start of the operation."""
+    r"""The core's provider choice for one operation over ``source``, and
+    the run loop's provider answering its fetches. Its capabilities are
+    read once, at the start of the operation, from the source the
+    operation asks (:func:`operation`)."""
+    source = operation(source)
     declared = source.capabilities()
     if not isinstance(declared, p.Capabilities):
         raise TypeError(
@@ -64,6 +67,18 @@ def chosen(source: p.Source) -> tuple[dict[str, Any], HostProvider]:
         )
     choice = {'provider': 'host', 'capabilities': capabilities(declared)}
     return choice, HostProvider(source)
+
+
+def operation(source: p.Source) -> p.Source:
+    r"""The source one operation over ``source`` asks: a built-in source's
+    own answers for that operation (a fresh SQL kit, so what it keeps
+    within an operation is that operation's alone), or any other source
+    itself."""
+    from sdm_client.sources import _BuiltInSource
+
+    if isinstance(source, _BuiltInSource):
+        return source._operation()
+    return source
 
 
 class HostProvider:

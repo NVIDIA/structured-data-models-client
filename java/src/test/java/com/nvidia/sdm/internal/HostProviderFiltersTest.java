@@ -6,10 +6,13 @@ package com.nvidia.sdm.internal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nvidia.sdm.provider.Capabilities;
 import com.nvidia.sdm.provider.DataRequest;
+import com.nvidia.sdm.provider.FailureFacts;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -135,5 +138,22 @@ class HostProviderFiltersTest {
     Map<String, Object> declared =
         (Map<String, Object>) HostProviders.chosen(source).choice().get("capabilities");
     assertEquals(List.of("has_rows"), declared.get("filters"));
+  }
+
+  /** As Python's {@code test_capabilities_refuse_what_no_provider_declares}. */
+  @Test
+  void capabilitiesRefuseWhatNoProviderDeclares() {
+    assertThrows(IllegalArgumentException.class, () -> Capabilities.builder().maxKeysPerRequest(0));
+    assertThrows(IllegalArgumentException.class, () -> Capabilities.builder().maxSeed(-1));
+    // The core's seed is an unsigned 64-bit integer.
+    BigInteger largest = BigInteger.TWO.pow(64).subtract(BigInteger.ONE);
+    assertEquals(largest, Capabilities.builder().maxSeed(largest).build().maxSeed());
+    assertThrows(
+        IllegalArgumentException.class, () -> Capabilities.builder().maxSeed(largest.add(BigInteger.ONE)));
+    assertThrows(IllegalArgumentException.class, () -> Capabilities.builder().engine(""));
+    assertThrows(IllegalArgumentException.class, () -> new Capabilities.Fallback(0, 1));
+    assertEquals(
+        new FailureFacts(true, false, Optional.of(FailureFacts.Unusable.MISSING), false, Optional.empty()),
+        FailureFacts.builder().notFound().unusable(FailureFacts.Unusable.MISSING).build());
   }
 }

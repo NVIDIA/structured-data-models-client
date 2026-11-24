@@ -20,10 +20,11 @@ import org.apache.arrow.vector.types.pojo.Schema;
  * model it reads, and the driver that runs the SQL the library writes for its database, as
  * Python's {@code _BuiltInSource}. Not part of the API.
  *
- * <p>Each operation's answers are its own: {@link #capabilities}, which every operation reads once
- * as it starts, opens a fresh SQL kit for the operation on the calling thread, and {@link #answer}
- * answers through it. The kit settles a namespace left to the connection once, and reads an
- * identical catalog read once, within that operation only.
+ * <p>Each operation's answers are its own: the core reaches a built-in source through {@link
+ * #operation}, a fresh SQL kit for that operation ({@link SourceRun#of}), which settles a
+ * namespace left to the connection once and reads an identical catalog read once, within that
+ * operation only. Asked directly, {@link #capabilities}, {@link #answer} and {@link #failure} each
+ * answer through a kit of their own.
  */
 abstract sealed class BuiltInSource implements Source
     permits DuckDbSource,
@@ -33,25 +34,17 @@ abstract sealed class BuiltInSource implements Source
         SnowflakeSource,
         DatabricksSparkSource {
 
-  /** The operation each thread is answering. */
-  private final ThreadLocal<KitRun> runs = new ThreadLocal<>();
-
   BuiltInSource() {}
 
-  /**
-   * What this source answers, as the library's SQL for its database declares it. Read as an
-   * operation starts, it starts the operation's answers: a namespace left to the connection is
-   * settled afresh, and the catalog read anew.
-   */
+  /** What this source answers, as the library's SQL for its database declares it. */
   @Override
   public final Capabilities capabilities() {
-    return open().capabilities();
+    return operation().capabilities();
   }
 
   /**
    * Answers {@code request} with the library's SQL for this database, run on the connection, in the
-   * contract's shape ({@code expected}, where the request fixes one), within the operation {@link
-   * #capabilities} started on this thread.
+   * contract's shape ({@code expected}, where the request fixes one).
    *
    * @throws StructuredDataException a request this database's SQL cannot answer, refused by name
    * @throws Exception the driver's failure, as it raised it
@@ -59,13 +52,21 @@ abstract sealed class BuiltInSource implements Source
   @Override
   public final ArrowReader answer(
       DataRequest request, Optional<Schema> expected, BufferAllocator allocator) throws Exception {
-    return current().answer(request, allocator);
+    return operation().answer(request, expected, allocator);
   }
 
   /** What the driver's failure tells the core: its codes, and what it means on this database. */
   @Override
   public final ProviderFailure failure(Exception failure) {
-    return current().failure(failure);
+    return operation().failure(failure);
+  }
+
+  /**
+   * One operation's answers: a fresh SQL kit over the connection, the source the core asks for that
+   * operation.
+   */
+  final KitRun operation() {
+    return new KitRun(sqlChoice(), driver());
   }
 
   /**
@@ -77,17 +78,4 @@ abstract sealed class BuiltInSource implements Source
 
   /** The provider running the kit's statements on the caller's connection or session. */
   abstract Host.Provider driver();
-
-  /** A fresh operation's answers on this thread. */
-  private KitRun open() {
-    KitRun run = new KitRun(sqlChoice(), driver());
-    runs.set(run);
-    return run;
-  }
-
-  /** The operation this thread is answering; a fresh one where none was started. */
-  private KitRun current() {
-    KitRun run = runs.get();
-    return run != null ? run : open();
-  }
 }

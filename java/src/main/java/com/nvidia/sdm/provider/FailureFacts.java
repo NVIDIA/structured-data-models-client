@@ -35,6 +35,57 @@ public record FailureFacts(
     return new FailureFacts(false, false, Optional.empty(), false, Optional.empty());
   }
 
+  /** A builder starting from no fact, as Python's {@code FailureFacts(...)} keywords do. */
+  public static Builder builder() {
+    return new Builder();
+  }
+
+  /** Builds the facts one at a time; each left out is not a fact. */
+  public static final class Builder {
+    private boolean notFound;
+    private boolean refusesExpression;
+    private Unusable unusable;
+    private boolean denied;
+    private Reason reason;
+
+    private Builder() {}
+
+    /** The table asked for does not exist under the name asked. */
+    public Builder notFound() {
+      notFound = true;
+      return this;
+    }
+
+    /** The source refused an expression it was asked to read. */
+    public Builder refusesExpression() {
+      refusesExpression = true;
+      return this;
+    }
+
+    /** Why a table that failed to be read cannot be used. */
+    public Builder unusable(Unusable value) {
+      unusable = Objects.requireNonNull(value, "unusable");
+      return this;
+    }
+
+    /** The source denied the caller access to what was asked. */
+    public Builder denied() {
+      denied = true;
+      return this;
+    }
+
+    /** What went wrong. */
+    public Builder reason(Reason value) {
+      reason = Objects.requireNonNull(value, "reason");
+      return this;
+    }
+
+    public FailureFacts build() {
+      return new FailureFacts(
+          notFound, refusesExpression, Optional.ofNullable(unusable), denied, Optional.ofNullable(reason));
+    }
+  }
+
   /** Why a table the source failed to read cannot be used. */
   public enum Unusable {
     /** It does not exist, or the caller may not see it. */
