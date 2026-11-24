@@ -12,7 +12,7 @@
 //! dialect, which the data layer answers, so the core never reads SQL and
 //! the data layer never sees the definition's YAML or the run. Expressions
 //! cross as opaque text. The types are the pure modules' own
-//! (`sdm-data`'s `view_expr` and `view_expr::metric`, at lane j's fix 2),
+//! (`sdm-sql`'s `view_expr` and `view_expr::metric`, at lane j's fix 2),
 //! taken as they are; each refusal is typed, and the core words it as the
 //! old client did.
 //!

@@ -298,4 +298,24 @@ public final class NativeCore {
 
   /** Releases an Arrow handle. */
   static native void releaseArrow(long arrow);
+
+  /** A built-in source's SQL kit for a provider choice (the contract's JSON); its handle. */
+  static native long sqlKit0(byte[] provider) throws NativeError;
+
+  /** What a kit's source answers, as the contract's JSON. */
+  static native byte[] sqlKitCapabilities0(long kit) throws NativeError;
+
+  /**
+   * A kit's answer to a request (the contract's JSON), its key sets the exported streams at {@code
+   * streams} by {@code ids}, each fetch run by {@code run}; a {@link NativeArrow}.
+   */
+  static native Object sqlKitAnswer0(
+      long kit, byte[] request, int[] ids, long[] streams, NativeSqlKit.Run run)
+      throws NativeError;
+
+  /** What a driver's failure means, for a provider error, as the contract's JSON. */
+  static native byte[] sqlKitFailure0(long kit, byte[] error) throws NativeError;
+
+  /** Releases a kit's handle. */
+  static native void releaseSqlKit(long kit);
 }

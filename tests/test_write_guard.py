@@ -1726,7 +1726,7 @@ def test_a_temporary_table_is_admitted_only_in_the_loaders_lakebase_setup() -> (
 
 
 #: The core's Postgres reads that bind a seed's time in the window column's
-#: own type (sdm-data's seed CTE): the table's row read once, the
+#: own type (sdm-sql's seed CTE): the table's row read once, the
 #: seed's value put in place of the column (``jsonb_populate_record``).
 _SEEDS = (
     'WITH "__sdm_seeds__" AS (\n'

@@ -14,5 +14,5 @@ SQL_PROVIDERS = ('duckdb', 'sqlite', 'postgres', 'databricks', 'snowflake')
 
 def test_builtin_sql_providers_keep_value_by_value_dates():
     for name in SQL_PROVIDERS:
-        source = (ROOT / f'rust/crates/sdm-data/src/{name}.rs').read_text()
+        source = (ROOT / f'rust/crates/sdm-sql/src/{name}.rs').read_text()
         assert 'text_times: Some(TextTimes::ValueByValue)' in source, name

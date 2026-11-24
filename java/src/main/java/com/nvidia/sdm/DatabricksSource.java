@@ -4,7 +4,11 @@
 
 package com.nvidia.sdm;
 
+import com.nvidia.sdm.internal.Host;
+import com.nvidia.sdm.internal.Providers;
+import com.nvidia.sdm.internal.jdbc.JdbcProvider;
 import java.sql.Connection;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -17,7 +21,7 @@ import java.util.Optional;
  *
  * <p>Authentication is the connection's: the caller opens it with a token of its own.
  */
-public final class DatabricksSource implements JdbcSource {
+public final class DatabricksSource extends BuiltInSource {
   private final Connection connection;
   private final String catalog;
   private final String schema;
@@ -50,7 +54,19 @@ public final class DatabricksSource implements JdbcSource {
     return new DatabricksSource(connection, catalog, schema);
   }
 
-  /** A metric view in this source's namespace, interpreted by the core. */
+  /**
+   * This source, reading the metric view {@code name} in its namespace, whose expressions calling
+   * functions other than pure built-ins are left out.
+   */
+  public DatabricksSource semanticModel(String name) {
+    return semanticModel(name, false);
+  }
+
+  /**
+   * This source, reading the metric view {@code name} in its namespace; {@code trustExpressions}
+   * keeps the expressions that call functions other than pure built-ins, which run as SQL under
+   * the connection's credentials.
+   */
   public DatabricksSource semanticModel(String name, boolean trustExpressions) {
     return new DatabricksSource(connection, catalog, schema,
         Objects.requireNonNull(name, "name"), trustExpressions);
@@ -66,7 +82,7 @@ public final class DatabricksSource implements JdbcSource {
     return trustExpressions;
   }
 
-  @Override
+  /** The caller-owned connection, kept open while reading source data. */
   public Connection connection() {
     return connection;
   }
@@ -79,6 +95,24 @@ public final class DatabricksSource implements JdbcSource {
   /** The schema the tables are read in, when one was given. */
   public Optional<String> schema() {
     return Optional.ofNullable(schema);
+  }
+
+  @Override
+  Map<String, Object> sqlChoice() {
+    return withMicroseconds(
+        Providers.sqlChoice("databricks", semanticModel, trustExpressions, catalog, schema));
+  }
+
+  // Native getters can reinterpret timestamps through session or JVM zones. The core selects the
+  // source meaning and a lossless integer projection.
+  private static Map<String, Object> withMicroseconds(Map<String, Object> choice) {
+    choice.put("timestamp_encoding", "microseconds");
+    return choice;
+  }
+
+  @Override
+  Host.Provider driver() {
+    return new JdbcProvider(connection, JdbcProvider.Driver.DATABRICKS);
   }
 
   @Override

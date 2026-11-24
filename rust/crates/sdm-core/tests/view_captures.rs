@@ -304,7 +304,67 @@ fn refusal(sqlstate: &str) -> FetchResult {
         sqlstate: Some(sqlstate.to_owned()),
         vendor_code: None,
         error_class: None,
+        facts: None,
     })
+}
+
+fn spaces() -> &'static sdm_sql::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    &SPACES
+}
+
+/// A Databricks metric view's source, as the host names it to its SQL
+/// kit, and as the kit declares it to the core.
+fn databricks_view(case: &Json, trust: bool) -> (ProviderChoice, sdm_sql::kit::SqlKit) {
+    let source: sdm_sql::plan::SqlChoice = serde_json::from_value(json!({
+        "provider": "sql", "dialect": "databricks",
+        "view": {"name": view_name(case), "trust_expressions": trust},
+    }))
+    .unwrap();
+    let kit = sdm_sql::kit::SqlKit::new(source, Some(spaces())).unwrap();
+    (ProviderChoice::new(kit.capabilities().unwrap()), kit)
+}
+
+/// `asked` answered as a host answers a built-in source's request: through
+/// `kit`, each warehouse fetch it runs answered by `rows`, the fetch's
+/// request given.
+fn through_kit(
+    kit: &sdm_sql::kit::SqlKit,
+    run: &mut sdm_core::Run,
+    asked: &sdm_contract::run::FetchStep,
+    rows: &dyn Fn(&DataRequest) -> FetchResult,
+) -> FetchResult {
+    let mut keys = BTreeMap::new();
+    for id in &asked.plan.key_sets {
+        if let Some(Attachment::Arrow(made)) = run.take_attachment(*id) {
+            keys.insert(
+                *id,
+                sdm_contract::data::KeyData {
+                    schema: made.schema,
+                    batches: made.batches,
+                },
+            );
+        }
+    }
+    let answered = kit.answer(
+        &asked.request,
+        &keys,
+        |x| x.to_string(),
+        &mut |fetch| match rows(fetch.request) {
+            FetchResult::Data(data) => Ok(sdm_sql::kit::Answered {
+                schema: data.schema,
+                batches: data.batches,
+            }),
+            FetchResult::Error(error) => Err(error),
+            other => panic!("a warehouse answered {other:?}"),
+        },
+    );
+    match answered {
+        Ok(answered) => FetchResult::Data(ArrowData::new(answered.schema, answered.batches)),
+        Err(sdm_sql::kit::KitError::Provider(error)) => FetchResult::Error(error),
+        Err(sdm_sql::kit::KitError::Refused(error)) => FetchResult::Refused(error),
+    }
 }
 
 /// Build protocol attachments from the contract types, as the hosts do.
@@ -333,14 +393,8 @@ fn describe_spec(
     let trust = case["input"]["view"]["trust_expressions"]
         .as_bool()
         .unwrap_or(false);
-    let provider: ProviderChoice = serde_json::from_value(json!({
-        "provider": "sql", "dialect": "databricks",
-        "view": {"name": view_name(case), "trust_expressions": trust},
-    }))
-    .unwrap();
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::reading_views(
-        sdm_core::pql::spaces(),
-    )));
+    let (provider, kit) = databricks_view(case, trust);
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Databases::new(spaces())));
     let mut run = start(
         &root,
         StartRun {
@@ -390,15 +444,16 @@ fn describe_spec(
             } => {
                 for asked in asked_now {
                     requests.push(asked.request.clone());
-                    if let Some(answer) = edits.answer.as_ref().and_then(|f| f(&asked.request)) {
-                        run.submit_fetch(asked.id, answer).unwrap();
-                        continue;
-                    }
-                    let answer = FetchResult::Data(ordinary_rows(
-                        &asked.request,
-                        edits,
-                        case["case"] == "view.metric.wildcards-nested-join",
-                    ));
+                    let answer = through_kit(&kit, &mut run, &asked, &|request| {
+                        if let Some(answer) = edits.answer.as_ref().and_then(|f| f(request)) {
+                            return answer;
+                        }
+                        FetchResult::Data(ordinary_rows(
+                            request,
+                            edits,
+                            case["case"] == "view.metric.wildcards-nested-join",
+                        ))
+                    });
                     run.submit_fetch(asked.id, answer).unwrap();
                 }
             }
@@ -1044,11 +1099,7 @@ fn materialize_query(
 ) -> Located {
     use sdm_contract::data::AttachmentId;
     use sdm_contract::ops::Materialize;
-    let provider: ProviderChoice = serde_json::from_value(json!({
-        "provider": "sql", "dialect": "databricks",
-        "view": {"name": view_name(case), "trust_expressions": false},
-    }))
-    .unwrap();
+    let (provider, kit) = databricks_view(case, false);
     let indices = RecordBatch::try_new(
         Arc::new(arrow_schema::Schema::new(vec![arrow_schema::Field::new(
             "indices",
@@ -1058,9 +1109,7 @@ fn materialize_query(
         vec![Arc::new(arrow_array::Int64Array::from(vec![0, 1])) as arrow_array::ArrayRef],
     )
     .unwrap();
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::reading_views(
-        sdm_core::pql::spaces(),
-    )));
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Databases::new(spaces())));
     let mut run = start(
         &root,
         StartRun {
@@ -1115,19 +1164,17 @@ fn materialize_query(
             if asked.purpose.is_none() {
                 return Located::Past(Box::new(asked.request));
             }
-            if let Some(answer) = edits.answer.as_ref().and_then(|f| f(&asked.request)) {
-                run.submit_fetch(asked.id, answer).unwrap();
-                continue;
-            }
-            run.submit_fetch(
-                asked.id,
+            let answer = through_kit(&kit, &mut run, &asked, &|request| {
+                if let Some(answer) = edits.answer.as_ref().and_then(|f| f(request)) {
+                    return answer;
+                }
                 FetchResult::Data(ordinary_rows(
-                    &asked.request,
+                    request,
                     edits,
                     case["case"] == "view.metric.wildcards-nested-join",
-                )),
-            )
-            .unwrap();
+                ))
+            });
+            run.submit_fetch(asked.id, answer).unwrap();
         }
     }
 }

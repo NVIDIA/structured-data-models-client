@@ -590,7 +590,9 @@ public final class ContractRunner {
       keys.forEach(
           (table, key) -> {
             if (key == null) {
-              options.noPrimaryKey((String) table);
+              // Java has no "no key" declaration, as Python's primary_keys has none; a table with
+              // no key is described without one. An empty key is refused as Python's None is.
+              options.primaryKey((String) table);
             } else if (key instanceof String one) {
               options.primaryKey((String) table, one);
             } else {

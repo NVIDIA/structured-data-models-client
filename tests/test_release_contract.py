@@ -127,18 +127,6 @@ HANDED_OUT_THOUGH_NOT_EXPORTED = frozenset(
         # sampling has one interface to run through. The connector's typing
         # check pins that type, so changing it is a change to sources.
         'sdm_connectors.backends.spark.SparkConnection',
-        # What each `Source` overload says its connection must look like. They
-        # are protocols, matched by shape: a caller passes a live connection
-        # and never names, imports or builds one of these. Exporting seven
-        # names to describe an argument nobody writes would be a larger
-        # promise than the one it closes.
-        'sdm_connectors._types.DatabricksLike',
-        'sdm_connectors._types.DuckDBLike',
-        'sdm_connectors._types.PostgresLike',
-        'sdm_connectors._types.SQLiteLike',
-        'sdm_connectors._types.SnowflakeLike',
-        'sdm_connectors._types.SnowparkLike',
-        'sdm_connectors._types.SparkLike',
     }
 )
 
@@ -598,6 +586,18 @@ class _InternalTypes:
 
 class TestPublicSurface:
     """What a caller can name, and what the endpoint receives."""
+
+    def test_a_union_is_one_kind_on_every_python(self):
+        spec = importlib.util.spec_from_file_location(
+            'snapshot_kinds', REPO / 'scripts/snapshot_public_api.py'
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module._kind(int | str) == 'Union'
+        # The older spellings, which are unions too.
+        assert module._kind(typing.Union[int, str]) == 'Union'  # noqa: UP007
+        assert module._kind(typing.Optional[int]) == 'Union'  # noqa: UP045
+        assert module._kind(3) == 'int'
 
     def test_forward_annotations_remain_distinct_from_defaults_and_types(self):
         spec = importlib.util.spec_from_file_location(

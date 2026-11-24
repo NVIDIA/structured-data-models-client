@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! The words of a view's conversion: the old client's sentences, as
-//! it wrote them, from the typed facts `sdm-schema` and `sdm-data` answer
+//! it wrote them, from the typed facts `sdm-schema` and `sdm-sql` answer
 //! with. A value or a piece of an expression is quoted as the old client
 //! quoted it, Python's `repr` or `str`, through the parser's text helpers
 //! ([`crate::pql`], the one module that names the parser), so no other crate
@@ -16,11 +16,10 @@
 
 use sdm_contract::ops::Dtype;
 use sdm_contract::view::ViewKind;
-use sdm_contract::{CoreWarning, Detail, Sentence};
-use sdm_data::view_expr::ExprRefusal;
-use sdm_data::view_expr::metric::{
-    DefaultRefusal, FilterRefusal, MeasureReason, MeasureRefusal, Parameter, Unread,
+use sdm_contract::view::{
+    DefaultRefusal, ExprRefusal, FilterRefusal, MeasureReason, MeasureRefusal, Parameter, Unread,
 };
+use sdm_contract::{CoreWarning, Detail, Sentence};
 use sdm_schema::view::joins::{JoinMessage, SkipReason};
 use sdm_schema::view::model::{
     Edge, EdgeReason, JoinNote, JoinRefusal, KeyReason, LinkFailure, MeasureNote,
@@ -585,7 +584,11 @@ pub fn ignored_text(ignored: Ignored) -> String {
         Ignored::Materialization => {
             "Ignored the 'materialization' section since it cannot be represented in a graph".into()
         }
-        Ignored::Fields => sdm_data::view_expr::metric::FIELDS_IGNORED.into(),
+        // The source's own name is the wording table's to give
+        // (`ViewFieldsIgnored`, from the warning's `database`).
+        Ignored::Fields => {
+            "Ignored the 'fields' section since the view also has 'dimensions', which the source reads instead".into()
+        }
     }
 }
 

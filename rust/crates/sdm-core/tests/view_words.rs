@@ -6,21 +6,21 @@
 //! expectations for expressions, YAML values and parameter conversions.
 
 use sdm_contract::CoreError;
-use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{ViewKind, ViewTextAnswer, ViewTextAsk};
-use sdm_core::pql::{spaces, yaml_rules};
+use sdm_core::pql::yaml_rules;
 use sdm_core::{view_steps, view_words};
-use sdm_data::Data;
-use sdm_data::view_expr::metric::{self as data, DefaultRefusal, FilterRefusal};
-use sdm_data::view_expr::{self, ExprDialect};
 use sdm_schema::view::metric;
 use sdm_schema::view::model::{self, Edge, MeasureNote, TimeColumnNote};
 use sdm_schema::view::yaml;
+use sdm_sql::Sql;
+use sdm_sql::plan::SqlChoice;
+use sdm_sql::view_expr::metric::{self as data, DefaultRefusal, FilterRefusal};
+use sdm_sql::view_expr::{self, ExprDialect};
 
 /// The data layer's answers in Databricks's dialect, as the routine asks
-/// them (`DataLayer::view_text`).
+/// them (`Sql::view_text`).
 fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-    Data::reading_views(spaces()).view_text(&ProviderChoice::sql("databricks"), question)
+    Sql::reading_views(spaces()).view_text(&SqlChoice::new("databricks"), question)
 }
 
 /// The dialect's own words for a refusal's reason, as the routine asks.
@@ -551,4 +551,11 @@ fn described_parameter_type_overrides_yaml_and_last_duplicate_wins_in_place() {
         ),
         "Failed to add join 'users', and with it the join 'addresses' nested in it and the dimensions 'city' and 'country', since missing key"
     );
+}
+
+/// The core's white space as the data layer reads a view's text by.
+fn spaces() -> &'static sdm_sql::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    &SPACES
 }

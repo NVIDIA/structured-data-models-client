@@ -7,8 +7,6 @@
 //! only a relation's name never answers for a filter or columns it would
 //! drop.
 
-use std::sync::Arc;
-
 use sdm_contract::data::{DERIVED_RULE, DataRequest, ProviderChoice};
 use sdm_contract::{Detail, ErrorCode};
 use sdm_core::CompositionRoot;
@@ -34,7 +32,7 @@ fn scan(table: serde_json::Value) -> DataRequest {
 }
 
 fn root() -> CompositionRoot {
-    CompositionRoot::new(Arc::new(sdm_data::Data::new()))
+    CompositionRoot::default()
 }
 
 #[test]

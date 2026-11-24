@@ -11,14 +11,16 @@ import java.util.*;
 
 /** Shared shop data with explicit extra user columns or uppercase identifiers. */
 final class ShopFixtures {
+  private static final Set<Object> BASES = Set.of("shop.json", "context.json");
+
   private ShopFixtures() {}
 
   static Map<String, Object> load(Path path) throws Exception {
     var variant = read(path);
     if (!variant.containsKey("base")) return variant;
-    if (!"shop.json".equals(variant.get("base")))
-      throw new IllegalArgumentException("shop variants must use shop.json");
-    var fixture = new LinkedHashMap<>(read(path.resolveSibling("shop.json")));
+    if (!BASES.contains(variant.get("base")))
+      throw new IllegalArgumentException("shop variants must use shop.json or context.json");
+    var fixture = new LinkedHashMap<>(read(path.resolveSibling((String) variant.get("base"))));
     var tables = new LinkedHashMap<String, Object>();
     for (var entry : map(fixture.get("tables")).entrySet()) {
       var table = new LinkedHashMap<>(map(entry.getValue()));

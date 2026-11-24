@@ -414,6 +414,8 @@ public final class ParityRunner {
         request =
             PredictiveQuery.parse(text(scenario.get("pql"))).materialize(schema, options.build());
         semantic.put("request", requestEvidence(request, allocator));
+        if (scenario.containsKey("context"))
+          semantic.put("context", contextEvidence(request, map(scenario.get("context"))));
       }
       lifecycle.add("materialize");
       if ("restore-predict".equals(scenario.get("journey"))) {
@@ -550,6 +552,36 @@ public final class ParityRunner {
         rows = Math.addExact(rows, reader.getVectorSchemaRoot().getRowCount());
       return rows;
     }
+  }
+
+  /**
+   * How the context was drawn, held to what the scenario expects. {@code kept} counts the examples
+   * meeting the query in each part's draws: a source that dropped one the query keeps would count
+   * fewer.
+   */
+  static List<Map<String, Object>> contextEvidence(Request request, Map<String, Object> expected) {
+    var report = request.contextReport();
+    var parts = new ArrayList<Map<String, Object>>();
+    for (var part : report.parts()) {
+      var row = new LinkedHashMap<String, Object>();
+      row.put("kept", part.kept());
+      row.put("asked", part.asked());
+      row.put("stopped", part.stopped());
+      row.put("filtered_at_source", part.filteredAtSource());
+      parts.add(row);
+    }
+    var wanted = new ArrayList<Map<String, Object>>();
+    for (Object kept : list(expected.get("kept"))) {
+      var row = new LinkedHashMap<String, Object>();
+      row.put("kept", ((Number) kept).longValue());
+      row.put("asked", ((Number) expected.get("asked")).longValue());
+      row.put("stopped", expected.get("stopped"));
+      row.put("filtered_at_source", expected.get("filtered_at_source"));
+      wanted.add(row);
+    }
+    if (!"available".equals(report.status()) || !parts.equals(wanted))
+      throw new AssertionError("context draw differs from the expected");
+    return parts;
   }
 
   static LocalDateTime fixtureTime(Object value) {
@@ -1138,7 +1170,50 @@ public final class ParityRunner {
                       Boolean.TRUE.equals(settings.get("trust_expressions")));
       }
       for (var name : names.entrySet())
-        tables.put(name.getKey(), Readers.readTable(source, name.getValue(), allocator));
+        tables.put(name.getKey(), readTable(source, name.getValue(), allocator));
+    }
+
+    /**
+     * The table {@code name} of {@code source}, read through its connection or session: an
+     * unqualified name in the source's namespace, as the case gives it.
+     */
+    private static Table readTable(Source source, String name, RootAllocator allocator)
+        throws Exception {
+      List<String> parts = new ArrayList<>();
+      if (source instanceof DatabricksSparkSource spark) {
+        spark.catalog().ifPresent(parts::add);
+        spark.schema().ifPresent(parts::add);
+        parts.add(name);
+        String qualified = name.contains(".") ? name : String.join(".", parts);
+        String quoted =
+            java.util.Arrays.stream(qualified.split("\\.", -1))
+                .map(part -> "`" + part.replace("`", "``") + "`")
+                .collect(java.util.stream.Collectors.joining("."));
+        return com.nvidia.sdm.internal.ReadTables.collect(
+            new com.nvidia.sdm.internal.jdbc.SparkProvider(spark.session())
+                .readQuery("SELECT * FROM " + quoted, allocator),
+            allocator);
+      }
+      Connection connection;
+      if (source instanceof DatabricksSource databricks) {
+        databricks.catalog().ifPresent(parts::add);
+        databricks.schema().ifPresent(parts::add);
+        connection = databricks.connection();
+      } else if (source instanceof SnowflakeSource snowflake) {
+        snowflake.database().ifPresent(parts::add);
+        snowflake.schema().ifPresent(parts::add);
+        connection = snowflake.connection();
+      } else if (source instanceof PostgresSource postgres) {
+        postgres.schema().ifPresent(parts::add);
+        connection = postgres.connection();
+      } else if (source instanceof DuckDbSource duckdb) {
+        connection = duckdb.connection();
+      } else {
+        connection = ((SqliteSource) source).connection();
+      }
+      parts.add(name);
+      return Readers.readTable(
+          connection, name.contains(".") ? name : String.join(".", parts), allocator);
     }
 
     void restoreFixtureTypes(RootAllocator allocator, Map<String, Object> fixture) {

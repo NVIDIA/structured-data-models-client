@@ -11,8 +11,7 @@ use std::collections::BTreeSet;
 use corpus::messages;
 use sdm_contract::ControlMessage;
 use sdm_contract::data::{
-    Determinism, Dialect, IndexAdvice, NullOrder, OptionalRequest, ProviderCapabilities,
-    ProviderChoice,
+    Determinism, IndexAdvice, NullOrder, OptionalRequest, ProviderCapabilities, ProviderChoice,
 };
 
 #[test]
@@ -26,76 +25,57 @@ fn every_message_round_trips() {
 
 #[test]
 fn provider_choices_round_trip() {
-    for choice in [
-        ProviderChoice::Sql {
-            timestamp_encoding: None,
-            dialect: Dialect::new("duckdb"),
+    let choice = ProviderChoice {
+        capabilities: ProviderCapabilities {
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            keys_optional: false,
+            key_enforcement: false,
+            sample_rows: false,
+            optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
+            filters: Default::default(),
+            max_keys_per_request: Some(10_000),
+            max_seed: u64::MAX,
+            text_times: None,
+            null_order: Some(NullOrder::First),
+            index_advice: Some(IndexAdvice::SingleColumn),
+            sampling: Determinism::SeededStable,
+            fallback_text_order: None,
+            fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
             namespace: Vec::new(),
+            tries_upper_case_names: false,
+            namespace_first: false,
             view: None,
         },
-        ProviderChoice::Host {
-            capabilities: ProviderCapabilities {
-                opaque_vendor: None,
-                compares_stored_times: false,
-                samples_by_key_dtype: false,
-                reads_nan_as_missing: false,
-                derived_relations: false,
-                neighbor_lookback: false,
-                keys_optional: false,
-                key_enforcement: false,
-                sample_rows: false,
-                optional: BTreeSet::from([OptionalRequest::Preview, OptionalRequest::CountRows]),
-                max_keys_per_request: Some(10_000),
-                max_seed: u64::MAX,
-                text_times: None,
-                null_order: Some(NullOrder::First),
-                index_advice: Some(IndexAdvice::SingleColumn),
-                sampling: Determinism::SeededStable,
-                fallback_text_order: None,
-                fallback: None,
-            },
-        },
-    ] {
-        let text = serde_json::to_string(&choice).unwrap();
-        assert_eq!(
-            serde_json::from_str::<ProviderChoice>(&text).unwrap(),
-            choice
-        );
-    }
+    };
+    let text = serde_json::to_string(&choice).unwrap();
+    assert_eq!(
+        serde_json::from_str::<ProviderChoice>(&text).unwrap(),
+        choice
+    );
 }
 
-/// A SQL provider's namespace (contract v28): left out, it reads as none
-/// and is written back left out, so a v27 choice reads as it did; each
-/// part a name or `null`, the source's current one (a Databricks source
-/// given its catalog and not its schema); anything else refused.
+/// A provider is named by what it declares, tagged `host`: a built-in
+/// source's SQL is its kit's, and the core takes no SQL source.
 #[test]
-fn a_provider_namespace_takes_names_and_null_parts() {
-    for (text, namespace) in [
-        (r#"{"provider":"sql","dialect":"postgres"}"#, vec![]),
-        (
-            r#"{"provider":"sql","dialect":"postgres","namespace":["sales"]}"#,
-            vec![Some("sales".to_owned())],
-        ),
-        (
-            r#"{"provider":"sql","dialect":"databricks","namespace":["main",null]}"#,
-            vec![Some("main".to_owned()), None],
-        ),
-    ] {
-        let read: ProviderChoice = serde_json::from_str(text).unwrap();
-        let ProviderChoice::Sql {
-            namespace: held, ..
-        } = &read
-        else {
-            panic!("not a SQL provider: {text}");
-        };
-        assert_eq!(held, &namespace, "{text}");
-        let written: serde_json::Value = serde_json::to_value(&read).unwrap();
-        let given: serde_json::Value = serde_json::from_str(text).unwrap();
-        assert_eq!(written, given, "{text}");
-    }
+fn a_provider_is_its_declared_capabilities() {
+    let declared = r#"{"provider":"host","capabilities":{"optional":[],"max_keys_per_request":null,
+        "sampling":"seeded_stable","max_seed":1}}"#;
+    let read: ProviderChoice = serde_json::from_str(declared).unwrap();
+    assert_eq!(read.capabilities.max_seed, 1);
+    let written = serde_json::to_value(&read).unwrap();
+    assert_eq!(written["provider"], "host");
     for refused in [
-        r#"{"provider":"sql","dialect":"postgres","namespace":"sales"}"#,
-        r#"{"provider":"sql","dialect":"postgres","namespace":[1]}"#,
+        r#"{"provider":"sql","dialect":"postgres"}"#,
+        r#"{"capabilities":{"optional":[],"max_keys_per_request":null,
+            "sampling":"seeded_stable","max_seed":1}}"#,
         r#"{"provider":"host","capabilities":{"optional":[],"max_keys_per_request":null,
             "sampling":"seeded_stable","max_seed":1,"text_times":null},"namespace":["sales"]}"#,
     ] {
@@ -153,9 +133,7 @@ fn the_sampling_policies_are_spelled_and_default_to_none() {
             "null_order":"first","index_advice":"single_column"}}"#,
     )
     .unwrap();
-    let ProviderChoice::Host { capabilities } = declared else {
-        panic!("not a host provider");
-    };
+    let capabilities = declared.capabilities;
     assert_eq!(capabilities.null_order, Some(NullOrder::First));
     assert_eq!(capabilities.index_advice, Some(IndexAdvice::SingleColumn));
     let silent: ProviderChoice = serde_json::from_str(
@@ -163,9 +141,7 @@ fn the_sampling_policies_are_spelled_and_default_to_none() {
             "sampling":"seeded_stable","max_seed":2147483647}}"#,
     )
     .unwrap();
-    let ProviderChoice::Host { capabilities } = silent else {
-        panic!("not a host provider");
-    };
+    let capabilities = silent.capabilities;
     assert_eq!(capabilities.null_order, None);
     assert_eq!(capabilities.index_advice, None);
     for wrong in [
@@ -369,6 +345,7 @@ fn a_provider_error_keeps_its_retryability_and_codes_in_the_core_error() {
             retryable,
             sqlstate: Some("40001".into()),
             vendor_code: Some("1213".into()),
+            facts: None,
         });
         assert_eq!(error.code, ErrorCode::ProviderError);
         assert_eq!(error.kind, ErrorKind::DataSource);

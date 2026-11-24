@@ -245,7 +245,7 @@ fn predict_run() -> Run {
         ),
     ]);
     start(
-        &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+        &CompositionRoot::default(),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

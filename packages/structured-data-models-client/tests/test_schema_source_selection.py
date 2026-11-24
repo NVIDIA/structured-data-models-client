@@ -13,7 +13,6 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from sdm_connectors import PostgresSource
 from test_schema_copy_provenance import (
     ANCHOR,
     QUERY,
@@ -24,6 +23,7 @@ from test_schema_copy_provenance import (
 
 from sdm_client import (
     Column,
+    PostgresSource,
     PredictiveQuery,
     Relationship,
     Schema,

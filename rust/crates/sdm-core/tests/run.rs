@@ -35,14 +35,14 @@ fn describe(table: &str) -> DataRequest {
     }
 }
 
-/// A run whose data requests a host provider answers, through `sdm-data`'s
+/// A run whose data requests a host provider answers, through `sdm-sql`'s
 /// data layer.
 fn data_run<F>(make: impl FnOnce(Asker) -> F) -> Run
 where
     F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
 {
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
-    let host = ProviderChoice::Host {
+    let root = CompositionRoot::default();
+    let host = ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,
@@ -54,6 +54,7 @@ where
             key_enforcement: false,
             sample_rows: false,
             optional: BTreeSet::new(),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,
@@ -62,6 +63,13 @@ where
             sampling: Determinism::Unseeded,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         },
     };
     Run::with_data(root.data_access(&host).unwrap(), make)
@@ -86,6 +94,7 @@ fn failed() -> FetchResult {
         retryable: false,
         sqlstate: Some("42P01".into()),
         vendor_code: None,
+        facts: None,
     })
 }
 

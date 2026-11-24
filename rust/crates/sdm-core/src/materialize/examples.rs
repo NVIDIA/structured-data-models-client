@@ -480,6 +480,8 @@ async fn run(
             ranking: None,
         },
         query: None,
+        // The caller's own examples: nothing was drawn.
+        context: Vec::new(),
         examples: Some(sdm_contract::examples::ExampleFacts {
             entity_table: entity.name.clone(),
             kind: call.task.kind,

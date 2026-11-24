@@ -9,8 +9,9 @@
 //! rows `scan`s read, instead of refused (`DataAccess::route`). The answer
 //! has the shape the request's pushdown gives, so the body that asked reads
 //! it as it reads the provider's: the requested columns with the fields the
-//! scan's admission gave them, and the contract's fixed columns
-//! (`DataRequest::expected`) for `key_counts` and `time_bounds`.
+//! scan's admission gave them, the contract's fixed columns
+//! (`DataRequest::expected`) for `key_counts`, and microsecond timestamps
+//! (`microsecond_time_bounds`) for `time_bounds`.
 //!
 //! Limits fail loudly by name, never by reading on or cutting short: each
 //! scan asks for one row past what is left of `max_rows`, so no scan moves
@@ -351,7 +352,10 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                 Arc::new(Int64Array::from(d)),
                 Arc::new(Int64Array::from(z)),
             ];
-            held.finish(Out::fixed(request, columns)?)
+            let ExpectedSchema::Schema { fields, .. } = request.expected() else {
+                return Err(internal("the key counts expect no fixed columns").into());
+            };
+            held.finish(Out::fixed(&fields, columns))
         }
         DataRequest::TimeBounds { columns } => {
             let (mut positions, mut lows, mut highs) = (vec![], vec![], vec![]);
@@ -370,7 +374,8 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                 Arc::new(TimestampMicrosecondArray::from(lows)),
                 Arc::new(TimestampMicrosecondArray::from(highs)),
             ];
-            held.finish(Out::fixed(request, columns)?)
+            let fields = sdm_contract::data::microsecond_time_bounds();
+            held.finish(Out::fixed(&fields, columns))
         }
         DataRequest::SampleEntities {
             table,
@@ -396,9 +401,23 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
                     refused(request, "seed", "a sample's seed is a non-negative integer")
                 })?;
             let projected = unique(columns);
-            let scanned = held
-                .scan(table, projected.clone(), filters.clone(), None)
-                .await?;
+            // The value filters the provider applies go with the scan; the
+            // rest are applied here, before the draw, so the sample is of
+            // the rows that may meet them all.
+            let declared = &held.asker.capabilities()?.filters;
+            let (sent, kept): (Vec<Filter>, Vec<Filter>) =
+                filters.iter().cloned().partition(|f| f.taken_by(declared));
+            let mut read = projected.clone();
+            for filter in &kept {
+                read.extend(filter.columns().into_iter().map(str::to_owned));
+            }
+            let mut scanned = held.scan(table, unique(&read), sent, None).await?;
+            if !kept.is_empty() {
+                let mask = crate::value_filter::may_hold(&scanned.batch, &kept)?;
+                scanned.batch =
+                    arrow_select::filter::filter_record_batch(&scanned.batch, &mask.into())
+                        .map_err(|_| internal("the fallback's value filters do not apply"))?;
+            }
             // A defined ordering of the same data: every projected column,
             // by the row format's order, so equal rows are equal in all.
             let rows = ordered_rows(request, "columns", &scanned.columns(&projected)?)?;
@@ -504,12 +523,7 @@ async fn answered(held: &mut Held<'_>, seeds: Option<ArrowData>) -> Result<Arrow
             // first: a scan names some.
             let mut columns: Vec<String> = vec![];
             for filter in filters {
-                match filter {
-                    Filter::KeyIn { columns: named, .. } => columns.extend(named.iter().cloned()),
-                    Filter::TimeRange { column, .. } | Filter::NotNull { column } => {
-                        columns.push(column.clone())
-                    }
-                }
+                columns.extend(filter.columns().into_iter().map(str::to_owned));
             }
             if columns.is_empty() {
                 columns.push(first_column(held, table).await?);
@@ -917,18 +931,14 @@ impl Out {
         Ok(())
     }
 
-    /// The contract's fixed columns of `request`'s answer, holding
-    /// `columns`.
-    fn fixed(request: &DataRequest, columns: Vec<ArrayRef>) -> Result<Out, CoreError> {
-        let ExpectedSchema::Schema { fields } = request.expected() else {
-            return Err(internal("a request of fixed columns expects none"));
-        };
+    /// An answer of the fixed columns `fields`, holding `columns`.
+    fn fixed(fields: &[sdm_contract::types::Field], columns: Vec<ArrayRef>) -> Out {
         let fields: Vec<Field> = fields.iter().map(|f| f.to_arrow()).collect();
-        Ok(Out {
+        Out {
             received: fields.clone(),
             fields,
             columns,
-        })
+        }
     }
 
     fn finish(self) -> Result<ArrowData, CoreError> {

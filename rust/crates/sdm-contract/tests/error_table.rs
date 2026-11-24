@@ -115,6 +115,7 @@ fn provider_and_transport_errors_outside_the_table_are_internal() {
             retryable: true,
             sqlstate: Some("42P01".into()),
             vendor_code: None,
+            facts: None,
         });
         assert!(
             !serde_json::to_string(&provided)

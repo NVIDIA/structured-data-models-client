@@ -21,10 +21,9 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
-from sdm_connectors import DatabricksSource, Source
 from sdm_connectors.backends.spark import SparkConnection
 
-from sdm_client._rust import providers
+from sdm_client import DatabricksSource, Source
 from sdm_client._rust.providers.databricks import (
     DatabricksProvider,
     DatabricksSparkProvider,
@@ -350,13 +349,13 @@ def _sources() -> dict[str, Any]:
 
 def test_the_client_tells_the_databricks_connections_apart() -> None:
     sources = _sources()
-    assert {name: s.backend for name, s in sources.items()} == dict.fromkeys(
-        sources, 'databricks'
+    assert {name: type(s) for name, s in sources.items()} == dict.fromkeys(
+        sources, DatabricksSource
     )
-    assert {name: source.kind for name, source in sources.items()} == {
-        'warehouse': 'databricks-sql',
-        'spark': 'databricks-spark',
-        'metric-view': 'databricks-metric-view',
+    assert {name: source._driver for name, source in sources.items()} == {
+        'warehouse': 'DatabricksSqlProvider',
+        'spark': 'DatabricksSparkProvider',
+        'metric-view': 'DatabricksSqlProvider',
     }
     assert isinstance(sources['spark'], Source)
 
@@ -376,14 +375,19 @@ def test_the_provider_choice_names_the_dialect_and_the_namespace(
     name: str, choice: list[Any], made: type
 ) -> None:
     source = _sources()[name]
-    chosen, provider = providers.for_source(source)
-    assert chosen == {
+    assert source._sql_choice() == {
         'provider': 'sql',
         'dialect': 'databricks',
         'namespace': choice,
     }
-    assert type(provider) is made
-    assert provider._connection is source.connection
+    from sdm_client._rust import host_providers
+
+    chosen, provider = host_providers.chosen(source)
+    assert chosen['provider'] == 'host'
+    # The operation the choice started answers on the source's driver.
+    driver = provider._source._driver
+    assert type(driver) is made
+    assert driver._connection is source.connection
 
 
 def _error(module: str, name: str, **attributes: Any) -> type[Exception]:

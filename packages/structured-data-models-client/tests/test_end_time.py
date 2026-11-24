@@ -49,7 +49,8 @@ def accounts(request):
         return
     import duckdb
     from adbc_driver_sqlite import dbapi as sqlite
-    from sdm_connectors import DuckDBSource, SQLiteSource
+
+    from sdm_client import DuckDBSource, SQLiteSource
 
     connection = (
         duckdb.connect() if request.param == 'duckdb' else sqlite.connect()

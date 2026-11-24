@@ -62,7 +62,14 @@ public final class SdmClient implements AutoCloseable {
   public static SdmClient connect(String url, ClientOptions options) {
     Objects.requireNonNull(options, "options");
     return new SdmClient(
-        new HttpTransport(url, options.apiKey(), options.timeout(), options.maxRetries()), null);
+        new HttpTransport(
+            url,
+            options.apiKey(),
+            options.timeout(),
+            options.maxRetries(),
+            options.exactUrl(),
+            options.bearerToken()),
+        null);
   }
 
   /**
@@ -168,7 +175,7 @@ public final class SdmClient implements AutoCloseable {
     }
     Map<String, Object> operation = new LinkedHashMap<>();
     operation.put("op", "predict");
-    operation.put("supports_sessions", serving == null);
+    operation.put("supports_sessions", servesSessions());
     operation.put("state", request.materialized().predictionState(SdmClient::requestId));
     operation.put("model", model); operation.put("request_id", requestId());
     operation.put("outputs", outputs == null ? List.of() : List.copyOf(outputs));
@@ -195,6 +202,11 @@ public final class SdmClient implements AutoCloseable {
     if (closed) throw new StructuredDataException("this client was closed", "INVALID_CONFIGURATION", Map.of(), null);
   }
 
+  /** Whether the endpoint can pin a context: not a serving endpoint, nor an exact predictions URL. */
+  private boolean servesSessions() {
+    return serving == null && transport.servesSessions();
+  }
+
   Host.Model tabularTransport() {
     return new Host.Model() {
       public byte[] call(byte[] body) throws Host.TransportFailed, Host.Refused, Host.EndpointFailed {
@@ -203,7 +215,7 @@ public final class SdmClient implements AutoCloseable {
       public byte[] call(Object endpoint, byte[] body) throws Host.TransportFailed, Host.Refused, Host.EndpointFailed {
         requireOpen();
         if ("predict".equals(endpoint)) return call(body);
-        if (serving != null) throw new StructuredDataException("this transport does not support sessions",
+        if (!servesSessions()) throw new StructuredDataException("this transport does not support sessions",
             "SESSIONS_UNSUPPORTED", Map.of(), null);
         try { return transport.call(endpoint, body); }
         catch (HttpTransport.Failed e) { throw new Host.TransportFailed(); }
@@ -232,15 +244,13 @@ public final class SdmClient implements AutoCloseable {
     Objects.requireNonNull(request, "request");
     Objects.requireNonNull(model, "model");
     Objects.requireNonNull(holdout, "holdout");
+    if (!servesSessions()) throw new StructuredDataException("this transport does not support sessions",
+        "SESSIONS_UNSUPPORTED", Map.of(), null);
     if (!request.direct()) {
-      if (serving != null) throw new StructuredDataException("this transport does not support sessions",
-          "SESSIONS_UNSUPPORTED", Map.of(), null);
       FittedModel fitted = RelationalSessions.fit(this, request, model, holdout, outputs);
       sessions.add(fitted);
       return fitted;
     }
-    if (serving != null) throw new StructuredDataException("this transport does not support sessions",
-        "SESSIONS_UNSUPPORTED", Map.of(), null);
     List<Object> keys = new ArrayList<>();
     for (Object key : holdout) {
       Map<String, Object> part = ArrowTabular.key(key);

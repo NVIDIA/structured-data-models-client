@@ -4,7 +4,7 @@
 
 //! Contract v26's table source on DuckDB: the
 //! relation forms DuckDB takes, one to three parts, each rendered through
-//! `sdm-data`'s one `FROM` function with every part quoted alone, the
+//! `sdm-sql`'s one `FROM` function with every part quoted alone, the
 //! statement's text pinned and the statement executed on DuckDB, so each
 //! reads the table its parts name and no other: `["a.b"]` the table named
 //! `a.b`, not the decoy `b` of schema `a`; a part holding a double quote
@@ -15,10 +15,13 @@
 
 use duckdb::Connection;
 use duckdb::arrow::array::{Array, AsArray, Int32Array};
-use sdm_contract::data::{DataRequest, DescribePart, Dialect, FetchPlan, ProviderChoice, Relation};
-use sdm_contract::run::{FetchStep, ReplyId};
+use std::collections::BTreeMap;
+
+use sdm_contract::data::{DataRequest, DescribePart, Relation};
 use sdm_contract::{Detail, ErrorCode};
+use sdm_host::kit::SqlPlan;
 use sdm_testkit::duck;
+use sdm_testkit::sql_source::SqlSource;
 
 /// A source holding a table of each relation form, each with its own value
 /// of `v`, and a decoy `b` of schema `a` beside the table named `a.b`.
@@ -57,32 +60,18 @@ fn relation(parts: &[&str]) -> Relation {
     }
 }
 
-fn plan(request: &DataRequest) -> Result<FetchPlan, sdm_contract::CoreError> {
-    let duckdb = ProviderChoice::Sql {
-        timestamp_encoding: None,
-        dialect: Dialect::new("duckdb"),
-        namespace: Vec::new(),
-        view: None,
-    };
-    sdm_host::default_root().data_access(&duckdb)?.plan(request)
+fn plan(request: &DataRequest) -> Result<SqlPlan, sdm_contract::CoreError> {
+    SqlSource::of("duckdb").plan(request)
 }
 
-/// The plan's one statement, and what it reads on `connection`.
+/// The kit's one statement, and what it reads on `connection`, as the
+/// driver hands it over.
 fn run(connection: &Connection, request: DataRequest) -> (String, Vec<duck::Fetched>) {
-    let plan = plan(&request).unwrap();
-    let FetchPlan::Sql { statements, .. } = &plan else {
-        panic!("not SQL");
-    };
-    let text = statements[0].text.clone();
-    let step = FetchStep {
-        id: ReplyId(1),
-        request,
-        plan,
-        continuation: None,
-        purpose: None,
-    };
-    let fetched = duck::answer(connection, &step).unwrap_or_else(|e| panic!("{text}: {e:?}"));
-    (text, vec![fetched])
+    let mut ran = duck::fetches(connection, &request, &BTreeMap::new())
+        .unwrap_or_else(|e| panic!("{request:?}: {e:?}"));
+    assert_eq!(ran.len(), 1, "one fetch");
+    let (plan, fetched) = ran.remove(0);
+    (plan.statements[0].text.clone(), vec![fetched])
 }
 
 fn scan(parts: &[&str]) -> DataRequest {

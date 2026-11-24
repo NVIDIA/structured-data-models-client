@@ -1,0 +1,356 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! The SQL kit: one built-in source's answer to a typed request, written
+//! once for every host.
+//!
+//! A built-in source (DuckDB, SQLite, Postgres, Databricks, Snowflake)
+//! answers each typed request the core sends it through [`SqlKit::answer`].
+//! The kit renders the request in the source's dialect, binds its key sets
+//! as that dialect binds them (several fetches where the key set is split),
+//! asks the host's driver to run each fetch through `run`, joins the answers
+//! in order and reads their values as the reference reads them. The host
+//! writes no SQL and decides nothing: it runs the statements it is handed,
+//! with the batches it is handed, on one session per `answer`.
+//!
+//! The kit takes each step in order: the plan; where the source needs one,
+//! a metadata read with empty key sets and the plan projected by it; the
+//! plan bound; each fetch run; the answers joined; the joined answer
+//! conformed.
+
+use std::collections::BTreeMap;
+
+use arrow_array::RecordBatch;
+use arrow_schema::SchemaRef;
+use sdm_contract::data::{
+    AttachmentId, DataRequest, FailureFacts, KeyData, ProviderCapabilities, ProviderError, Relation,
+};
+use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
+use sdm_contract::{CoreError, Detail, Sentence};
+
+use crate::Sql;
+use crate::plan::{SqlChoice, SqlPlan};
+
+/// One fetch the kit asks the host's driver to run: the statements of
+/// `plan`, in order, on one session, binding `keys` where a statement names
+/// a key set, the last statement's result the answer.
+#[derive(Debug, Clone, Copy)]
+pub struct KitFetch<'a> {
+    /// The request this fetch answers, or the part of it the fetch reads.
+    pub request: &'a DataRequest,
+    /// The statements to run.
+    pub plan: &'a SqlPlan,
+    /// The key sets and text batches the statements bind, by the id each
+    /// statement names them by.
+    pub keys: &'a BTreeMap<AttachmentId, KeyData>,
+}
+
+/// A result: its schema and every batch the driver handed over.
+#[derive(Debug, Clone)]
+pub struct Answered {
+    pub schema: SchemaRef,
+    pub batches: Vec<RecordBatch>,
+}
+
+/// Why [`SqlKit::answer`] did not answer.
+#[derive(Debug, Clone)]
+pub enum KitError {
+    /// The kit refused the request by name: it cannot be written in this
+    /// dialect, or its answer broke a rule the kit holds.
+    Refused(CoreError),
+    /// The host's driver failed to run a fetch.
+    Provider(ProviderError),
+}
+
+impl From<CoreError> for KitError {
+    fn from(error: CoreError) -> Self {
+        KitError::Refused(error)
+    }
+}
+
+/// A built-in source's SQL: its dialect, the namespace it reads under, the
+/// semantic model it reads through, and the timestamp transport its driver
+/// needs. One kit answers one run: the namespace it settles is kept for
+/// the run, as the core keeps a run's, and never between runs.
+/// Runs a step of the kit that recurses once per level of a value (a JSON
+/// value read as the reference reads it) on a stack deep enough for any
+/// value: the caller's thread may have a small one (a JVM's).
+pub type OnDeepStack = fn(&mut dyn FnMut());
+
+/// Runs `step` where it is called: the stack of a kit given none.
+fn on_this_stack(step: &mut dyn FnMut()) {
+    step();
+}
+
+#[derive(Debug)]
+pub struct SqlKit {
+    data: Sql,
+    on_deep_stack: OnDeepStack,
+    provider: std::sync::Mutex<SqlChoice>,
+    /// Each catalog read's answer this run, by the plan that read it: an
+    /// identical catalog read is answered once a run, as the core answered
+    /// a SQL source's.
+    catalog: std::sync::Mutex<Vec<(SqlPlan, Result<Answered, KitError>)>>,
+}
+
+impl SqlKit {
+    /// The kit of the SQL source `provider` names, reading semantic models
+    /// with `spaces` where given. Refused by name where `provider` is not a
+    /// SQL source this build writes, or names a semantic model its dialect
+    /// cannot read.
+    pub fn new(
+        provider: SqlChoice,
+        spaces: Option<&'static crate::view_expr::Spaces>,
+    ) -> Result<Self, CoreError> {
+        let data = match spaces {
+            Some(spaces) => Sql::reading_views(spaces),
+            None => Sql::new(),
+        };
+        data.capabilities(&provider)?;
+        Ok(SqlKit {
+            data,
+            on_deep_stack: on_this_stack,
+            provider: std::sync::Mutex::new(provider),
+            catalog: std::sync::Mutex::new(Vec::new()),
+        })
+    }
+
+    /// This kit, reading the values of each answer (its conforming, which
+    /// recurses once per level of a JSON value) through `on_deep_stack`.
+    /// The answer read stays the caller's, released on its own stack.
+    #[must_use]
+    pub fn reading_values_on(mut self, on_deep_stack: OnDeepStack) -> Self {
+        self.on_deep_stack = on_deep_stack;
+        self
+    }
+
+    /// The source this kit answers for, its namespace settled once the run
+    /// asked it.
+    pub fn provider(&self) -> SqlChoice {
+        self.provider
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
+    /// What the source answers: every request and filter its dialect
+    /// writes.
+    pub fn capabilities(&self) -> Result<ProviderCapabilities, CoreError> {
+        let provider = self.provider();
+        let mut declared = self.data.capabilities(&provider)?;
+        // The engine's traits the core reads by them, alike for every
+        // source (contract v76).
+        let probe = Relation::of(vec!["t".to_owned()]);
+        declared.database = self.data.source_database(&provider);
+        declared.column_affinities = !self.data.holds_column_types(&provider);
+        declared.reads_tables_as_they_stand = self.data.reads_tables_as_they_stand(&provider);
+        declared.namespace = self.data.read_as(&provider, &probe).source;
+        declared.namespace.pop();
+        declared.tries_upper_case_names = self.data.spellings(&provider, &probe).len() > 1;
+        declared.namespace_first = self.data.unsettled(&provider);
+        declared.view = provider.view.clone();
+        Ok(declared)
+    }
+
+    /// The answer to `request`, its key sets `keys` by the id the request
+    /// names each by, every fetch run by `run`; doubles written into SQL
+    /// text as `float_text` writes them (the reference's language's
+    /// spelling, which the core holds).
+    pub fn answer(
+        &self,
+        request: &DataRequest,
+        keys: &BTreeMap<AttachmentId, KeyData>,
+        float_text: fn(f64) -> String,
+        run: &mut dyn FnMut(KitFetch<'_>) -> Result<Answered, ProviderError>,
+    ) -> Result<Answered, KitError> {
+        let provider = self.provider();
+        let mut plan = self.data.plan(request, &provider)?;
+        if let Some(metadata) = self.data.result_metadata(&provider, request, &plan)? {
+            // A schema-only read binds empty key sets: the source query is
+            // never run to learn its result's types.
+            let empty: BTreeMap<AttachmentId, KeyData> = keys
+                .iter()
+                .map(|(id, made)| {
+                    (
+                        *id,
+                        KeyData {
+                            schema: made.schema.clone(),
+                            batches: Vec::new(),
+                        },
+                    )
+                })
+                .collect();
+            let described =
+                self.run_bound(&provider, request, metadata, &empty, float_text, run)?;
+            plan = self
+                .data
+                .project_result(&provider, request, &plan, &described.batches)?;
+        }
+        let catalog_read = matches!(request, DataRequest::Describe { .. }).then(|| plan.clone());
+        let read_before = catalog_read.as_ref().and_then(|plan| {
+            self.catalog
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .iter()
+                .find(|(read, _)| read == plan)
+                .map(|(_, answered)| answered.clone())
+        });
+        let answered = match read_before {
+            Some(answered) => answered?,
+            None => {
+                // A failed read is kept too: the same read fails alike.
+                let answered = self.run_bound(&provider, request, plan, keys, float_text, run);
+                if let Some(plan) = catalog_read {
+                    self.catalog
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .push((plan, answered.clone()));
+                }
+                answered?
+            }
+        };
+
+        // A catalog answer is read from the dialect's own rows and written
+        // in the standard shape every source answers in.
+        if let DataRequest::Describe { part, .. } = request {
+            let mut read = self.data.read(request, &provider, &answered.batches)?;
+            // The namespace a source leaves to its connection, settled with
+            // the parts it names, as the core settles a run's: kept for the
+            // rest of the run, and answered in full.
+            if *part == sdm_contract::data::DescribePart::Namespace
+                && self.data.unsettled(&provider)
+                && let sdm_contract::catalog::CatalogAnswer::Namespace(parts) = read
+            {
+                let settled = self.data.settled(&provider, parts);
+                let probe = Relation::of(vec!["t".to_owned()]);
+                let mut full = self.data.read_as(&settled, &probe).source;
+                full.pop();
+                *self
+                    .provider
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = settled;
+                read = sdm_contract::catalog::CatalogAnswer::Namespace(full);
+            }
+            if let Some((schema, batch)) = crate::standard::catalog(&read)? {
+                return Ok(Answered {
+                    schema,
+                    batches: vec![batch],
+                });
+            }
+        }
+        // Every other answer whose shape the contract fixes, in that shape
+        // too, as every source answers it.
+        Ok(
+            match crate::standard::fixed(request, &answered.schema, &answered.batches)? {
+                Some((schema, batches)) => Answered { schema, batches },
+                None => answered,
+            },
+        )
+    }
+
+    /// `plan` bound as the source binds it, each fetch run in order, their
+    /// answers joined and read as the reference reads them.
+    fn run_bound(
+        &self,
+        provider: &SqlChoice,
+        request: &DataRequest,
+        plan: SqlPlan,
+
+        keys: &BTreeMap<AttachmentId, KeyData>,
+        float_text: fn(f64) -> String,
+        run: &mut dyn FnMut(KitFetch<'_>) -> Result<Answered, ProviderError>,
+    ) -> Result<Answered, KitError> {
+        let named = plan.key_sets();
+        let given: BTreeMap<AttachmentId, KeyData> = keys
+            .iter()
+            .filter(|(id, _)| named.contains(id))
+            .map(|(id, made)| (*id, made.clone()))
+            .collect();
+        let bound = self
+            .data
+            .bind(provider, request, plan, &given, float_text)?;
+        let mut joined: Option<Answered> = None;
+        for fetch in bound.fetches {
+            // Each fetch is handed what its statements bind and nothing
+            // more, as the core hands its host only what a fetch names.
+            let binds = fetch.plan.key_sets();
+            let mut bound_keys: BTreeMap<AttachmentId, KeyData> = given
+                .iter()
+                .filter(|(id, _)| binds.contains(id))
+                .map(|(id, made)| (*id, made.clone()))
+                .collect();
+            bound_keys.extend(fetch.batches);
+            let answered = run(KitFetch {
+                request: &fetch.request,
+                plan: &fetch.plan,
+                keys: &bound_keys,
+            })
+            .map_err(|mut error| {
+                // What the failure means, read by the engine that failed,
+                // so the core reads it as it reads every source's.
+                error.facts = Some(self.data.failure(provider, &error));
+                KitError::Provider(error)
+            })?;
+            joined = Some(match joined {
+                None => answered,
+                Some(mut earlier) => {
+                    if earlier.schema != answered.schema {
+                        let reason =
+                            "a chunk of the answer has another schema than the chunks before it";
+                        return Err(KitError::Refused(
+                            CoreError::new(
+                                Sentence::ProviderSchemaMismatch,
+                                format!(
+                                    "the provider's data does not match the chunks schema: {reason}"
+                                ),
+                            )
+                            .with_field("check", Detail::text("chunks"))
+                            .with_field("reason", Detail::text(reason)),
+                        ));
+                    }
+                    earlier.batches.extend(answered.batches);
+                    earlier
+                }
+            });
+        }
+        let whole = joined.ok_or_else(|| {
+            KitError::Refused(CoreError::new(
+                Sentence::Internal,
+                "a request bound into no fetch",
+            ))
+        })?;
+        // Its values read as the reference reads them, on a stack deep
+        // enough for any value; `whole`, the driver's answer, is kept here
+        // and released on this stack, never the deep one.
+        let mut conformed = None;
+        (self.on_deep_stack)(&mut || {
+            conformed =
+                Some(
+                    self.data
+                        .conform(provider, &whole.schema, &whole.batches, float_text),
+                );
+        });
+        let conformed = conformed.ok_or_else(|| {
+            KitError::Refused(CoreError::new(
+                Sentence::Internal,
+                "an answer's values were not read",
+            ))
+        })??;
+        Ok(match conformed {
+            Some((schema, batches)) => Answered { schema, batches },
+            None => whole,
+        })
+    }
+
+    /// What the driver's failure `error` tells the core.
+    pub fn failure(&self, error: &ProviderError) -> FailureFacts {
+        self.data.failure(&self.provider(), error)
+    }
+
+    /// The answer to a question about a semantic model's text, in the
+    /// source's dialect.
+    pub fn view_text(&self, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
+        self.data.view_text(&self.provider(), ask)
+    }
+}

@@ -48,7 +48,13 @@ if TYPE_CHECKING:
     # dependency, and a core route over frames needs none of it.
     from sdm_connectors.providers import Provider
 
-from sdm_client._rust import NativeBoundaryError, codec, errors, facts
+from sdm_client._rust import (
+    NativeBoundaryError,
+    codec,
+    errors,
+    facts,
+    host_providers,
+)
 from sdm_client.core.transport import EndpointFailed
 from sdm_client.errors import StructuredDataError
 
@@ -124,18 +130,19 @@ def native() -> ModuleType:
     return _native
 
 
-def _driver(
-    error: Exception, provider: Any = None
-) -> tuple[dict[str, Any], str]:
-    r"""A driver's exception as the contract's ``ProviderError``, and its class.
+def provider_error(
+    error: BaseException, provider: Any = None
+) -> dict[str, Any]:
+    r"""A driver's exception as the contract's ``ProviderError``.
 
     Only the SQLSTATE and the vendor code are kept, as text, from the
     attributes drivers put them in, and what ``provider`` reads of the
-    failure where it reads one (its ``error_fields``, the
-    :class:`~sdm_connectors.providers.Provider` protocol's hook: a
-    Databricks failure's SQLSTATE its message writes and its error class);
-    the driver's message is passed through unread as an internal diagnostic;
-    only the core interprets it, and never echoes it into public errors.
+    failure where it reads one (its ``error_fields``: a source's
+    :meth:`~sdm_client.provider.Source.failure`, or a driver's reading of
+    its own failure, a Databricks failure's SQLSTATE its message writes
+    and its error class); the driver's message is passed through unread as
+    an internal diagnostic; only the core interprets it, and never echoes
+    it into public errors.
     """
     sqlstate = next(
         (
@@ -154,7 +161,6 @@ def _driver(
         ),
         None,
     )
-    kind = type(error)
     provided = {
         'kind': 'data_source',
         'retryable': getattr(error, 'retryable', False) is True,
@@ -162,14 +168,21 @@ def _driver(
         'vendor_code': vendor,
         'driver_message': str(error),
     }
-    # What the provider reads of its driver's failure beyond the attributes
-    # above (a Databricks failure's SQLSTATE in its message, and its
-    # error class), as the reference reads them.
     read = getattr(provider, 'error_fields', None)
     said = read(error) if callable(read) else None
     if said is not None:
         provided.update(said)
-    return provided, f'{kind.__module__}.{kind.__qualname__}'
+    return provided
+
+
+def _driver(
+    error: Exception, provider: Any = None
+) -> tuple[dict[str, Any], str]:
+    r"""A source's failure as the contract's ``ProviderError``
+    (:func:`provider_error`), and its class."""
+    kind = type(error)
+    named = f'{kind.__module__}.{kind.__qualname__}'
+    return provider_error(error, provider), named
 
 
 class Finished:
@@ -390,8 +403,14 @@ def _steps(
                 handle.cancel()
                 raise
             except Exception as failure:  # noqa: BLE001 - the provider's
-                provided, driver_class = _driver(failure, provider)
-                outcome = {'outcome': 'error', 'error': provided}
+                refusal = host_providers.refused(failure)
+                if refusal is not None:
+                    # The source refused the request by name, with an error
+                    # the core gives (a built-in source's SQL kit, say).
+                    outcome = {'outcome': 'refused', 'error': refusal}
+                else:
+                    provided, driver_class = _driver(failure, provider)
+                    outcome = {'outcome': 'error', 'error': provided}
             reply = codec.encode(
                 {
                     'message': 'fetch_reply',
@@ -555,9 +574,13 @@ def _of_the_part(error: StructuredDataError, raised: Exception) -> None:
 def _key_sets(handle: Any, request: dict[str, Any]) -> dict[int, Any]:
     r"""The key sets ``request``'s plan names, taken from the run by id: the
     attachments the core sent with the step, each a key set's
-    Arrow or the one text its dialect wrote of it."""
+    Arrow or the one text its dialect wrote of it; a host provider's plan
+    names its request's key sets."""
     plan = request['plan']
     taken: dict[int, Any] = {}
+    for attachment in plan.get('key_sets', ()):
+        if attachment not in taken:
+            taken[attachment] = handle.take_attachment(attachment)
     for statement in plan.get('statements', ()):
         for param in statement['params']:
             if param['param'] == 'key_set':

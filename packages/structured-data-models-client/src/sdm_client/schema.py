@@ -62,9 +62,8 @@ from sdm_client.wire import (
 )
 
 if TYPE_CHECKING:
-    from sdm_connectors import Source
-
     from sdm_client._rust.results import SourceFacts
+    from sdm_client.provider import Source
     from sdm_client.relational_task import RelationalTask
     from sdm_client.request import Request
 
@@ -1004,7 +1003,7 @@ class Schema:
     def with_source(self, source: Source) -> Schema:
         """Return this schema using a replacement caller-owned database source.
 
-        Backend, namespace, source kind and semantic-model settings must match.
+        Source class, backend, namespace and semantic-model settings must match.
         Rust checks the replacement tables and column types without reinference
         or a full key-uniqueness scan. Neither connection is closed or changed.
         Existing queries and requests retain their original source.
@@ -1177,6 +1176,19 @@ class Schema:
         a copy of the schema is asking for.
         """
         return self.snapshot()
+
+    def __getstate__(self) -> dict[str, Any]:
+        r"""The schema's state, refused for a schema over a source.
+
+        A source holds an open connection, or a caller's own data access,
+        neither of which can be pickled: the schema refuses whatever the
+        source's class would do.
+        """
+        if self.__dict__.get('_source') is not None:
+            raise TypeError(
+                'a Source holds an open connection, which cannot be pickled'
+            )
+        return dict(self.__dict__)
 
     def __setstate__(self, state: dict[str, Any]) -> None:
         r"""Restore a copied or unpickled schema with its links still checked.
@@ -1420,8 +1432,9 @@ class Schema:
         query, so it runs against one engine.
 
         Args:
-            source: Where the tables are: an ``sdm_connectors.Source``, or a
-                ``SemanticModel`` got from one.
+            source: Where the tables are: a built-in source such as
+                :class:`~sdm_client.DuckDBSource`, the semantic model one
+                reads, or the caller's own :class:`~sdm_client.Source`.
             tables: For each name a query will use, the table's name in the
                 source. Left out, every table the source describes is taken,
                 under its own name: every table in the namespace, or every
@@ -1587,15 +1600,6 @@ def _require_table(tables: Mapping[str, _T], name: str) -> _T:
     return tables[name]
 
 
-#: How a message names each source's engine.
-_BACKEND_NAMES = {
-    'databricks': 'Databricks',
-    'snowflake': 'Snowflake',
-    'postgres': 'PostgreSQL',
-    'duckdb': 'DuckDB',
-    'sqlite': 'SQLite',
-}
-
 _SKIP_THE_CHECK = (
     'Name another key with primary_keys=, or pass check_keys=False to skip '
     '(one full scan per table).'
@@ -1624,16 +1628,15 @@ def _require_table_names(tables: Mapping[str, str]) -> None:
 
 
 def _require_a_source(source: object) -> None:
-    try:
-        from sdm_connectors import Source
-    except ImportError:  # pragma: no cover - nothing could have built one
-        Source = None  # type: ignore[assignment,misc]
-    if Source is None or not isinstance(source, Source):
+    from sdm_client.provider import Source
+
+    if not isinstance(source, Source):
         raise StructuredDataError(
-            f'a schema over tables in place needs an sdm_connectors.Source, '
-            f'got {type(source).__name__}. Build one from a connection: '
+            f'a schema over tables in place needs a Source, got '
+            f'{type(source).__name__}. Build one from a connection, such as '
             f'DatabricksSource(databricks.sql.connect(...), catalog=..., '
-            f'schema=...), or DatabricksSource(spark, ...) in a notebook',
+            f'schema=...), or DatabricksSource(spark, ...) in a notebook, or '
+            f'subclass sdm_client.Source to read data your own way',
             code='INVALID_REQUEST',
         )
 

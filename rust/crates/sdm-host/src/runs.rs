@@ -60,6 +60,8 @@ pub struct HostRun {
     ids: AttachmentIds,
     /// The zones of the run's host facts, which the core resolves with.
     zones: Arc<ZoneResolver>,
+    /// When the run started: each reply tells the core the time since.
+    started: crate::clock::Started,
 }
 
 /// What a contained call failed with: an error, or a panic, which
@@ -161,6 +163,7 @@ fn producer_failed() -> ProviderError {
         retryable: false,
         sqlstate: None,
         vendor_code: None,
+        facts: None,
     }
 }
 
@@ -295,6 +298,7 @@ impl HostRun {
             ids: run.attachment_ids(),
             run: Mutex::new(run),
             zones,
+            started: crate::clock::Started::now(),
         }
     }
 
@@ -364,6 +368,7 @@ impl HostRun {
             let mut attachments = with_stand_ins(attachments, unreadable);
             match decode(message)? {
                 ControlMessage::FetchReply(reply) => {
+                    run.tell_elapsed(self.started.elapsed_ns());
                     let result = match reply.outcome {
                         FetchOutcome::Data { data, continuation } => {
                             check_attachments(&[(data, AttachmentKind::Arrow)], &attachments)?;
@@ -406,6 +411,19 @@ impl HostRun {
                         FetchOutcome::Error { error } => {
                             check_attachments(&[], &attachments)?;
                             FetchResult::Error(error)
+                        }
+                        FetchOutcome::Refused { error } => {
+                            check_attachments(&[], &attachments)?;
+                            // Only an error the core's table holds is the
+                            // source's to give; any other is the host's
+                            // defect.
+                            if !error.holds_to_table() {
+                                return Err(CoreError::new(
+                                    Sentence::Internal,
+                                    "a source refused a request with an error the core does not give",
+                                ));
+                            }
+                            FetchResult::Refused(error)
                         }
                     };
                     run.submit_fetch(reply.id, result)

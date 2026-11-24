@@ -741,7 +741,7 @@ fn plain(values: &ArrayRef, indices: &[u64]) -> ArrayRef {
 /// receives it, admitted.
 fn through_host_run(data: ArrowData) -> ArrowData {
     let (send, receive) = mpsc::channel();
-    let host = ProviderChoice::Host {
+    let host = ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,
@@ -753,6 +753,7 @@ fn through_host_run(data: ArrowData) -> ArrowData {
             key_enforcement: false,
             sample_rows: false,
             optional: BTreeSet::new(),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,
@@ -761,6 +762,13 @@ fn through_host_run(data: ArrowData) -> ArrowData {
             sampling: Determinism::Unseeded,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         },
     };
     let access = sdm_host::default_root().data_access(&host).unwrap();

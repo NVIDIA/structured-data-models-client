@@ -2,14 +2,14 @@
 // All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-//! The composition root: the one data layer every run plans its data
-//! requests through.
+//! The composition root: the one data layer every run reads a source's
+//! database through.
 //!
 //! The root holds one `Arc<dyn DataLayer>`, which `sdm_host::default_root`
 //! builds; swapping the data layer replaces that one value. A run takes the
-//! provider its operation names, with the capabilities the layer gives for
-//! it, asks for data only through [`DataAccess::plan`] (bound as the
-//! provider binds it, [`DataAccess::bind`]), and reads a
+//! provider its operation names, with the capabilities it declared, asks
+//! for data only through [`DataAccess::plan`] (asked in parts as the
+//! provider's key limit takes it, [`DataAccess::bind`]), and reads a
 //! catalog answer only through [`DataAccess::read`], into the contract's
 //! dialect-neutral shape. Nothing in the core matches on a
 //! backend's name: what a provider takes is what its capabilities say, and
@@ -22,14 +22,12 @@ use std::sync::Arc;
 use arrow_array::RecordBatch;
 use sdm_contract::catalog::CatalogAnswer;
 use sdm_contract::data::{
-    AttachmentId, BoundRequest, DataLayer, DataRequest, FailureFacts, FallbackLimits, FetchPlan,
-    KeyData, ProviderCapabilities, ProviderChoice, ProviderError, Relation, ViewChoice,
+    AttachmentId, BoundRequest, DataLayer, DataRequest, DescribePart, FailureFacts, FallbackLimits,
+    FetchPlan, KeyData, ProviderCapabilities, ProviderChoice, ProviderError, Relation, ViewChoice,
     refuse_derived, seed_integer,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::{CoreError, Detail, Scalar, Sentence};
-
-use crate::ArrowData;
 
 /// What a binding starts its runs with.
 #[derive(Clone)]
@@ -37,85 +35,96 @@ pub struct CompositionRoot {
     data: Arc<dyn DataLayer>,
 }
 
-/// How one run reaches its data: the root's data layer, the provider the
-/// operation names, and what that provider answers.
+/// A data layer reading no database: every answer in the contract's
+/// shape, and no semantic model read.
+struct NoDatabases;
+
+impl DataLayer for NoDatabases {}
+
+impl Default for CompositionRoot {
+    /// The root over a data layer reading no database: for a host whose
+    /// providers are all its own.
+    fn default() -> Self {
+        CompositionRoot::new(Arc::new(NoDatabases))
+    }
+}
+
+/// How one run reaches its data: the root's data layer and what the
+/// operation's provider declared it answers.
 #[derive(Clone)]
 pub struct DataAccess {
     layer: Arc<dyn DataLayer>,
-    provider: ProviderChoice,
     capabilities: ProviderCapabilities,
 }
 
 impl CompositionRoot {
-    /// The root over `data`, the one data layer every run plans through.
+    /// The root over `data`, the one data layer every run reads through.
     pub fn new(data: Arc<dyn DataLayer>) -> Self {
         CompositionRoot { data }
     }
 
-    /// The data layer every run plans through.
+    /// The data layer every run reads through.
     pub fn data_layer(&self) -> &Arc<dyn DataLayer> {
         &self.data
     }
 
-    /// The data access of a run whose operation names `provider`; a
-    /// provider the data layer cannot serve is refused here, before the
-    /// run exists.
+    /// The data access of a run whose operation names `provider`.
     pub fn data_access(&self, provider: &ProviderChoice) -> Result<DataAccess, CoreError> {
-        let capabilities = self.data.capabilities(provider)?;
         Ok(DataAccess {
             layer: Arc::clone(&self.data),
-            provider: provider.clone(),
-            capabilities,
+            capabilities: provider.capabilities.clone(),
         })
     }
 }
 
 impl DataAccess {
-    /// Whether the run's provider leaves a namespace part to the connection
-    /// that must be read before any table (`DataLayer::unsettled`), until
-    /// the source says its current parts
-    /// ([`DataAccess::settled`]).
+    /// Whether the run's provider must be asked its namespace before any
+    /// table ([`ProviderCapabilities::namespace_first`]), until the source
+    /// says it ([`DataAccess::settled`]).
     pub fn unsettled(&self) -> bool {
-        self.layer.unsettled(&self.provider)
+        self.capabilities.namespace_first
     }
 
     /// The run's data access with its provider's namespace the parts the
-    /// source answered for it (`DataLayer::settled`).
+    /// source answered for it ([`ProviderChoice::settled`]).
     pub fn settled(&self, parts: Vec<String>) -> DataAccess {
         let mut access = self.clone();
-        access.provider = self.layer.settled(&self.provider, parts);
+        access.capabilities = ProviderChoice::new(self.capabilities.clone())
+            .settled(parts)
+            .capabilities;
         access
     }
 
     /// Whether the run's provider reads a source of tables, whose tables
-    /// each `materialize` reads as they stand (
-    /// `DataLayer::reads_tables_as_they_stand`), where a host provider's
-    /// tables are the host's own.
+    /// each `materialize` reads as they stand
+    /// ([`ProviderCapabilities::reads_tables_as_they_stand`]), where a host
+    /// provider's tables are the host's own.
     pub fn reads_a_source(&self) -> bool {
-        self.layer.reads_tables_as_they_stand(&self.provider)
+        self.capabilities.reads_tables_as_they_stand
     }
 
     /// The semantic model the run's provider reads the source through,
-    /// if any (`ProviderChoice::Sql.view`).
+    /// if any ([`ProviderCapabilities::view`]).
     pub fn view(&self) -> Option<ViewChoice> {
-        self.provider.view().cloned()
+        self.capabilities.view.clone()
     }
 
     /// The kind of model the provider reads, before its definition is fetched.
     pub fn view_kind(&self) -> Option<sdm_contract::view::ViewKind> {
-        self.layer.view_kind(&self.provider)
+        self.layer.view_kind(&self.capabilities)
     }
 
     /// The data layer's answer to a question of a semantic model's text, in
-    /// the run's provider's dialect (`DataLayer::view_text`).
+    /// the run's provider's database's dialect (`DataLayer::view_text`).
     pub fn view_text(&self, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-        self.layer.view_text(&self.provider, ask)
+        self.layer.view_text(&self.capabilities, ask)
     }
 
     /// Whether the run's provider's source holds a type per column that a
-    /// caller's type must match (`DataLayer::holds_column_types`).
+    /// caller's type must match
+    /// ([`ProviderCapabilities::column_affinities`]).
     pub fn holds_column_types(&self) -> bool {
-        self.layer.holds_column_types(&self.provider)
+        !self.capabilities.column_affinities
     }
 
     /// What the run's provider answers.
@@ -151,61 +160,47 @@ impl DataAccess {
     }
 
     /// The database the run's provider reads, by name
-    /// (`DataLayer::source_database`); `None` for a host provider.
-    pub fn source_database(&self) -> Option<&'static str> {
-        self.layer.source_database(&self.provider)
+    /// ([`ProviderCapabilities::database`]); `None` for a caller's source.
+    pub fn source_database(&self) -> Option<String> {
+        self.capabilities.database.clone()
     }
 
-    /// `relation` as the run's provider reads it (`DataLayer::read_as`).
+    /// `relation` as the run's provider reads it
+    /// ([`ProviderCapabilities::read_as`]).
     pub fn read_as(&self, relation: &Relation) -> Relation {
-        self.layer.read_as(&self.provider, relation)
+        self.capabilities.read_as(relation)
     }
 
-    /// What the run's provider's failure says (`DataLayer::failure`): the
-    /// facts the step that asked reads the one of that fits it.
+    /// What the run's provider's failure says, as the provider said it
+    /// ([`ProviderError::facts`]): the facts the step that asked reads the
+    /// one of that fits it; where it says nothing, only what the SQL
+    /// standard's codes say ([`FailureFacts::standard`]).
     pub fn failure(&self, error: &ProviderError) -> FailureFacts {
-        self.layer.failure(&self.provider, error)
+        error
+            .facts
+            .clone()
+            .unwrap_or_else(|| FailureFacts::standard(error))
     }
 
     /// The name forms the catalog read of `relation`, as the run's
-    /// provider reads it, tries in order (`DataLayer::spellings`).
+    /// provider reads it, tries in order
+    /// ([`ProviderCapabilities::spellings`]).
     pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
-        self.layer.spellings(&self.provider, relation)
+        self.capabilities.spellings(relation)
     }
 
-    /// An admitted answer of the run's provider, its values read as the
-    /// reference reads them where the provider hands over the driver's own
-    /// (`DataLayer::conform`); the answer as it is where the data
-    /// layer holds no rule for it.
-    pub fn conform(&self, data: ArrowData) -> Result<ArrowData, CoreError> {
-        match self.layer.conform(
-            &self.provider,
-            &data.schema,
-            &data.batches,
-            crate::pql::float_text,
-        )? {
-            Some((schema, batches)) => Ok(ArrowData {
-                schema,
-                batches,
-                received: data.received,
-            }),
-            None => Ok(data),
-        }
-    }
-
-    /// `plan`, the run's provider's answer to `request`, bound as the
-    /// provider binds it with the key sets `keys` it names
-    /// (`DataLayer::bind`): one fetch or more, each with the
-    /// batches it binds by local reference, a double written as the
-    /// reference's language writes one ([`crate::pql::float_text`]).
+    /// `plan`, the run's provider's answer to `request`, asked in parts of
+    /// at most the keys the provider takes in one request
+    /// ([`sdm_data::parts`]): one fetch or more, each with the batches it
+    /// binds by local reference.
     pub fn bind(
         &self,
         request: &DataRequest,
         plan: FetchPlan,
         keys: &BTreeMap<AttachmentId, KeyData>,
     ) -> Result<BoundRequest, CoreError> {
-        self.layer
-            .bind(&self.provider, request, plan, keys, crate::pql::float_text)
+        let max = self.capabilities.max_keys_per_request.unwrap_or(u64::MAX);
+        sdm_data::parts::bind(request, plan, keys, max)
     }
 
     /// How the run's provider answers `request`. A request whose fields
@@ -222,27 +217,10 @@ impl DataAccess {
         }
     }
 
-    pub(crate) fn result_metadata(
-        &self,
-        request: &DataRequest,
-        plan: &FetchPlan,
-    ) -> Result<Option<FetchPlan>, CoreError> {
-        self.layer.result_metadata(&self.provider, request, plan)
-    }
-
-    pub(crate) fn project_result(
-        &self,
-        request: &DataRequest,
-        plan: &FetchPlan,
-        metadata: &ArrowData,
-    ) -> Result<FetchPlan, CoreError> {
-        self.layer
-            .project_result(&self.provider, request, plan, &metadata.batches)
-    }
-
-    /// How `request` is answered: the data layer's plan for the run's
-    /// provider, as [`DataAccess::plan`] gives it, or, for an optional
-    /// request the provider did not declare while it declares the
+    /// How `request` is answered: the provider's plan, as
+    /// [`DataAccess::plan`] gives it, its answer of the contract's shape
+    /// ([`DataRequest::expected`]), alike for every source, or, for an
+    /// optional request the provider did not declare while it declares the
     /// in-memory fallback's limits, the fallback within them (design
     /// choice 1), which the core answers from the rows `scan`s read.
     /// Refused as [`DataAccess::plan`] refuses, but for the fallback's
@@ -271,7 +249,8 @@ impl DataAccess {
             return Ok(Route::Fallback(limits));
         }
         self.seeded_within(request)?;
-        Ok(Route::Plan(self.layer.plan(request, &self.provider)?))
+        let expect = request.expected();
+        Ok(Route::Plan(FetchPlan::of(expect, request)))
     }
 
     /// Refuses a sample seeded past the largest seed the provider declares
@@ -306,15 +285,33 @@ impl DataAccess {
     }
 
     /// The catalog answer the run's provider returned to `request`, a
-    /// `describe` it planned, read by the data layer into the contract's
-    /// dialect-neutral shape. `batches` are the answer as
-    /// the run admitted it (check (b)).
+    /// `describe` it planned, read into the contract's dialect-neutral
+    /// shape: as the contract's own shape
+    /// ([`sdm_contract::catalog_read::standard`]), but for a semantic
+    /// model's definition, which the data layer reads by the provider's
+    /// database (`DataLayer::read_view`). `batches` are the answer as the
+    /// run admitted it (check (b)). A request that is not a `describe` is
+    /// refused with `INTERNAL_ERROR`.
     pub fn read(
         &self,
         request: &DataRequest,
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError> {
-        self.layer.read(request, &self.provider, batches)
+        let DataRequest::Describe { part, .. } = request else {
+            return Err(CoreError::new(
+                Sentence::Internal,
+                "only a catalog answer is read by the data layer",
+            )
+            .with_field("request", Detail::text(request.name())));
+        };
+        let answer = match part {
+            DescribePart::ViewDefinition => {
+                self.layer.read_view(&self.capabilities, request, batches)?
+            }
+            _ => sdm_contract::catalog_read::standard(*part, batches)?,
+        };
+        debug_assert_eq!(answer.part(), *part);
+        Ok(answer)
     }
 }
 

@@ -380,7 +380,7 @@ pub(crate) struct Catalog {
 /// keys, asked as [`table`] asks them, never its rows. `Ok(None)` where the
 /// source answers no column, as for a table it does not hold; the
 /// provider's failure, whole, for the caller to read by what it asked
-/// (`DataLayer::failure`). Every later read of the table reads the columns
+/// (`DataAccess::failure`). Every later read of the table reads the columns
 /// found ([`Asker::guard`]).
 pub(crate) async fn columns(
     asker: &Asker,
@@ -406,7 +406,7 @@ pub(crate) async fn columns(
         (columns, keys)
     } else {
         let requests = [asked(DescribePart::Columns), asked(DescribePart::Keys)];
-        let replies = catalog_replies(asker, &requests).await?;
+        let replies = crate::describe::replies(asker, requests.to_vec()).await?;
         if let Some(error) = replies.iter().find_map(|reply| match reply {
             Reply::Fetch(FetchResult::Error(error)) => Some(error.clone()),
             _ => None,
@@ -431,41 +431,9 @@ pub(crate) async fn columns(
     Ok(Ok(Some(Catalog { columns: declared })))
 }
 
-/// Ask each distinct concrete catalog read once, as its plan establishes.
-async fn catalog_replies(asker: &Asker, asked: &[DataRequest]) -> Result<Vec<Reply>, CoreError> {
-    let plans: Vec<_> = asked.iter().map(|request| asker.planned(request)).collect();
-    let first: Vec<usize> = (0..asked.len())
-        .map(|i| {
-            (0..i)
-                .find(|&j| {
-                    plans[j]
-                        .as_ref()
-                        .zip(plans[i].as_ref())
-                        .is_some_and(|(left, right)| left.same_catalog_read(right))
-                })
-                .unwrap_or(i)
-        })
-        .collect();
-    let distinct = asked
-        .iter()
-        .zip(&first)
-        .enumerate()
-        .filter(|(i, (_, first))| *i == **first)
-        .map(|(_, (request, _))| request.clone())
-        .collect();
-    let answered = crate::describe::replies(asker, distinct).await?;
-    Ok(first
-        .iter()
-        .map(|&at| {
-            let distinct_before = (0..at).filter(|&j| first[j] == j).count();
-            answered[distinct_before].clone()
-        })
-        .collect())
-}
-
 /// The answers to `requests`, each a catalog read of the one table
 /// `source` names, asked together in one step under each spelling the
-/// source's catalog tries in turn (`DataLayer::spellings`; Snowflake's as
+/// source's catalog tries in turn (`ProviderCapabilities::spellings`; Snowflake's as
 /// given, then upper-cased), the next asked only where one of the step's
 /// reads failed with what the source says is a name it does not hold
 /// (`FailureFacts::not_found`, Snowflake's errno 2003). The spelling that
@@ -494,7 +462,7 @@ async fn spelled<const N: usize>(
                 request
             })
             .collect();
-        let replies = catalog_replies(asker, &asked).await?;
+        let replies = crate::describe::replies(asker, asked.clone()).await?;
         let missing = replies.iter().any(|reply| {
             matches!(reply, Reply::Fetch(FetchResult::Error(error)) if asker.failure(error).not_found)
         });
@@ -701,7 +669,7 @@ pub(crate) async fn not_held(asker: &Asker, table: &Relation) -> CoreError {
 
 /// Whether the source holds a relation, a table or a view, under `source`,
 /// as the source itself resolves the name: `describe` of the tables with
-/// `source` named, whose answer is empty when it holds none (sdm-data's
+/// `source` named, whose answer is empty when it holds none (sdm-sql's
 /// rendering decides how the dialect matches a name; the core matches
 /// none).
 async fn holds(asker: &Asker, source: &Relation) -> Result<bool, CoreError> {

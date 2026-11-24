@@ -14,10 +14,9 @@ import warnings
 from typing import Any
 
 import pytest
-from sdm_connectors import DatabricksSource
 from test_a_metric_view_filter_holds import _TYPES, _Cursor, _Warehouse
 
-from sdm_client import Schema, StructuredDataError
+from sdm_client import DatabricksSource, Schema, StructuredDataError
 
 
 @pytest.fixture

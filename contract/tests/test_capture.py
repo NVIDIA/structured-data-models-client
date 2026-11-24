@@ -73,14 +73,13 @@ def _shop() -> Any:
 
 
 def test_the_backend_dispatch_reads_the_proxy_as_duckdb() -> None:
-    from sdm_connectors import DuckDBSource, Source
-    from sdm_connectors.source import _backend_of
+    from sdm_client import DuckDBSource
+    from sdm_client.sources import _backend_of
 
     connection = duckdb.connect()
     proxy = run_python.capture(connection, run_python.DriverLog())
     assert _backend_of(connection) == 'duckdb'
     assert _backend_of(proxy) == 'duckdb'
-    assert type(Source(proxy)) is DuckDBSource
     assert DuckDBSource(proxy).connection is proxy
 
 
@@ -103,8 +102,7 @@ def test_a_derived_cursor_is_the_proxy_type_as_the_driver_s_is() -> None:
 
 
 def test_schema_from_source_uses_the_captured_connection() -> None:
-    from sdm_client import Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, Schema
 
     connection = _shop()
     log = run_python.DriverLog()

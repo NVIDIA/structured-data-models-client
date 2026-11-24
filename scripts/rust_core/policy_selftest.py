@@ -253,8 +253,8 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         'sdm-host -> sdm-engine',
     )
     case(
-        'control: sdm-host on sdm-data, which it builds for a run',
-        lambda m: m.edge('sdm-host', 'sdm-data'),
+        'control: sdm-host on sdm-sql, which it builds for a run',
+        lambda m: m.edge('sdm-host', 'sdm-sql'),
         None,
     )
     case(
@@ -297,16 +297,16 @@ def deps_cases(results: list[Result], base: dict[str, Any]) -> None:
         ('sdm-engine', 'pyo3'),
         ('sdm-schema', 'jni'),
         ('sdm-request', 'arrow-pyarrow'),
-        ('sdm-data', 'numpy'),
+        ('sdm-sql', 'numpy'),
         ('sdm-core', 'duckdb'),
         ('sdm-host', 'pyo3'),
         # The drivers of the dialects after DuckDB.
-        ('sdm-data', 'rusqlite'),
+        ('sdm-sql', 'rusqlite'),
         ('sdm-host', 'tokio-postgres'),
         ('sdm-contract', 'odbc-api'),
         # SQL toolkits and Arrow's database connectors.
         ('sdm-core', 'sqlx'),
-        ('sdm-data', 'sqlx-postgres'),
+        ('sdm-sql', 'sqlx-postgres'),
         ('sdm-schema', 'sqlx-sqlite'),
         ('sdm-engine', 'adbc_core'),
         ('sdm-host', 'adbc_driver_manager'),
@@ -683,9 +683,9 @@ def scan_cases(results: list[Result]) -> None:
         '`Duckdb` names a provider or SQL',
     )
     sql(
-        'control: SQL in sdm-data',
+        'control: SQL in sdm-sql',
         lambda r: append(
-            r / crates / 'sdm-data/src/lib.rs',
+            r / crates / 'sdm-sql/src/lib.rs',
             '\nconst Q: &str = "SELECT a FROM t";\n',
         ),
         None,
@@ -834,7 +834,7 @@ def scan_cases(results: list[Result]) -> None:
 
     def dialect_where_allowed(root: Path) -> None:
         append(
-            root / crates / 'sdm-data/src/lib.rs',
+            root / crates / 'sdm-sql/src/lib.rs',
             '\nconst Q: &str = "PRAGMA table_info";\n',
         )
         append(
@@ -846,7 +846,7 @@ def scan_cases(results: list[Result]) -> None:
         )
 
     dialects(
-        'control: sdm-data, comments, test modules, NotNull and decided',
+        'control: sdm-sql, comments, test modules, NotNull and decided',
         dialect_where_allowed,
         None,
     )
@@ -904,7 +904,7 @@ def scan_cases(results: list[Result]) -> None:
         'control: SQL named in a docstring, and the word "select" alone',
         lambda r: append(
             r / providers / 'duckdb.py',
-            '\ndef f():\n    """Runs the SELECT sdm-data rendered."""\n'
+            '\ndef f():\n    """Runs the SELECT sdm-sql rendered."""\n'
             "    return 'select a provider'\n",
         ),
         None,
@@ -1554,6 +1554,33 @@ def scan_cases(results: list[Result]) -> None:
         path.write_text(text)
 
     bans("sdm-host's allow moved up to the function", widened, f'{zones}:')
+    clock = 'rust/crates/sdm-host/src/clock.rs'
+    host_lib = 'rust/crates/sdm-host/src/lib.rs'
+    bans(
+        "a wall clock read in sdm-host's clock module",
+        lambda r: append(
+            r / clock,
+            'pub(crate) fn wall() -> std::time::SystemTime {\n'
+            '    std::time::SystemTime::now()\n}\n',
+        ),
+        f'{clock}:',
+    )
+    bans(
+        "sdm-host's clock allow widened to every ban",
+        lambda r: edit(
+            r / host_lib,
+            '    clippy::disallowed_types,\n',
+            '    clippy::disallowed_types,\n    clippy::all,\n',
+        ),
+        f'{host_lib}:',
+    )
+    bans(
+        "sdm-host's clock allow on another module",
+        lambda r: edit(
+            r / host_lib, ')]\nmod clock;', ')]\nmod frames_clock;\nmod clock;'
+        ),
+        f'{host_lib}:',
+    )
     bans(
         'a Zoned parsed by type annotation',
         lambda r: append(

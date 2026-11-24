@@ -17,9 +17,10 @@ Concretely, the public surface is:
 
 | Package | Public |
 |---|---|
-| `sdm_client` | Everything in `sdm_client.__all__`: the client, `Schema`, `Request`, `PredictiveQuery`, the model handles, `PredictionResult`, the exception types and `SDMWarning` |
+| `sdm_client` | Everything in `sdm_client.__all__`: the client, `Schema`, `Request`, `PredictiveQuery`, the model handles, `PredictionResult`, `Source` and the built-in sources, the exception types and `SDMWarning` |
 | `sdm_api` | Everything in `sdm_api.__all__`: the wire vocabulary |
 | `sdm_connectors` | Everything in `sdm_connectors.__all__` |
+| `sdm_client.provider` | Everything in `sdm_client.provider.__all__`: `Source`, and the types a caller's own source answers the core's data requests with, `Capabilities` and the request and filter types |
 | `sdm_connectors.databricks` | Everything in `sdm_connectors.databricks.__all__`: `warehouse` and `lakebase` |
 
 Not public, and free to change in any release:

@@ -18,9 +18,13 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError
+from sdm_client import (
+    DuckDBSource,
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 
@@ -128,21 +132,17 @@ def _copies() -> dict[str, Callable[[Schema], Schema]]:
 
 def _watched(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     r"""The kind of each request a source is asked from now on."""
-    from sdm_client._rust import providers
+    # An operation over a built-in source asks its own SQL kit.
+    from sdm_client._rust.sql_kit import KitRun
 
     asked: list[str] = []
-    real = providers.for_source
+    real = KitRun.answer
 
-    def watched(given):
-        choice, provider = real(given)
+    def watched(kit, request, expected):
+        asked.append(request.name)
+        return real(kit, request, expected)
 
-        def answering(request, keys):
-            asked.append(request['request']['request'])
-            return provider(request, keys)
-
-        return choice, answering
-
-    monkeypatch.setattr(providers, 'for_source', watched)
+    monkeypatch.setattr(KitRun, 'answer', watched)
     return asked
 
 

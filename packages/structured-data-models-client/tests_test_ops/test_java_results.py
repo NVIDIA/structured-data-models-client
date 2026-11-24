@@ -34,6 +34,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import kit_host
 import pyarrow as pa
 import pytest
 
@@ -63,7 +64,8 @@ JVM_ZONE = 'Asia/Kolkata'
 
 
 class Recording:
-    r"""A Python provider whose steps and answers are kept, in order."""
+    r"""A Python provider whose fetches (each SQL plan and request its kit
+    handed it) and answers are kept, in order."""
 
     def __init__(self, inner: Any) -> None:
         self.inner = inner
@@ -81,31 +83,25 @@ class Recording:
 
 
 def _fetched(provider: Any, dialect: str, column: str) -> None:
-    r"""``column`` (with ``id``) planned by the core and read through
-    ``provider``; the core's refusal of what it read is no matter here."""
+    r"""``column`` (with ``id``) asked by the core and read through
+    ``provider``, the statements of ``dialect``'s SQL kit run on it; the
+    core's refusal of what it read is no matter here."""
     from sdm_client.errors import StructuredDataError
 
-    fetch = {
-        'request': {
-            'request': 'scan',
-            'table': {'source': ['t']},
-            'columns': ['id', column],
-            'filters': [],
-            'limit': None,
-        },
-        # A Postgres read names its schema, the database's ``public``.
-        'provider': {
-            'provider': 'sql',
-            'dialect': dialect,
-            **({'namespace': ['public']} if dialect == 'postgres' else {}),
-        },
-        'echo': True,
+    request = {
+        'request': 'scan',
+        'table': {'source': ['t']},
+        'columns': ['id', column],
+        'filters': [],
+        'limit': None,
     }
+    choice, source = kit_host.chosen(L5.sql_choice(dialect), provider)
+    fetch = {'request': request, 'provider': choice, 'echo': True}
     try:
         run(
             {'op': 'test', 'test': 'fetch', 'fetch': 1},
             {1: codec.attachment(fetch)},
-            provider=provider,
+            provider=source,
         )
     except StructuredDataError:
         pass

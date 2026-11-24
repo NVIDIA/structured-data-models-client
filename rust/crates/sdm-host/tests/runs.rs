@@ -14,7 +14,7 @@ use std::sync::{Arc, Barrier};
 use arrow_array::{ArrayRef, LargeStringArray, RecordBatch, new_null_array};
 use arrow_schema::{DataType, IntervalUnit};
 use sdm_contract::data::{AttachmentId, DataRequest, ProviderError};
-use sdm_contract::data::{Determinism, Dialect, ProviderCapabilities, ProviderChoice};
+use sdm_contract::data::{Determinism, ProviderCapabilities, ProviderChoice};
 use sdm_contract::facts::{PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::Dtype;
 use sdm_contract::ops::{
@@ -312,28 +312,7 @@ fn table(column: ArrayRef) -> ArrowData {
 /// A run that fetches twice and answers with the type of each column it
 /// was handed, through a validation result's diagnostics.
 fn fetching_run() -> Run {
-    let host = ProviderChoice::Host {
-        capabilities: ProviderCapabilities {
-            opaque_vendor: None,
-            compares_stored_times: false,
-            samples_by_key_dtype: false,
-            reads_nan_as_missing: false,
-            derived_relations: false,
-            neighbor_lookback: false,
-            keys_optional: false,
-            key_enforcement: false,
-            sample_rows: false,
-            optional: Default::default(),
-            max_keys_per_request: None,
-            max_seed: u64::MAX,
-            text_times: None,
-            null_order: None,
-            index_advice: None,
-            sampling: Determinism::Unseeded,
-            fallback_text_order: None,
-            fallback: None,
-        },
-    };
+    let host = fetching_provider();
     let access = sdm_host::default_root().data_access(&host).unwrap();
     Run::with_data(access, |asker| async move {
         let mut seen = Vec::new();
@@ -414,6 +393,7 @@ fn fetched_data_is_admitted_and_host_ids_are_scoped_to_their_message() {
         retryable: false,
         sqlstate: None,
         vendor_code: None,
+        facts: None,
     };
     run.reply(
         &fetch_reply(second, FetchOutcome::Error { error }),
@@ -636,6 +616,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
                 ranking: None,
             },
             query: None,
+            context: Vec::new(),
         }))
     }));
     let Step::Done {
@@ -704,12 +685,7 @@ fn request_state_leaves_one_run_as_bytes_and_returns_under_the_host_s_id() {
     // An index set a materialize names is checked the same way.
     let materialize = start_message(
         Operation::Materialize(Materialize {
-            provider: ProviderChoice::Sql {
-                timestamp_encoding: None,
-                dialect: Dialect::new("duckdb"),
-                namespace: Vec::new(),
-                view: None,
-            },
+            provider: fetching_provider(),
             schema: AttachmentId(1),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
@@ -773,4 +749,95 @@ fn a_run_resolves_zones_through_its_host_s_roots() {
 fn a_host_run_can_be_shared_between_threads() {
     fn shared<T: Send + Sync>() {}
     shared::<HostRun>();
+}
+
+#[test]
+fn a_source_s_named_refusal_is_the_operation_s_error_and_only_one_the_core_gives() {
+    // A refusal the core's table holds reaches the operation as itself.
+    let run = host_run(fetching_run());
+    let first = fetch_id(&run.next().unwrap());
+    let refusal = sdm_contract::CoreError::new(
+        sdm_contract::Sentence::Undeclared,
+        "the data source does not take this request",
+    )
+    .with_field("request", sdm_contract::Detail::text("lookup"));
+    run.reply(
+        &fetch_reply(
+            first,
+            FetchOutcome::Refused {
+                error: refusal.clone(),
+            },
+        ),
+        no_attachments(),
+    )
+    .unwrap();
+    let second = fetch_id(&run.next().unwrap());
+    run.reply(
+        &fetch_reply(second, FetchOutcome::Refused { error: refusal }),
+        no_attachments(),
+    )
+    .unwrap();
+    let Step::Done {
+        result: OperationResult::ValidateQuery(validation),
+    } = step(&run.next().unwrap())
+    else {
+        panic!("done");
+    };
+    let seen: Vec<&str> = validation
+        .diagnostics
+        .iter()
+        .map(|d| d.code.as_str())
+        .collect();
+    assert_eq!(seen, ["refused"; 2]);
+
+    // One whose kind its code does not carry is the host's defect.
+    let run = host_run(fetching_run());
+    let first = fetch_id(&run.next().unwrap());
+    let mut outside = sdm_contract::CoreError::new(
+        sdm_contract::Sentence::Undeclared,
+        "the data source does not take this request",
+    );
+    outside.kind = ErrorKind::Internal;
+    let refused = run
+        .reply(
+            &fetch_reply(first, FetchOutcome::Refused { error: outside }),
+            no_attachments(),
+        )
+        .unwrap_err();
+    assert!(!refused.control.is_empty());
+}
+
+/// A provider declaring nothing optional, which the fetching runs read
+/// through.
+fn fetching_provider() -> ProviderChoice {
+    ProviderChoice {
+        capabilities: ProviderCapabilities {
+            opaque_vendor: None,
+            compares_stored_times: false,
+            samples_by_key_dtype: false,
+            reads_nan_as_missing: false,
+            derived_relations: false,
+            neighbor_lookback: false,
+            keys_optional: false,
+            key_enforcement: false,
+            sample_rows: false,
+            optional: Default::default(),
+            filters: Default::default(),
+            max_keys_per_request: None,
+            max_seed: u64::MAX,
+            text_times: None,
+            null_order: None,
+            index_advice: None,
+            sampling: Determinism::Unseeded,
+            fallback_text_order: None,
+            fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
+        },
+    }
 }

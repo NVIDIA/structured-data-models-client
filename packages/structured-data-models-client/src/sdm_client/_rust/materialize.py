@@ -18,10 +18,11 @@ import math
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, errors, providers, results
+from sdm_client._rust import codec, errors, host_providers, results
 from sdm_client._rust.results import CoreQuery, CoreRequest, QueryFacts
 from sdm_client._rust.run import run
 from sdm_client._rust.spec import held_schema
+from sdm_client.context_report import ContextReport
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
@@ -42,6 +43,7 @@ TAKEN = frozenset(
         'inference_config',
         'top_k',
         'rows_per_call',
+        'context_time_limit',
         'lag_timesteps',
         'context_anchor_time',
         'exclude_cols_dict',
@@ -66,6 +68,7 @@ VALUED = frozenset(
         'inference_config',
         'top_k',
         'rows_per_call',
+        'context_time_limit',
         'lag_timesteps',
         'exclude_cols_dict',
         'max_pq_iterations',
@@ -73,6 +76,16 @@ VALUED = frozenset(
         'use_prediction_time',
     }
 )
+
+
+def _seconds(value: Any) -> Any:
+    """A ``timedelta`` as its seconds; any other value as given, for the
+    core to take or refuse."""
+    return (
+        value.total_seconds()
+        if isinstance(value, datetime.timedelta)
+        else value
+    )
 
 
 def _anchor(value: Any) -> dict[str, Any] | None:
@@ -271,7 +284,7 @@ def gather(
     num_context_samples: int | None,
     options: dict[str, Any],
     candidates: Sequence[Any] | None = None,
-) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
+) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest, ContextReport]:
     r"""The payloads of the request, gathered on the core; what the core
     resolved of the query; and what the request keeps for predict on the
     core (class:`~sdm_client._rust.results.CoreRequest`), with the parts of
@@ -301,7 +314,13 @@ def gather(
 
     schema = materializer.schema
     anchor = options.get('anchor_time')
-    choice, provider = providers.for_source(schema.source)
+    source = schema.source
+    if source is None:
+        raise StructuredDataError(
+            'materializing from tables in place needs a source-backed schema',
+            code='UNSUPPORTED_REQUEST',
+        )
+    choice, provider = host_providers.chosen(source)
     operation = {
         'op': 'materialize',
         'provider': choice,
@@ -335,7 +354,9 @@ def gather(
             value={
                 'num_context_samples': num_context_samples,
                 **{
-                    name: options[name]
+                    name: _seconds(options[name])
+                    if name == 'context_time_limit'
+                    else options[name]
                     for name in sorted(set(options) & VALUED)
                 },
                 **_context_anchor(options),
@@ -367,8 +388,9 @@ def gather(
 
 def unpack(
     finished: Any,
-) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest]:
-    """Present an existing core materialization result, for either data source."""
+) -> tuple[tuple[dict[str, Any], ...], QueryFacts, CoreRequest, ContextReport]:
+    """Present an existing core materialization result, for either data
+    source, with how its context was drawn."""
     gathered = results.expect(finished.result, results.Gathered)
     state = gathered.state
     if gathered.query is None:
@@ -377,7 +399,12 @@ def unpack(
             code='INTERNAL_ERROR',
         )
     payloads, retained = unpack_state(finished, state)
-    return payloads, gathered.query, retained
+    report = (
+        ContextReport('available', gathered.context)
+        if gathered.context
+        else ContextReport('unavailable')
+    )
+    return payloads, gathered.query, retained, report
 
 
 def unpack_state(

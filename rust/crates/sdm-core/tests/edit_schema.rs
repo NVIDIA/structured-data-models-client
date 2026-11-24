@@ -52,7 +52,7 @@ fn facts() -> HostFacts {
 
 fn start(operation: Operation, attachments: Attachments) -> Result<sdm_core::Run, CoreError> {
     sdm_core::start(
-        &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+        &CompositionRoot::default(),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

@@ -174,7 +174,8 @@ fn fetch_run() -> HostRun {
             filters: vec![],
             limit: None,
         },
-        plan: Some(FetchPlan::Host {
+        plan: Some(FetchPlan {
+            key_sets: Vec::new(),
             expect: ExpectedSchema::Discover {},
         }),
         provider: None,
@@ -211,6 +212,7 @@ fn a_provider_s_kind_outside_its_code_s_set_ends_the_fetch_as_internal() {
                     retryable: true,
                     sqlstate: None,
                     vendor_code: None,
+                    facts: None,
                 },
             },
         }))

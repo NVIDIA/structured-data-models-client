@@ -148,9 +148,9 @@ The compatibility ledger in `tests/compatibility/manifest.json` records supporte
 
 ### Product (ships to users)
 
-- `packages/structured-data-models-client/`: the public `sdm_client` API.
+- `packages/structured-data-models-client/`: the public `sdm_client` API, including `Source` (`provider.py`) and the built-in sources (`sources.py`).
   - `src/sdm_client/_rust/`: the Python host of the Rust core: the run loop, the message codec, the error table, and `providers/`, which run the core's SQL on the user's DuckDB, SQLite or Postgres connection.
-- `packages/structured-data-models-connectors/`: `sdm_connectors`, the `Source` classes and the driver helpers in `backends/`.
+- `packages/structured-data-models-connectors/`: `sdm_connectors`, the file and table readers, the Databricks connection helpers and the driver helpers in `backends/`.
 - `packages/structured-data-models-api/`: `sdm_api`, the wire types generated from the model's OpenAPI file.
 - `rust/`: the Rust core; see [`rust/README.md`](rust/README.md).
   - `rust/crates/`: the library crates (all but `sdm-testkit` ship).
@@ -191,11 +191,11 @@ It hands the host steps, "run these SQL statements" or "send this request body",
 The paths below are under `packages/` for Python and under `rust/crates/` for Rust.
 
 1. **Connect a source.**
-   Python: `sdm_connectors/source.py` (`DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource`, `SnowflakeSource`).
+   Python: `sdm_client/sources.py` (`DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource`, `SnowflakeSource`), or a caller's own subclass of `sdm_client.Source`.
    Rust: none; the connection stays in the host, and `sdm_client/_rust/providers/` runs the core's SQL on it.
 2. **Describe the schema** (`Schema.from_source`).
    Python: `sdm_client/schema.py` and the source adapters pass schema inputs and Arrow data to the core.
-   Rust: `sdm-core/src/describe.rs` drives, `sdm-data` writes the catalog SQL, `sdm-schema` infers types, keys, time columns and links.
+   Rust: `sdm-core/src/describe.rs` drives, `sdm-sql` writes the catalog SQL, `sdm-schema` infers types, keys, time columns and links.
 3. **Validate the PQL** (`PredictiveQuery`).
    Python: `sdm_client/query.py` passes the query and schema to the core.
    Rust: `sdm-pql`, reached only through `sdm-core/src/pql.rs`.
@@ -204,7 +204,7 @@ The paths below are under `packages/` for Python and under `rust/crates/` for Ru
    Rust: `sdm-core/src/materialize.rs`, with time, random streams and labels in `sdm-engine`.
 5. **Sample each entity's neighbors.**
    Python: source adapters execute requested reads and return Arrow data; sampling policy stays in Rust.
-   Rust: `sdm-core/src/subgraph.rs` and `sdm-engine/src/sample.rs`, with the SQL from `sdm-data`, run by the host; `sdm-core/src/fallback.rs` samples in memory.
+   Rust: `sdm-core/src/subgraph.rs` and `sdm-engine/src/sample.rs`, with the SQL from `sdm-sql`, run by the host; `sdm-core/src/fallback.rs` samples in memory.
 6. **Build the request.**
    Python: `sdm_client/request.py` holds the public request and passes inputs to the core.
    Rust: `sdm-request` (payload and options) over `sdm-wire` (the model's JSON types).

@@ -229,12 +229,12 @@ if BIG:
 
             import pandas as pd
             from sdm_client import (
+                DuckDBSource,
                 KumoRelational,
                 PredictiveQuery,
                 Schema,
                 SDMClient,
             )
-            from sdm_connectors import DuckDBSource
 
             with R.source(setup) as connection:
                 schema = Schema.from_source(DuckDBSource(connection))

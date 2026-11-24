@@ -287,8 +287,13 @@ def where() -> dict[str, Any]:
 def json_documents(dsn: str) -> dict[str, Any]:
     r"""The Postgres ``json`` column's documents through predict."""
     import psycopg
-    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-    from sdm_connectors import PostgresSource
+    from sdm_client import (
+        KumoRelational,
+        PostgresSource,
+        PredictiveQuery,
+        Schema,
+        SDMClient,
+    )
 
     out: dict[str, Any] = {'refusal': None, 'bodies': []}
     with psycopg.connect(dsn) as connection:

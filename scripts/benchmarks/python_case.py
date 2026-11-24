@@ -150,7 +150,7 @@ def run(args):
     if args.workload == 'relational-sqlite':
         import adbc_driver_sqlite.dbapi
         import pyarrow as pa
-        from sdm_connectors import SQLiteSource
+        from sdm_client import SQLiteSource
 
         connection = adbc_driver_sqlite.dbapi.connect()
         with connection.cursor() as cursor:

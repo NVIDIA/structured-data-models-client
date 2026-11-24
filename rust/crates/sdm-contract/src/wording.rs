@@ -224,7 +224,7 @@ pub const PROPOSED: &[Sentence] = &[Sentence::NullAnchor];
 
 /// A database a sentence names: by the name the core gives it, as a
 /// product (`backend`), and as the place a table is held (`place`). The
-/// data layer holds each database's (`sdm_data::DATABASE_NAMES`), since a
+/// data layer holds each database's (`sdm_sql::DATABASE_NAMES`), since a
 /// dialect is its alone; the host's table carries them beside the
 /// sentences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -733,9 +733,9 @@ pub fn template(sentence: Sentence) -> Template {
             said(r#"the data source answered with columns other than the ones asked for"#)
         }
         S::ValueNotANumber => said(r#"column {column!r} holds a value that is not a number"#),
-        S::Undeclared => {
-            said(r#"the data source does not take a {request} request, which this call needs"#)
-        }
+        S::Undeclared => said(
+            r#"the data source does not take a {request} request, which this call needs: a data provider answers it by declaring it among its capabilities' optional requests, or lets the client answer it in memory by declaring a fallback"#,
+        ),
         S::SeedPastRange => said(
             r#"the data source samples with a seed of at most {max_seed:,}, and this call asks for a larger one"#,
         ),
@@ -968,6 +968,9 @@ pub fn template(sentence: Sentence) -> Template {
         }
         S::RowsPerCall => said(
             r#"rows_per_call is not a whole number of at least one, and a call scores a whole number of rows, at least one"#,
+        ),
+        S::ContextTimeLimit => said(
+            r#"context_time_limit is not a number of seconds of at least zero, and it is how long a request may draw its context examples"#,
         ),
         S::MaxPqIterationsNotAWholeNumber => owned(
             r#"max_pq_iterations must be a whole number, got {given!N}"#,

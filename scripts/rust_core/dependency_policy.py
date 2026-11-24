@@ -42,6 +42,7 @@ CLASSES: dict[str, str] = {
     'sdm-core': DOMAIN,
     'sdm-pql': DOMAIN,
     'sdm-data': DOMAIN,
+    'sdm-sql': DOMAIN,
     'sdm-schema': DOMAIN,
     'sdm-engine': DOMAIN,
     'sdm-wire': DOMAIN,
@@ -66,6 +67,7 @@ ALLOWED: dict[str, frozenset[str]] = {
     'sdm-wire': frozenset({'sdm-contract'}),
     'sdm-schema': frozenset({'sdm-contract'}),
     'sdm-data': frozenset({'sdm-contract'}),
+    'sdm-sql': frozenset({'sdm-contract'}),
     'sdm-engine': frozenset({'sdm-schema', 'sdm-contract'}),
     'sdm-request': frozenset(
         {'sdm-engine', 'sdm-schema', 'sdm-wire', 'sdm-contract'}
@@ -76,6 +78,8 @@ ALLOWED: dict[str, frozenset[str]] = {
             'sdm-engine',
             'sdm-schema',
             'sdm-data',
+            # The SQL data layer the core's tests plug in; no shipped edge.
+            'sdm-sql',
             'sdm-wire',
             'sdm-contract',
             PARSER,
@@ -83,7 +87,7 @@ ALLOWED: dict[str, frozenset[str]] = {
     ),
     # sdm-host builds the concrete data layer for a run; it reaches
     # sdm-engine's Zones through sdm-core's re-export, never directly.
-    'sdm-host': frozenset({'sdm-core', 'sdm-data', 'sdm-contract'}),
+    'sdm-host': frozenset({'sdm-core', 'sdm-data', 'sdm-sql', 'sdm-contract'}),
     'sdm-py': frozenset({'sdm-host', 'sdm-contract'}),
     'sdm-jni': frozenset({'sdm-host', 'sdm-contract'}),
     'sdm-testkit': frozenset({'sdm-host', 'sdm-contract'}),
@@ -97,7 +101,7 @@ REQUIRED: dict[str, frozenset[str]] = {
 # The Rust database drivers, of DuckDB and of the dialects that may follow
 # it: SQLite, Postgres, ODBC (which Databricks and others are
 # reached through) and Snowflake. No shipped crate links one, whatever its
-# dialect: the host runs the statements sdm-data renders through its own
+# dialect: the host runs the statements sdm-sql renders through its own
 # language's driver.
 DRIVERS = frozenset(
     {

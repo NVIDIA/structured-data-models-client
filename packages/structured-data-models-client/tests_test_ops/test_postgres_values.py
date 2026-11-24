@@ -21,10 +21,14 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import kit_host
 import pyarrow as pa
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
+#: The Postgres source's SQL choice, its kit's database: under the
+#: database's schema, as every Postgres read names one.
+POSTGRES = {'provider': 'sql', 'dialect': 'postgres', 'namespace': ['public']}
 PROVIDER_FILE = (
     'packages/structured-data-models-client/src/sdm_client/_rust/providers/'
     'postgres.py'
@@ -178,7 +182,8 @@ def _read(database: Any, column: str) -> tuple[Any, _Answers]:
     core, and what the provider handed over."""
     with database.connect() as connection:
         answers = _Answers(connection)
-        return recorder().admitted(answers, column), answers
+        choice, provider = kit_host.chosen(POSTGRES, answers)
+        return recorder().admitted(choice, provider, column), answers
 
 
 @pytest.mark.parametrize('column', COLUMNS)
@@ -282,23 +287,17 @@ def test_seed_bindings_preserve_exact_key_and_timestamp_text(
             'per_seed': None,
             'order': None,
         },
-        # Under the database's schema, as every Postgres read names one
-        # .
-        'provider': {
-            'provider': 'sql',
-            'dialect': 'postgres',
-            'namespace': ['public'],
-        },
         'echo': True,
     }
 
     def check() -> None:
         with database.connect() as connection:
             answers = _Answers(connection)
+            choice, provider = kit_host.chosen(POSTGRES, answers)
             finished = run(
                 {'op': 'test', 'test': 'keyed', 'fetch': 1, 'keys': 2},
-                {1: codec.attachment(fetch), 2: table},
-                provider=answers,
+                {1: codec.attachment(fetch | {'provider': choice}), 2: table},
+                provider=provider,
             )
             finished.take(finished.result['data'])
         texts = [

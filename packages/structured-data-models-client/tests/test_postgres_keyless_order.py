@@ -8,9 +8,14 @@ import os
 import uuid
 
 import pytest
-from sdm_connectors import PostgresSource
 
-from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
+from sdm_client import (
+    KumoRelational,
+    PostgresSource,
+    PredictiveQuery,
+    Schema,
+    SDMClient,
+)
 
 
 @pytest.fixture

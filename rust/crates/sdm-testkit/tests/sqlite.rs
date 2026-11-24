@@ -7,22 +7,15 @@
 
 use std::path::PathBuf;
 
-use sdm_contract::data::{DataRequest, DescribePart, Dialect, FetchPlan, ProviderChoice, Relation};
+use sdm_contract::data::{DataRequest, DescribePart, Relation};
 use sdm_contract::{Detail, ErrorCode};
+use sdm_host::kit::SqlPlan;
 use sdm_testkit::host::{self, Answer};
+use sdm_testkit::sql_source::SqlSource;
 use sdm_testkit::{bases, case};
 use serde_json::{Value, json};
 
 const DATABASE: &str = "sqlite";
-
-fn sqlite() -> ProviderChoice {
-    ProviderChoice::Sql {
-        timestamp_encoding: None,
-        dialect: Dialect::new(DATABASE),
-        namespace: Vec::new(),
-        view: None,
-    }
-}
 
 fn relation(parts: &[&str]) -> Relation {
     Relation {
@@ -42,10 +35,8 @@ fn scan(parts: &[&str]) -> DataRequest {
     }
 }
 
-fn plan(request: &DataRequest) -> Result<FetchPlan, sdm_contract::CoreError> {
-    sdm_host::default_root()
-        .data_access(&sqlite())?
-        .plan(request)
+fn plan(request: &DataRequest) -> Result<SqlPlan, sdm_contract::CoreError> {
+    SqlSource::of(DATABASE).plan(request)
 }
 
 fn source() -> rusqlite::Connection {
@@ -82,9 +73,8 @@ fn each_relation_form_sqlite_takes_reads_the_table_its_parts_name() {
         (&["say \"hi\""], r#""say ""hi""""#, 5),
         (&["main", "say \"hi\""], r#""main"."say ""hi""""#, 5),
     ] {
-        let FetchPlan::Sql { statements, .. } = plan(&scan(parts)).unwrap() else {
-            panic!("{parts:?}: not SQL");
-        };
+        let SqlPlan { statements, .. } = plan(&scan(parts)).unwrap();
+
         let [statement] = &statements[..] else {
             panic!("{parts:?}: not one statement");
         };
@@ -154,13 +144,15 @@ fn base_regression_s_journey_reads_a_fixed_budget_on_sqlite() {
     let bases = bases::load(&contract.join("bases.yaml")).unwrap();
     let observed = host::run_sqlite(&loaded[0].case, &bases, &root()).unwrap();
     assert!(matches!(observed.answer, Answer::Predicted(_)));
-    // Each table's catalog, keys and preview are read again at materialize.
+    // Each table's catalog, keys and preview are read again at materialize;
+    // the sampler's index read of each table is the keys' own statement,
+    // which the kit answers once a run.
     let refreshes = observed
         .fetches
         .iter()
         .filter(|f| f["purpose"] == sdm_testkit::plan_b::LOCATE)
         .count();
-    assert_eq!((observed.fetches.len(), refreshes), (24, 6));
+    assert_eq!((observed.fetches.len(), refreshes), (22, 6));
     let driver = observed.driver.as_ref().expect("a driver record");
     let statements = driver["capture"]["statements"].as_array().unwrap();
     let per_stage = |stage: &str| statements.iter().filter(|s| s["stage"] == stage).count();
@@ -170,9 +162,10 @@ fn base_regression_s_journey_reads_a_fixed_budget_on_sqlite() {
             per_stage("materialize"),
             per_stage("predict")
         ),
-        (10, 14, 0)
+        (10, 12, 0)
     );
-    assert_eq!(driver["query_log"]["statements"].as_u64(), Some(24));
+    assert_eq!(driver["query_log"]["statements"].as_u64(), Some(22));
+
     assert_eq!(driver["capture"]["bindings"].as_array().unwrap().len(), 3);
     let planned = |wanted: &dyn Fn(&Value) -> bool| {
         let found: Vec<_> = observed

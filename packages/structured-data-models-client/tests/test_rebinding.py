@@ -13,7 +13,7 @@ from sdm_client.errors import StructuredDataError
 
 @pytest.fixture(params=['duckdb', 'sqlite'])
 def sources(request, tmp_path):
-    from sdm_connectors import DuckDBSource, SQLiteSource
+    from sdm_client import DuckDBSource, SQLiteSource
 
     connections = []
     result = []
@@ -107,12 +107,13 @@ def test_rebinding_refuses_memory_and_missing_columns_atomically(sources):
 
 def test_rebinding_rejects_backend_changes(sources):
     import duckdb
-    from sdm_connectors import DuckDBSource
+
+    from sdm_client import DuckDBSource
 
     original = Schema.from_source(sources[0], {'items': 'items'})
     with duckdb.connect() as connection:
         other = DuckDBSource(connection)
-        if sources[0].backend != 'duckdb':
+        if not isinstance(sources[0], DuckDBSource):
             with pytest.raises(StructuredDataError, match='same backend'):
                 original.with_source(other)
 
@@ -159,7 +160,8 @@ def test_rebind_after_old_connection_closed(sources):
 
 def test_rebinding_rejects_changed_declared_type():
     import duckdb
-    from sdm_connectors import DuckDBSource
+
+    from sdm_client import DuckDBSource
 
     with duckdb.connect() as old, duckdb.connect() as new:
         old.execute(

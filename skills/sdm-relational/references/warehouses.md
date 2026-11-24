@@ -27,8 +27,8 @@ connection its own driver makes, and says so if given another.
 Install the connector's extra, for instance
 `pip install 'structured-data-models-client[databricks]'`.
 
-`Source(connection)` picks the right one for you when you would rather not
-name it. Lakebase is `PostgresSource`, with the `lakebase` extra and
+Each is a `Source`, and so is a subclass of your own that reads data your own
+way. Lakebase is `PostgresSource`, with the `lakebase` extra and
 `sdm_connectors.databricks.lakebase(endpoint, database=..., workspace=...)`,
 which mints the credential and gives back a psycopg connection. Both keywords are
 keyword-only; `database` is required, and `workspace` falls back to an ambient
@@ -47,8 +47,7 @@ adbc_driver_sqlite.dbapi.connect(); got Connection
 ```python
 import duckdb
 import pandas as pd
-from sdm_client import KumoRelational, PredictiveQuery, Relationship, SDMClient, Schema
-from sdm_connectors import DuckDBSource
+from sdm_client import DuckDBSource, KumoRelational, PredictiveQuery, Relationship, SDMClient, Schema
 
 connection = duckdb.connect()
 connection.register('users', pd.DataFrame({'user_id': range(12)}))
@@ -139,7 +138,7 @@ open and no credential to handle.
 In a Databricks notebook, pass `spark`:
 
 ```python
-from sdm_connectors import DatabricksSource
+from sdm_client import DatabricksSource
 
 source = DatabricksSource(spark, catalog='main', schema='sales')
 ```
@@ -156,7 +155,7 @@ through the helper carries both:
 ```python
 from databricks.sdk import WorkspaceClient
 
-from sdm_connectors import DatabricksSource
+from sdm_client import DatabricksSource
 from sdm_connectors.databricks import warehouse
 
 databricks_connection = warehouse(warehouse_id, workspace=WorkspaceClient())
@@ -170,7 +169,7 @@ You close what it hands back.
 In a Snowflake notebook, a Snowpark `session` passes as it is:
 
 ```python
-from sdm_connectors import SnowflakeSource
+from sdm_client import SnowflakeSource
 
 source = SnowflakeSource(session, database='SALES', schema='PUBLIC')
 ```
@@ -180,8 +179,7 @@ source = SnowflakeSource(session, database='SALES', schema='PUBLIC')
 A metric view already names the tables a question is about and how they join, so it can be the source itself:
 
 ```python
-from sdm_client import Schema
-from sdm_connectors import DatabricksSource
+from sdm_client import DatabricksSource, Schema
 
 source = DatabricksSource(
     databricks_connection, catalog='sales', schema='public'

@@ -26,13 +26,12 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
-from sdm_connectors import SnowflakeSource
 from sdm_connectors.providers import PlanNotRun
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.errors import NotSupportedError, ProgrammingError
 
+from sdm_client import SnowflakeSource
 from sdm_client._rust import run as rust_run
-from sdm_client._rust.providers import for_source
 from sdm_client._rust.providers.snowflake import SnowflakeProvider
 
 
@@ -286,29 +285,24 @@ def test_a_plan_the_provider_does_not_run_is_refused_before_anything_runs() -> (
 
 def test_a_snowflake_source_names_its_dialect_namespace_and_provider() -> None:
     connection = _Connection({})
-    choice, provider = for_source(
-        SnowflakeSource(connection, database='SALES', schema='public')
-    )
+    source = SnowflakeSource(connection, database='SALES', schema='public')
     # The parts as given, never upper-cased (``CN/sql.py:247``).
-    assert choice == {
+    assert source._sql_choice() == {
         'provider': 'sql',
         'dialect': 'snowflake',
         'namespace': ['SALES', 'public'],
     }
-    assert isinstance(provider, SnowflakeProvider)
-    choice, _ = for_source(SnowflakeSource(connection, database='SALES'))
+    assert isinstance(source._operation()._driver, SnowflakeProvider)
+    choice = SnowflakeSource(connection, database='SALES')._sql_choice()
     assert choice['namespace'] == ['SALES', None]
-    choice, _ = for_source(SnowflakeSource(connection))
-    assert 'namespace' not in choice
+    assert 'namespace' not in SnowflakeSource(connection)._sql_choice()
 
 
 def test_a_snowpark_session_is_read_through_its_own_connection() -> None:
     rows = pa.table({'user_id': pa.array([0, 1], pa.int8())})
     connection = _Connection({_SELECT: rows})
     source = SnowflakeSource(Session(connection), database='DB', schema='S')
-    assert source.kind == 'snowflake'
-    _, provider = for_source(source)
-    answer = _arrow(provider(_step((_SELECT, []))))
+    answer = _arrow(source._operation()._driver(_step((_SELECT, []))))
     assert answer.equals(rows)
     assert connection.calls == [(_SELECT, None, 'qmark')]
 

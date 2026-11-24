@@ -115,7 +115,7 @@ def test_sql_cli_discovers_error_members_once_and_refreshes_next_invocation(
         *[
             f'sql: rust/crates/{crate}/src/lib.rs:1: the strings '
             'of a statement hold `select a from t where`, SQL or a '
-            "provider's name; SQL and providers are sdm-data's alone"
+            "provider's name; SQL and providers are sdm-sql's alone"
             for crate in present
         ],
         'sql: FAIL',
@@ -320,7 +320,6 @@ def test_jni_cannot_contain_provider_specific_words(
         ('describe.rs', 'crate::sql_column::project();'),
         ('lib.rs', 'mod sql_column;'),
         ('materialize/examples.rs', 'ExampleSource::Sql { schema };'),
-        ('rebind.rs', 'sdm_contract::data::ProviderChoice::Sql { provider };'),
         (
             'sql_column.rs',
             'use sdm_contract::sql_column::{SqlColumn, SqlColumnCall}; fn f(request: SqlColumn, call: SqlColumnCall) {}',

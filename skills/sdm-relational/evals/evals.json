@@ -62,10 +62,10 @@
     {
       "id": "r06",
       "prompt": "Our users and orders tables are in a warehouse and are far too big to pull into pandas. How do I point kumo-relational at them with sdm_client without exporting the tables?",
-      "expected_output": "Uses a connector source from sdm_connectors (e.g. SnowflakeSource, DatabricksSource, PostgresSource, DuckDBSource) wrapping the driver's own connection, then Schema.from_source(source, {name: table}, primary_keys=..., time_columns=..., relationships=...). materialize() then samples with SQL so only a bounded sample leaves: up to a thousand rows of each table to read its columns, then only the rows a prediction needs. Everything after the schema is the same as with from_data. Installs the connector's extra, e.g. structured-data-models-client[snowflake].",
+      "expected_output": "Uses a built-in source from sdm_client (e.g. SnowflakeSource, DatabricksSource, PostgresSource, DuckDBSource) wrapping the driver's own connection, then Schema.from_source(source, {name: table}, primary_keys=..., time_columns=..., relationships=...). materialize() then samples with SQL so only a bounded sample leaves: up to a thousand rows of each table to read its columns, then only the rows a prediction needs. Everything after the schema is the same as with from_data. Installs the connector's extra, e.g. structured-data-models-client[snowflake].",
       "assertions": [
         "Uses Schema.from_source rather than Schema.from_data",
-        "Builds a source from sdm_connectors around a warehouse connection",
+        "Builds a source from sdm_client around a warehouse connection",
         "Explains that only a bounded sample leaves the warehouse, not the whole table",
         "Keeps the PredictiveQuery / materialize / predict flow the same as with in-memory data",
         "Does not export the full tables to pandas as the recommended approach"

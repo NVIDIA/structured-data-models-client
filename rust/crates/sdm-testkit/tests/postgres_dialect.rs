@@ -13,8 +13,9 @@
 //! - Every request kind the core asks, on every base of
 //!   `contract/request-kinds.json`, is planned for Postgres through the
 //!   root's data access (so each optional request is one the dialect
-//!   declares) as SQL statements of the Postgres dialect; a keyed request
-//!   binds its key set as a parameter of a statement (`SqlParam::KeySet`,
+//!   declares) as SQL statements of the Postgres dialect, as its SQL kit
+//!   writes them; a keyed request binds its key set as a parameter of a
+//!   statement, the JSON text the dialect writes it as (`SqlParam::Text`,
 //!   `P1 d:131`: the binding is the dialect's).
 //! - Choice 12's relation forms on Postgres: one part or two (schema and
 //!   table) plan, each part quoted alone (a dotted name one identifier, a
@@ -25,10 +26,10 @@
 
 use std::path::PathBuf;
 
-use sdm_contract::data::{
-    DataRequest, DescribePart, Dialect, FetchPlan, ProviderChoice, Relation, SqlParam,
-};
+use sdm_contract::data::{DataRequest, DescribePart, Relation};
 use sdm_contract::{Detail, ErrorCode};
+use sdm_host::kit::{Dialect, SqlChoice, SqlParam, SqlPlan};
+use sdm_testkit::sql_source::SqlSource;
 use serde_json::{Value, json};
 
 fn contract() -> PathBuf {
@@ -38,8 +39,8 @@ fn contract() -> PathBuf {
 /// A Postgres source under its schema, as every run reads one: the
 /// source's, or its session's current one, which the core reads once per
 /// run before any table.
-fn postgres() -> ProviderChoice {
-    ProviderChoice::Sql {
+fn postgres() -> SqlChoice {
+    SqlChoice {
         timestamp_encoding: None,
         dialect: Dialect::new("postgres"),
         namespace: vec![Some("public".to_owned())],
@@ -47,19 +48,15 @@ fn postgres() -> ProviderChoice {
     }
 }
 
-fn plan(request: &DataRequest) -> Result<FetchPlan, sdm_contract::CoreError> {
-    sdm_host::default_root()
-        .data_access(&postgres())?
-        .plan(request)
+fn plan(request: &DataRequest) -> Result<SqlPlan, sdm_contract::CoreError> {
+    SqlSource::new(postgres())?.plan(request)
 }
 
 #[test]
 fn postgres_is_rendered_by_the_data_layer_and_provided_on_rust_host() {
     assert!(sdm_host::providers().contains(&"postgres"));
     assert!(sdm_testkit::PROVIDERS.contains(&"postgres"));
-    sdm_host::default_root()
-        .data_access(&postgres())
-        .expect("the root's data layer takes the Postgres dialect");
+    SqlSource::new(postgres()).expect("the SQL kit takes the Postgres dialect");
 }
 
 #[test]
@@ -84,9 +81,7 @@ fn every_request_kind_plans_as_postgres_statements() {
         }
         let request: DataRequest = serde_json::from_value(request).unwrap();
         let plan = plan(&request).unwrap_or_else(|e| panic!("{place}: {e:?}"));
-        let FetchPlan::Sql { statements, .. } = plan else {
-            panic!("{place}: not SQL");
-        };
+        let SqlPlan { statements, .. } = plan;
         assert!(!statements.is_empty(), "{place}");
         for statement in &statements {
             assert_eq!(statement.dialect, Dialect::new("postgres"), "{place}");
@@ -95,7 +90,7 @@ fn every_request_kind_plans_as_postgres_statements() {
         let binds = statements
             .iter()
             .flat_map(|s| &s.params)
-            .any(|p| matches!(p, SqlParam::KeySet { .. }));
+            .any(|p| matches!(p, SqlParam::KeySet { .. } | SqlParam::Text { .. }));
         assert_eq!(
             binds, has_keys,
             "{place}: the key set is bound by a parameter"
@@ -135,9 +130,7 @@ fn a_relation_of_one_or_two_parts_plans_each_part_quoted_alone() {
         (&["say \"hi\""], r#""say ""hi""""#, None),
         (&["s", "say \"hi\""], r#""s"."say ""hi""""#, None),
     ] {
-        let FetchPlan::Sql { statements, .. } = plan(&scan(parts)).unwrap() else {
-            panic!("not SQL");
-        };
+        let SqlPlan { statements, .. } = plan(&scan(parts)).unwrap();
         let text = &statements.last().unwrap().text;
         assert!(text.contains(from), "{parts:?}: {text}");
         if let Some(not) = not {
@@ -186,13 +179,17 @@ fn key_set(attachment: u64, more: &[Value]) -> Value {
     })
 }
 
-/// The statements `request` plans on Postgres, as the contract writes them.
+/// The statements `request` plans on Postgres, as the kit hands them to
+/// the driver: its key set written as the JSON text the statement reads,
+/// one text parameter.
 fn planned(request: Value) -> Value {
     let request: DataRequest = serde_json::from_value(request).unwrap();
-    let FetchPlan::Sql { statements, .. } = plan(&request).unwrap() else {
-        panic!("not SQL");
-    };
-    serde_json::to_value(statements).unwrap()
+    serde_json::to_value(plan(&request).unwrap().statements).unwrap()
+}
+
+/// The one text parameter a key set the kit writes as JSON is bound as.
+fn text_param() -> Value {
+    json!({"param": "text", "attachment": 1})
 }
 
 /// base.regression's entity lookup and its neighbor read, as Postgres
@@ -237,7 +234,7 @@ FROM (
 ) AS l
 WHERE l.r = 1
 ORDER BY l.b"#,
-            "params": [key_set(2, &[])],
+            "params": [text_param()],
         }])
     );
     let neighbors = planned(json!({
@@ -286,7 +283,8 @@ CROSS JOIN LATERAL (
   LIMIT 32
 ) AS n
 ORDER BY s."batch", n.r"#,
-            "params": [key_set(3, &[time])],
+            "params": [text_param()],
+
         }])
     );
 }

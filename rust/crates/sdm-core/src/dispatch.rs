@@ -785,7 +785,7 @@ pub(crate) fn materialize(
                     labels_only,
                 };
             Ok(Run::with_data(access, move |asker| async move {
-                // A source's tables (a SQL provider's) are read as they stand
+                // A source's tables (a built-in database's) are read as they stand
                 // at each run, their location, columns and types, once the
                 // request's inputs are checked (`describe::initialize`), and
                 // nothing of them is remembered between runs (the owner's

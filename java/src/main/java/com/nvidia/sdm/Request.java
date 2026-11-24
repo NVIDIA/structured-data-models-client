@@ -31,6 +31,16 @@ public final class Request {
     return this;
   }
 
+  private ContextReport contextReport = ContextReport.unavailable();
+
+  /** How the context examples were drawn from the source. */
+  public ContextReport contextReport() { return contextReport; }
+
+  Request withContextReport(ContextReport report) {
+    this.contextReport = report;
+    return this;
+  }
+
   private byte[] contextData;
   private byte[] predictData;
   private Map<String, Object> direct;
@@ -121,6 +131,7 @@ public final class Request {
     Snapshots.Writer writer = new Snapshots.Writer();
     Map<String, Object> saved = new java.util.LinkedHashMap<>();
     saved.put("sanitization_report", sanitizationReport.saved());
+    saved.put("context_report", contextReport.saved());
     saved.put("schema", schema.saved(writer));
     if(facts instanceof Results.ExampleFacts e) saved.put("example_facts", Map.of("entity_table",e.entityTable(),"kind",e.problemType(),"windowed",e.windowed(),"num_forecasts",e.numForecasts()));
     saved.put("query", query); saved.put("inference", inference); saved.put("task_options", taskOptions);
@@ -198,6 +209,9 @@ public final class Request {
     }
     if (saved.containsKey("sanitization_report")) {
       request.sanitizationReport = SanitizationReport.restored(saved.get("sanitization_report"));
+    }
+    if (saved.containsKey("context_report")) {
+      request.contextReport = ContextReport.restored(saved.get("context_report"));
     }
     request.inference = inference;
     request.taskOptions = taskOptions;
@@ -336,7 +350,8 @@ public final class Request {
         if (!validated.accepted() || validated.query() == null)
           throw new StructuredDataException("core produced an invalid request part", "INTERNAL_ERROR", Map.of(), null);
         result.add(new Request(schema, part, text, validated.query(), inferenceAsked)
-            .withSanitizationReport(sanitizationReport));
+            .withSanitizationReport(sanitizationReport)
+            .withContextReport(contextReport));
       }
     }
     return Optional.of(List.copyOf(result));

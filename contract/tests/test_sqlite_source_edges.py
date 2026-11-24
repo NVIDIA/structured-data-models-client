@@ -50,19 +50,33 @@ def _on_the_core(
     validation."""
     if locate_counts is not None:
         from sdm_client import PredictiveQuery
+        from sdm_client._rust.host_providers import HostProvider
         from sdm_client._rust.providers.sqlite import SqliteProvider
 
+        asked = HostProvider.__call__
         provider = SqliteProvider.__call__
         materialize = PredictiveQuery.materialize
         located: list[int] = []
+        # The purpose of the core's step being answered: the source's SQL
+        # kit hands its driver each statement below that step.
+        asking: dict[str, Any] = {'purpose': None}
+
+        def answering(self: Any, step: dict[str, Any], keys: Any = None) -> Any:
+            asking['purpose'] = step.get('purpose')
+            try:
+                return asked(self, step, keys)
+            finally:
+                asking['purpose'] = None
 
         def fetch(self: Any, step: dict[str, Any], keys: Any = None) -> Any:
-            if step.get('purpose') != 'locate':
+            if asking['purpose'] != 'locate':
                 return provider(self, step, keys)
             with R._runner().StatementLog('sqlite') as log:
                 answer = provider(self, step, keys)
             located.append(sum(bool(text) for text in log.texts))
             return answer
+
+        monkeypatch.setattr(HostProvider, '__call__', answering)
 
         def call(self: Any, *args: Any, **kwargs: Any) -> Any:
             before = sum(located)
@@ -366,8 +380,11 @@ def test_partial_unique_index_refreshes_facts_once(
     locate: list[int] = []
     got = _on_the_core(monkeypatch, 'partial-unique', locate)
     assert locate == [7]
-    # Eleven description reads, then seven refresh and seven gather reads.
-    assert got['statements'] == {'from_source': 11, 'materialize': 14}
+    # Eleven description reads, then seven refresh and six gather reads: the
+    # sampler's index read of a table is the statement its keys were read
+    # by this run, which the source's SQL kit answers once a run
+    # (``sdm-testkit``'s SQLite budget).
+    assert got['statements'] == {'from_source': 11, 'materialize': 13}
     _relational_request(got)
 
 
@@ -377,9 +394,10 @@ def test_each_materialize_refreshes_facts_and_keeps_results_stable(
     locate: list[int] = []
     got = _on_the_core(monkeypatch, 'materialize-twice', locate)
     assert locate == [6, 6]
-    assert got['statements'] == {'from_source': 10, 'materialize': 14}
+    # Each table's index read is its keys' statement this run, read once.
+    assert got['statements'] == {'from_source': 10, 'materialize': 12}
     _relational_request(got)
     assert len(got['repeated']) == 1
-    # Both calls refresh source facts; only the two index checks stay cached.
+    # Both calls refresh source facts; the index checks stay cached.
     assert got['repeated'][0]['statements'] == 12
     assert got['repeated'][0]['payloads'] == got['payloads']

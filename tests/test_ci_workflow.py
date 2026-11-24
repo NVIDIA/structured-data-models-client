@@ -142,10 +142,10 @@ def test_a_job_installs_the_candidate_s_wheels_before_naming_them() -> None:
 def test_each_image_is_named_once_and_pinned_by_digest() -> None:
     workflow = _workflow()
     env = workflow['env']
-    for key in ('POSTGRES_IMAGE', 'MANYLINUX'):
+    for key in ('POSTGRES_IMAGE', 'MANYLINUX', 'TRINO_IMAGE'):
         assert DIGEST.search(env[key]), env[key]
     text = CI.read_text(encoding='utf-8')
-    for key in ('POSTGRES_IMAGE', 'MANYLINUX'):
+    for key in ('POSTGRES_IMAGE', 'MANYLINUX', 'TRINO_IMAGE'):
         assert text.count(env[key]) == 1, key
     # The aarch64 build's image, named in that job alone.
     aarch64 = workflow['jobs']['native-wheel-aarch64']['env']['MANYLINUX']
@@ -180,6 +180,7 @@ def test_every_image_ci_runs_is_pulled_with_retries_first() -> None:
         'native-wheel-aarch64',
         'wheel-smoke',
         'wheel-smoke-aarch64',
+        'java-db',
     ):
         runs = [str(s.get('run', '')) for s in jobs[name]['steps']]
         pulls = [i for i, r in enumerate(runs) if 'pull_image.sh' in r]
@@ -335,7 +336,13 @@ def test_ci4_every_image_ci_names_is_pinned_by_digest(
         assert load['container'] == '${{ matrix.image }}'
         for image in jdks:
             assert image.startswith('mcr.microsoft.com/openjdk/jdk:'), image
-        named = {env['POSTGRES_IMAGE'], env['MANYLINUX'], aarch64, *jdks}
+        named = {
+            env['POSTGRES_IMAGE'],
+            env['MANYLINUX'],
+            env['TRINO_IMAGE'],
+            aarch64,
+            *jdks,
+        }
         assert set(images) == named, set(images) ^ named
         for name, job in workflow['jobs'].items():
             assert name == 'java-load' or 'container' not in job, name
@@ -391,8 +398,17 @@ def test_ci4_every_container_ci_runs_is_pulled_first_by_pull_image_sh(
                     pulls.append(run.strip().split(' ', 1)[1])
                 if 'docker run' in run:
                     seen += 1
-                    assert '"$MANYLINUX"' in run, (name, run)
-                    assert '"$MANYLINUX"' in pulls, (name, pulls)
+                    # The build image, or Trino for the Java provider test.
+                    image = next(
+                        (
+                            i
+                            for i in ('"$MANYLINUX"', '"$TRINO_IMAGE"')
+                            if i in run
+                        ),
+                        None,
+                    )
+                    assert image, (name, run)
+                    assert image in pulls, (name, pulls)
                 if '--container' in run and 'wheel_smoke.py' in run:
                     seen += 1
                     lane = '--lane ${{ matrix.lane }}'

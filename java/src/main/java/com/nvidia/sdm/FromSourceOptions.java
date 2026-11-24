@@ -113,12 +113,6 @@ public final class FromSourceOptions {
       return this;
     }
 
-    /** Declares {@code table} has no primary key, as Python's {@code None} does. */
-    public Builder noPrimaryKey(String table) {
-      primaryKeys.put(Objects.requireNonNull(table, "table"), null);
-      return this;
-    }
-
     /** Declares {@code table}'s time column. */
     public Builder timeColumn(String table, String column) {
       timeColumns.put(Objects.requireNonNull(table, "table"), Objects.requireNonNull(column, "column"));

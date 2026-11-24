@@ -8,7 +8,7 @@
 //! `neighbors` or `lookup` request carries, the order `_by_fkey` keeps neighbors in, and, the
 //! sampler's three reads as typed requests ([`by_pkey`], [`by_fkey`],
 //! [`by_time`]). It holds no SQL: what it asks for is typed requests,
-//! which `sdm-data` plans.
+//! which `sdm-sql` plans.
 
 use std::sync::Arc;
 

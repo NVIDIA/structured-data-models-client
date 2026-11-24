@@ -7,10 +7,10 @@
 //! package's test author before the implementation:
 //!
 //! - P2--1: "The second data layer drops a whole key list when one name
-//!   in it is null, where `sdm-data` drops only the null name
+//!   in it is null, where `sdm-sql` drops only the null name
 //!   (`sdm-testkit/src/layer.rs`)": a key's and a foreign key's column list
 //!   holding a null name is read with the null name dropped and every other
-//!   name kept, as `sdm-data`'s reader (`read.rs`, `names`) reads it;
+//!   name kept, as `sdm-sql`'s reader (`read.rs`, `names`) reads it;
 //! - P2--2: "The memory test provider... does not answer
 //!   `column_ranges`, so on a table bigger than the preview it picks the
 //!   time column from the preview (`sdm-testkit/src/memory.rs`)": the
@@ -26,10 +26,8 @@ use arrow_array::types::{Int64Type, TimestampMicrosecondType};
 use arrow_array::{ArrayRef, Int64Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, TimeUnit};
 use sdm_contract::catalog::CatalogAnswer;
-use sdm_contract::data::{
-    DataLayer, DataRequest, OptionalRequest, ProviderChoice, catalog_columns as c,
-};
-use sdm_testkit::layer::HostLayer;
+use sdm_contract::catalog_read::standard;
+use sdm_contract::data::{DataRequest, DescribePart, OptionalRequest, catalog_columns as c};
 use sdm_testkit::memory::Memory;
 use serde_json::json;
 
@@ -45,21 +43,6 @@ fn lists(rows: &[&[Option<&str>]]) -> ArrayRef {
     Arc::new(builder.finish())
 }
 
-fn describe(part: &str) -> DataRequest {
-    serde_json::from_value(json!({
-        "request": "describe",
-        "tables": [{"source": ["orders"]}],
-        "part": part,
-    }))
-    .unwrap()
-}
-
-fn host() -> ProviderChoice {
-    ProviderChoice::Host {
-        capabilities: Memory::capabilities(),
-    }
-}
-
 #[test]
 fn a_null_name_drops_only_that_name_from_a_key_list() {
     let keys = RecordBatch::try_from_iter([
@@ -70,7 +53,7 @@ fn a_null_name_drops_only_that_name_from_a_key_list() {
         (c::COLUMNS, lists(&[&[Some("a"), None, Some("b")]])),
     ])
     .unwrap();
-    let read = HostLayer.read(&describe("keys"), &host(), &[keys]).unwrap();
+    let read = standard(DescribePart::Keys, &[keys]).unwrap();
     let CatalogAnswer::Keys(found) = read else {
         panic!("not a keys answer: {read:?}");
     };
@@ -87,9 +70,8 @@ fn a_null_name_drops_only_that_name_from_a_key_list() {
         (c::REFERENCED_COLUMNS, lists(&[&[None, Some("id")]])),
     ])
     .unwrap();
-    let read = HostLayer
-        .read(&describe("foreign_keys"), &host(), &[foreign])
-        .unwrap();
+    let read = standard(DescribePart::ForeignKeys, &[foreign]).unwrap();
+
     let CatalogAnswer::ForeignKeys(found) = read else {
         panic!("not a foreign-keys answer: {read:?}");
     };

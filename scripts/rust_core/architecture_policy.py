@@ -43,6 +43,7 @@ CORE_CRATES = (
     'sdm-core',
     'sdm-pql',
     'sdm-data',
+    'sdm-sql',
     'sdm-schema',
     'sdm-engine',
     'sdm-wire',
@@ -841,14 +842,13 @@ PROVIDER_WORDS = frozenset(
 # Provider-computed columns and typed example sources use
 # sdm-contract/src/sql_column.rs,
 # data.rs (ProviderChoice), and examples.rs (ExampleSource). Core orchestrates
-# these opaque requests; SQL rendering and provider knowledge stay in sdm-data.
+# these opaque requests; SQL rendering and provider knowledge stay in sdm-sql.
 # Match reviewed qualified references/declarations, never entire files or words.
 _SQL_ORCHESTRATION = {
     'describe.rs': (r'crate::sql_column',),
     'dispatch.rs': (r'Operation::AddSqlColumn', r'crate::sql_column'),
     'lib.rs': (r'mod sql_column;',),
     'materialize/examples.rs': (r'ExampleSource::Sql',),
-    'rebind.rs': (r'sdm_contract::data::ProviderChoice::Sql',),
     'sql_column.rs': (
         r'sdm_contract::sql_column',
         r'sdm_contract::sql_column::\{\s*SqlColumn,\s*SqlColumnCall\s*\}',
@@ -908,7 +908,7 @@ def check_sql(root: Path) -> list[str]:
                     problems.append(
                         f'{rel}:{source.line(offset)}: the strings '
                         f'of a statement hold `{evidence}`, SQL or a '
-                        "provider's name; SQL and providers are sdm-data's "
+                        "provider's name; SQL and providers are sdm-sql's "
                         'alone'
                     )
             for match in _INCLUDE.finditer(source.skeleton):
@@ -932,11 +932,12 @@ def check_sql(root: Path) -> list[str]:
 # --- dialects ---------------------------------------------------------------
 
 # The shared crates that hold no dialect knowledge: every
-# shipped crate but sdm-data, whose dialects they are, and the parser,
+# shipped crate but sdm-sql, whose dialects they are, and the parser,
 # which reads no data. sdm-testkit is dev-only.
 DIALECT_FREE_CRATES = (
     'sdm-contract',
     'sdm-core',
+    'sdm-data',
     'sdm-request',
     'sdm-schema',
     'sdm-engine',
@@ -1024,7 +1025,7 @@ def check_dialects(root: Path) -> list[str]:
                     problems.append(
                         f'{rel}:{source.line(offset)}: `{name}` names a '
                         f'dialect ({", ".join(hit)}); a dialect is '
-                        f"sdm-data's alone, and {crate} holds none"
+                        f"sdm-sql's alone, and {crate} holds none"
                     )
     return problems
 
@@ -1097,7 +1098,7 @@ def check_provider_sql(root: Path) -> list[str]:
                     problems.append(
                         f'{rel}:{node.lineno}: a string holds '
                         f'`{" ".join(match.group(0).split())[:40]}`, SQL; '
-                        "the statements a provider runs are sdm-data's"
+                        "the statements a provider runs are sdm-sql's"
                     )
     return problems
 
@@ -1322,11 +1323,28 @@ REQUIRED_METHODS = frozenset(
         'jiff::tz::TimeZone::system',
     }
 )
-# The one place shipped code may allow a ban: sdm-host reads the zone lookup
-# roots the host names. The allow must be exactly this one,
-# on exactly this statement: a binding of `TimeZoneDatabase::from_dir` over
-# the root's path, with at most a trailing `.ok` or `?`.
+# The two places shipped code may allow a ban, both in sdm-host, the host
+# layer every binding runs the core through. It reads the zone lookup roots
+# the host names: the allow must be exactly this one, on exactly this
+# statement, a binding of `TimeZoneDatabase::from_dir` over the root's path,
+# with at most a trailing `.ok` or `?`. And it reads a run's monotonic clock,
+# which it tells the core with each reply: the allow must be exactly the
+# clock's, on exactly `mod clock;`, and the clock module may name no banned
+# API but `std::time::Instant` (CLOCK_ONLY).
 BAN_EXEMPTION = Path('rust/crates/sdm-host/src/zones.rs')
+CLOCK_EXEMPTION = Path('rust/crates/sdm-host/src/lib.rs')
+CLOCK_MODULE = Path('rust/crates/sdm-host/src/clock.rs')
+_CLOCK_ATTRIBUTE = re.compile(
+    r'^#\[allow\(clippy::disallowed_methods,clippy::disallowed_types,'
+    r'reason=""\)\]$'
+)
+_CLOCK_STATEMENT = re.compile(r'^mod clock ;$')
+#: What the clock module may not name: every banned API but the monotonic
+#: clock it reads.
+CLOCK_ONLY = re.compile(
+    r'\b(SystemTime|HashMap|HashSet|RandomState|env\s*::|fs\s*::|File\b|'
+    r'thread_rng|rand\s*::|TimeZone|Zoned|unix_epoch)'
+)
 _EXEMPT_ATTRIBUTE = re.compile(
     r'^#\[allow\(clippy::disallowed_methods,reason=""\)\]$'
 )
@@ -1434,15 +1452,22 @@ def ban_switches(attribute: Attribute) -> set[str]:
     return switches
 
 
-def exempt(source: Source, attribute: Attribute) -> bool:
-    """Whether this is sdm-host's approved allow on its approved statement."""
-    if attribute.inner or not _EXEMPT_ATTRIBUTE.match(attribute.text):
+def exempt(
+    source: Source,
+    attribute: Attribute,
+    allow: re.Pattern[str] = _EXEMPT_ATTRIBUTE,
+    statement: re.Pattern[str] = _EXEMPT_STATEMENT,
+) -> bool:
+    """Whether this is one of sdm-host's approved allows on its approved
+    statement: the zone roots' by default, the clock's when named."""
+    if attribute.inner or not allow.match(attribute.text):
         return False
     end = source.skeleton.find(';', attribute.end)
     if end < 0:
         return False
-    statement = tokens(source.skeleton[attribute.end : end + 1])
-    return bool(_EXEMPT_STATEMENT.match(statement))
+    return bool(
+        statement.match(tokens(source.skeleton[attribute.end : end + 1]))
+    )
 
 
 def ban_problems(rel: Path, source: Source, shipped: bool) -> list[str]:
@@ -1464,11 +1489,23 @@ def ban_problems(rel: Path, source: Source, shipped: bool) -> list[str]:
             exemptions += 1
             if exemptions == 1:
                 continue
+        if rel == CLOCK_EXEMPTION and exempt(
+            source, attribute, _CLOCK_ATTRIBUTE, _CLOCK_STATEMENT
+        ):
+            exemptions += 1
+            if exemptions == 1:
+                continue
         for lint in sorted(switches):
             problems.append(
-                f'{rel}:{line}: shipped code allows {lint}; the one '
-                "exemption is sdm-host's reading of the zone lookup roots, "
-                'on its one statement'
+                f'{rel}:{line}: shipped code allows {lint}; the '
+                "exemptions are sdm-host's reading of the zone lookup roots "
+                'and its run clock module, each on its one statement'
+            )
+    if rel == CLOCK_MODULE:
+        for match in CLOCK_ONLY.finditer(source.skeleton):
+            problems.append(
+                f'{rel}:{source.line(match.start())}: the clock module reads '
+                f'only the monotonic clock, not `{match.group(0)}`'
             )
     if shipped:
         # Code brought in from outside src/ would be read as test code.

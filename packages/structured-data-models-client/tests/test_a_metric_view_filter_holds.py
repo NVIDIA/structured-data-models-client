@@ -21,9 +21,9 @@ from typing import Any
 import pandas as pd
 import pyarrow as pa
 import pytest
-from sdm_connectors import DatabricksSource  # noqa: E402
 
 from sdm_client import (  # noqa: E402
+    DatabricksSource,  # noqa: E402
     PredictiveQuery,
     Schema,
     StructuredDataError,

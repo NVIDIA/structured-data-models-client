@@ -13,16 +13,17 @@
 //!   request but the in-context examples are DuckDB's; the examples are
 //!   drawn by each provider's own seeded sample (DuckDB's reservoir
 //!   shuffles even a table it keeps whole), so they are not compared;
-//! - the swapped layer refuses a SQL dialect by name.
+//! - the swapped layer reads no database: every answer is held to the
+//!   contract's shape, and no semantic model is read.
 
 use std::path::PathBuf;
 
-use sdm_contract::ErrorCode;
-use sdm_contract::data::{DataLayer, Dialect, ProviderChoice};
+use sdm_contract::data::DataLayer;
 use sdm_testkit::bases;
 use sdm_testkit::case::{self, Case};
 use sdm_testkit::host::{self, Answer, Observed};
 use sdm_testkit::layer::{self, HostLayer};
+use sdm_testkit::memory::Memory;
 use serde_json::{Value, json};
 
 fn repository() -> PathBuf {
@@ -131,20 +132,12 @@ fn two_schema_tables_over_one_source_predict_as_two_sources() {
 }
 
 #[test]
-fn the_swapped_layer_renders_no_sql_dialect() {
-    let refused = HostLayer
-        .capabilities(&ProviderChoice::Sql {
-            timestamp_encoding: None,
-            dialect: Dialect::new("duckdb"),
-            namespace: Vec::new(),
-            view: None,
-        })
-        .unwrap_err();
-    assert_eq!(refused.code, ErrorCode::UnsupportedRequest);
-    assert_eq!(
-        refused.fields.get("dialect"),
-        Some(&sdm_contract::Detail::text("duckdb"))
-    );
+fn the_swapped_layer_reads_no_database() {
+    // Even a source declaring a built-in database is read through no
+    // semantic model.
+    let mut declared = Memory::capabilities();
+    declared.database = Some("duckdb".into());
+    assert_eq!(HostLayer.view_kind(&declared), None);
 }
 
 /// The key counts the core asks are labelled as the dialects label them

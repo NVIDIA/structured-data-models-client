@@ -67,11 +67,12 @@ See the [quickstart](../get-started/quickstart.md), [prediction output](../refer
 | `sdm-core` | Coordinate shared operations |
 | `sdm-pql`, `sdm-schema` | Query parsing/validation and schema rules |
 | `sdm-engine`, `sdm-request`, `sdm-wire` | Sampling, request/session computation and model payload/result handling |
-| `sdm-data` | SQL generation and dialect-specific catalog interpretation |
+| `sdm-sql` | SQL generation and dialect-specific catalog interpretation |
+| `sdm-data` | Engine-neutral data preparation (time series) |
 | `sdm-testkit` | Test host and provider checks; not a runtime dependency |
 
 Only the language adapters execute database and HTTP operations.
-SQL dialect logic stays in `sdm-data`; changing in-memory sampling must not duplicate warehouse query logic in a host adapter.
+SQL dialect logic stays in `sdm-sql`; changing in-memory sampling must not duplicate warehouse query logic in a host adapter.
 The native protocol is versioned for matching bindings, not a separately supported public API.
 See [Rust crate rules](../../rust/README.md) for the enforced dependency boundaries.
 

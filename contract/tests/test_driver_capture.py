@@ -196,7 +196,7 @@ def test_the_spark_session_passes_the_reference_dispatch() -> None:
     log = run.DriverLog()
     log.recorder = run.Recorder()
     captured = run._CapturedSpark(Session(), log)
-    # sdm_connectors.source._is_spark_session reads the type's MRO.
+    # sdm_client.sources._is_spark_session reads the type's MRO.
     assert any(
         cls.__name__ == 'SparkSession' and cls.__module__.startswith('pyspark.')
         for cls in type(captured).__mro__
@@ -208,9 +208,9 @@ def test_the_spark_session_passes_the_reference_dispatch() -> None:
 
 
 def test_a_connect_case_opens_its_source_by_detection() -> None:
-    # A connect case's user writes Source(connection): the old client's
+    # A connect case opens the leg's source class over the connection: the old client's
     # Schema.from_source refuses the bare connection (CL/schema.py:1665).
-    import sdm_connectors
+    import sdm_client
 
     class Connection:
         pass
@@ -219,7 +219,7 @@ def test_a_connect_case_opens_its_source_by_detection() -> None:
     source = run.warehouse_source(
         'lakebase', captured, {'schema': 's'}, {'connect': 'lakebase'}
     )
-    assert isinstance(source, sdm_connectors.PostgresSource)
+    assert isinstance(source, sdm_client.PostgresSource)
     assert source.connection is captured
 
 

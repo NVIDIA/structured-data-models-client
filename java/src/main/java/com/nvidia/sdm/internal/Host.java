@@ -61,9 +61,10 @@ public final class Host {
         throws Exception;
 
     /**
-     * The facts {@code failure} tells the core ({@code ProviderError}'s {@code sqlstate}, {@code
-     * vendor_code}, {@code error_class} and internal {@code driver_message}), each where it says one: a driver's {@link
-     * java.sql.SQLException}'s state and vendor code, by default.
+     * The fields of the contract's {@code ProviderError} {@code failure} tells the core ({@code
+     * sqlstate}, {@code vendor_code}, {@code error_class}, internal {@code driver_message} and
+     * {@code facts}), each where it says one: a driver's {@link java.sql.SQLException}'s state and
+     * vendor code, by default.
      */
     default Map<String, Object> failure(Exception failure) {
       Map<String, Object> facts = new LinkedHashMap<>();
@@ -471,31 +472,24 @@ public final class Host {
     try {
       // A later page's step names the key sets the first took.
       if (request.get("continuation") == null) {
-        keys = keySets(run, (Map<String, Object>) request.get("plan"), allocator);
+        Map<String, Object> plan = (Map<String, Object>) request.get("plan");
+        keys = keySets(run, plan, allocator);
       }
       ArrowReader answer = provider.answer(request, keys, allocator);
       stream = ArrowExchange.export(allocator, answer);
       outcome.put("outcome", "data");
       outcome.put("data", 1);
       attached.put(1, stream);
+    } catch (HostProviders.Refused refused) {
+      // The source refused the request by name, with an error the core gives.
+      outcome.put("outcome", "refused");
+      outcome.put("error", refused.error());
     } catch (StructuredDataException e) {
       // The host's own refusal (the flag Arrow needs), never a provider's failure.
       cancel(run);
       throw e;
     } catch (Exception failure) {
-      Map<String, Object> provided = new LinkedHashMap<>();
-      provided.put("kind", "data_source");
-      provided.put("retryable", failure instanceof java.sql.SQLTransientException);
-      // Internal facts go to the core; its public provider error sanitizes driver text.
-      Map<String, Object> facts = provider.failure(failure);
-      provided.put("sqlstate", facts.get("sqlstate"));
-      provided.put("vendor_code", facts.get("vendor_code"));
-      if (facts.get("error_class") != null) {
-        provided.put("error_class", facts.get("error_class"));
-      }
-      if (facts.get("driver_message") != null) {
-        provided.put("driver_message", facts.get("driver_message"));
-      }
+      Map<String, Object> provided = providerError(failure, provider.failure(failure));
       outcome.put("outcome", "error");
       outcome.put("error", provided);
       driverClass = failure.getClass().getName();
@@ -526,38 +520,58 @@ public final class Host {
   }
 
   /**
-   * The key sets a request's plan names, taken from the run by attachment id: each
-   * a key set's Arrow, or the one text its dialect wrote of it.
+   * A source's failure as the contract's {@code ProviderError}: of the kind {@code data_source},
+   * retryable where the driver says so, with the fields {@code told} names (its SQLSTATE, vendor
+   * code, error class, internal driver message, and what it means, each where it says one).
+   * Internal facts go to the core; its public provider error sanitizes driver text.
+   */
+  static Map<String, Object> providerError(Exception failure, Map<String, Object> told) {
+    Map<String, Object> provided = new LinkedHashMap<>();
+    provided.put("kind", "data_source");
+    provided.put("retryable", failure instanceof java.sql.SQLTransientException);
+    provided.put("sqlstate", told.get("sqlstate"));
+    provided.put("vendor_code", told.get("vendor_code"));
+    for (String field : List.of("error_class", "driver_message", "facts")) {
+      if (told.get(field) != null) {
+        provided.put(field, told.get(field));
+      }
+    }
+    return provided;
+  }
+
+  /**
+   * The key sets a request's plan names, taken from the run by attachment id: each a key set's
+   * Arrow, or the one text its dialect wrote of it; a host plan names its request's key sets.
    */
   @SuppressWarnings("unchecked")
   private static Map<Integer, ArrowReader> keySets(
       Run run, Map<String, Object> plan, BufferAllocator allocator) throws NativeError {
-    Map<Integer, ArrowReader> taken = new LinkedHashMap<>();
-    Object statements = plan == null ? null : plan.get("statements");
-    if (!(statements instanceof List<?> list)) {
-      return taken;
+    List<Integer> named = new ArrayList<>();
+    if (plan != null && plan.get("key_sets") instanceof List<?> hosted) {
+      for (Object id : hosted) named.add(((Number) id).intValue());
     }
-    for (Object statement : list) {
-      for (Object param : (List<Object>) ((Map<String, Object>) statement).get("params")) {
-        Map<String, Object> read = (Map<String, Object>) param;
-        Object named;
-        if ("key_set".equals(read.get("param"))) {
-          named = ((Map<String, Object>) read.get("keys")).get("attachment");
-        } else if ("text".equals(read.get("param"))) {
-          named = read.get("attachment");
-        } else {
-          continue;
-        }
-        int id = ((Number) named).intValue();
-        if (taken.containsKey(id)) {
-          continue;
-        }
-        Object value = run.takeAttachment(id);
-        if (value instanceof NativeArrow arrow) {
-          try (arrow) {
-            byte[] ipc = ArrowData.ipc(arrow.reader(allocator));
-            taken.put(id, ArrowData.reader(ipc, allocator));
+    if (plan != null && plan.get("statements") instanceof List<?> statements) {
+      for (Object statement : statements) {
+        for (Object param : (List<Object>) ((Map<String, Object>) statement).get("params")) {
+          Map<String, Object> read = (Map<String, Object>) param;
+          if ("key_set".equals(read.get("param"))) {
+            named.add(((Number) ((Map<String, Object>) read.get("keys")).get("attachment")).intValue());
+          } else if ("text".equals(read.get("param"))) {
+            named.add(((Number) read.get("attachment")).intValue());
           }
+        }
+      }
+    }
+    Map<Integer, ArrowReader> taken = new LinkedHashMap<>();
+    for (int id : named) {
+      if (taken.containsKey(id)) {
+        continue;
+      }
+      Object value = run.takeAttachment(id);
+      if (value instanceof NativeArrow arrow) {
+        try (arrow) {
+          byte[] ipc = ArrowData.ipc(arrow.reader(allocator));
+          taken.put(id, ArrowData.reader(ipc, allocator));
         }
       }
     }

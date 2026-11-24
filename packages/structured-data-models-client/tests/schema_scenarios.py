@@ -294,7 +294,7 @@ def _postgres_dsn() -> str | None:
 def placed(database: str, scratch: Path) -> Iterator[Place]:
     r"""An empty place in ``database``: an in-memory DuckDB, a SQLite file
     under ``scratch``, or a Postgres schema of its own, dropped after."""
-    from sdm_connectors import DuckDBSource, PostgresSource, SQLiteSource
+    from sdm_client import DuckDBSource, PostgresSource, SQLiteSource
 
     if database == 'duckdb':
         import duckdb
@@ -1115,7 +1115,7 @@ scenario(
 def _search_path(place: Place) -> Any:
     r"""A source naming no schema reads the connection's own
     (``current_schema``), here the place's, set as its search path."""
-    from sdm_connectors import PostgresSource
+    from sdm_client import PostgresSource
 
     place.connection.execute(f'SET search_path TO {place.namespace}')
     place.source = PostgresSource(place.connection)

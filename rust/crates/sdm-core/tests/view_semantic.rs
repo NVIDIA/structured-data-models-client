@@ -4,8 +4,8 @@
 
 //! A Snowflake semantic view's conversion (V1 to V7) over a fake data
 //! layer, the Snowflake dialect being: the layer answers the view's
-//! text in Snowflake's rules (`sdm-data`'s), every read as a host provider
-//! would, and the test answers each read from tables it holds. S5's third
+//! text in Snowflake's rules (`sdm-sql`'s), and the test answers each read
+//! from tables it holds, as any source answers. S5's third
 //! sequence: each table is finished, its columns read, its expressions
 //! sampled and its rows read, before the next table's first read.
 
@@ -13,13 +13,14 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::{
-    ArrayRef, Float64Array, Int64Array, RecordBatch, StringArray, TimestampMicrosecondArray,
+    ArrayRef, BooleanArray, Float64Array, Int64Array, ListArray, RecordBatch, StringArray,
+    TimestampMicrosecondArray,
 };
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
-use sdm_contract::catalog::{CatalogAnswer, CatalogColumn, ViewDefinition};
+use sdm_contract::catalog::{CatalogAnswer, ViewDefinition};
 use sdm_contract::data::{
-    AttachmentId, DataLayer, DataRequest, DescribePart, ExpectedSchema, FetchPlan,
-    ProviderCapabilities, ProviderChoice, Relation,
+    AttachmentId, DataLayer, DataRequest, DescribePart, ProviderCapabilities, ProviderChoice,
+    Relation,
 };
 use sdm_contract::facts::PlatformFacts;
 use sdm_contract::ops::{
@@ -31,7 +32,7 @@ use sdm_contract::{CONTRACT_VERSION, CoreError, HostFacts, Scalar, Step, Unit};
 use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, UnknownZone, Zones, start,
 };
-use sdm_data::view_expr::ExprDialect;
+use sdm_sql::view_expr::ExprDialect;
 use serde_json::json;
 
 struct NoZones;
@@ -68,81 +69,132 @@ relationships:
     relationship_columns: [{left_column: USER_ID, right_column: USER_ID}]
 "#;
 
-/// The fake layer: Snowflake's reading of the view's text, every read
-/// passed to the test as a host provider's request, each catalog answer
-/// the test's tables'.
+/// The fake layer: Snowflake's reading of the view's text and the view's
+/// definition; every other read is passed to the test as any source's
+/// request, each catalog answer the test's tables' in the standard shape.
 struct Fake {
     definition: String,
-    catalogs: BTreeMap<String, Vec<&'static str>>,
+}
+
+/// The test's tables' columns, by name.
+fn catalogs() -> BTreeMap<String, Vec<&'static str>> {
+    BTreeMap::from([
+        ("USERS".to_owned(), vec!["USER_ID", "COUNTRY"]),
+        (
+            "ORDERS".to_owned(),
+            vec!["ORDER_ID", "USER_ID", "PRICE", "TS"],
+        ),
+    ])
+}
+
+/// A catalog answer in the standard shape every source answers in: the
+/// columns of the table asked for, and no key.
+fn catalog(request: &DataRequest) -> ArrowData {
+    use sdm_contract::data::catalog_columns as c;
+    let DataRequest::Describe { tables, part } = request else {
+        panic!("a read of no catalog");
+    };
+    let (fields, arrays): (Vec<Field>, Vec<ArrayRef>) = match part {
+        DescribePart::Columns => {
+            let table = tables[0].source.last().unwrap();
+            let names = catalogs()[table].clone();
+            let types: Vec<&str> = names
+                .iter()
+                .map(|name| {
+                    if *name == "TS" {
+                        "TIMESTAMP_LTZ(6)"
+                    } else {
+                        ""
+                    }
+                })
+                .collect();
+            let none = vec![false; names.len()];
+            (
+                vec![
+                    Field::new(c::NAME, DataType::Utf8, false),
+                    Field::new(c::TYPE, DataType::Utf8, false),
+                    Field::new(c::NOT_NULL, DataType::Boolean, false),
+                    Field::new(c::PRIMARY_KEY, DataType::Boolean, false),
+                ],
+                vec![
+                    Arc::new(StringArray::from(names)),
+                    Arc::new(StringArray::from(types)),
+                    Arc::new(BooleanArray::from(none.clone())),
+                    Arc::new(BooleanArray::from(none)),
+                ],
+            )
+        }
+        DescribePart::Keys => {
+            let item = Arc::new(Field::new(c::LIST_ITEM, DataType::Utf8, true));
+            (
+                vec![
+                    Field::new(c::KIND, DataType::Utf8, false),
+                    Field::new(c::COLUMNS, DataType::List(Arc::clone(&item)), false),
+                ],
+                vec![
+                    Arc::new(StringArray::from(Vec::<&str>::new())),
+                    Arc::new(ListArray::new_null(item, 0)),
+                ],
+            )
+        }
+        // The view's definition, which the data layer reads.
+        DescribePart::ViewDefinition => return ArrowData::new(Arc::new(Schema::empty()), vec![]),
+        other => panic!("a read of {other:?}"),
+    };
+    let schema = Arc::new(Schema::new(fields));
+    let batch = RecordBatch::try_new(Arc::clone(&schema), arrays).unwrap();
+    ArrowData::new(schema, vec![batch])
+}
+
+/// The source: a Snowflake semantic view's, as its kit declares it, that
+/// reads a derived relation.
+fn provider() -> ProviderChoice {
+    let source: sdm_sql::plan::SqlChoice = serde_json::from_value(json!({
+        "provider": "sql", "dialect": "snowflake",
+        "view": {"name": "DB.SHOP.SHOP_VIEW", "trust_expressions": false},
+    }))
+    .unwrap();
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    let mut capabilities = sdm_sql::kit::SqlKit::new(source, Some(&SPACES))
+        .unwrap()
+        .capabilities()
+        .unwrap();
+    capabilities.derived_relations = true;
+    ProviderChoice::new(capabilities)
 }
 
 impl DataLayer for Fake {
-    fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
-        // A warehouse's: it reads a derived relation.
-        let mut capabilities =
-            sdm_data::Data::new().capabilities(&ProviderChoice::sql("duckdb"))?;
-        capabilities.derived_relations = true;
-        Ok(capabilities)
-    }
-
-    fn plan(&self, _: &DataRequest, _: &ProviderChoice) -> Result<FetchPlan, CoreError> {
-        Ok(FetchPlan::Host {
-            expect: ExpectedSchema::Discover {},
-        })
-    }
-
-    fn read(
+    fn read_view(
         &self,
-        request: &DataRequest,
-        _: &ProviderChoice,
+        _: &ProviderCapabilities,
+        _: &DataRequest,
         _: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError> {
-        let DataRequest::Describe { tables, part } = request else {
-            panic!("a read of no catalog");
-        };
-        Ok(match part {
-            DescribePart::ViewDefinition => CatalogAnswer::ViewDefinition(ViewDefinition {
-                kind: ViewKind::Semantic,
-                text: self.definition.clone(),
-                parameters: vec![],
-                located: vec![],
-                columns: vec![],
-            }),
-            DescribePart::Columns => {
-                let table = tables[0].source.last().unwrap();
-                CatalogAnswer::Columns(
-                    self.catalogs[table]
-                        .iter()
-                        .map(|name| CatalogColumn {
-                            name: (*name).to_owned(),
-                            declared_type: if *name == "TS" {
-                                "TIMESTAMP_LTZ(6)".into()
-                            } else {
-                                String::new()
-                            },
-                            not_null: false,
-                            primary_key: false,
-                            key_nullable: false,
-                            unique: false,
-                            dtype: None,
-                        })
-                        .collect(),
-                )
-            }
-            DescribePart::Keys => CatalogAnswer::Keys(vec![]),
-            other => panic!("a read of {other:?}"),
-        })
+        Ok(CatalogAnswer::ViewDefinition(ViewDefinition {
+            kind: ViewKind::Semantic,
+            text: self.definition.clone(),
+            parameters: vec![],
+            located: vec![],
+            columns: vec![],
+        }))
     }
 
-    fn view_kind(&self, _: &ProviderChoice) -> Option<ViewKind> {
+    fn view_kind(&self, _: &ProviderCapabilities) -> Option<ViewKind> {
         Some(ViewKind::Semantic)
     }
 
-    fn view_text(&self, _: &ProviderChoice, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-        Ok(sdm_data::view_expr::answer(
+    fn view_text(
+        &self,
+        _: &ProviderCapabilities,
+        ask: ViewTextAsk,
+    ) -> Result<ViewTextAnswer, CoreError> {
+        Ok(sdm_sql::view_expr::answer(
             ask,
             ExprDialect::Snowflake,
-            sdm_core::pql::spaces(),
+            &*Box::leak(Box::new(sdm_sql::view_expr::Spaces::new(
+                sdm_core::pql::is_space,
+            ))),
             &|_| DeclaredType::Unknown,
         ))
     }
@@ -225,19 +277,8 @@ fn source_spec() -> SourceSpec {
 fn semantic_run(definition: &str, spec: SourceSpec) -> sdm_core::Run {
     let fake = Fake {
         definition: definition.to_owned(),
-        catalogs: BTreeMap::from([
-            ("USERS".to_owned(), vec!["USER_ID", "COUNTRY"]),
-            (
-                "ORDERS".to_owned(),
-                vec!["ORDER_ID", "USER_ID", "PRICE", "TS"],
-            ),
-        ]),
     };
-    let provider: ProviderChoice = serde_json::from_value(json!({
-        "provider": "sql", "dialect": "snowflake",
-        "view": {"name": "DB.SHOP.SHOP_VIEW", "trust_expressions": false},
-    }))
-    .unwrap();
+    let provider = provider();
     start(
         &CompositionRoot::new(Arc::new(fake)),
         StartRun {
@@ -277,6 +318,7 @@ fn describe_view(definition: &str, spec: SourceSpec) -> (SourceDescription, Vec<
                 for asked in requests {
                     let answer = match &asked.request {
                         DataRequest::Preview { table, columns, .. } => rows(table, columns),
+                        DataRequest::Describe { .. } => catalog(&asked.request),
                         _ => ArrowData::new(Arc::new(Schema::empty()), vec![]),
                     };
                     if let Some(table) = table_of(&asked.request) {
@@ -417,12 +459,10 @@ fn converted_temporal_facts_reach_the_existing_zoned_window_planner() {
         panic!("no temporal window");
     };
     assert_eq!(window.source_type.as_deref(), Some("TIMESTAMP_LTZ(6)"));
-    let FetchPlan::Sql { statements, .. } = sdm_data::Data::new()
-        .plan(&request, &ProviderChoice::sql("snowflake"))
+    let statements = sdm_sql::Sql::new()
+        .plan(&request, &sdm_sql::plan::SqlChoice::new("snowflake"))
         .unwrap()
-    else {
-        panic!("no Snowflake SQL");
-    };
+        .statements;
     assert!(
         statements
             .iter()

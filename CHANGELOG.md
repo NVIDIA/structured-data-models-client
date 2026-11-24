@@ -5,6 +5,79 @@ versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
 these packages. The three Python distributions share one version.
 
+## Unreleased
+
+### Added
+
+- `SDMClient(..., exact_url=True, bearer_token=True)` in Python, and `ClientOptions.builder().exactUrl(true).bearerToken(true)` in Java, call an endpoint that serves predictions at one URL and reads the key as a bearer token, such as a hosted model in the NVIDIA API catalog.
+  Such an endpoint has no sessions, model list or readiness route, so those calls fail with a named error; without the options, every URL is a base, as before.
+- Python and Java callers can read data through their own code instead of a database connection, by subclassing `Source` (`sdm_client.Source`, an abstract base class) or implementing it (`com.nvidia.sdm.Source`, an interface), with `capabilities()` and `answer(request, expected)` (Java: `answer(request, expected, allocator)`).
+  The core sends it typed data requests, never SQL; it answers each with Arrow data and declares what it answers in its `Capabilities`.
+  An instance is passed wherever a source is taken, as a built-in source is, and the requests, filters, capabilities and failures are the same in both languages, in each one's own types.
+  The seeds of a `neighbors` or `lookup` past a source's `max_keys_per_request` are split by the core into requests of at most that many seeds, for Python and Java sources alike.
+  See [Your own source](docs/reference/data-providers.md), and the Trino example in both languages, which it links.
+- `Request.context_report` (Python) and `Request.contextReport()` (Java) say how the context examples were drawn from the source: for each part, the draws, the rows they read, the candidates labelled, how many the query's conditions kept, whether any condition went to the source, and why drawing stopped (`full`, `source_exhausted`, `row_budget` or `time_limit`).
+  A request whose context comes up short, from a condition only the client checks, is drawn again, larger, sized by the share of the first draw that qualified, until the context holds as many examples as were asked for, the source has no more rows, 5,000,000 rows have been drawn, or `context_time_limit` has passed.
+- `context_time_limit` (Python `materialize()` keyword, in seconds or as a `timedelta`; Java `MaterializeOptions.Builder.contextTimeLimit(Duration)`) bounds the time a request spends drawing its context, five minutes by default.
+  No draw starts once it has passed, and the examples kept so far are the context; a draw already reading runs on.
+  The time is read by the host layer the Python and Java clients share, as the core reads no clock.
+- A caller's own Java `Source` can declare the value filters it applies (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf`, `AllOf` and `HasRows` on samples and scans.
+  A source that declares none receives none.
+
+### Changed
+
+- `Source` is the one public source type in Python and Java.
+  The unreleased `DataProvider` is renamed `Source`, and `ProviderSource` is removed: a caller passes its own source directly.
+  `Schema.from_source`, `with_source` and `.source` (Java: `fromSource`, `withSource`, `source()`) take exactly a `Source`; an object that only has the methods of one is refused with `INVALID_REQUEST`.
+- The built-in Python sources moved from `sdm_connectors` to `sdm_client`: import `DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource` and `SnowflakeSource` from `sdm_client`.
+  They take the same connections and raise the same `ConnectorError` codes as before.
+  `sdm_connectors` keeps its readers, `quote_ident`, `resolve_sql` and the Databricks connection helpers, and no longer holds any source.
+- A semantic model is a source of the same class: `DatabricksSource.semantic_model(name, trust_expressions=False)` returns a `DatabricksSource` reading the metric view, and `SnowflakeSource.semantic_model(...)` a `SnowflakeSource` reading the semantic view.
+  Java's `semanticModel(name)` is added beside `semanticModel(name, trustExpressions)`.
+- Java's `Readers.readTable` and `Readers.readQuery` take the caller's `java.sql.Connection` instead of a source, as Python's `read_table` does, and read an unqualified table name in the connection's current schema.
+  Java no longer reads a whole table or query through a Spark session; a Databricks schema is still read in place through the session (`DatabricksSparkSource`), and a Spark DataFrame can be converted to Arrow by the caller.
+- The core reaches every source the same way, through `capabilities()` and `answer()`: a built-in source answers them itself, with the library's SQL for its database run on the caller's connection, and asked directly returns exactly what an operation over it receives.
+  `capabilities()` is read once as each operation starts, before any request of it.
+  Each operation over a built-in source is answered through a SQL kit of its own, so the namespace it settles and the catalog it reads hold for that operation only, whichever thread runs it.
+  The built-in Python source classes are final (`typing.final`), as Java's are: to read a database differently, write your own `Source`.
+  A request its database's SQL cannot answer is refused by name with the client's own error.
+- `Capabilities` declares the traits of a source the core reads, each defaulting to a plain source of tables: `namespace` and `ask_namespace_first`, `retry_upper_case_names`, `column_types_are_affinities`, `reread_tables_every_run`, `engine`, `semantic_model`, `derived_relations`, `text_times`, `index_advice`, `sample_by_row_count`, `sample_by_key_type`, `neighbor_lookback`, `keys_optional`, `key_enforcement`, `compares_stored_times`, `nan_is_missing`, `opaque_vendor` and `fallback_text_order` (Java: the same in camel case, on `Capabilities.builder()`).
+  Java's `Capabilities` is a class built by its builder rather than a record.
+- Each value in a request is a `Value` (Java: `DataRequest.Value`): the plain value with the Arrow type the core holds it as, so a source writes it exactly (an integer's width and sign, a decimal's precision, a timestamp's unit and zone, a null's type), and a request read and written again is exactly the request the core sent.
+  `Capabilities.max_seed` (Java: `maxSeed`, a `BigInteger`) is an unsigned 64-bit integer in both languages, refused past that range; an empty `engine` or `opaque_vendor` is refused in both.
+  Java's `FailureFacts.builder()` builds facts as Python's keywords do.
+  A `Relation` carries a derived relation's `columns`, `filter` and `found`, a `KeySet` its `schema` with the core's field metadata, a `Window` its `source_type`, a `SampleEntities` its `key_dtype`, and a per-seed limit may be a `SqlLimit`.
+  A `ProviderFailure` carries the `FailureFacts` the failure means.
+- Python's `Source.answer()` returns an `ArrowStream`, any object exporting an Arrow stream through the PyCapsule interface.
+- Every source answers each request in the contract's shapes, the built-in sources included: a built-in source's key counts are written in the contract's names and types whatever its engine answers.
+  A `time_bounds` answer's bounds are of the column's own type for every source (a timestamp of any unit or zone, a date, or text), as the client reads each alike; `expected` is no longer given for it.
+- Java's `Source` is an interface, as a caller implements a service interface, with `failure` a default method; Python's is an abstract base class, its language's equivalent.
+  Against the 2.0 candidate, the public Java API changes so: `Source` gains `capabilities()` and `answer(request, expected, allocator)`, `JdbcSource` is removed, and `Readers.readTable` and `Readers.readQuery` take the caller's `Connection` rather than a `Source`; each is recorded by name in the `api-compatibility` profile.
+- Rebinding a schema to another source (`with_source`, `withSource`) compares the sources' classes, and whether each reads a semantic model, in both languages.
+  A Python schema over a SQL warehouse connection can now be rebound to a notebook's Spark session over the same catalog, and back.
+- A schema over any source refuses to be pickled, whatever the source's own class allows.
+- The Java library's Databricks SDK, AWS S3 SDK, commons-compress and xz dependencies are optional.
+  A feature that needs a missing one is refused with `INVALID_CONFIGURATION` naming the artifact to add, before any of its classes load.
+
+### Removed
+
+- `sdm_connectors.Source`, `DatabricksSource`, `SnowflakeSource`, `PostgresSource`, `DuckDBSource`, `SQLiteSource` and `SemanticModel`; the built-in sources are in `sdm_client`, and a semantic model is the source class itself.
+- `Source(connection)`, which chose a built-in source class by the connection's driver: name the class instead.
+- `Source.kind`, `Source.backend` and `Source.namespace_parts()`.
+- Java's `ProviderSource`, `com.nvidia.sdm.provider.DataProvider` and `JdbcSource`.
+- Java's `FromSourceOptions.Builder.noPrimaryKey`, which the core always refused, as it refuses Python's `primary_keys={table: None}`; a table with no key is still described without one.
+
+### Fixed
+
+- A query whose `WHERE` keeps few entities, or whose static target most entities lack, gathers the context it asks for.
+  The conditions on the entity's own columns, and the static target's column holding a value, go to the source with the context sample, so the sample is drawn from the entities that may qualify instead of from every entity.
+  Before, a `WHERE` keeping one entity in sixty gathered about a sixtieth of the context asked for, or none.
+  Every example is still checked by the query's own rules, so a source's null, type or collation rules cannot change which examples are used.
+  A source the client samples in memory filters there before drawing; Snowflake samples after filtering, and Databricks sizes its sample by the rows the filters keep.
+- A query that keeps only entities with rows in a window, such as `WHERE COUNT(orders.*, -30, 0, days) > 1`, or whose target is an `AVG`, `MIN` or `MAX` that most entities have no rows for, gathers the context it asks for on DuckDB, Postgres, Snowflake and Databricks.
+  The source is asked, at each anchor time, for the entities with enough rows in the window, widened by a day each way, instead of for every entity.
+  For a filtered query, the same seed draws different entities than 1.0 did, from the same entities that qualify.
+
 ## 2.0.0
 
 The Java library is built and tested in CI but is not released.

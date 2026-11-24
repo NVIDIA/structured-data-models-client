@@ -10,15 +10,15 @@
 //! text is built past its bound.
 
 use sdm_contract::CoreError;
-use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{TypeClass, ViewTextAnswer, ViewTextAsk};
-use sdm_core::pql::{spaces, yaml_rules};
+use sdm_core::pql::yaml_rules;
 use sdm_core::{view_steps, view_words};
-use sdm_data::Data;
-use sdm_data::view_expr::metric::DefaultRefusal;
 use sdm_schema::view::metric;
 use sdm_schema::view::spec::ColumnItem;
 use sdm_schema::view::yaml;
+use sdm_sql::Sql;
+use sdm_sql::plan::SqlChoice;
+use sdm_sql::view_expr::metric::DefaultRefusal;
 
 const TYPES: &[&str] = &[
     "STRING",
@@ -90,7 +90,7 @@ impl Rng {
 /// The data layer's answers in Databricks's dialect, as the routine asks
 /// them (`DataLayer::view_text`).
 fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-    Data::reading_views(spaces()).view_text(&ProviderChoice::sql("databricks"), question)
+    Sql::reading_views(spaces()).view_text(&SqlChoice::new("databricks"), question)
 }
 
 /// A type's class, as the data layer answers it.
@@ -243,7 +243,9 @@ fn the_bound_counts_the_characters_written() {
 /// rule holds, every one of them tested.
 #[test]
 fn the_patterns_white_space_is_the_one_rule() {
-    let spaces = sdm_core::pql::spaces();
+    let spaces = &*Box::leak(Box::new(sdm_sql::view_expr::Spaces::new(
+        sdm_core::pql::is_space,
+    )));
     let mut members = Vec::new();
     for range in spaces.class().split("\\x{").skip(1) {
         let (code, rest) = range.split_once('}').unwrap();
@@ -268,4 +270,11 @@ fn the_patterns_white_space_is_the_one_rule() {
         };
         assert_eq!(held(code), spaces.holds(c), "U+{code:04X}");
     }
+}
+
+/// The core's white space as the data layer reads a view's text by.
+fn spaces() -> &'static sdm_sql::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    &SPACES
 }

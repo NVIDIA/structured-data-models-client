@@ -20,6 +20,8 @@ import inspect
 import json
 import pathlib
 import sys
+import types
+import typing
 from typing import Any, ForwardRef
 
 SNAPSHOT = (
@@ -32,6 +34,7 @@ SNAPSHOT = (
 PACKAGES = (
     'sdm_api',
     'sdm_client',
+    'sdm_client.provider',
     'sdm_connectors',
     'sdm_connectors.databricks',
 )
@@ -115,8 +118,17 @@ def _first_party_attributes(owner: type) -> dict[str, Any]:
 RECORDED_BY_VALUE = (str, int, float, bool, bytes, type(None))
 
 
+def _kind(obj: object) -> str:
+    """The kind of a value, the same on every supported Python: a union
+    (``A | B`` or ``Union[A, B]``) is a ``Union`` whatever type the
+    interpreter gives it (3.14 makes ``A | B`` a ``typing.Union``)."""
+    if typing.get_origin(obj) in (typing.Union, types.UnionType):
+        return 'Union'
+    return type(obj).__name__
+
+
 def _describe(obj: object) -> dict[str, object]:
-    described: dict[str, object] = {'kind': type(obj).__name__}
+    described: dict[str, object] = {'kind': _kind(obj)}
     if isinstance(obj, RECORDED_BY_VALUE):
         described['value'] = obj if not isinstance(obj, bytes) else obj.hex()
         return described

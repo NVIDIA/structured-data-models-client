@@ -729,7 +729,7 @@ fn table(received: &DataType) -> ArrowData {
 /// and declares the preview, the one optional request describing a table
 /// of three rows asks.
 fn host_provider() -> ProviderChoice {
-    ProviderChoice::Host {
+    ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,
@@ -741,6 +741,7 @@ fn host_provider() -> ProviderChoice {
             key_enforcement: false,
             sample_rows: false,
             optional: BTreeSet::from([OptionalRequest::Preview]),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,
@@ -749,6 +750,13 @@ fn host_provider() -> ProviderChoice {
             sampling: Determinism::Unseeded,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         },
     }
 }
@@ -773,7 +781,7 @@ fn facts() -> HostFacts {
 /// The schema a request's answer must have, where the contract fixes it.
 fn expected_schema(request: &DataRequest) -> Option<Arc<Schema>> {
     match request.expected() {
-        ExpectedSchema::Schema { fields } => Some(Arc::new(Schema::new(
+        ExpectedSchema::Schema { fields, .. } => Some(Arc::new(Schema::new(
             fields
                 .iter()
                 .map(sdm_contract::types::Field::to_arrow)

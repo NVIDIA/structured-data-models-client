@@ -5,11 +5,11 @@
 //! The catalog's answers as the core reads them, in no dialect's shape.
 //!
 //!
-//! A `describe` request is answered in the shape its plan expects: a SQL
-//! dialect's own catalog's, or, for a host provider, the contract's
-//! (`data::catalog_columns`). The data layer reads either into a
-//! [`CatalogAnswer`] after the core has admitted it (check
-//! (b)), so the core and `sdm-schema` read a column's name, type,
+//! A `describe` request is answered in the contract's shape
+//! (`data::catalog_columns`), read into a [`CatalogAnswer`]
+//! (`catalog_read::standard`) after the core has admitted it (check (b)),
+//! but for a semantic model's definition, in its database's own shape,
+//! which its data layer reads (`DataLayer::read_view`); so the core and `sdm-schema` read a column's name, type,
 //! nullability and key flag, a key's kind and columns, a foreign key's
 //! column pairs and an index's columns, resolved or not, and never a
 //! dialect's spelling of them. These types never travel: a host answers in

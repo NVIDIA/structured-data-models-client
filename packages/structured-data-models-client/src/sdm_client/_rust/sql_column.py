@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from sdm_client._rust import codec, providers
+from sdm_client._rust import codec, host_providers
 from sdm_client._rust.run import run
 from sdm_client._rust.schema import build
 from sdm_client._rust.spec import held_schema
@@ -29,7 +29,7 @@ def add(schema: Schema, table: str, name: str, expression: str) -> Schema:
             'SQL columns require a source-backed schema; calculate in-memory columns before admission',
             code='UNSUPPORTED_REQUEST',
         )
-    choice, provider = providers.for_source(schema.source)
+    choice, provider = host_providers.chosen(schema.source)
     finished = run(
         {'op': 'add_sql_column', 'provider': choice, 'schema': 1, 'input': 2},
         {

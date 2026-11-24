@@ -137,6 +137,12 @@ pub enum FetchOutcome {
     Error {
         error: ProviderError,
     },
+    /// The source refused the request by name (contract v76): an error the
+    /// core's table holds, such as a built-in source's SQL kit gives for a
+    /// request its dialect cannot write. The operation fails with it.
+    Refused {
+        error: crate::CoreError,
+    },
 }
 
 /// The host's answer to one model call.

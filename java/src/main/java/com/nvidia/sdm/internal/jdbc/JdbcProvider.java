@@ -28,7 +28,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
  * The Java host's one data provider: it answers a fetch step by running the statements its plan
  * carries, in order, on the source's {@link Connection}, and hands back the last one's result as
  * Arrow, as Python's providers do ({@code sdm_client._rust.providers}). The statements are the
- * core's ({@code sdm-data} renders each dialect's SQL); this class writes none, reads no value's
+ * core's ({@code sdm-sql} renders each dialect's SQL); this class writes none, reads no value's
  * meaning, and decides nothing (structure design rule 6). What differs by driver is two things
  * only:
  *
@@ -71,6 +71,25 @@ public final class JdbcProvider implements Host.Provider {
     /** The dialect the core names its statements by. */
     public String dialect() {
       return dialect;
+    }
+
+    /**
+     * The database {@code connection} is open on, by the product name its driver reports, for
+     * reading a caller's own SQL ({@code Readers}).
+     *
+     * @throws IllegalArgumentException for a database this library has no driver support for
+     */
+    public static Driver of(Connection connection) throws SQLException {
+      String product = connection.getMetaData().getDatabaseProductName();
+      String name = product == null ? "" : product.toLowerCase(java.util.Locale.ROOT);
+      if (name.contains("duckdb")) return DUCKDB;
+      if (name.contains("sqlite")) return SQLITE;
+      if (name.contains("postgres")) return POSTGRES;
+      if (name.contains("snowflake")) return SNOWFLAKE;
+      if (name.contains("databricks") || name.contains("spark")) return DATABRICKS;
+      throw new IllegalArgumentException(
+          "a connection to DuckDB, SQLite, Postgres, Databricks or Snowflake is read; got one to "
+              + product);
     }
   }
 

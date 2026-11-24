@@ -16,6 +16,10 @@ Variants contain ordered additional user columns with literal values and optiona
 Python and Java expand the same data before provisioning, reading, verification and hashing.
 Fixture hashes describe the expanded logical data, including nulls, numeric types, row order and column order; changes to the base also change each affected variant's hash.
 
+A scenario with a `context` block reads `fixtures/context.json`, a shop in which the rows a query asks for are rare, and holds each part's context draw to it: the examples kept, which is the true count of matching examples, so a source that drops one fails the cell; the examples asked for; why drawing stopped; and whether a condition went to the source.
+`sent_with` names the filter kinds the scenario's condition is written with: a caller's own provider declaring them all is sent it.
+The tests of callers' own providers, in Python and Java, read these scenarios too.
+
 ## Credential-free contract checks
 
 `manifest.json` is also the maintained API/capability ledger.

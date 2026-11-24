@@ -8,9 +8,9 @@
 use std::collections::BTreeMap;
 
 use sdm_contract::data::{
-    AttachmentId, Bound, DataRequest, DescribePart, Dialect, ExpectedSchema, FetchPlan, Filter,
-    KeySet, ProviderError, SeedBound, SqlParam, SqlStatement, TableColumn, TableKey, TieBreak,
-    TieTerm, Window,
+    AttachmentId, Bound, DataRequest, DescribePart, Determinism, ExpectedSchema, FetchPlan, Filter,
+    KeySet, ProviderCapabilities, ProviderChoice, ProviderError, SeedBound, TableColumn, TableKey,
+    TieBreak, TieTerm, Window,
 };
 use sdm_contract::facts::{LocalZone, PlatformFacts, ZoneRootFact};
 use sdm_contract::ops::{
@@ -119,12 +119,7 @@ pub fn messages() -> Vec<ControlMessage> {
     vec![
         start(Operation::ValidateQuery(validate)),
         start(Operation::DescribeSource(DescribeSource {
-            provider: sdm_contract::data::ProviderChoice::Sql {
-                timestamp_encoding: None,
-                dialect: Dialect::new("duckdb"),
-                namespace: Vec::new(),
-                view: None,
-            },
+            provider: host(),
             source: AttachmentId(1),
             check_keys: true,
         })),
@@ -135,12 +130,7 @@ pub fn messages() -> Vec<ControlMessage> {
             edit: AttachmentId(3),
         })),
         start(Operation::Materialize(Materialize {
-            provider: sdm_contract::data::ProviderChoice::Sql {
-                timestamp_encoding: None,
-                dialect: Dialect::new("duckdb"),
-                namespace: Vec::new(),
-                view: None,
-            },
+            provider: host(),
             schema: AttachmentId(1),
             query: AttachmentId(2),
             indices: Some(AttachmentId(3)),
@@ -207,23 +197,11 @@ pub fn messages() -> Vec<ControlMessage> {
                     ],
                     limit: None,
                 },
-                plan: FetchPlan::Sql {
-                    result_conversions: Vec::new(),
-                    statements: vec![SqlStatement {
-                        dialect: Dialect::new("duckdb"),
-                        text: "SELECT id, at FROM orders WHERE id IN (SELECT id FROM keys)".into(),
-                        params: vec![
-                            SqlParam::KeySet {
-                                keys: keys(),
-                                relation: "keys".into(),
-                            },
-                            SqlParam::Value {
-                                value: Scalar::UInt64(u64::MAX),
-                            },
-                        ],
-                    }],
+                plan: FetchPlan {
+                    key_sets: vec![keys().attachment],
                     expect: ExpectedSchema::Discover {},
                 },
+
                 continuation: None,
                 purpose: None,
             }],
@@ -264,7 +242,8 @@ pub fn messages() -> Vec<ControlMessage> {
                             },
                         ])),
                     },
-                    plan: FetchPlan::Host {
+                    plan: FetchPlan {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -278,7 +257,8 @@ pub fn messages() -> Vec<ControlMessage> {
                         columns: vec!["age".into()],
                         seeds: seeds(&[]),
                     },
-                    plan: FetchPlan::Host {
+                    plan: FetchPlan {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -298,7 +278,8 @@ pub fn messages() -> Vec<ControlMessage> {
                         }],
                         key_dtype: None,
                     },
-                    plan: FetchPlan::Host {
+                    plan: FetchPlan {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -312,7 +293,8 @@ pub fn messages() -> Vec<ControlMessage> {
                             column: "ts".into(),
                         }],
                     },
-                    plan: FetchPlan::Host {
+                    plan: FetchPlan {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -328,7 +310,8 @@ pub fn messages() -> Vec<ControlMessage> {
                             label: None,
                         }],
                     },
-                    plan: FetchPlan::Host {
+                    plan: FetchPlan {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -340,7 +323,8 @@ pub fn messages() -> Vec<ControlMessage> {
                         tables: vec![],
                         part: DescribePart::Indexes,
                     },
-                    plan: FetchPlan::Host {
+                    plan: FetchPlan {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -352,7 +336,8 @@ pub fn messages() -> Vec<ControlMessage> {
                         table: "orders".into(),
                         columns: vec!["ts".into()],
                     },
-                    plan: FetchPlan::Host {
+                    plan: FetchPlan {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -364,7 +349,8 @@ pub fn messages() -> Vec<ControlMessage> {
                         table: "orders".into(),
                         key: vec!["order_id".into()],
                     },
-                    plan: FetchPlan::Host {
+                    plan: FetchPlan {
+                        key_sets: Vec::new(),
                         expect: ExpectedSchema::Discover {},
                     },
                     continuation: None,
@@ -389,6 +375,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     retryable: true,
                     sqlstate: Some("42P01".into()),
                     vendor_code: None,
+                    facts: None,
                 },
             },
         }),
@@ -450,6 +437,15 @@ pub fn messages() -> Vec<ControlMessage> {
                 examples: None,
                 state,
                 query: None,
+                context: vec![sdm_contract::ops::ContextReport {
+                    draws: 2,
+                    rows_drawn: 12_000,
+                    candidates: 11_000,
+                    kept: 1_000,
+                    asked: 1_000,
+                    stopped: sdm_contract::ops::ContextStop::Full,
+                    filtered_at_source: true,
+                }],
             }),
         }),
         ControlMessage::Step(Step::Done {
@@ -476,6 +472,7 @@ pub fn messages() -> Vec<ControlMessage> {
                     retryable: true,
                     sqlstate: Some("08006".into()),
                     vendor_code: Some("57P01".into()),
+                    facts: None,
                 })),
         },
         ControlMessage::Warnings {
@@ -493,4 +490,36 @@ pub fn messages() -> Vec<ControlMessage> {
             },
         },
     ]
+}
+
+/// A provider declaring every optional request and the largest seed.
+pub fn host() -> ProviderChoice {
+    ProviderChoice::new(ProviderCapabilities {
+        opaque_vendor: None,
+        compares_stored_times: false,
+        samples_by_key_dtype: false,
+        reads_nan_as_missing: false,
+        derived_relations: false,
+        neighbor_lookback: false,
+        keys_optional: false,
+        key_enforcement: false,
+        sample_rows: false,
+        optional: Default::default(),
+        filters: Default::default(),
+        max_keys_per_request: None,
+        max_seed: u64::MAX,
+        text_times: None,
+        null_order: None,
+        index_advice: None,
+        sampling: Determinism::SeededStable,
+        fallback_text_order: None,
+        fallback: None,
+        database: Some("duckdb".into()),
+        column_affinities: false,
+        reads_tables_as_they_stand: true,
+        namespace: Vec::new(),
+        tries_upper_case_names: false,
+        namespace_first: false,
+        view: None,
+    })
 }

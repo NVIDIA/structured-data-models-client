@@ -41,7 +41,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use duckdb::arrow::array::{Array, ArrayRef, Int64Array, RecordBatch};
 use duckdb::arrow::compute::{cast, concat_batches};
 use duckdb::arrow::datatypes::{DataType, Field, Schema};
-use sdm_contract::data::{AttachmentId, FetchPlan, KeySet, ProviderError, SqlParam};
+use sdm_contract::data::{AttachmentId, ProviderError};
 use sdm_contract::run::{FetchOutcome, FetchReply, FetchStep};
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, CoreError, ErrorKind, Step};
 use sdm_host::{ArrowData, Attachment, HostRun, Outgoing, default_root, encode, read};
@@ -51,6 +51,7 @@ use crate::driver::DriverLog;
 use crate::duck::{self, Fetched};
 use crate::host::facts;
 use crate::memory::Memory;
+use crate::sql_source::{Outcome, SqlSource};
 use crate::sqlite::Sqlite;
 
 /// The report's format, `expected.json`'s.
@@ -73,14 +74,65 @@ enum Source {
 }
 
 impl Source {
+    /// The provider a case's run names, and the built-in source that
+    /// answers its requests through its kit, one per run; the non-SQL
+    /// provider as it declares itself, with no kit.
+    fn provider(&self, database: &str) -> Result<(Value, Option<SqlSource>)> {
+        Ok(match self {
+            Source::Memory(_) => (
+                json!({"provider": "host", "capabilities": Memory::capabilities()}),
+                None,
+            ),
+            _ => {
+                let kit = SqlSource::of(database);
+                (serde_json::to_value(kit.provider()?)?, Some(kit))
+            }
+        })
+    }
+
+    /// The answer to `step`, through `kit` where the source is a built-in
+    /// one.
     fn answer(
+        &self,
+        kit: Option<&SqlSource>,
+        step: &FetchStep,
+        keys: &BTreeMap<AttachmentId, Fetched>,
+    ) -> Result<Outcome> {
+        let kit = match (self, kit) {
+            (Source::Memory(_), _) => None,
+            (_, None) => bail!("a run of a built-in source has no kit"),
+            (_, Some(kit)) => Some(kit),
+        };
+        if let Some(kit) = kit {
+            return kit.answer(&step.request, keys, &mut |fetch| {
+                Ok(match self {
+                    Source::Duck(connection) => duck::run_plan(
+                        connection,
+                        fetch.plan,
+                        fetch.keys,
+                        &mut DriverLog::default(),
+                    ),
+                    Source::Sqlite(source) => {
+                        source.run_plan(fetch.plan, fetch.keys, &mut DriverLog::default())
+                    }
+                    Source::Memory(_) => unreachable!("answered below"),
+                })
+            });
+        }
+        Ok(match self.memory_answer(step, keys) {
+            Ok(fetched) => Outcome::Data(fetched),
+            Err(error) => Outcome::Error(error),
+        })
+    }
+
+    /// The non-SQL provider's answer to `step`.
+    fn memory_answer(
         &self,
         step: &FetchStep,
         keys: &BTreeMap<AttachmentId, Fetched>,
     ) -> Result<Fetched, ProviderError> {
         match self {
-            Source::Duck(connection) => duck::answer_with(connection, step, keys),
-            Source::Sqlite(source) => source.answer_logged(step, keys, &mut DriverLog::default()),
+            Source::Duck(_) | Source::Sqlite(_) => unreachable!("answered through its kit"),
             Source::Memory(source) => {
                 let mut sets = BTreeMap::new();
                 for (id, fetched) in keys {
@@ -93,6 +145,7 @@ impl Source {
                                 retryable: false,
                                 sqlstate: None,
                                 vendor_code: None,
+                                facts: None,
                             }
                         })?;
                     sets.insert(*id, batch);
@@ -236,6 +289,7 @@ fn resolved<'a>(case: &'a Value, by_id: &BTreeMap<&str, &'a Value>) -> Result<&'
 struct ProviderPath<'a> {
     source: &'a Source,
     page_rows: usize,
+    kit: Option<SqlSource>,
     fault: Option<&'a str>,
     inject: Option<(usize, bool)>,
     held: BTreeMap<String, Vec<ArrowData>>,
@@ -263,14 +317,18 @@ impl ProviderPath<'_> {
                 retryable,
                 sqlstate: None,
                 vendor_code: None,
+                facts: None,
             });
         }
         let token = match &step.continuation {
             Some(token) => token.clone(),
             None => {
-                let fetched = match self.source.answer(step, keys) {
-                    Ok(fetched) => fetched,
-                    Err(error) => return failed(error),
+                let fetched = match self.source.answer(self.kit.as_ref(), step, keys)? {
+                    Outcome::Data(fetched) => fetched,
+                    Outcome::Error(error) => return failed(error),
+                    Outcome::Refused(error) => {
+                        return Ok((FetchOutcome::Refused { error }, BTreeMap::new()));
+                    }
                 };
                 let mut whole = concat_batches(&fetched.schema, &fetched.batches)?;
                 if self.fault == Some("silent_capability") && name == "neighbors" {
@@ -337,12 +395,10 @@ fn run_case(
         });
     }
     let capabilities = case.get("capabilities").cloned().unwrap_or(json!({}));
+    let (provider, kit) = source.provider(database)?;
     let mut fetch = json!({
         "request": request,
-        "provider": match source {
-            Source::Memory(_) => json!({"provider": "host", "capabilities": Memory::capabilities()}),
-            _ => json!({"provider": "sql", "dialect": database}),
-        },
+        "provider": provider,
         "echo": true,
         "undeclared": capabilities.get("withhold").cloned().unwrap_or(json!([])),
     });
@@ -385,6 +441,7 @@ fn run_case(
     });
     let mut path = ProviderPath {
         source,
+        kit,
         page_rows,
         fault,
         inject: case.get("inject").map(|inject| {
@@ -440,23 +497,9 @@ fn drive(
         for step in &requests {
             let mut keys = BTreeMap::new();
             if step.continuation.is_none() {
-                let sets: Vec<&KeySet> = match &step.plan {
-                    FetchPlan::Sql { statements, .. } => statements
-                        .iter()
-                        .flat_map(|s| &s.params)
-                        .filter_map(|param| match param {
-                            SqlParam::KeySet { keys, .. } => Some(keys),
-                            SqlParam::Text { .. } => None,
-                            SqlParam::Value { .. } => None,
-                        })
-                        .collect(),
-                    FetchPlan::Host { .. } => Memory::key_sets(&step.request),
-                };
-                for set in sets {
-                    if let Entry::Vacant(entry) = keys.entry(set.attachment) {
-                        let Ok(Some(Attachment::Arrow(data))) =
-                            handle.take_attachment(set.attachment)
-                        else {
+                for set in step.plan.key_sets.iter().copied() {
+                    if let Entry::Vacant(entry) = keys.entry(set) {
+                        let Ok(Some(Attachment::Arrow(data))) = handle.take_attachment(set) else {
                             bail!("a key set is not attached");
                         };
                         entry.insert(Fetched {

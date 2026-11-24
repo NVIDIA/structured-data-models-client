@@ -7,10 +7,9 @@ Written by independent test author before the implementation, from
 the design's row ("dialect, psycopg provider (Arrow without pandas)", "key
 sets bound as the dialect binds them", "L4 goldens executed", choice 12's
 relation forms) and ``test_the_duckdb_provider.py``, whose vectors this
-reads: each fetch is planned by the core's data layer for Postgres
-(``{'provider': 'sql', 'dialect': 'postgres'}``, under the database's
-``public`` schema ), answered by the provider
-over a ``psycopg`` connection to a real Postgres, admitted by the core and
+reads: each fetch is asked by the core of the Postgres source, answered
+through its SQL kit (``{'provider': 'sql', 'dialect': 'postgres'}``, under
+the database's ``public`` schema) by the provider over a ``psycopg`` connection to a real Postgres, admitted by the core and
 echoed back by the test-only fetch. The data is the DuckDB-built tables the
 vectors name, loaded into a database of their own by the contract loader
 (``contract/runners/databases.py``), as the cases' are.
@@ -33,7 +32,7 @@ vectors name, loaded into a database of their own by the contract loader
 
 The provider is ``sdm_client._rust.providers.postgres.PostgresProvider``,
 built over a ``psycopg`` connection and called as the DuckDB provider is
-(``provider(step, keys)``): the one name this test assumes of the
+(``provider(fetch, binds)``): the one name this test assumes of the
 implementation (data:`PROVIDER`).
 
 Where ``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES``
@@ -57,6 +56,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import kit_host
 import pyarrow as pa
 import pytest
 from request_kind_assertions import assert_source_answer, source_answer
@@ -156,17 +156,16 @@ def vectors_db(server: Server | None) -> Any:
     return server.database(VECTORS['setup'])
 
 
-def _fetch(request: dict[str, Any]) -> dict[str, Any]:
-    return {'request': request, 'provider': POSTGRES, 'echo': True}
+def _fetch(request: dict[str, Any], choice: Any) -> dict[str, Any]:
+    return {'request': request, 'provider': choice, 'echo': True}
 
 
 def test_public_window_sums_keep_postgres_chronological_order(
     server: Server | None,
 ) -> None:
     import pandas as pd
-    from sdm_connectors import PostgresSource
 
-    from sdm_client import PredictiveQuery, Relationship, Schema
+    from sdm_client import PostgresSource, PredictiveQuery, Relationship, Schema
 
     if server is None:
         pytest.fail('needs the local Postgres test service')
@@ -233,13 +232,23 @@ def _table(finished: Any) -> pa.Table:
 
 def _admitted(connection: Any, request: dict[str, Any]) -> pa.Table:
     r"""What the core admitted of ``request``'s answer on Postgres."""
-    provider = _provider(connection)
+    choice, provider = kit_host.chosen(POSTGRES, _provider(connection))
     finished = run(
         {'op': 'test', 'test': 'fetch', 'fetch': 1},
-        {1: codec.attachment(_fetch(request))},
+        {1: codec.attachment(_fetch(request, choice))},
         provider=provider,
     )
     return _table(finished)
+
+
+def _tables(keys: Any) -> dict[int, pa.Table]:
+    r"""Each key set handed over, read whole, by attachment."""
+    return {
+        attachment: pa.RecordBatchReader._import_from_c_capsule(
+            stream.__arrow_c_stream__()
+        ).read_all()
+        for attachment, stream in (keys or {}).items()
+    }
 
 
 def _keyed(
@@ -250,20 +259,23 @@ def _keyed(
     key_source_type: str | None = None,
 ) -> tuple[pa.Table, dict[str, Any]]:
     r"""A keyed fetch with ``seeds``, through the core: the core attaches
-    them to the step as its own key set, the provider binds them and
-    answers. Also the step's control size and the key set handed over."""
+    them to the step as its own key set, the source's kit has the provider
+    bind them and answer. Also the step's control size, the key set handed
+    over, and the key sets the kit bound for the provider, one per fetch it
+    handed it."""
     from sdm_client._rust.codec import CONTROL_CAP
 
-    provider = _provider(connection)
-    seen: dict[str, Any] = {}
+    seen: dict[str, Any] = {'bound': []}
+
+    def bound(fetch: dict[str, Any], binds: Any) -> None:
+        seen['bound'].append(_tables(binds))
+
+    choice, provider = kit_host.chosen(
+        POSTGRES, kit_host.Driven(_provider(connection), bound)
+    )
 
     def answer(step: dict[str, Any], keys: Any) -> Any:
-        seen['keys'] = {
-            attachment: pa.RecordBatchReader._import_from_c_capsule(
-                stream.__arrow_c_stream__()
-            ).read_all()
-            for attachment, stream in keys.items()
-        }
+        seen['keys'] = _tables(keys)
         seen['control'] = len(json.dumps(step).encode())
         assert seen['control'] < CONTROL_CAP
         return provider(step, dict(seen['keys']))
@@ -298,7 +310,7 @@ def _keyed(
     }
     finished = run(
         {'op': 'test', 'test': 'keyed', 'fetch': 1, 'keys': 2},
-        {1: codec.attachment(_fetch(request)), 2: seeds},
+        {1: codec.attachment(_fetch(request, choice)), 2: seeds},
         provider=answer,
     )
     return _table(finished), seen
@@ -484,9 +496,12 @@ def test_keys_that_collide_as_float64_bind_join_and_answer_exactly(
     for case in cases:
         exact = _seeds(case['type'], case['values'])
         data, seen = _keyed(vectors_db, case['request'], exact)
-        # The key set travels as the dialect's JSON text: one
-        # cell, each key as the old client writes it, its value exact.
-        [handed] = seen['keys'].values()
+        # The source is handed the keys exactly as sent, and its kit binds
+        # them as the dialect's JSON text: one cell, each key as the old
+        # client writes it, its value exact.
+        [sent] = seen['keys'].values()
+        assert sent.equals(exact), case['column']
+        [[handed]] = [each.values() for each in seen['bound'] if each]
         assert (handed.num_rows, handed.num_columns) == (1, 1), case['column']
         rows = json.loads(handed.column(0)[0].as_py(), parse_float=Decimal)
         assert [Decimal(str(key)) for key in rows] == [

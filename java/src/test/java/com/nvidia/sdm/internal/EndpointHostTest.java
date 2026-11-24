@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.nvidia.sdm.DatabricksSource;
+import com.nvidia.sdm.SourceAccess;
 import com.nvidia.sdm.ModelEndpointException;
 import com.nvidia.sdm.StructuredDataException;
 import com.nvidia.sdm.internal.jdbc.JdbcProvider;
@@ -56,19 +57,19 @@ class EndpointHostTest {
   @Test
   void aDatabricksSourceNamesItsDialectAndNamespace() {
     Connection connection = connection();
-    Providers.Chosen both = Providers.of(DatabricksSource.of(connection, "main", "sales"));
+    DatabricksSource both = DatabricksSource.of(connection, "main", "sales");
     assertEquals(
         Map.of("provider", "sql", "dialect", "databricks", "namespace", Arrays.asList("main", "sales"),
             "timestamp_encoding", "microseconds"),
-        both.choice());
-    assertInstanceOf(JdbcProvider.class, both.provider());
+        SourceAccess.sqlChoice(both));
+    assertInstanceOf(JdbcProvider.class, SourceAccess.driver(both));
     assertEquals(
         Arrays.asList(null, "sales"),
-        Providers.of(DatabricksSource.of(connection, null, "sales")).choice().get("namespace"));
+        SourceAccess.sqlChoice(DatabricksSource.of(connection, null, "sales")).get("namespace"));
     assertEquals(
         Arrays.asList("main", null),
-        Providers.of(DatabricksSource.of(connection, "main", null)).choice().get("namespace"));
-    Map<String, Object> current = Providers.of(DatabricksSource.of(connection)).choice();
+        SourceAccess.sqlChoice(DatabricksSource.of(connection, "main", null)).get("namespace"));
+    Map<String, Object> current = SourceAccess.sqlChoice(DatabricksSource.of(connection));
     assertEquals(Map.of("provider", "sql", "dialect", "databricks",
         "timestamp_encoding", "microseconds"), current);
     assertFalse(current.containsKey("namespace"));
@@ -83,12 +84,12 @@ class EndpointHostTest {
     DatabricksSource source = DatabricksSource.of(connection(), "main", "sales");
     DatabricksSource view = source.semanticModel("revenue", true);
     assertEquals(source.connection(), view.connection());
-    assertFalse(Providers.of(source).choice().containsKey("view"));
+    assertFalse(SourceAccess.sqlChoice(source).containsKey("view"));
     assertEquals(Map.of("name", "revenue", "trust_expressions", true),
-        Providers.of(view).choice().get("view"));
+        SourceAccess.sqlChoice(view).get("view"));
     assertEquals(Map.of("name", "revenue", "trust_expressions", false),
-        Providers.of(source.semanticModel("revenue", false)).choice().get("view"));
-    assertEquals(Arrays.asList("main", "sales"), Providers.of(view).choice().get("namespace"));
+        SourceAccess.sqlChoice(source.semanticModel("revenue", false)).get("view"));
+    assertEquals(Arrays.asList("main", "sales"), SourceAccess.sqlChoice(view).get("namespace"));
     assertThrows(NullPointerException.class, () -> source.semanticModel(null, false));
   }
 
@@ -96,10 +97,10 @@ class EndpointHostTest {
   void aMetricViewsWarningsAndErrorsCanNameTheSource() {
     DatabricksSource view = DatabricksSource.of(connection(), "main", "sales")
         .semanticModel("revenue", false);
-    Map<String, java.util.function.Function<Map<String, Object>, Object>> held = Providers.held(view);
+    Map<String, java.util.function.Function<Map<String, Object>, Object>> held = SourceAccess.held(view);
     assertEquals(view, held.get("source").apply(Map.of()));
     assertEquals(view, held.get("semantic_model").apply(Map.of()));
-    assertFalse(Providers.held(DatabricksSource.of(connection())).containsKey("semantic_model"));
+    assertFalse(SourceAccess.held(DatabricksSource.of(connection())).containsKey("semantic_model"));
     String said = Wording.warnings(java.util.List.of(Map.of(
         "code", "VIEW_READ_IN_PART", "sentence", "view_materialization_ignored")), held).get(0).text();
     assertTrue(said.contains("revenue"), said);

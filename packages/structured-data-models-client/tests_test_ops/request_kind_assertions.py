@@ -42,21 +42,33 @@ def source_answer(connection, fetch, *, postgres=False):
     request = fetch['request']
     kind = request['request']
     if kind == 'describe':
+        # The catalog as DuckDB's own catalog functions read it, each fact
+        # under the name the contract's catalog answer gives it. The facts
+        # a source derives (a column's key_nullable, unique and dtype, a
+        # key's index and enforcement, an index's columns) are not read.
         part = request['part']
         table = request['tables'][0]['source'][0] if request['tables'] else None
         if part == 'tables':
             sql, params = (
-                'SELECT table_name FROM information_schema.tables '
+                'SELECT table_name AS "table" FROM information_schema.tables '
                 "WHERE table_schema='main'",
                 [],
             )
         elif part == 'columns':
-            sql, params = 'SELECT * FROM pragma_table_info(?)', [table]
+            sql, params = (
+                'SELECT name, type, "notnull" AS not_null, pk AS primary_key '
+                'FROM pragma_table_info(?)',
+                [table],
+            )
         elif part in {'keys', 'foreign_keys'}:
             columns = (
-                'constraint_type, constraint_column_names'
+                "CASE constraint_type WHEN 'PRIMARY KEY' THEN 'primary' "
+                "WHEN 'UNIQUE' THEN 'unique' ELSE 'other' END AS kind, "
+                'constraint_column_names AS columns'
                 if part == 'keys'
-                else 'constraint_index, referenced_table, constraint_column_names, referenced_column_names'
+                else 'constraint_index AS key, referenced_table, '
+                'constraint_column_names AS columns, '
+                'referenced_column_names AS referenced_columns'
             )
             sql = (
                 f'SELECT {columns} FROM duckdb_constraints() WHERE table_name=?'
@@ -67,10 +79,21 @@ def source_answer(connection, fetch, *, postgres=False):
         else:
             assert part == 'indexes'
             sql, params = (
-                'SELECT table_name, expressions FROM duckdb_indexes()',
+                'SELECT table_name AS "table" FROM duckdb_indexes()',
                 [],
             )
-        return connection.sql(sql, params=params).to_arrow_table()
+        read = connection.sql(sql, params=params).to_arrow_table()
+        # A list of names is the contract's list<item: string>.
+        return read.cast(
+            pa.schema(
+                [
+                    pa.field(f.name, pa.list_(pa.string()), f.nullable)
+                    if pa.types.is_list(f.type)
+                    else f
+                    for f in read.schema
+                ]
+            )
+        )
     if kind == 'key_counts':
         rows = []
         for index, key in enumerate(request['keys']):
@@ -179,6 +202,9 @@ def source_answer(connection, fetch, *, postgres=False):
 def assert_source_answer(
     actual, expected, request, canonical, *, postgres=False
 ):
+    if request['request'] == 'describe':
+        # Only the facts the catalog reads (``source_answer``).
+        actual = actual.select(expected.column_names)
     assert [(f.name, f.type) for f in actual.schema] == [
         (f.name, f.type) for f in expected.schema
     ]

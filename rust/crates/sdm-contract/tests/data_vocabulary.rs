@@ -7,7 +7,7 @@
 //! extends the existing relation seam only to a closed neighbor limit.
 //!
 //! A `DataRequest` names what it wants with typed fields; a provider, or
-//! `sdm-data` for a SQL provider, decides how to fetch it. So no field of
+//! `sdm-sql` for a SQL provider, decides how to fetch it. So no field of
 //! the vocabulary, at any depth, may hold a free-text expression or a SQL
 //! string outside those exact seams. The test reads the generated JSON
 //! Schema of `DataRequest` and
@@ -84,7 +84,7 @@ const IDENTIFIERS: &[&str] = &[
 /// The reviewed exceptions of contract v28: a
 /// derived relation's filter and expression columns, SQL text of the
 /// source's own that the core carries opaque, never reading or writing it,
-/// which only `sdm-data`'s dialects render and only for a provider
+/// which only `sdm-sql`'s dialects render and only for a provider
 /// declaring `derived_relations`. Each is allowed only as that property of
 /// that definition.
 const OPAQUE_SQL: &[(&str, &str)] = &[("Relation", "filter"), ("RelationColumn", "expression")];

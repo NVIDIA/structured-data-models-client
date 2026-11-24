@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 
 The Java library uses the same Rust engine as Python, loaded from the JAR through JNI; see the [engine boundary diagrams](../docs/development/engine-boundaries.md).
 It describes the tables of a DuckDB, SQLite, Postgres or Databricks database through the caller's own JDBC connection, gathers a predictive query's request from them, and predicts with a model endpoint, each on the core, as the Python client does.
-Databricks metric views are read through `source.semanticModel(name, trustExpressions)`, and `schema.conversionNotes()` explains their conversion in the core's words.
+Databricks metric views are read through `source.semanticModel(name)` (or `semanticModel(name, trustExpressions)`), a source of the same class, and `schema.conversionNotes()` explains their conversion in the core's words.
 The library is built and tested in CI, but it is not released: there is no Maven publication and no release JAR. Build it from source as below.
 
 ## Read semantic predictions
@@ -61,13 +61,13 @@ Readers return an owned Arrow `Table`; callers close it before their `BufferAllo
 
 | API | Responsibility |
 | --- | --- |
-| `Readers.readTable(Source, table, allocator)` | Read one named table on the caller's connection/session. |
-| `Readers.readQuery(Source, sql, allocator)` | Read the caller's SQL result on that same connection/session. |
+| `Readers.readTable(Connection, table, allocator)` | Read one named table on the caller's JDBC connection. |
+| `Readers.readQuery(Connection, sql, allocator)` | Read the caller's SQL result on that same connection. |
 | `Readers.read(URI, ReadOptions, allocator)` | Read local/file/S3 CSV or Parquet, including partitioned datasets. |
 | `DatabricksSparkSource.of(SparkSession, catalog, schema)` | Execute Rust's existing Databricks SQL through the caller's Spark session. |
 
-`Source` is the common source boundary; `JdbcSource` owns `connection()` and the four existing JDBC classes keep their concrete getters.
-This is an explicit pre-release change to `Source.connection()`, not a fake JDBC connection for Spark.
+`Source` is the one source type: an interface that the built-in sources implement, and that your own source implements.
+Each built-in source keeps its own getters, such as `connection()` or `session()`.
 `Schema.source()` continues returning the actual `Source`.
 Spark APIs use an optional/provided dependency; ordinary applications must work without Spark JARs.
 Java owns driver/session access and lossless Arrow conversion; Rust keeps schema, sampling and prediction policy.
@@ -154,6 +154,14 @@ If a later model call fails, `exception.answered(allocator)` returns any complet
 | Natives in the JAR | Linux x86_64 and aarch64 (glibc 2.17 or later), macOS arm64 and x86_64, Windows x86_64 |
 
 The JAR depends on Arrow Java (`arrow-c-data`, `arrow-vector`, `arrow-memory-core`, and `arrow-memory-unsafe` at run time) and on the SLF4J 2 API, which it declares and does not bind: the application chooses its logger.
+Everything else is optional: add it only for the feature that needs it, or the feature refuses with `INVALID_CONFIGURATION` naming what to add.
+
+| Feature | Add |
+|---|---|
+| `s3://` files | `software.amazon.awssdk:s3`, `software.amazon.awssdk:url-connection-client` |
+| `.zip`, `.tar`, `.bz2`, `.xz` files | `org.apache.commons:commons-compress` (and `org.tukaani:xz` for `.xz`) |
+| `DatabricksServing.of(endpoint)` | `com.databricks:databricks-sdk-java` |
+| A database source | its JDBC driver (below) |
 Windows requires the Microsoft Visual C++ 2015–2022 x64 runtime.
 Windows ARM64 is deferred because the published Arrow dependency does not provide its native DLL.
 Native binary deployment targets do not establish support for older operating systems; the selected JDK, Arrow and connector drivers must also support the operating system.
@@ -236,7 +244,26 @@ The model endpoint's own refusal is a `ModelEndpointException`, with the endpoin
 A Databricks serving endpoint's refusal is a `ModelEndpointException` too, under the endpoint's status and its own code, in the core's words, as Python's serving client raises it.
 A panic inside the core is contained: the call raises `INTERNAL_ERROR` with `details().get("panic") == true`, and the JVM goes on.
 
-The core's log events reach SLF4J under the loggers its crates name (`sdm_core`, `sdm_host`, `sdm_data` and their modules), and its warnings under `com.nvidia.sdm.warnings`, at `WARN`.
+The core's log events reach SLF4J under the loggers its crates name (`sdm_core`, `sdm_host`, `sdm_sql` and their modules), and its warnings under `com.nvidia.sdm.warnings`, at `WARN`.
+
+## Your own source
+
+To read data through your own code instead of a database connection, implement `com.nvidia.sdm.Source`.
+The core sends it typed requests (`DataRequest`), never SQL, and it answers each with Arrow rows.
+Every source answers `describe` and `scan`; it declares any other request it answers in its `Capabilities`, and the core answers the rest in memory from `scan` when a fallback is declared.
+`Capabilities` also describes the source to the core, each default a plain source of tables: its namespace and whether to ask for it first, upper-cased name retries, column types that are only affinities, its engine, its semantic model, and the other traits the built-in sources declare.
+
+```java
+Source source = new MySource();                    // implements Source
+Schema schema = Schema.fromSource(source, options);
+```
+
+The built-in sources are reached the same way: `capabilities()`, read as each operation starts, opens the operation's answers, and `answer(request, expected, allocator)` asked directly returns exactly what an operation over the source receives.
+Each value in a request is a `DataRequest.Value`, the plain Java value with the Arrow type the core holds it as.
+
+With `Capabilities.maxKeysPerRequest(n)`, a `neighbors` or `lookup` with more than `n` seeds reaches the source as several requests of at most `n` seeds each, whose answers the core joins.
+Python takes the same source.
+[Your own source](../docs/reference/data-providers.md) covers both languages, with a complete example in each: the Java one is [`InMemoryProviderExampleTest.java`](src/test/java/com/nvidia/sdm/InMemoryProviderExampleTest.java).
 
 ## Build
 
@@ -286,11 +313,11 @@ The caller supplies private connection/endpoint configuration and a build proven
 
 `SnowflakeSource.of(connection, database, schema)` uses a caller-owned JDBC connection.
 Either namespace argument may be null to use its current value.
-Use `.semanticModel(name, false)` for an existing semantic view; Rust interprets its schema and writes sampling SQL.
+Use `.semanticModel(name)` for an existing semantic view; Rust interprets its schema and writes sampling SQL.
 The caller supplies `net.snowflake:snowflake-jdbc:4.4.0` and authentication.
 No connection settings are changed, and closing schemas or requests does not close the connection.
 
-`Readers.readTable(source, name, allocator)` and `Readers.readQuery(source, sql, allocator)` return owned Arrow tables usable with Tabular or Relational `Schema.fromData`.
+`Readers.readTable(connection, name, allocator)` and `Readers.readQuery(connection, sql, allocator)` return owned Arrow tables usable with Tabular or Relational `Schema.fromData`.
 Raw Snowflake `NUMBER` columns retain their declared decimal precision and scale, including integers beyond 64 bits and fractions that Python's connector converts to doubles.
 Rust applies the existing warehouse numeric conversion rules when these values enter source-backed Relational sampling.
 Timestamp values retain their precision; zoned timestamps carry the connection's current session timezone, read without changing it.

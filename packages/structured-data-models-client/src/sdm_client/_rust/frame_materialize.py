@@ -25,6 +25,7 @@ from sdm_client._rust.materialize import (
 )
 from sdm_client._rust.run import run
 from sdm_client._rust.spec import held_schema
+from sdm_client.context_report import ContextReport
 
 
 def _graph(materializer: Any) -> Any:
@@ -81,7 +82,12 @@ def gather(
     num_context_samples: int | None,
     options: dict[str, Any],
     candidates: Sequence[Any] | None = None,
-) -> tuple[tuple[dict[str, Any], ...], results.QueryFacts, results.CoreRequest]:
+) -> tuple[
+    tuple[dict[str, Any], ...],
+    results.QueryFacts,
+    results.CoreRequest,
+    ContextReport,
+]:
     # Waiting here releases the GIL and does not occupy the Rust executor.
     # Include initialization: concurrent first callers must publish one graph.
     with materializer._core_frame_lock:
@@ -102,7 +108,12 @@ def _gather_locked(
     num_context_samples: int | None,
     options: dict[str, Any],
     candidates: Sequence[Any] | None,
-) -> tuple[tuple[dict[str, Any], ...], results.QueryFacts, results.CoreRequest]:
+) -> tuple[
+    tuple[dict[str, Any], ...],
+    results.QueryFacts,
+    results.CoreRequest,
+    ContextReport,
+]:
     from sdm_client import decompose
 
     anchor = options.get('anchor_time')

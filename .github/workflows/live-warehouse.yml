@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# A brief check of the built-in Snowflake source, in Python and in Java, on
+# the real Snowflake account live parity uses. Its secrets are the
+# parity-live environment's, which only main, v2-candidate and epic/*
+# branches may use, so it runs on pushes to those branches (its check shows
+# on a PR's head commit) and never on a pull request's merge ref or a fork.
+# Each test makes its own schema and drops it. Live parity remains the full
+# comparison across every connector.
+name: Live warehouse
+
+on:
+  push:
+    branches: [main, v2-candidate, 'epic/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-warehouse-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TZ: UTC
+
+jobs:
+  snowflake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: parity-live
+    env:
+      SNOWFLAKE_URL: ${{ secrets.SNOWFLAKE_URL }}
+      SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+      SNOWFLAKE_ACCESS_TOKEN: ${{ secrets.SNOWFLAKE_ACCESS_TOKEN }}
+      PARITY_SNOWFLAKE_DATABASE: ${{ vars.PARITY_SNOWFLAKE_DATABASE }}
+      PARITY_SNOWFLAKE_WAREHOUSE: ${{ vars.PARITY_SNOWFLAKE_WAREHOUSE }}
+      # A missing secret fails the run instead of skipping every test.
+      SDM_REQUIRE_SNOWFLAKE: '1'
+      SDM_REQUIRE_JAVA: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+        working-directory: rust
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: rust
+          key: live-warehouse
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - name: Build the client wheel and the Java binding
+        run: |
+          python -m pip install maturin==1.15.0
+          python scripts/rust_core/native_wheel.py --out native
+          (cd rust && cargo build --release --locked -p sdm-jni)
+          mkdir -p java/target/natives/linux-x86_64
+          cp rust/target/release/libsdm_jni.so java/target/natives/linux-x86_64/
+      - name: Snowflake from Python
+        run: |
+          python -m pip install ./packages/structured-data-models-api \
+            './packages/structured-data-models-connectors[snowflake]' "$(ls native/*.whl)[test]"
+          python -m pytest -q -p no:cacheprovider -m live_warehouse -rs \
+            packages/structured-data-models-client/tests/test_snowflake_live.py
+      - name: Snowflake from Java
+        run: |
+          mvn -B -f java/pom.xml -Dtest=SnowflakeTest -Dsurefire.failIfNoSpecifiedTests=false test
+          python - <<'PY'
+          import pathlib, re, sys
+          report = pathlib.Path('java/target/surefire-reports/TEST-com.nvidia.sdm.SnowflakeTest.xml').read_text()
+          skipped = int(re.search(r'skipped="(\d+)"', report).group(1))
+          if skipped:
+              sys.exit(f'{skipped} Snowflake test(s) skipped on the live account')
+          PY

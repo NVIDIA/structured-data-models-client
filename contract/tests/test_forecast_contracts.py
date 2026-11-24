@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 import yaml
 from sdm_client import (
+    DuckDBSource,
     KumoRelational,
     PredictiveQuery,
     Schema,
@@ -20,7 +21,6 @@ from sdm_client import (
     StructuredDataError,
     decompose,
 )
-from sdm_connectors import DuckDBSource
 
 ROOT = Path(__file__).resolve().parents[2]
 

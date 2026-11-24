@@ -40,6 +40,7 @@ class RelationalMaterializer:
             'top_k',
             'prediction_statistic',
             'rows_per_call',
+            'context_time_limit',
         }
     )
 
@@ -76,7 +77,7 @@ class RelationalMaterializer:
             from sdm_client._rust.frame_materialize import gather
         else:
             from sdm_client._rust.materialize import gather
-        payloads, facts, retained = gather(
+        payloads, facts, retained, context_report = gather(
             self, query, indices, num_context_samples, options, candidates
         )
         request = Request.materialized(
@@ -93,6 +94,7 @@ class RelationalMaterializer:
             },
         )
         request._core = retained
+        request._context_report = context_report
         if self.schema.source is None:
             request._sanitization_report = self._sanitization_report
         return request

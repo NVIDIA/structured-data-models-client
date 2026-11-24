@@ -81,6 +81,12 @@ class StructuredDataError(Exception):
     #: this client raises itself. Read by the census's tests, never branched
     #: on: what a caller branches on is ``code`` and ``details``.
     _sentence: str | None = None
+    #: The core's error, as the contract writes it, on the error a source
+    #: raised to refuse a request by name (a built-in source's SQL kit
+    #: refusing one its engine cannot answer): the run hands it back to the
+    #: core as the source's refusal (``FetchOutcome::Refused``), which the
+    #: operation then fails with. ``None`` on every other error.
+    _refusal: dict[str, Any] | None = None
 
     def __init__(
         self,

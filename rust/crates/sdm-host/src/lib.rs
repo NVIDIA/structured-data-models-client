@@ -11,6 +11,12 @@
 #![forbid(unsafe_code)]
 
 pub mod admission;
+#[allow(
+    clippy::disallowed_methods,
+    clippy::disallowed_types,
+    reason = "a run's monotonic clock, which the host tells the core"
+)]
+mod clock;
 pub mod codec;
 mod extensions;
 mod frames;
@@ -34,12 +40,12 @@ pub use sdm_core::{
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 
 /// A Postgres `json` or `jsonb` value, given as the server's text, as the
-/// reference's provider hands it to the core (`sdm_data::json_text`, the
+/// reference's provider hands it to the core (`sdm_sql::json_text`, the
 /// reference's float text): for a host whose driver gives the server's
 /// text, so how the value is read stays in the data layer.
 /// `None` where the text is not JSON; `Some(None)` for a JSON null.
 pub fn json_value_text(text: &str) -> Option<Option<String>> {
-    let read = || sdm_data::json_text(text, sdm_core::float_text);
+    let read = || sdm_sql::json_text(text, sdm_core::float_text);
     // The reader recurses once per level: a deep value is read on a stack
     // of its own, as the core reads a deep query, a shallow one on the
     // caller's (a JVM thread's stack is small).
@@ -84,7 +90,7 @@ fn nesting(text: &str) -> usize {
 /// fills each error's and warning's sentence from it, formatting nothing
 /// the table does not name.
 pub fn templates() -> String {
-    sdm_contract::wording::table_json_naming(sdm_data::DATABASE_NAMES)
+    sdm_contract::wording::table_json_naming(sdm_sql::DATABASE_NAMES)
 }
 
 /// What each model supports, as the client describes it to a caller
@@ -114,9 +120,9 @@ pub fn capabilities() -> String {
 }
 
 /// The databases the data layer of [`default_root`] provides for
-/// (`sdm_data::PROVIDERS`), which a binding reports as plain data.
+/// (`sdm_sql::PROVIDERS`), which a binding reports as plain data.
 pub fn providers() -> &'static [&'static str] {
-    sdm_data::PROVIDERS
+    sdm_sql::PROVIDERS
 }
 
 /// `query` as the PQL library writes it back (`sdm_core::pql::normalized`),
@@ -126,13 +132,22 @@ pub fn normalized_query(query: &str) -> Option<String> {
 }
 
 /// The composition root a binding starts its runs with: the one data layer,
-/// `sdm-data`'s, built here where every binding reaches it (
-/// H14, E30).
+/// `sdm-sql`'s reading of the built-in databases, built here where every
+/// binding reaches it (H14, E30).
 pub fn default_root() -> CompositionRoot {
-    CompositionRoot::new(std::sync::Arc::new(sdm_data::Data::reading_views(
-        sdm_core::pql::spaces(),
-    )))
+    CompositionRoot::new(std::sync::Arc::new(sdm_sql::Databases::new(spaces())))
 }
+
+/// The white space the data layer reads a semantic model's text by: the
+/// core's rule of it (`sdm_core::pql::is_space`), with the class its
+/// patterns are compiled with derived from it once.
+pub(crate) fn spaces() -> &'static sdm_sql::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    &SPACES
+}
+
+pub mod kit;
 
 #[cfg(test)]
 mod tests {

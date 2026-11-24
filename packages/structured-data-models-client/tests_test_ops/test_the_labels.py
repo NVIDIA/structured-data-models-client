@@ -13,9 +13,8 @@ import duckdb
 import pandas as pd
 import pyarrow as pa
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema
+from sdm_client import DuckDBSource, PredictiveQuery, Schema
 from sdm_client._rust import materialize as bridge
 
 CONTRACT = Path(__file__).resolve().parents[3] / 'contract'

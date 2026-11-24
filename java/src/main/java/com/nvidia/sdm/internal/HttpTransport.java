@@ -35,7 +35,9 @@ import java.util.concurrent.TimeoutException;
  * tried again with exponential backoff, a {@code Retry-After} the endpoint sends honoured up to a
  * minute; the timeout bounds each attempt whole, its answer's body included; a status of 400 or more is the endpoint's refusal ({@link ModelEndpointException}); an
  * endpoint that cannot be reached, or an answer past 64 MiB or that is not a JSON object, is a
- * failed transport ({@link Failed}). Not part of the API.
+ * failed transport ({@link Failed}). With {@code exact}, the URL is the endpoint's predictions URL,
+ * taken as it is rather than as a base: predictions are posted to it, and it serves no sessions,
+ * model list or readiness route. Not part of the API.
  */
 public final class HttpTransport {
   /** Where a prediction is posted. */
@@ -58,6 +60,12 @@ public final class HttpTransport {
   private final int maxRetries;
   private final HttpClient client;
 
+  /** Whether {@link #url} is an exact predictions URL rather than a base. */
+  private final boolean exact;
+
+  /** Whether the key is sent as a bearer token. */
+  private final boolean bearer;
+
   /** The transport could not reach the endpoint or read its answer. */
   public static final class Failed extends Exception {
     private static final long serialVersionUID = 1L;
@@ -68,6 +76,17 @@ public final class HttpTransport {
   }
 
   public HttpTransport(String url, String apiKey, Duration timeout, int maxRetries) {
+    this(url, apiKey, timeout, maxRetries, false, false);
+  }
+
+  /**
+   * {@code exact}: post predictions to {@code url} itself rather than a route below it; {@code
+   * bearer}: send the key as {@code Authorization: Bearer} rather than {@code X-API-Key}.
+   */
+  public HttpTransport(
+      String url, String apiKey, Duration timeout, int maxRetries, boolean exact, boolean bearer) {
+    this.exact = exact;
+    this.bearer = bearer;
     this.url = validated(url, apiKey);
     this.apiKey = apiKey;
     if (timeout == null || timeout.isNegative() || timeout.isZero()) {
@@ -83,6 +102,23 @@ public final class HttpTransport {
 
   public String url() {
     return url;
+  }
+
+  /** Whether the endpoint can pin a context: not an exact predictions URL. */
+  public boolean servesSessions() {
+    return !exact;
+  }
+
+  private StructuredDataException unsupported(String what) {
+    return new StructuredDataException(
+        url + " serves predictions only; it has no " + what, "UNSUPPORTED_REQUEST", Map.of(), null);
+  }
+
+  /** The credential header: a bearer token, or {@code X-API-Key}. */
+  private void authorize(HttpRequest.Builder builder) {
+    if (apiKey == null) return;
+    if (bearer) builder.header("Authorization", "Bearer " + apiKey);
+    else builder.header("X-API-Key", apiKey);
   }
 
   private static StructuredDataException configuration(String message) {
@@ -123,6 +159,7 @@ public final class HttpTransport {
   }
 
   public List<String> models() throws Failed {
+    if (exact) throw unsupported("model list; name the model on predict");
     byte[] response = (byte[]) get("/v1/models", false).body();
     try {
       Object data = ((Map<?, ?>) Json.read(response)).get("data");
@@ -137,11 +174,13 @@ public final class HttpTransport {
     } catch (Json.JsonException | ClassCastException e) { throw new Failed("invalid model list"); }
   }
 
-  public boolean healthReady() throws Failed { return get("/v1/health/ready", true).statusCode() == 200; }
+  public boolean healthReady() throws Failed {
+    if (exact) throw unsupported("readiness route");
+    return get("/v1/health/ready", true).statusCode() == 200; }
 
   private HttpResponse<?> get(String path, boolean readiness) throws Failed {
     HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url + path)).timeout(timeout).GET();
-    if (apiKey != null) builder.header("X-API-Key", apiKey);
+    authorize(builder);
     HttpRequest request = builder.build();
     for (int attempt = 0; ; attempt++) {
       try {
@@ -195,17 +234,17 @@ public final class HttpTransport {
       String encoded = java.net.URLEncoder.encode(id, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
       path = "/v1/sessions/" + encoded + (delete ? "" : "/predictions");
     } else if (!"predict".equals(endpoint)) throw new Failed("invalid model endpoint");
+    if (exact && !"predict".equals(endpoint)) throw new StructuredDataException(
+        "this transport does not support sessions", "SESSIONS_UNSUPPORTED", Map.of(), null);
     int retries = create ? 0 : maxRetries;
-    URI target = URI.create(url + path);
+    URI target = URI.create(exact ? url : url + path);
     HttpRequest.Builder request =
         HttpRequest.newBuilder(target)
             .timeout(timeout)
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofByteArray(body));
     if (delete) request.DELETE();
-    if (apiKey != null) {
-      request.header("X-API-Key", apiKey);
-    }
+    authorize(request);
     HttpRequest built = request.build();
     for (int attempt = 0; ; attempt++) {
       HttpResponse<byte[]> response;

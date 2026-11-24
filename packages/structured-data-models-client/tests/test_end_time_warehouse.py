@@ -22,7 +22,7 @@ def test_live_end_time_selection_masking_and_prediction(connector):
     path = os.environ.get('SDM_END_TIME_CONFIG')
     if not path:
         pytest.skip('set SDM_END_TIME_CONFIG to private source/endpoint config')
-    from sdm_connectors import DatabricksSource, SnowflakeSource
+    from sdm_client import DatabricksSource, SnowflakeSource
 
     config = json.loads(Path(path).read_text())
     settings = config['sources'][connector]

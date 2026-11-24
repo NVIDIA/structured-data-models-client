@@ -7,7 +7,7 @@ statements its plan carries, in order, on a cursor of the source's ADBC
 connection, and hands back the last one's result as the driver's Arrow
 table, every batch the driver made, an empty result keeping its schema.
 
-The statements are the core's (``sdm-data`` renders SQLite's SQL); this
+The statements are the core's (``sdm-sql`` renders SQLite's SQL); this
 module writes none. Each request gets its own cursor, as the reference's
 reads do. A key set a plan names (the seeds of a ``neighbors`` or
 ``lookup`` request) is the Arrow attachment the core sent with the step,

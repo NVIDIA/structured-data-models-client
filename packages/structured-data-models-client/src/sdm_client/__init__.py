@@ -22,6 +22,7 @@ defaults to what the schema's shape implies.
 from sdm_client._version import __version__
 from sdm_client.base import ModelCapabilities
 from sdm_client.client import FittedModel, SDMClient
+from sdm_client.context_report import ContextDraw, ContextReport
 from sdm_client.core.warnings import SDMWarning
 from sdm_client.errors import (
     MissingExtraError,
@@ -37,6 +38,7 @@ from sdm_client.explanations import (
 )
 from sdm_client.inference import InferenceConfig
 from sdm_client.models import KumoRelational, KumoTabular, Model
+from sdm_client.provider import Source
 from sdm_client.query import PredictiveQuery
 from sdm_client.relational_task import RelationalTask
 from sdm_client.reports import (
@@ -59,6 +61,13 @@ from sdm_client.schema import (
     Schema,
     SourceTable,
     Table,
+)
+from sdm_client.sources import (
+    DatabricksSource,
+    DuckDBSource,
+    PostgresSource,
+    SnowflakeSource,
+    SQLiteSource,
 )
 from sdm_client.summaries import ExplanationSummarizer
 
@@ -94,11 +103,19 @@ __all__ = [
     'RelationshipOrigin',
     'Request',
     'Schema',
+    'ContextDraw',
+    'ContextReport',
     'SanitizationReport',
     'TableSanitizationReport',
     'Split',
     'SDMClient',
+    'Source',
     'SourceTable',
+    'DatabricksSource',
+    'DuckDBSource',
+    'PostgresSource',
+    'SQLiteSource',
+    'SnowflakeSource',
     'StructuredDataError',
     'Table',
     'Target',

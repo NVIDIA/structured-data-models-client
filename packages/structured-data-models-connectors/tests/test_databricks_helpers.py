@@ -186,7 +186,9 @@ def test_a_connection_the_caller_opened_is_used_as_it_is(
 ) -> None:
     """structured-data-models-client did not open it, so it neither reopens it to name itself
     nor sets a tag on its session: only the read runs."""
-    from sdm_connectors import DatabricksSource, read_table
+    from sdm_client import DatabricksSource
+
+    from sdm_connectors import read_table
 
     databricks_sql = pytest.importorskip('databricks.sql')
     monkeypatch.setattr(

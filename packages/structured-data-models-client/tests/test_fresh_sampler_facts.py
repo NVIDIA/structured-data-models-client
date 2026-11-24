@@ -17,9 +17,14 @@ from typing import Any
 import duckdb
 import pyarrow as pa
 import pytest
-from sdm_connectors import DatabricksSource, DuckDBSource, SQLiteSource
 
-from sdm_client import PredictiveQuery, Schema
+from sdm_client import (
+    DatabricksSource,
+    DuckDBSource,
+    PredictiveQuery,
+    Schema,
+    SQLiteSource,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 _spec = importlib.util.spec_from_file_location(

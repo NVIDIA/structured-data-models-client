@@ -7,7 +7,6 @@ package com.nvidia.sdm;
 import com.nvidia.sdm.internal.ArrowData;
 import com.nvidia.sdm.internal.Host;
 import com.nvidia.sdm.internal.Indices;
-import com.nvidia.sdm.internal.Providers;
 import com.nvidia.sdm.internal.Results;
 import java.math.BigInteger;
 import java.time.Instant;
@@ -87,11 +86,11 @@ public final class PredictiveQuery {
         return materializer.labels(this, options);
       }
     }
-    Providers.Chosen chosen = Providers.of(schema.source());
+    SourceRun chosen = SourceRun.of(schema.source());
     try (Host.Finished finished = Host.run(
         Map.of("op", "labels_source", "provider", chosen.choice(), "schema", 1, "input", 2),
         Map.of(1, Host.attachment(schema.toHeld()), 2, Host.attachment(options.input(text))),
-        new Host.Call(chosen.provider(), null, Providers.held(schema.source())))) {
+        new Host.Call(chosen.provider(), null, chosen.held()))) {
       return labelTable(finished);
     }
   }
@@ -195,7 +194,7 @@ public final class PredictiveQuery {
             finished.arrow(((Number) result.get("predict")).intValue()), request, text);
       }
     }
-    Providers.Chosen chosen = Providers.of(schema.source());
+    SourceRun chosen = SourceRun.of(schema.source());
     Object anchor = options.anchorTime();
     Map<String, Object> operation = new LinkedHashMap<>();
     operation.put("op", "materialize");
@@ -219,7 +218,7 @@ public final class PredictiveQuery {
       attachments.put(4, Host.attachment(candidates(options.candidates())));
     }
     Map<String, Function<Map<String, Object>, Object>> held =
-        new LinkedHashMap<>(Providers.held(schema.source()));
+        new LinkedHashMap<>(chosen.held());
     held.put("query", fields -> text);
     try (Host.Finished finished =
         Host.run(operation, attachments, new Host.Call(chosen.provider(), null, held))) {
@@ -233,7 +232,8 @@ public final class PredictiveQuery {
       com.nvidia.sdm.internal.MaterializedRequest retained =
           new com.nvidia.sdm.internal.MaterializedRequest(state, finished);
       return new Request(schema, retained, text, gathered.query(),
-          inferenceAsked(options.options().get("inference_config")));
+              inferenceAsked(options.options().get("inference_config")))
+          .withContextReport(ContextReport.reported(finished.result().get("context")));
     }
   }
 

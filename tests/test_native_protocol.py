@@ -128,10 +128,13 @@ def test_the_core_speaks_the_locked_version_and_refuses_a_mismatched_host() -> (
     None
 ):
     # Reject a mismatched host before interpreting its operation or attachments.
-    from sdm_client._rust import codec, errors, facts
+    import duckdb
+    from sdm_client import DuckDBSource
+    from sdm_client._rust import codec, errors, facts, host_providers
     from sdm_client._rust.run import native
 
     core = native()
+    choice, _ = host_providers.chosen(DuckDBSource(duckdb.connect()))
     assert core.CONTRACT_VERSION == max(
         _lock_module().parse_lock(LOCK.read_text())
     )
@@ -142,7 +145,7 @@ def test_the_core_speaks_the_locked_version_and_refuses_a_mismatched_host() -> (
             'facts': facts.host_facts(core),
             'operation': {
                 'op': 'describe_source',
-                'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+                'provider': choice,
                 'source': 1,
                 'check_keys': True,
             },
@@ -390,10 +393,13 @@ def test_executed_sql_preserves_labels_history_and_prediction_order() -> None:
 
 def _describe(connection: Any, parts: list[str]) -> Any:
     r"""``describe_source`` over ``connection`` with ``orders`` read from the
-    relation of ``parts``, through the Python host's own run."""
-    from sdm_client._rust import codec
-    from sdm_client._rust.providers.duckdb import DuckDBProvider
+    relation of ``parts``, through the Python host's own run, the source
+    reached as every source is."""
+    from sdm_client import DuckDBSource
+    from sdm_client._rust import codec, host_providers
     from sdm_client._rust.run import run
+
+    choice, provider = host_providers.chosen(DuckDBSource(connection))
 
     spec = {
         'tables': [{'name': 'orders', 'source': {'source': parts}}],
@@ -402,14 +408,14 @@ def _describe(connection: Any, parts: list[str]) -> Any:
     }
     operation = {
         'op': 'describe_source',
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
+        'provider': choice,
         'source': 1,
         'check_keys': True,
     }
     finished = run(
         operation,
         {1: codec.attachment(copy.deepcopy(spec))},
-        provider=DuckDBProvider(connection),
+        provider=provider,
     )
     return json.loads(finished.take(finished.result['description']))
 

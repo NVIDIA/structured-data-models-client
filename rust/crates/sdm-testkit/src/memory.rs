@@ -154,6 +154,7 @@ fn failed(kind: ErrorKind) -> ProviderError {
         retryable: false,
         sqlstate: None,
         vendor_code: None,
+        facts: None,
     }
 }
 
@@ -180,6 +181,7 @@ impl Memory {
             key_enforcement: false,
             sample_rows: false,
             optional: DECLARED.iter().copied().collect(),
+            filters: Default::default(),
             max_keys_per_request: None,
             sampling: Determinism::SeededStable,
             max_seed: u64::MAX,
@@ -188,6 +190,13 @@ impl Memory {
             index_advice: None,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         }
     }
 
@@ -544,7 +553,7 @@ impl Memory {
     /// A copy of the tables of `connection`'s current schema, in the order
     /// DuckDB's catalog lists them, each with its rows as DuckDB's driver
     /// hands them over and its catalog as DuckDB declares it (a key's
-    /// kind read as `sdm-data` reads DuckDB's: a primary key, a unique
+    /// kind read as `sdm-sql` reads DuckDB's: a primary key, a unique
     /// key, or another kind). Read once, to build a fixture.
     pub fn from_duckdb(connection: &duckdb::Connection) -> Result<Memory> {
         const HERE: &str = "database_name = current_database() AND schema_name = current_schema()";

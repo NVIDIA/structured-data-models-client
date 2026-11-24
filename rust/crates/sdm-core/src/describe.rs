@@ -738,7 +738,7 @@ pub(crate) async fn ask(asker: &Asker, request: DataRequest) -> Result<ArrowData
 
 /// The data a request's answer holds, or the provider's own error, kept
 /// whole so the data layer can say what it means
-/// (`DataLayer::failure`): a semantic model's conversion reads each failure
+/// (`DataAccess::failure`): a semantic model's conversion reads each failure
 /// by what it asked.
 pub(crate) async fn attempt(
     asker: &Asker,
@@ -775,7 +775,7 @@ pub(crate) async fn settled(asker: Asker) -> Result<Asker, CoreError> {
 /// and before any row is sampled, where the host handed one to read
 /// (`pending`); none otherwise, the run reading `description` as handed.
 ///
-/// A source's tables (a SQL provider's) are read as they stand at this run
+/// A source's tables (a built-in database's) are read as they stand at this run
 /// and nothing of them is remembered between runs : each table's location (a part the provider leaves to the
 /// connection read from the session once), its catalog (a table the source
 /// does not hold refused by name, every later read of it naming the

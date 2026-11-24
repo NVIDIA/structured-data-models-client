@@ -12,9 +12,9 @@ import json
 import warnings
 from typing import Any
 
-from sdm_connectors import DatabricksSource, SnowflakeSource
 from sdm_connectors.backends.spark import SparkConnection
 
+from sdm_client import DatabricksSource, SnowflakeSource
 from sdm_client._rust import errors, providers, results
 from sdm_client._rust.providers.databricks import (
     DatabricksSparkProvider,
@@ -58,7 +58,10 @@ def _sources() -> dict[str, Any]:
 
 def test_a_metric_view_s_choice_names_the_model_on_its_source() -> None:
     sources = _sources()
-    choice, provider = providers.for_source(sources['model'])
+    choice, provider = (
+        sources['model']._sql_choice(),
+        sources['model']._operation()._driver,
+    )
     assert choice == {
         'provider': 'sql',
         'dialect': 'databricks',
@@ -68,7 +71,10 @@ def test_a_metric_view_s_choice_names_the_model_on_its_source() -> None:
     assert type(provider) is DatabricksSqlProvider
     assert provider._connection is sources['warehouse'].connection
 
-    choice, provider = providers.for_source(sources['trusted'])
+    choice, provider = (
+        sources['trusted']._sql_choice(),
+        sources['trusted']._operation()._driver,
+    )
     assert choice == {
         'provider': 'sql',
         'dialect': 'databricks',
@@ -82,7 +88,7 @@ def test_a_metric_view_s_choice_names_the_model_on_its_source() -> None:
     assert isinstance(provider._connection, SparkConnection)
 
     # A table of the warehouse names no model.
-    choice, _ = providers.for_source(sources['warehouse'])
+    choice = sources['warehouse']._sql_choice()
     assert 'view' not in choice
 
 
@@ -90,7 +96,7 @@ def test_a_snowflake_semantic_view_uses_its_source_provider() -> None:
     model = SnowflakeSource(
         _snowflake(), database='SALES', schema='PUBLIC'
     ).semantic_model('SALES_SEMANTICS')
-    choice, provider = providers.for_source(model)
+    choice, provider = model._sql_choice(), model._operation()._driver
     assert choice == {
         'provider': 'sql',
         'dialect': 'snowflake',
@@ -98,7 +104,7 @@ def test_a_snowflake_semantic_view_uses_its_source_provider() -> None:
         'view': {'name': 'SALES_SEMANTICS', 'trust_expressions': False},
     }
     assert type(provider) is providers.SnowflakeProvider
-    assert provider._connection is model.source.connection
+    assert provider._connection is model.connection
 
 
 def _text(value: str) -> dict[str, str]:

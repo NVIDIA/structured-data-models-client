@@ -83,7 +83,7 @@ fn limits(max_rows: u64, max_bytes: u64) -> FallbackLimits {
 }
 
 fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> ProviderChoice {
-    ProviderChoice::Host {
+    ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,
@@ -95,6 +95,7 @@ fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> Provi
             key_enforcement: false,
             sample_rows: false,
             optional: optional.iter().copied().collect::<BTreeSet<_>>(),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,
@@ -103,6 +104,13 @@ fn host(optional: &[OptionalRequest], fallback: Option<FallbackLimits>) -> Provi
             sampling: Determinism::SeededStable,
             fallback_text_order: Some(sdm_contract::data::FallbackTextOrder::BinaryUtf8),
             fallback,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         },
     }
 }
@@ -121,7 +129,7 @@ fn run_with(
     seeds: Option<RecordBatch>,
     answer: impl Fn(&DataRequest) -> FetchResult,
 ) -> Ran {
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let root = CompositionRoot::default();
     let kept: Arc<Mutex<Option<ArrowData>>> = Arc::default();
     let into = Arc::clone(&kept);
     let mut run = Run::with_data(
@@ -187,7 +195,7 @@ fn fallback(request: DataRequest, seeds: Option<RecordBatch>) -> Ran {
 }
 
 /// A host that answers a scan from `rows`: its columns by name, its
-/// not-null filters, then its limit.
+/// not-null filters (no value filter), then its limit.
 fn scan_of(rows: RecordBatch) -> impl Fn(&DataRequest) -> FetchResult {
     move |request| {
         let DataRequest::Scan {
@@ -201,11 +209,16 @@ fn scan_of(rows: RecordBatch) -> impl Fn(&DataRequest) -> FetchResult {
         };
         let mut kept: Vec<u32> = (0..rows.num_rows() as u32).collect();
         for filter in filters {
-            let Filter::NotNull { column } = filter else {
-                panic!("{filter:?}")
-            };
-            let column = rows.column_by_name(column).unwrap();
-            kept.retain(|&row| column.is_valid(row as usize));
+            match filter {
+                Filter::NotNull { column } => {
+                    let column = rows.column_by_name(column).unwrap();
+                    kept.retain(|&row| column.is_valid(row as usize));
+                }
+                // A value filter may return more rows than it holds for:
+                // this host applies none.
+                other if other.kind().is_some() => {}
+                other => panic!("{other:?}"),
+            }
         }
         if let Some(limit) = limit {
             kept.truncate(*limit as usize);
@@ -607,6 +620,60 @@ fn a_sample_is_the_same_rows_whatever_order_the_provider_scans_in() {
     );
 }
 
+fn older_than(age: i64) -> Filter {
+    Filter::Compare {
+        column: "user".into(),
+        op: sdm_contract::data::CompareOp::Gt,
+        value: Scalar::Int64(age),
+    }
+}
+
+#[test]
+fn a_sample_draws_from_the_rows_its_value_filters_keep_where_the_host_applies_none() {
+    let mut request = sample(10, 7);
+    let DataRequest::SampleEntities { filters, .. } = &mut request else {
+        unreachable!()
+    };
+    filters.push(older_than(1));
+    let ran = fallback(request, None);
+    let answer = ran.answer.unwrap();
+    // Users 2 and 3 only: the two rows of user 2 and the one of user 3.
+    let mut users = int64(&answer, "user");
+    users.sort_unstable();
+    assert_eq!(users, [Some(2), Some(2), Some(3)]);
+    // The host declares no value filter: its scan carries none.
+    let [DataRequest::Scan { filters, .. }] = ran.asked.as_slice() else {
+        panic!("{:?}", ran.asked)
+    };
+    assert!(filters.iter().all(|f| f.kind().is_none()), "{filters:?}");
+}
+
+#[test]
+fn a_host_declaring_a_value_filter_gets_it_on_its_scan() {
+    let mut provider = host(&[], Some(limits(1_000, 1 << 30)));
+    let ProviderChoice { capabilities } = &mut provider;
+    capabilities.filters = [sdm_contract::data::FilterKind::Compare].into();
+    let mut request = sample(10, 7);
+    let DataRequest::SampleEntities { filters, .. } = &mut request else {
+        unreachable!()
+    };
+    filters.push(older_than(1));
+    filters.push(Filter::AnyOf {
+        filters: vec![older_than(2)],
+    });
+    let ran = run_with(provider, request, None, scan_of(table()));
+    let [DataRequest::Scan { filters, .. }] = ran.asked.as_slice() else {
+        panic!("{:?}", ran.asked)
+    };
+    // The comparison it declares goes to it; the `AnyOf` it does not is
+    // applied here, and reads its column.
+    assert!(filters.contains(&older_than(1)), "{filters:?}");
+    assert!(!filters.iter().any(|f| matches!(f, Filter::AnyOf { .. })));
+    let mut users = int64(&ran.answer.unwrap(), "user");
+    users.sort_unstable();
+    assert_eq!(users, [Some(3)]);
+}
+
 #[test]
 fn rows_past_the_limit_fail_by_name_and_no_scan_moves_more() {
     let ran = run_with(
@@ -700,6 +767,7 @@ fn a_scan_the_provider_fails_is_the_requests_failure() {
                 retryable: true,
                 sqlstate: Some("08006".into()),
                 vendor_code: None,
+                facts: None,
             })
         },
     );
@@ -799,7 +867,7 @@ fn preview_budget_counts_returned_slice_not_its_large_parent() {
 
 #[test]
 fn a_range_budget_refusal_can_recover_with_preview_in_the_same_run() {
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let root = CompositionRoot::default();
     let provider = host(&[], Some(limits(1, 4096)));
     let mut run = Run::with_data(root.data_access(&provider).unwrap(), |asker| async move {
         let failed = asker
@@ -858,9 +926,7 @@ fn a_range_budget_refusal_can_recover_with_preview_in_the_same_run() {
 #[test]
 fn text_comparisons_require_compatible_declared_collation_but_preview_does_not() {
     let mut provider = host(&[], Some(limits(100, 1 << 20)));
-    let ProviderChoice::Host { capabilities } = &mut provider else {
-        unreachable!()
-    };
+    let ProviderChoice { capabilities } = &mut provider;
     capabilities.fallback_text_order = None;
     let rejected = run_with(
         provider.clone(),

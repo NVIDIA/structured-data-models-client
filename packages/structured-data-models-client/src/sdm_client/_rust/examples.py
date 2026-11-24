@@ -10,7 +10,7 @@ import copy
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any
 
-from sdm_client._rust import codec, providers, results
+from sdm_client._rust import codec, host_providers, results
 from sdm_client._rust.frame_materialize import _graph
 from sdm_client._rust.materialize import unpack_state
 from sdm_client._rust.run import run
@@ -81,7 +81,7 @@ def materialize(
         attachments[1] = _graph(owner)
         source = {'source': 'frames', 'graph': 1}
     else:
-        choice, provider = providers.for_source(schema.source)
+        choice, provider = host_providers.chosen(schema.source)
         attachments[1] = codec.attachment(held_schema(schema))
         source = {'source': 'sql', 'provider': choice, 'schema': 1}
     finished = run(

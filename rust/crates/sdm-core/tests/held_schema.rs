@@ -179,7 +179,7 @@ fn shop(country_facts: bool, ghost: bool) -> HeldSchema {
 }
 
 fn host() -> ProviderChoice {
-    ProviderChoice::Host {
+    ProviderChoice {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,
             compares_stored_times: false,
@@ -197,6 +197,7 @@ fn host() -> ProviderChoice {
                 OptionalRequest::Neighbors,
                 OptionalRequest::Lookup,
             ]),
+            filters: Default::default(),
             max_keys_per_request: None,
             max_seed: u64::MAX,
             text_times: None,
@@ -205,6 +206,13 @@ fn host() -> ProviderChoice {
             sampling: Determinism::SeededStable,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         },
     }
 }
@@ -213,7 +221,7 @@ const QUERY: &str = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_
 
 fn run_of(operation: Operation, attachments: Attachments) -> Result<Run, CoreError> {
     start(
-        &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+        &CompositionRoot::default(),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

@@ -25,7 +25,7 @@ fn bytes(value: &impl serde::Serialize) -> Attachment {
 }
 fn run(operation: Operation, attached: Attachments) -> Run {
     sdm_core::start(
-        &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+        &CompositionRoot::default(),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: HostFacts {

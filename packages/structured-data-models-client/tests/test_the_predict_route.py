@@ -23,9 +23,9 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
 from sdm_client import (
+    DuckDBSource,
     KumoRelational,
     PredictiveQuery,
     Request,

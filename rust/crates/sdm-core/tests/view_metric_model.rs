@@ -6,25 +6,25 @@
 //! Authored inputs assert joins, parameters, dimensions, measures and refusals.
 
 use sdm_contract::CoreError;
-use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
-use sdm_core::pql::{spaces, yaml_rules};
+use sdm_core::pql::yaml_rules;
 use sdm_core::view::definition::{self as view_definition, Dimension};
 use sdm_core::view_steps::{self, JoinJudgement};
 use sdm_core::view_words;
-use sdm_data::Data;
-use sdm_data::view_expr::metric as data;
-use sdm_data::view_expr::strip_comments;
 use sdm_schema::view::joins::JoinWalk;
 use sdm_schema::view::metric;
 use sdm_schema::view::spec::{Cardinality, JoinKeys, RefusalReason, Source, TableItem, ViewSpec};
 use sdm_schema::view::yaml::Value;
+use sdm_sql::Sql;
+use sdm_sql::plan::SqlChoice;
+use sdm_sql::view_expr::metric as data;
+use sdm_sql::view_expr::strip_comments;
 use serde_json::Value as Json;
 
 /// The data layer's answers in Databricks's dialect, as the routine asks
 /// them (`DataLayer::view_text`).
 fn ask(question: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-    Data::reading_views(spaces()).view_text(&ProviderChoice::sql("databricks"), question)
+    Sql::reading_views(spaces()).view_text(&SqlChoice::new("databricks"), question)
 }
 
 /// `unquote_ident`: a name in backticks, unquoted, else as written.
@@ -600,4 +600,11 @@ joins:
     let kept = kept_joins(&spec, &walk);
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0]["alias"], "valid");
+}
+
+/// The core's white space as the data layer reads a view's text by.
+fn spaces() -> &'static sdm_sql::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    &SPACES
 }

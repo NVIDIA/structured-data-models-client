@@ -9,13 +9,15 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use sdm_contract::data::{AttachmentId, FetchPlan, ProviderError};
+use sdm_contract::data::{AttachmentId, ProviderError};
 use sdm_contract::error::{ErrorCode, ErrorKind};
 use sdm_contract::ops::{DescribeSource, Operation};
 use sdm_contract::run::{FetchOutcome, FetchReply, StartRun};
 use sdm_contract::{CONTRACT_VERSION, ControlMessage, Step};
 use sdm_host::{Attachment, HostRun, default_root, encode, read};
 use sdm_testkit::host;
+use sdm_testkit::sql_source::{Outcome, SqlSource};
+
 use serde_json::{Value, json};
 
 fn root() -> PathBuf {
@@ -74,11 +76,14 @@ fn core(provider: &Value) -> Value {
 /// Tests do not implement a warehouse or manufacture a successful table answer.
 fn recording(leg: &str, core: &Value) -> Value {
     let spec = &core["describe_source"];
+    // The source answers through its kit, whose fetches the recording
+    // holds, as a host's recorder records them.
+    let kit = SqlSource::from_json(&spec["provider"]).unwrap();
     let message = encode(&ControlMessage::Start(Box::new(StartRun {
         contract: CONTRACT_VERSION,
         facts: host::facts().unwrap(),
         operation: Operation::DescribeSource(DescribeSource {
-            provider: serde_json::from_value(spec["provider"].clone()).unwrap(),
+            provider: kit.provider().unwrap(),
             source: AttachmentId(1),
             check_keys: false,
         }),
@@ -100,6 +105,7 @@ fn recording(leg: &str, core: &Value) -> Value {
         vendor_code: None,
         error_class: None,
         driver_message: None,
+        facts: None,
     };
     let mut fetches = Vec::new();
     loop {
@@ -122,18 +128,25 @@ fn recording(leg: &str, core: &Value) -> Value {
                 fetches.len() < 8,
                 "describe did not finish after driver errors"
             );
-            let FetchPlan::Sql { statements, .. } = &step.plan else {
-                panic!("a warehouse fetch is not SQL");
+            let outcome = kit
+                .answer(&step.request, &BTreeMap::new(), &mut |fetch| {
+                    fetches.push(json!({"request": fetch.request, "plan": fetch.plan,
+                       "statements": fetch.plan.statements.iter().map(|s| s.text.clone()).collect::<Vec<_>>(),
+                       "error": &failure}));
+                    Ok(Err(failure.clone()))
+                })
+                .unwrap();
+            // A request the kit refuses runs nothing, and is recorded as
+            // nothing: the kit refuses it again on the replay.
+            let outcome = match outcome {
+                Outcome::Error(error) => FetchOutcome::Error { error },
+                Outcome::Refused(error) => FetchOutcome::Refused { error },
+                Outcome::Data(_) => panic!("a warehouse fetch answered"),
             };
-            fetches.push(json!({"request": step.request, "plan": step.plan,
-               "statements": statements.iter().map(|s| s.text.clone()).collect::<Vec<_>>(),
-               "error": &failure}));
             run.reply(
                 &encode(&ControlMessage::FetchReply(FetchReply {
                     id: step.id,
-                    outcome: FetchOutcome::Error {
-                        error: failure.clone(),
-                    },
+                    outcome,
                 }))
                 .unwrap(),
                 BTreeMap::new(),

@@ -326,4 +326,216 @@ class DatabricksProviderTest {
           .noneMatch(e -> String.valueOf(e.getValue()).contains("secret")));
     }
   }
+
+  /** A metric view joining a filtered fact table to a dimension, as Python's filter test reads. */
+  private static final String METRIC_VIEW =
+      String.join(
+          "\n",
+          "version: 0.1",
+          "source: cat.sch.order_lines",
+          "filter: source.status = 'VALID'",
+          "joins:",
+          "  - name: customers",
+          "    source: cat.sch.customers",
+          "    on: source.customer_id = customers.customer_id",
+          "dimensions:",
+          "  - name: line_id",
+          "    expr: source.line_id",
+          "  - name: ordered_at",
+          "    expr: source.ordered_at",
+          "  - name: quantity",
+          "    expr: source.quantity",
+          "  - name: segment",
+          "    expr: customers.segment",
+          "measures:",
+          "  - name: total_quantity",
+          "    expr: SUM(source.quantity)");
+
+  private static final Map<String, List<List<String>>> VIEW_TABLES =
+      Map.of(
+          "order_lines",
+          List.of(
+              List.of("line_id", "INT"),
+              List.of("customer_id", "INT"),
+              List.of("ordered_at", "TIMESTAMP"),
+              List.of("quantity", "INT"),
+              List.of("status", "STRING")),
+          "customers",
+          List.of(List.of("customer_id", "INT"), List.of("segment", "STRING")));
+
+  /**
+   * A Databricks metric view is a source of the same class in Java, as in Python's {@code
+   * test_semantic_model_source.py}: its source table and each join become tables, each dimension
+   * a column of the table it reads, and its measures are left out.
+   */
+  @Test
+  void aMetricViewIsDescribedAsTheTablesItJoins() {
+    FakeJdbc.Database[] held = new FakeJdbc.Database[1];
+    FakeJdbc.Database db =
+        new FakeJdbc.Database(
+            sql -> {
+              List<Object> bound = held[0].ran.get(held[0].ran.size() - 1).bound();
+              if (sql.contains("information_schema.columns")) {
+                String table =
+                    bound.stream().map(String::valueOf).filter(VIEW_TABLES::containsKey).findFirst()
+                        .orElseThrow(() -> new AssertionError("no table bound: " + bound));
+                List<List<String>> columns = VIEW_TABLES.get(table);
+                int n = columns.size();
+                return List.of(
+                    FakeJdbc.Column.of("column_name", "STRING", columns.stream().map(c -> c.get(0)).toArray()),
+                    FakeJdbc.Column.of("full_data_type", "STRING", columns.stream().map(c -> c.get(1)).toArray()),
+                    FakeJdbc.Column.of("is_nullable", "STRING", java.util.Collections.nCopies(n, "YES").toArray()),
+                    FakeJdbc.Column.of("table_catalog", "STRING", java.util.Collections.nCopies(n, "cat").toArray()),
+                    FakeJdbc.Column.of("table_schema", "STRING", java.util.Collections.nCopies(n, "sch").toArray()),
+                    FakeJdbc.Column.of("table_name", "STRING", java.util.Collections.nCopies(n, table).toArray()),
+                    FakeJdbc.Column.of("table_type", "STRING", java.util.Collections.nCopies(n, "MANAGED").toArray()));
+              }
+              // No declared constraints: the view's joins are its links.
+              if (sql.contains("information_schema.table_constraints")) {
+                return List.of(FakeJdbc.Column.of("constraint_type", "STRING"),
+                    FakeJdbc.Column.of("constraint_name", "STRING"),
+                    FakeJdbc.Column.of("column_name", "STRING"));
+              }
+              if (sql.contains("information_schema.referential_constraints")) {
+                return List.of(FakeJdbc.Column.of("constraint_name", "STRING"),
+                    FakeJdbc.Column.of("source_column", "STRING"),
+                    FakeJdbc.Column.of("table_catalog", "STRING"),
+                    FakeJdbc.Column.of("table_schema", "STRING"),
+                    FakeJdbc.Column.of("table_name", "STRING"),
+                    FakeJdbc.Column.of("referenced_column", "STRING"));
+              }
+              if (sql.contains(" AS k, COUNT(*) AS n, COUNT(DISTINCT `")) {
+                return keyCounts(sql);
+              }
+              if (sql.startsWith("DESCRIBE QUERY SELECT ") || sql.startsWith("SELECT `")) {
+                return viewRows(sql);
+              }
+              if (sql.startsWith("DESCRIBE TABLE EXTENDED")) {
+                return List.of(
+                    FakeJdbc.Column.of("col_name", "STRING", "line_id", "ordered_at", "quantity",
+                        "segment", "total_quantity", "", "# Detailed Table Information", "Catalog",
+                        "Database", "Type", "View Text"),
+                    FakeJdbc.Column.of("data_type", "STRING", "int", "timestamp", "int", "string",
+                        "bigint measure", "", "", "cat", "sch", "METRIC_VIEW", METRIC_VIEW),
+                    FakeJdbc.Column.of("comment", "STRING", null, null, null, null, null, null,
+                        null, null, null, null, null));
+              }
+              throw new AssertionError("unexpected SQL: " + sql + " " + bound);
+            });
+    held[0] = db;
+    Schema schema =
+        Schema.fromSource(
+            DatabricksSource.of(db.connection(), "cat", "sch").semanticModel("sales_metrics"));
+    assertEquals(
+        Map.of(
+            // The dimensions of each table, then the join's key the view reads them by.
+            "order_lines", List.of("line_id", "ordered_at", "quantity", "customer_id"),
+            "customers", List.of("segment", "customer_id")),
+        schema.tables().stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    t -> t.name(), t -> t.columns().stream().map(c -> c.name()).toList())));
+    assertEquals(
+        List.of(new com.nvidia.sdm.Relationship("order_lines", "customer_id", "customers", "customer_id")),
+        schema.relationships());
+    // The view's filter holds for every row read from its source table.
+    for (FakeJdbc.Ran ran : db.ran) {
+      if (ran.text().contains("`order_lines`") && !ran.text().startsWith("DESCRIBE TABLE")) {
+        assertTrue(ran.text().contains("WHERE (source.status = 'VALID')"), ran.text());
+      }
+    }
+    assertEquals(0, db.statementsOpen);
+  }
+
+  /**
+   * Each key counted, as the core counts a join's key: its label, the rows, the distinct values,
+   * and the rows missing it, over the rows the view keeps.
+   */
+  private static List<FakeJdbc.Column> keyCounts(String sql) {
+    List<Object> labels = new ArrayList<>(), rows = new ArrayList<>();
+    List<Object> distinct = new ArrayList<>(), missing = new ArrayList<>();
+    for (String part : sql.split("UNION ALL")) {
+      java.util.regex.Matcher counted =
+          java.util.regex.Pattern.compile("SELECT (\\d+) AS k, .*COUNT\\(DISTINCT `(\\w+)`\\)")
+              .matcher(part.trim());
+      if (!counted.find()) throw new AssertionError("unexpected key count: " + part);
+      String key = counted.group(2);
+      List<FakeJdbc.Column> read =
+          viewRows("SELECT `" + key + "`" + part.substring(part.indexOf(" FROM ") - 1));
+      List<Object> values = read.get(0).values();
+      labels.add(Long.parseLong(counted.group(1)));
+      rows.add((long) values.size());
+      distinct.add(values.stream().filter(v -> v != null).distinct().count());
+      missing.add(values.stream().filter(v -> v == null).count());
+    }
+    return List.of(
+        new FakeJdbc.Column("k", "BIGINT", 0, 0, labels),
+        new FakeJdbc.Column("n", "BIGINT", 0, 0, rows),
+        new FakeJdbc.Column("d", "BIGINT", 0, 0, distinct),
+        new FakeJdbc.Column("z", "BIGINT", 0, 0, missing));
+  }
+
+  /**
+   * The metric view's tables as the stand-in warehouse answers a read of them: the described
+   * columns of a query ({@code DESCRIBE QUERY}), or its rows, the fact table's rows those the view's
+   * filter keeps.
+   */
+  private static List<FakeJdbc.Column> viewRows(String sql) {
+    boolean describe = sql.startsWith("DESCRIBE QUERY ");
+    String select = describe ? sql.substring("DESCRIBE QUERY ".length()) : sql;
+    String table = select.contains("`order_lines`") ? "order_lines" : "customers";
+    Map<String, String> types = new LinkedHashMap<>();
+    for (List<String> column : VIEW_TABLES.get(table)) types.put(column.get(0), column.get(1));
+    // Each item of the SELECT list, named by its last quoted name; a timestamp read as its
+    // microseconds (UNIX_MICROS), as the core asks Databricks for one.
+    List<String> names = new ArrayList<>();
+    List<Boolean> micros = new ArrayList<>();
+    for (String item : select.substring("SELECT ".length(), select.indexOf(" FROM ")).split(", ")) {
+      java.util.regex.Matcher quoted = java.util.regex.Pattern.compile("`(\\w+)`").matcher(item);
+      String name = null;
+      while (quoted.find()) name = quoted.group(1);
+      names.add(name);
+      micros.add(item.startsWith("UNIX_MICROS("));
+    }
+    List<FakeJdbc.Column> columns = new ArrayList<>();
+    if (describe) {
+      columns.add(FakeJdbc.Column.of("col_name", "STRING", names.toArray()));
+      columns.add(
+          FakeJdbc.Column.of(
+              "data_type", "STRING", names.stream().map(n -> types.get(n).toLowerCase()).toArray()));
+      return columns;
+    }
+    List<Map<String, Object>> rows = new ArrayList<>();
+    if (table.equals("order_lines")) {
+      for (int i = 0; i < 120; i++) {
+        if (i % 3 == 0) continue; // void: the view's filter leaves it out
+        rows.add(
+            Map.of(
+                "line_id", i + 1,
+                "customer_id", 1 + i % 6,
+                "ordered_at", java.time.LocalDateTime.of(2024, 1, 1, 0, 0).plusDays(i),
+                "quantity", 1 + i % 4,
+                "status", "VALID"));
+      }
+    } else {
+      for (int i = 1; i <= 6; i++) rows.add(Map.of("customer_id", i, "segment", i % 2 == 1 ? "a" : "b"));
+    }
+    for (int at = 0; at < names.size(); at++) {
+      String name = names.get(at);
+      boolean asMicros = micros.get(at);
+      columns.add(
+          new FakeJdbc.Column(
+              name,
+              asMicros ? "BIGINT" : types.get(name),
+              0,
+              0,
+              rows.stream()
+                  .map(r -> r.get(name))
+                  .map(v -> asMicros
+                      ? (Object) (((java.time.LocalDateTime) v).toEpochSecond(java.time.ZoneOffset.UTC) * 1_000_000L)
+                      : v)
+                  .toList()));
+    }
+    return columns;
+  }
 }

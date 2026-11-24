@@ -2105,7 +2105,7 @@ class _Captured:
 
     It passes the reference's dispatch as the connection does (design,
     "Driver capture"): its class's module is under ``duckdb``, which
-    ``sdm_connectors.source._backend_of`` reads over the MRO; a derived
+    ``sdm_client.sources._backend_of`` reads over the MRO; a derived
     cursor is the same class, so ``reader._query_handle``'s
     ``isinstance(cursor, type(connection))`` holds as it does for the
     driver; and ``__class__`` answers the driver's class, so
@@ -2409,7 +2409,7 @@ class _CapturedRelation(_Captured):
 
 
 # Under the driver's own package, which the reference's backend dispatch
-# reads (sdm_connectors.source._DRIVER_MODULES); a test-only name no import
+# reads (sdm_client.sources._DRIVER_MODULES); a test-only name no import
 # resolves.
 _Captured.__module__ = 'duckdb.sdm_capture'
 
@@ -3884,18 +3884,21 @@ def warehouse_source(
     leg: str, captured: Any, names: Mapping[str, str], given: Mapping[str, Any]
 ) -> Any:
     r"""The public source a user builds on ``leg`` over the captured
-    connection: for a connect case, ``Source(connection)``, which finds the
-    leg's source class by the connection's type (CN/source.py:97-107), as
-    the case's ``Source(session)`` does; the leg's source class in the test
+    connection: for a connect case, the leg's source class over the
+    connection in its current namespace; the leg's source class in the test
     schema otherwise, naming only the case's ``named_part`` when it has
     one, and a view case's semantic model of it."""
-    import sdm_connectors
+    import sdm_client
 
     if 'connect' in given:
-        return sdm_connectors.Source(captured)
+        if leg in ('databricks-sql', 'databricks-spark'):
+            return sdm_client.DatabricksSource(captured)
+        if leg == 'snowflake':
+            return sdm_client.SnowflakeSource(captured)
+        return sdm_client.PostgresSource(captured)
     parts = warehouse_namespace(leg, names, given)
     if leg in ('databricks-sql', 'databricks-spark'):
-        source = sdm_connectors.DatabricksSource(
+        source = sdm_client.DatabricksSource(
             captured,
             **{
                 key: value
@@ -3904,7 +3907,7 @@ def warehouse_source(
             },
         )
     elif leg == 'snowflake':
-        source = sdm_connectors.SnowflakeSource(
+        source = sdm_client.SnowflakeSource(
             captured,
             **{
                 key: value
@@ -3915,7 +3918,7 @@ def warehouse_source(
             },
         )
     else:
-        return sdm_connectors.PostgresSource(captured, schema=parts[0])
+        return sdm_client.PostgresSource(captured, schema=parts[0])
     view = given.get('view')
     if view is None:
         return source
@@ -4300,12 +4303,12 @@ def _open(
 
 def _source(database: str, connection: Any) -> Any:
     r"""The public source a user builds over ``connection``."""
-    import sdm_connectors
+    import sdm_client
 
     return {
-        'duckdb': sdm_connectors.DuckDBSource,
-        'sqlite': sdm_connectors.SQLiteSource,
-        'postgres': sdm_connectors.PostgresSource,
+        'duckdb': sdm_client.DuckDBSource,
+        'sqlite': sdm_client.SQLiteSource,
+        'postgres': sdm_client.PostgresSource,
     }[database](connection)
 
 

@@ -15,7 +15,7 @@ pub enum ExampleSource {
         graph: AttachmentId,
     },
     Sql {
-        provider: ProviderChoice,
+        provider: Box<ProviderChoice>,
         schema: AttachmentId,
     },
 }

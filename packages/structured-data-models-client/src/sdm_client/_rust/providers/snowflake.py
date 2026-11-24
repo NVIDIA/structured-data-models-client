@@ -20,7 +20,7 @@ as rows only (``SHOW``, ``DESCRIBE``: ``fetch_arrow_all`` raises
 each non-null cell its ``str``, an empty result keeping its columns. The
 core reads those columns by position, as the reference reads the rows.
 
-The statements are the core's (``sdm-data`` renders Snowflake's SQL); this
+The statements are the core's (``sdm-sql`` renders Snowflake's SQL); this
 module writes none, folds no name's case, retries nothing and says nothing
 of what a failure means; a key set arrives as the JSON text the core
 wrote for it, bound as it is. The connector's ``errno`` and ``sqlstate`` reach

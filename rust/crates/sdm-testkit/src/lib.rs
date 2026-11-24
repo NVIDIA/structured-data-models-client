@@ -8,7 +8,8 @@
 //! [`case`] loads typed cases; [`host`] runs them through `sdm_host::HostRun`.
 //! [`observation`] records execution for completeness and correctness checks.
 //! [`endpoint`] supplies scripted model responses, and [`driver`] records data reads.
-//! [`duck`], [`sqlite`], [`memory`] and [`replay`] provide database or in-memory data.
+//! [`duck`], [`sqlite`], [`memory`] and [`replay`] provide database or in-memory data;
+//! [`sql_source`] answers a built-in source's requests through its SQL kit over them.
 //! [`kit`] checks provider conformance, and [`layer`] exercises a host-supplied data layer.
 
 /// Database providers supported by the native test host.
@@ -28,5 +29,6 @@ pub mod memory;
 pub mod observation;
 pub mod plan_b;
 pub mod replay;
+pub mod sql_source;
 pub mod sqlite;
 pub mod values;

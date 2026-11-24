@@ -314,8 +314,7 @@ def build_request() -> Any:
     r"""Build the current client's base regression request."""
     import duckdb
     import pandas as pd
-    from sdm_client import PredictiveQuery, Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, PredictiveQuery, Schema
 
     case = json.loads(CASE.read_text(encoding='utf-8'))
     connection = duckdb.connect()

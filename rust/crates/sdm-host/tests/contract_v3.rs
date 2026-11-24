@@ -17,9 +17,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use arrow_array::{ArrayRef, Int64Array, RecordBatch};
-use sdm_contract::data::{
-    AttachmentId, DataRequest, Dialect, ExpectedSchema, FetchPlan, ProviderError, SqlStatement,
-};
+use sdm_contract::data::{AttachmentId, DataRequest, ExpectedSchema, FetchPlan, ProviderError};
 use sdm_contract::facts::{LocalZone, PlatformFacts};
 use sdm_contract::ops::{
     Dtype, Operation, OperationResult, PqlDiagnostic, ProfileName, ProfileSpec, QueryColumn,
@@ -242,19 +240,17 @@ fn wide_fetch(pad: usize) -> TestFetch {
         undeclared: vec![],
         fallback: None,
         request: DataRequest::Scan {
-            table: "orders".into(),
+            table: format!("orders{}", "_".repeat(pad)).into(),
             columns: (0..200).map(|i| format!("column_{i:03}")).collect(),
             filters: vec![],
             limit: None,
         },
-        plan: Some(FetchPlan::Sql {
-            result_conversions: Vec::new(),
-            statements: vec![SqlStatement {
-                dialect: Dialect::new("duckdb"),
-                text: format!("SELECT * FROM orders{}", " ".repeat(pad)),
-                params: vec![],
-            }],
-            expect: ExpectedSchema::Schema { fields },
+        plan: Some(FetchPlan {
+            key_sets: Vec::new(),
+            expect: ExpectedSchema::Schema {
+                fields,
+                optional: Vec::new(),
+            },
         }),
         provider: None,
     }
@@ -489,6 +485,7 @@ fn a_provider_error_s_retryability_and_codes_reach_the_core_error() {
                         retryable,
                         sqlstate: Some("40001".into()),
                         vendor_code: Some("1213".into()),
+                        facts: None,
                     },
                 },
             }))

@@ -1548,6 +1548,51 @@ pub struct Materialized {
     /// own validator may not. Absent from a core that does not say.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub query: Option<QueryFacts>,
+    /// How each part's context examples were drawn, in the parts' order:
+    /// one for a request, one per step of a forecast and per question of a
+    /// ranking. Empty for context the caller gave, and from a core that
+    /// does not say.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context: Vec<ContextReport>,
+}
+
+/// How one part's context examples were drawn from the source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ContextReport {
+    /// The draws of the entity table: more than one where the first kept
+    /// too few examples.
+    pub draws: u32,
+    /// The rows those draws read, together.
+    pub rows_drawn: u64,
+    /// The examples of the last draw labelled: its entities at their
+    /// anchors.
+    pub candidates: u64,
+    /// The candidates with an answer that the query's conditions keep,
+    /// before the context is cut to the size asked for.
+    pub kept: u64,
+    /// The context examples asked for.
+    pub asked: u64,
+    /// Why drawing stopped.
+    pub stopped: ContextStop,
+    /// Whether any of the query's conditions went to the source with the
+    /// draw (value filters).
+    pub filtered_at_source: bool,
+}
+
+/// Why a part's context stopped drawing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextStop {
+    /// As many examples as asked for were kept.
+    Full,
+    /// The last draw held every row the source had to give.
+    SourceExhausted,
+    /// Another draw would have read more rows than one request may.
+    RowBudget,
+    /// The draws had taken the time one request's context may
+    /// (`context_time_limit`): the examples kept so far are the context.
+    TimeLimit,
 }
 
 /// The facts of a resolved query a host reads: plain values, no tree. Its
