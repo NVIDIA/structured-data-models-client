@@ -129,8 +129,8 @@ pub const TABLES_UNLINKED: &str = WarningCode::TablesUnlinked.as_str();
 /// The notice that tables linked into the schema were reached by no row
 /// the sampler read (`_warn_of_tables_left_out`).
 pub const TABLES_UNREACHED: &str = WarningCode::TablesUnreached.as_str();
-/// The notice that columns the request sends are of a meaning the model
-/// does not read (`_warn_of_columns_the_model_does_not_read`).
+/// The notice that columns of a meaning the model does not read are left
+/// out of the request (`_warn_of_columns_the_model_does_not_read`).
 pub const COLUMNS_UNREAD: &str = WarningCode::ColumnsUnread.as_str();
 /// The notice that context examples answering the question were taken out
 /// (`_drop_context_that_answers_the_question`).
@@ -2711,16 +2711,16 @@ fn names<'a>(names: impl IntoIterator<Item = &'a str>) -> Detail {
 /// them after it gathers, each a code and fields the host words: the
 /// schema's tables the request does not carry, those no relationship
 /// connects to the entity table apart from those linked and reached by no
-/// row (`_warn_of_tables_left_out`); the columns it sends that the model
-/// does not read, text (`_warn_of_columns_the_model_does_not_read`, a
-/// static target's columns left out); and the context examples that
-/// answered the question, taken out (`_drop_context_that_answers_the_question`).
+/// row (`_warn_of_tables_left_out`); the columns left out because the
+/// model does not read them, `unread` ([`warn_of_unread_columns`]); and the
+/// context examples that answered the question, taken out
+/// (`_drop_context_that_answers_the_question`).
 fn notices(
     asker: &Asker,
     description: &SourceDescription,
     asked: &Asked,
     sent: &BTreeSet<String>,
-    excluded: &[(String, String)],
+    unread: &[(String, String)],
     answering: usize,
     windowed: bool,
 ) {
@@ -2787,44 +2787,7 @@ fn notices(
             )
         });
     }
-    let mut unread: Vec<String> = description
-        .tables
-        .iter()
-        .filter(|t| sent.contains(&t.name))
-        .flat_map(|t| {
-            t.columns
-                .iter()
-                .filter(|c| c.stype == Stype::Text)
-                .filter(|c| {
-                    !excluded
-                        .iter()
-                        .any(|(et, ec)| *et == t.name && *ec == c.name)
-                })
-                .map(move |c| format!("{}.{}", t.name, c.name))
-        })
-        .collect();
-    unread.sort_unstable();
-    if !unread.is_empty() {
-        asker.warn(CoreWarning {
-            fields: [
-                ("variant".to_owned(), Detail::text(several(unread.len()))),
-                (
-                    "columns".to_owned(),
-                    names(unread.iter().map(String::as_str)),
-                ),
-                ("stypes".to_owned(), names(["text"])),
-            ]
-            .into(),
-            ..CoreWarning::new(
-                if unread.len() > 1 {
-                    Sentence::ColumnsUnreadSeveral
-                } else {
-                    Sentence::ColumnsUnreadOne
-                },
-                "columns the request sends are of a meaning the model does not read",
-            )
-        });
-    }
+    warn_of_unread_columns(asker, sent, unread);
     if answering > 0 {
         asker.warn(CoreWarning {
             fields: [
@@ -4162,6 +4125,10 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         });
     }
     excluded_by_caller(&graph, &exclude_cols, &mut excluded)?;
+    // Then the columns the model does not read, which the endpoint refuses
+    // (`_with_unread_columns`), after the query's and the caller's.
+    let unread = unread_columns(&graph, &excluded);
+    excluded.extend(unread.iter().cloned());
     let train_anchors = anchors.len();
     let entity_names = crate::subgraph::sample_columns(&graph, entity, &excluded);
     // The labelled context's examples before narrowing, then the entities
@@ -4458,7 +4425,7 @@ pub(crate) async fn one(asker: &Asker, inputs: Inputs) -> Result<Gathered, CoreE
         &description,
         &asked,
         &sent,
-        &excluded,
+        &unread,
         answering,
         asked.range.is_some(),
     );
@@ -4652,6 +4619,71 @@ async fn anchors_checked(
         }
     }
     Ok((anchor, context_anchor, bounds.map(|b| b.min)))
+}
+
+/// The feature columns of `graph` typed text that `excluded` does not
+/// already name, each table's in its order (`_unread_columns`). The model
+/// carries no text processor and the endpoint refuses a column typed text,
+/// so each is left out of the request rather than sent.
+pub(crate) fn unread_columns(
+    graph: &Graph,
+    excluded: &[(String, String)],
+) -> Vec<(String, String)> {
+    graph
+        .tables
+        .iter()
+        .flat_map(|table| {
+            crate::subgraph::features(graph, table, excluded)
+                .into_iter()
+                .filter(|(_, stype)| *stype == Stype::Text)
+                .map(|(column, _)| (table.name.clone(), column))
+        })
+        .collect()
+}
+
+/// Says which of the `unread` columns of a table the request carries,
+/// `sent`, were left out because the model does not read them
+/// (`_warn_of_columns_the_model_does_not_read`). The request is still
+/// answered, and the caller should know a column contributed nothing.
+///
+/// A column the query or the caller already left out is not named: it
+/// would not have been sent either way.
+pub(crate) fn warn_of_unread_columns(
+    asker: &Asker,
+    sent: &BTreeSet<String>,
+    unread: &[(String, String)],
+) {
+    let mut named: Vec<String> = unread
+        .iter()
+        .filter(|(table, _)| sent.contains(table))
+        .map(|(table, column)| format!("{table}.{column}"))
+        .collect();
+    named.sort_unstable();
+    if named.is_empty() {
+        return;
+    }
+    asker.warn(CoreWarning {
+        fields: [
+            (
+                "variant".to_owned(),
+                Detail::text(if named.len() > 1 { "several" } else { "one" }),
+            ),
+            (
+                "columns".to_owned(),
+                names(named.iter().map(String::as_str)),
+            ),
+            ("stypes".to_owned(), names(["text"])),
+        ]
+        .into(),
+        ..CoreWarning::new(
+            if named.len() > 1 {
+                Sentence::ColumnsUnreadSeveral
+            } else {
+                Sentence::ColumnsUnreadOne
+            },
+            "columns of a meaning the model does not read are left out of the request",
+        )
+    });
 }
 
 /// Adds the columns the caller keeps out of the request (`exclude_cols_dict`)

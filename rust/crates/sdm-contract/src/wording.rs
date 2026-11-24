@@ -1246,7 +1246,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"{tables!j} is linked into the schema and not in this request: the sampler reached no row of it from the entities being scored, so the model answers without it. Raise num_hops if it lies further out than the hops sampled, and check the foreign key holds values the parent key actually has if it does not."#,
         ),
         S::ColumnsUnreadOne => said(
-            r#"{columns!c} is typed text, which this model does not read, so the request is answered without it and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."#,
+            r#"{columns!c} is typed text, which this model does not read, so it is left out of the request and it contributes nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."#,
         ),
         S::TablesUnlinkedSeveral => said(
             r#"{tables!j} are in the schema and not in this request: no relationship connects them to {entity_table!r}, so the model answers without them. Say how they join: {advice:append_relationship(tables)}, or leave them out of the schema to say they are not wanted."#,
@@ -1255,7 +1255,7 @@ pub fn template(sentence: Sentence) -> Template {
             r#"{tables!j} are linked into the schema and not in this request: the sampler reached no row of them from the entities being scored, so the model answers without them. Raise num_hops if they lie further out than the hops sampled, and check the foreign key holds values the parent key actually has if they do not."#,
         ),
         S::ColumnsUnreadSeveral => said(
-            r#"{columns!c} are typed text, which this model does not read, so the request is answered without them and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."#,
+            r#"{columns!c} are typed text, which this model does not read, so they are left out of the request and they contribute nothing to the prediction. Type a column categorical if its values are labels rather than prose, or leave it out to say so."#,
         ),
         S::FilterChoseExamples => said(
             r#"the entity filter {condition!r} selects the labelled examples the model learns from, and does not narrow the {entities} rows named for scoring. Those are scored as given, whether or not they satisfy it. Pass only indices that satisfy the condition if that is what you meant."#,

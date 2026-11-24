@@ -565,8 +565,8 @@ def unread_warnings(built: Schema) -> list[str]:
 
 
 def test_a_text_column_is_said_to_contribute_nothing():
-    """It is accepted and dropped at the model, so the request succeeds and
-    the column that looked most informative carried nothing."""
+    """It is left out of the request, so the request succeeds and the column
+    that looked most informative carried nothing."""
     said = unread_warnings(prose_schema())
 
     assert len(said) == 1
@@ -753,9 +753,9 @@ def test_a_table_nothing_links_is_said_to_be_missing_from_the_request():
 
 
 def test_an_unread_column_of_a_table_never_sent_is_not_named():
-    """`orphan.notes` is typed text and does not reach the model to be
-    dropped there, so the loss the warning describes did not happen and its
-    remedy would change nothing."""
+    """`orphan.notes` is typed text and its table is not sent, so the loss
+    the warning describes did not happen and its remedy would change
+    nothing."""
     said = said_while_materializing(orphaned())
 
     assert [line for line in said if 'does not read' in line] == []

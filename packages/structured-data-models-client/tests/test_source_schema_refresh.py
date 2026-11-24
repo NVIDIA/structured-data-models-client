@@ -163,16 +163,12 @@ def test_rebuilt_schema_reads_new_type_and_keeps_declared_meaning(connection):
     connection.execute('ALTER TABLE users ALTER COLUMN age TYPE VARCHAR')
     connection.execute("UPDATE users SET age = 'CHANGED'")
     schema['users']['age'].dtype = 'string'
-    schema['users']['age'].stype = 'text'
+    schema['users']['age'].stype = 'categorical'
     request = materialize(schema)
     assert_prediction_rows(request)
-    assert schema['users']['age'].stype == 'text'
-    assert set(map(tuple, request.context.related_tables['users']['age'])) == {
-        ('changed',)
-    }
-    assert set(map(tuple, request.predict.related_tables['users']['age'])) == {
-        ('changed',)
-    }
+    assert schema['users']['age'].stype == 'categorical'
+    assert set(request.context.related_tables['users']['age']) == {'CHANGED'}
+    assert set(request.predict.related_tables['users']['age']) == {'CHANGED'}
 
 
 # Accepted edits for historical dtype spellings, independently specified from
