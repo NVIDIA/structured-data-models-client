@@ -1483,15 +1483,28 @@ pub fn schema_mismatch(check: &str, column: Option<&str>, reason: &str) -> CoreE
 
 /// Check (b): `data` against the schema its request expects back.
 fn check_expected(expect: &ExpectedSchema, data: &ArrowData) -> Result<(), CoreError> {
-    let ExpectedSchema::Schema { fields } = expect else {
+    let ExpectedSchema::Schema { fields, optional } = expect else {
         return Ok(());
     };
     let mismatch = |column: Option<&str>, reason: &str| schema_mismatch("expected", column, reason);
     let got = data.schema.fields();
-    if got.len() != fields.len() {
+    if got.len() < fields.len() {
         return Err(mismatch(None, "the number of columns differs"));
     }
-    for (index, (field, expected)) in got.iter().zip(fields).enumerate() {
+    // The columns past those every source sends are some of the optional
+    // ones, in their order (contract v76).
+    let mut wanted = fields.iter().collect::<Vec<_>>();
+    let mut rest = optional.iter();
+    for field in got.iter().skip(fields.len()) {
+        match rest
+            .by_ref()
+            .find(|optional| optional.name == *field.name())
+        {
+            Some(optional) => wanted.push(optional),
+            None => return Err(mismatch(None, "the number of columns differs")),
+        }
+    }
+    for (index, (field, expected)) in got.iter().zip(wanted).enumerate() {
         let name = expected.name.as_str();
         if field.name() != name {
             return Err(mismatch(Some(name), "a column's name differs"));
@@ -1625,6 +1638,7 @@ mod tests {
                     key_sets: Vec::new(),
                     expect: ExpectedSchema::Schema {
                         fields: vec![field("a", ColumnType::Int64, false)],
+                        optional: Vec::new(),
                     },
                 };
                 asker.ask_planned(describe(), plan).await;
@@ -1645,6 +1659,42 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.code, ErrorCode::ProviderSchemaMismatch, "{err:?}");
             assert_eq!(run.state(), RunState::Finished);
+        }
+    }
+
+    /// Data whose columns are named `names`, each a nullable `int64`.
+    fn columns(names: &[&str]) -> ArrowData {
+        let schema = Arc::new(arrow_schema::Schema::new(
+            names
+                .iter()
+                .map(|name| arrow_schema::Field::new(*name, arrow_schema::DataType::Int64, true))
+                .collect::<Vec<_>>(),
+        ));
+        ArrowData::new(schema, Vec::new())
+    }
+
+    #[test]
+    fn an_answer_may_add_the_optional_columns_in_their_order_and_no_others() {
+        let int = |name: &str| field(name, ColumnType::Int64, true);
+        let expect = ExpectedSchema::Schema {
+            fields: vec![int("a")],
+            optional: vec![int("b"), int("c")],
+        };
+        for given in [&["a"][..], &["a", "b"], &["a", "c"], &["a", "b", "c"]] {
+            assert!(
+                crate::run::check_expected(&expect, &columns(given)).is_ok(),
+                "{given:?}"
+            );
+        }
+        for given in [
+            &[][..],
+            &["a", "c", "b"],
+            &["a", "d"],
+            &["b"],
+            &["a", "b", "b"],
+        ] {
+            let err = crate::run::check_expected(&expect, &columns(given)).unwrap_err();
+            assert_eq!(err.code, ErrorCode::ProviderSchemaMismatch, "{given:?}");
         }
     }
 }

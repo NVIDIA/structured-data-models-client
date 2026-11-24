@@ -33,6 +33,7 @@ mod sql;
 #[cfg(test)]
 mod sql_tests;
 mod sqlite;
+mod standard;
 pub mod view_expr;
 
 pub use keys::canonical_decimal_text;

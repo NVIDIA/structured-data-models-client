@@ -20,7 +20,7 @@ The last column is what `scripts/rust_core/dependency_policy.py` allows, for any
 | `sdm-sql` | The SQL kit: each dialect's statements (DuckDB, SQLite, Postgres, Databricks, Snowflake), key-set binding, catalog reading, view-text answers | `sdm-contract` |
 | `sdm-engine` | Time and zones, random streams, sampling rules, labels | `sdm-schema`, `sdm-contract` |
 | `sdm-request` | The model request's payload and options, the ranking and the result layout | `sdm-engine`, `sdm-schema`, `sdm-wire`, `sdm-contract` |
-| `sdm-core` | The run state machine and the operations: describe, edit, validate, materialize, predict | every crate above (`sdm-sql` only until the typed-request sources' step 3) |
+| `sdm-core` | The run state machine and the operations: describe, edit, validate, materialize, predict | every crate above but `sdm-sql`, which only its tests take |
 | `sdm-host` | The layer every binding shares: message codec, Arrow admission, run ownership, panic containment, zones | `sdm-core`, `sdm-data`, `sdm-sql`, `sdm-contract` |
 | `sdm-py` (in `bindings/`) | The Python module `sdm_client._native` | exactly `sdm-host` and `sdm-contract` |
 | `sdm-jni` (in `bindings/`) | The JNI bridge used by the Java client | exactly `sdm-host` and `sdm-contract` |
@@ -32,9 +32,8 @@ The Java binding, `sdm-jni`, lives under `bindings/` with the same dependency ru
 
 The normal (non-test) dependencies in use today.
 Shipped `sdm-core` code reaches the data layer only through the `DataLayer` trait in `sdm-contract`, and `sdm-host` plugs `sdm-sql` in.
-Until the typed-request sources' step 3, `sdm-core` also takes `sdm-sql`'s view-text types.
 `sdm-engine` depends on `sdm-schema` only to implement its `infer::TextTimes` trait, which is how inference reads text as times.
-Test-only dependencies, not drawn: the tests of `sdm-host` and `sdm-testkit` use `test-ops` builds of `sdm-core` and `sdm-host`.
+Test-only dependencies, not drawn: `sdm-core`'s tests use `sdm-sql`, and the tests of `sdm-host` and `sdm-testkit` use `test-ops` builds of `sdm-core` and `sdm-host`.
 Each crate's own README repeats its part of this graph.
 
 ```mermaid
@@ -46,7 +45,6 @@ flowchart TD
     sdm_host --> sdm_core["sdm-core"]
     sdm_host --> sdm_sql["sdm-sql"]
     sdm_core --> sdm_data["sdm-data"]
-    sdm_core --> sdm_sql
     sdm_core --> sdm_request["sdm-request"]
     sdm_core --> sdm_engine["sdm-engine"]
     sdm_core --> sdm_schema["sdm-schema"]
@@ -78,7 +76,6 @@ sdm-testkit -----+--> sdm-host --+--> sdm-core --+--> sdm-request --+--> sdm-wir
                                  |               +--> sdm-wire
                                  |               +--> sdm-pql
                                  |               +--> sdm-data
-                                 |               +--> sdm-sql
                                  +--> sdm-sql
 
 sdm-contract: the leaf every crate but sdm-pql shares

@@ -2104,6 +2104,23 @@ pub mod catalog_columns {
     pub const TYPE: &str = "type";
     pub const NOT_NULL: &str = "not_null";
     pub const PRIMARY_KEY: &str = "primary_key";
+    /// `columns`, optional (contract v76): whether a primary key column may
+    /// still hold a null (SQLite's), whether the source keeps the column
+    /// unique beside any key it declares (a SQLite rowid alias), and the
+    /// data type its declaration fixes, by [`crate::ops::Dtype`]'s name,
+    /// where the source types a column by its declaration (SQLite's).
+    pub const KEY_NULLABLE: &str = "key_nullable";
+    pub const UNIQUE: &str = "unique";
+    pub const DTYPE: &str = "dtype";
+    /// `keys` and `indexes`, optional (contract v76): the index a key or an
+    /// index is, where its columns are read by that name (`index_columns`),
+    /// as SQLite's catalog lists one. `keys`, optional: whether the source
+    /// holds its rows to the key (a Databricks key is informational).
+    /// `indexes`, optional: whether its columns are resolved (an expression
+    /// list the reader cannot split is not).
+    pub const INDEX: &str = "index";
+    pub const ENFORCED: &str = "enforced";
+    pub const RESOLVED: &str = "resolved";
     /// `keys`, for one table: one row per key it declares, its kind
     /// ([`KIND_PRIMARY`], [`KIND_UNIQUE`], [`KIND_FOREIGN`] or another the
     /// reader leaves alone) and its columns. `foreign_keys` and `indexes`: the columns of
@@ -2113,6 +2130,9 @@ pub mod catalog_columns {
     pub const KIND_PRIMARY: &str = "primary";
     pub const KIND_UNIQUE: &str = "unique";
     pub const KIND_FOREIGN: &str = "foreign";
+    /// A unique index over only the rows its condition covers (contract
+    /// v76): [`crate::catalog::KeyKind::PartialUnique`].
+    pub const KIND_PARTIAL_UNIQUE: &str = "partial_unique";
     /// `foreign_keys`, for one table: one row per column pair of each
     /// foreign key it declares, the key's number naming it, the table it
     /// refers to, and the columns on both sides.
@@ -2148,26 +2168,51 @@ impl DataRequest {
                 DescribePart::Tables | DescribePart::KeyEnforcement => {
                     vec![field(c::TABLE, Utf8, false)]
                 }
-                DescribePart::Columns => vec![
-                    field(c::NAME, Utf8, false),
-                    field(c::TYPE, Utf8, false),
-                    field(c::NOT_NULL, Bool, false),
-                    field(c::PRIMARY_KEY, Bool, false),
-                ],
-                DescribePart::Keys => vec![
-                    field(c::KIND, Utf8, false),
-                    field(c::COLUMNS, names(), false),
-                ],
+                DescribePart::Columns => {
+                    return ExpectedSchema::Schema {
+                        fields: vec![
+                            field(c::NAME, Utf8, false),
+                            field(c::TYPE, Utf8, false),
+                            field(c::NOT_NULL, Bool, false),
+                            field(c::PRIMARY_KEY, Bool, false),
+                        ],
+                        optional: vec![
+                            field(c::KEY_NULLABLE, Bool, false),
+                            field(c::UNIQUE, Bool, false),
+                            field(c::DTYPE, Utf8, true),
+                        ],
+                    };
+                }
+                DescribePart::Keys => {
+                    return ExpectedSchema::Schema {
+                        fields: vec![
+                            field(c::KIND, Utf8, false),
+                            field(c::COLUMNS, names(), false),
+                        ],
+                        optional: vec![
+                            field(c::INDEX, Utf8, true),
+                            field(c::ENFORCED, Bool, false),
+                        ],
+                    };
+                }
                 DescribePart::ForeignKeys => vec![
                     field(c::KEY, Int64, false),
                     field(c::REFERENCED_TABLE, Utf8, false),
                     field(c::COLUMNS, names(), false),
                     field(c::REFERENCED_COLUMNS, names(), false),
                 ],
-                DescribePart::Indexes => vec![
-                    field(c::TABLE, Utf8, false),
-                    field(c::COLUMNS, names(), false),
-                ],
+                DescribePart::Indexes => {
+                    return ExpectedSchema::Schema {
+                        fields: vec![
+                            field(c::TABLE, Utf8, false),
+                            field(c::COLUMNS, names(), false),
+                        ],
+                        optional: vec![
+                            field(c::INDEX, Utf8, true),
+                            field(c::RESOLVED, Bool, false),
+                        ],
+                    };
+                }
                 DescribePart::IndexColumns => vec![field(c::NAME, Utf8, true)],
                 DescribePart::Namespace => vec![field(c::NAME, Utf8, false)],
                 // The dialect's own statement's shape: a host provider is
@@ -2194,7 +2239,10 @@ impl DataRequest {
             | DataRequest::Neighbors { .. }
             | DataRequest::Lookup { .. } => return ExpectedSchema::Discover {},
         };
-        ExpectedSchema::Schema { fields }
+        ExpectedSchema::Schema {
+            fields,
+            optional: Vec::new(),
+        }
     }
 }
 
@@ -2214,7 +2262,14 @@ pub fn field(name: &str, column_type: ColumnType, nullable: bool) -> Field {
 #[serde(tag = "expect", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExpectedSchema {
     Discover {},
-    Schema { fields: Vec<Field> },
+    /// `fields`, in order, then any of `optional`, in their order: the
+    /// further facts a source may report beside those every source reports
+    /// (contract v76), each left out where it reports none.
+    Schema {
+        fields: Vec<Field>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        optional: Vec<Field>,
+    },
 }
 
 /// A provider's failure: its kind, whether trying again may succeed, and

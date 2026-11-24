@@ -10,7 +10,7 @@ It renders SQL and never runs it: the host runs the statements with its own driv
 Must not hold: a database driver, I/O, or schema, sampling or payload rules.
 
 ```text
-used by:     sdm-host, sdm-core (until the typed-request sources' step 3)
+used by:     sdm-host, (tests: sdm-core)
      |
 sdm-sql
      |

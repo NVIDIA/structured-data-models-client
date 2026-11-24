@@ -170,7 +170,10 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
         // In the contract's own shape.
         DescribePart::Namespace => return request.expected(),
     };
-    ExpectedSchema::Schema { fields }
+    ExpectedSchema::Schema {
+        fields,
+        optional: Vec::new(),
+    }
 }
 
 /// DuckDB's answer to a `describe` of `part`, which holds [`expected`]'s

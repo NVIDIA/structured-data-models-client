@@ -627,6 +627,125 @@ impl Run {
     }
 }
 
+/// A built-in source's SQL kit (`sdm_host::kit`): it answers each typed
+/// request the core sends the source by running the statements it writes
+/// on the caller's driver. Internal; the client's built-in sources hold one.
+#[pyclass(frozen, module = "sdm_client._native")]
+struct SqlKit {
+    kit: sdm_host::kit::HostKit,
+}
+
+/// A placeholder of the driver's error while the Python exception that
+/// stands for it is kept to raise once the kit returns.
+fn raised_in_run() -> sdm_contract::data::ProviderError {
+    sdm_contract::data::ProviderError {
+        kind: ErrorKind::DataSource,
+        retryable: false,
+        sqlstate: None,
+        vendor_code: None,
+        error_class: None,
+        driver_message: None,
+    }
+}
+
+#[pymethods]
+impl SqlKit {
+    /// The kit of the built-in source `provider` names, a provider choice
+    /// as the contract writes it.
+    #[new]
+    fn new(py: Python<'_>, provider: &[u8]) -> PyResult<Self> {
+        sdm_host::kit::HostKit::from_bytes(provider)
+            .map(|kit| SqlKit { kit })
+            .map_err(|out| core_error(py, out))
+    }
+
+    /// What the source answers, as the contract writes its capabilities.
+    fn capabilities(&self, py: Python<'_>) -> PyResult<Py<PyBytes>> {
+        self.kit
+            .capabilities_bytes()
+            .map(|bytes| PyBytes::new(py, &bytes).unbind())
+            .map_err(|out| core_error(py, out))
+    }
+
+    /// The answer to `request` (as the contract writes it), its key sets
+    /// `keys` by id, as an [`ArrowStream`]. `run(plan, request, keys)` runs
+    /// one fetch on the caller's driver: the plan and request as the
+    /// contract writes them, the batches the plan binds by id; it returns
+    /// an object with `__arrow_c_stream__`. An exception it raises is
+    /// raised as it is.
+    fn answer(
+        &self,
+        py: Python<'_>,
+        request: &[u8],
+        keys: &Bound<'_, PyMapping>,
+        run: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        logging(py);
+        let (attachments, unreadable) = attachments_from_python(keys)?;
+        if !unreadable.is_empty() {
+            return Err(PyValueError::new_err(
+                "a key set could not be read as Arrow",
+            ));
+        }
+        let mut handed = BTreeMap::new();
+        for (id, attachment) in attachments {
+            let Attachment::Arrow(data) = attachment else {
+                return Err(PyTypeError::new_err(format!(
+                    "key set {} is not Arrow",
+                    id.0
+                )));
+            };
+            handed.insert(id, data);
+        }
+        let mut raised: Option<PyErr> = None;
+        let answered = self
+            .kit
+            .answer_bytes(request, handed, &mut |plan, asked, binds| {
+                let call = || -> PyResult<ArrowData> {
+                    let dict = PyDict::new(py);
+                    for (id, data) in binds {
+                        dict.set_item(
+                            id.0,
+                            Py::new(
+                                py,
+                                ArrowStream {
+                                    schema: data.schema,
+                                    batches: data.batches,
+                                },
+                            )?,
+                        )?;
+                    }
+                    let value =
+                        run.call1((PyBytes::new(py, plan), PyBytes::new(py, asked), dict))?;
+                    read_arrow(py, &value)?.map_err(|_| {
+                        PyValueError::new_err("the driver's answer could not be read as Arrow")
+                    })
+                };
+                call().map_err(|error| {
+                    raised = Some(error);
+                    raised_in_run()
+                })
+            });
+        if let Some(error) = raised {
+            return Err(error);
+        }
+        match answered {
+            Ok(data) => Ok(Py::new(
+                py,
+                ArrowStream {
+                    schema: data.schema,
+                    batches: data.batches,
+                },
+            )?
+            .into_any()),
+            Err(sdm_host::kit::KitFailure::Refused(out)) => Err(core_error(py, out)),
+            Err(sdm_host::kit::KitFailure::Provider(_)) => Err(PyException::new_err(
+                "the driver failed without an exception",
+            )),
+        }
+    }
+}
+
 #[pymodule]
 fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = module.py();
@@ -666,6 +785,7 @@ fn _native(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add("CoreError", py.get_type::<CoreError>())?;
     module.add_class::<ArrowStream>()?;
     module.add_class::<Run>()?;
+    module.add_class::<SqlKit>()?;
     module.add_function(wrap_pyfunction!(reset_log_cache, module)?)?;
     module.add_function(wrap_pyfunction!(templates, module)?)?;
     module.add_function(wrap_pyfunction!(is_posix_zone, module)?)?;

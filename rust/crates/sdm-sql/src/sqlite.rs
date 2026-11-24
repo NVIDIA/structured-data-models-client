@@ -446,6 +446,7 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
                 .into_iter()
                 .map(|name| field(name, ColumnType::Int64, false))
                 .collect(),
+            optional: Vec::new(),
         },
         _ => ExpectedSchema::Discover {},
     }

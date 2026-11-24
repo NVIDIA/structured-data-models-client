@@ -316,6 +316,7 @@ fn expected_fields() -> ExpectedSchema {
             field("name", ColumnType::Utf8, true),
             field("n", ColumnType::Int64, false),
         ],
+        optional: Vec::new(),
     }
 }
 

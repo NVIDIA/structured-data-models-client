@@ -142,7 +142,9 @@ impl DataLayer for Fake {
         Ok(sdm_sql::view_expr::answer(
             ask,
             ExprDialect::Snowflake,
-            sdm_core::pql::spaces(),
+            &*Box::leak(Box::new(sdm_sql::view_expr::Spaces::new(
+                sdm_core::pql::is_space,
+            ))),
             &|_| DeclaredType::Unknown,
         ))
     }

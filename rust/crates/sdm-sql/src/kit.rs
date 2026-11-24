@@ -146,7 +146,19 @@ impl SqlKit {
                 .data
                 .project_result(&self.provider, request, &plan, &described.batches)?;
         }
-        self.run_bound(request, plan, keys, float_text, run)
+        let answered = self.run_bound(request, plan, keys, float_text, run)?;
+        // A catalog answer is read from the dialect's own rows and written
+        // in the standard shape every source answers in.
+        if let DataRequest::Describe { .. } = request {
+            let read = self.data.read(request, &self.provider, &answered.batches)?;
+            if let Some((schema, batch)) = crate::standard::catalog(&read)? {
+                return Ok(Answered {
+                    schema,
+                    batches: vec![batch],
+                });
+            }
+        }
+        Ok(answered)
     }
 
     /// `plan` bound as the source binds it, each fetch run in order, their

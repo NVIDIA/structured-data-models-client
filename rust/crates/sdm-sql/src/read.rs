@@ -138,6 +138,37 @@ fn index_columns(lists: &ListArray, row: usize) -> IndexCoverage {
     }
 }
 
+/// The optional text column `name` (contract v76), `None` where the
+/// answer leaves it out.
+fn optional_strings<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<Option<&'a StringArray>, CoreError> {
+    if batch.schema().index_of(name).is_err() {
+        return Ok(None);
+    }
+    strings(batch, name).map(Some)
+}
+
+/// The optional flag column `name` (contract v76), `None` where the answer
+/// leaves it out.
+fn optional_flags<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<Option<&'a BooleanArray>, CoreError> {
+    if batch.schema().index_of(name).is_err() {
+        return Ok(None);
+    }
+    flags(batch, name).map(Some)
+}
+
+/// The data type `name` names (`Dtype`'s own name), refused by name where
+/// it names none.
+fn dtype_named(name: &str) -> Result<sdm_contract::ops::Dtype, CoreError> {
+    serde_json::from_value(serde_json::Value::String(name.to_owned()))
+        .map_err(|_| unread("dtype", "a column's dtype names no data type"))
+}
+
 /// Row `row`'s flag, false where it is null.
 pub(crate) fn flag(flags: &BooleanArray, row: usize) -> bool {
     !flags.is_null(row) && flags.value(row)
@@ -268,21 +299,68 @@ pub(crate) fn host(
             c::TABLE,
         )?)),
         DescribePart::Tables => tables(batches, c::TABLE),
-        DescribePart::Columns => columns(
-            batches,
-            &ColumnNames {
-                name: c::NAME,
-                declared_type: c::TYPE,
-                not_null: c::NOT_NULL,
-                primary_key: c::PRIMARY_KEY,
-            },
-        ),
-        DescribePart::Keys => keys(batches, c::KIND, c::COLUMNS, |kind| match kind {
-            c::KIND_PRIMARY => KeyKind::Primary,
-            c::KIND_UNIQUE => KeyKind::Unique,
-            c::KIND_FOREIGN => KeyKind::Foreign,
-            _ => KeyKind::Other,
-        }),
+        DescribePart::Columns => {
+            let CatalogAnswer::Columns(mut found) = columns(
+                batches,
+                &ColumnNames {
+                    name: c::NAME,
+                    declared_type: c::TYPE,
+                    not_null: c::NOT_NULL,
+                    primary_key: c::PRIMARY_KEY,
+                },
+            )?
+            else {
+                unreachable!("columns answers columns")
+            };
+            // The optional facts (contract v76), row by row in the order the
+            // named rows were read.
+            let mut at = found.iter_mut();
+            for batch in batches {
+                let named = strings(batch, c::NAME)?;
+                let key_nullable = optional_flags(batch, c::KEY_NULLABLE)?;
+                let unique = optional_flags(batch, c::UNIQUE)?;
+                let dtype = optional_strings(batch, c::DTYPE)?;
+                for row in 0..batch.num_rows() {
+                    if named.is_null(row) {
+                        continue;
+                    }
+                    let Some(column) = at.next() else { break };
+                    column.key_nullable = key_nullable.is_some_and(|f| flag(f, row));
+                    column.unique = unique.is_some_and(|f| flag(f, row));
+                    column.dtype = match dtype.and_then(|d| text(d, row)) {
+                        Some(name) => Some(dtype_named(&name)?),
+                        None => None,
+                    };
+                }
+            }
+            Ok(CatalogAnswer::Columns(found))
+        }
+        DescribePart::Keys => {
+            let CatalogAnswer::Keys(mut found) =
+                keys(batches, c::KIND, c::COLUMNS, |kind| match kind {
+                    c::KIND_PRIMARY => KeyKind::Primary,
+                    c::KIND_UNIQUE => KeyKind::Unique,
+                    c::KIND_PARTIAL_UNIQUE => KeyKind::PartialUnique,
+                    c::KIND_FOREIGN => KeyKind::Foreign,
+                    _ => KeyKind::Other,
+                })?
+            else {
+                unreachable!("keys answers keys")
+            };
+            let mut at = found.iter_mut();
+            for batch in batches {
+                let index = optional_strings(batch, c::INDEX)?;
+                let enforced = optional_flags(batch, c::ENFORCED)?;
+                for row in 0..batch.num_rows() {
+                    let Some(key) = at.next() else { break };
+                    key.index = index.and_then(|i| text(i, row));
+                    if let Some(enforced) = enforced {
+                        key.enforced = flag(enforced, row);
+                    }
+                }
+            }
+            Ok(CatalogAnswer::Keys(found))
+        }
         DescribePart::ForeignKeys => foreign_keys(
             batches,
             &ForeignKeyNames {
@@ -297,12 +375,18 @@ pub(crate) fn host(
             for batch in batches {
                 let table = strings(batch, c::TABLE)?;
                 let lists = lists(batch, c::COLUMNS)?;
+                let index = optional_strings(batch, c::INDEX)?;
+                let resolved = optional_flags(batch, c::RESOLVED)?;
                 for row in 0..batch.num_rows() {
                     if let Some(table) = text(table, row) {
-                        found.push(CatalogIndex {
-                            table,
-                            columns: index_columns(lists, row),
-                        });
+                        let columns = match (index.and_then(|i| text(i, row)), resolved) {
+                            (Some(name), _) => IndexCoverage::Named(name),
+                            (None, Some(resolved)) if !flag(resolved, row) => {
+                                IndexCoverage::Unresolved
+                            }
+                            _ => index_columns(lists, row),
+                        };
+                        found.push(CatalogIndex { table, columns });
                     }
                 }
             }

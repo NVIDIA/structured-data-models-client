@@ -26,7 +26,6 @@ arrow-select.workspace = true
 jiff.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-data = { path = "../sdm-data" }
-sdm-sql = { path = "../sdm-sql" }
 sdm-engine = { path = "../sdm-engine" }
 sdm-pql = { path = "../sdm-pql" }
 sdm-request = { path = "../sdm-request" }
@@ -38,6 +37,8 @@ stacker.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+# The SQL data layer, plugged into the core in its tests.
+sdm-sql = { path = "../sdm-sql" }
 arrow-array.workspace = true
 # The recordings' rows: Arrow IPC streams in base64.
 arrow-ipc.workspace = true

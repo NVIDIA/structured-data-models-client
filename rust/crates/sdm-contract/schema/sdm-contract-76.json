@@ -1,5 +1,5 @@
 {
-  "$id": "sdm-contract/75",
+  "$id": "sdm-contract/76",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ControlMessage",
   "description": "Every control message that crosses between a host and the core.",
@@ -1882,7 +1882,7 @@
       ]
     },
     "Relation": {
-      "description": "What a request reads: a relation of the source, by its name's parts,\neach quoted alone and never split on a dot, so `[\"a.b\"]` is one table\nnamed `a.b` and `[\"main\", \"t\"]` the table `t` of `main` (design choice\n12). Plain data, a list of strings, as easily built by a host in any\nlanguage as a name is. How many parts a source takes is its dialect's:\n`sdm-data` renders every dialect's `FROM` from a relation through one\nfunction and refuses one of no part, or of more parts than its dialect\naccepts, by name (rule `relation`); a host provider refuses one it\ncannot read the same way. Two schema tables over one source are two\nequal relations.\n\nA relation may be derived:\n`columns`, where given, are the relation's columns, each a name with\nthe source column it reads or an SQL text expression over the source's\ncolumns, and `filter` an SQL text condition every row read holds, as a\nview's definition gives them. Both are text of the source's own SQL,\nopaque to the core, which never reads or writes them: only a provider\ndeclaring [`ProviderCapabilities::derived_relations`] is asked for a\nderived relation, and the core refuses one for any other by name (rule\n[`DERIVED_RULE`]).",
+      "description": "What a request reads: a relation of the source, by its name's parts,\neach quoted alone and never split on a dot, so `[\"a.b\"]` is one table\nnamed `a.b` and `[\"main\", \"t\"]` the table `t` of `main` (design choice\n12). Plain data, a list of strings, as easily built by a host in any\nlanguage as a name is. How many parts a source takes is its dialect's:\n`sdm-sql` renders every dialect's `FROM` from a relation through one\nfunction and refuses one of no part, or of more parts than its dialect\naccepts, by name (rule `relation`); a host provider refuses one it\ncannot read the same way. Two schema tables over one source are two\nequal relations.\n\nA relation may be derived:\n`columns`, where given, are the relation's columns, each a name with\nthe source column it reads or an SQL text expression over the source's\ncolumns, and `filter` an SQL text condition every row read holds, as a\nview's definition gives them. Both are text of the source's own SQL,\nopaque to the core, which never reads or writes them: only a provider\ndeclaring [`ProviderCapabilities::derived_relations`] is asked for a\nderived relation, and the core refuses one for any other by name (rule\n[`DERIVED_RULE`]).",
       "type": "object",
       "properties": {
         "source": {
@@ -16781,7 +16781,7 @@
       ]
     },
     "SqlParam": {
-      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-data` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation. A dialect that binds its key sets as JSON\ntext names none: [`DataLayer::bind`] turns each into a `text` parameter.\n\nA `text` parameter (contract v28) binds the one text cell of a\none-row, one-column Arrow attachment: a key set the dialect writes as\nJSON text itself, past the control message's size ([`DataLayer::bind`]).\nIn a [`BoundFetch`] the attachment is a local reference the data layer\nchose; the core installs its batch in the run and names it here by the\nrun's own id before the step is sent.",
+      "description": "A statement's parameter: a scalar, or a key set the statement's text\nreads under `relation`. How the keys come to be read by that name is\nthe dialect's, which `sdm-sql` renders and its provider binds: the\nDuckDB provider registers the attachment as a relation of that name; a\nPostgreSQL dialect may bind the keys as JSON text that a common table\nexpression of that name unpacks, as the reference's PostgreSQL sampler\ndoes. `relation` names what the text reads, not an instruction to\nregister an Arrow relation. A dialect that binds its key sets as JSON\ntext names none: [`DataLayer::bind`] turns each into a `text` parameter.\n\nA `text` parameter (contract v28) binds the one text cell of a\none-row, one-column Arrow attachment: a key set the dialect writes as\nJSON text itself, past the control message's size ([`DataLayer::bind`]).\nIn a [`BoundFetch`] the attachment is a local reference the data layer\nchose; the core installs its batch in the run and names it here by the\nrun's own id before the step is sent.",
       "oneOf": [
         {
           "type": "object",
@@ -16857,9 +16857,16 @@
           ]
         },
         {
+          "description": "`fields`, in order, then any of `optional`, in their order: the\nfurther facts a source may report beside those every source reports\n(contract v76), each left out where it reports none.",
           "type": "object",
           "properties": {
             "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Field"
+              }
+            },
+            "optional": {
               "type": "array",
               "items": {
                 "$ref": "#/$defs/Field"

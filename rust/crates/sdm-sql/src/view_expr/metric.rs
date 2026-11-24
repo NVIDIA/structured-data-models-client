@@ -114,10 +114,6 @@ static STRING_TYPE: Lazy<Pattern> =
 
 const SOURCE_ALIAS: &str = "source";
 
-/// The old client's words for the `fields` section passed over for the
-/// `dimensions` (`DB/metric_view.py:953-957`), which name the warehouse.
-pub const FIELDS_IGNORED: &str = "Ignored the 'fields' section since the view also has 'dimensions', and Databricks reads \
-     only those";
 const INTEGER_TYPES: &[&str] = &[
     "bigint", "byte", "int", "integer", "long", "short", "smallint", "tinyint",
 ];

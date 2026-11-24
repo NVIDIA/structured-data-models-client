@@ -915,3 +915,165 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_releaseFrameGraph
         Ok(())
     });
 }
+
+/// A built-in source's SQL kit (`sdm_host::kit`) for the provider choice
+/// `provider` (the contract's JSON); its handle, which Java's
+/// `NativeSqlKit` owns and releases once.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_sqlKit0<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    provider: JByteArray<'caller>,
+) -> jlong {
+    entry(&mut unowned, |env| {
+        let provider = env.convert_byte_array(&provider)?;
+        let kit = sdm_host::kit::HostKit::from_bytes(&provider).map_err(Failure::Core)?;
+        Ok(Box::into_raw(Box::new(kit)) as jlong)
+    })
+}
+
+/// A kit's handle as Java holds it: the address of a `Box<HostKit>`.
+fn kit_of<'a>(handle: jlong) -> Result<&'a sdm_host::kit::HostKit, Failure> {
+    if handle == 0 {
+        return Err(Failure::Usage("a released SQL kit"));
+    }
+    #[allow(unsafe_code)]
+    // SAFETY: a non-zero handle is one `sqlKit0` returned from
+    // `Box::into_raw`, which Java's `NativeSqlKit` passes only while it
+    // holds it and releases once.
+    let kit = unsafe { &*(handle as *const sdm_host::kit::HostKit) };
+    Ok(kit)
+}
+
+/// What the kit's source answers, as the contract's JSON.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_sqlKitCapabilities0<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    kit: jlong,
+) -> JByteArray<'caller> {
+    entry(&mut unowned, |env| {
+        let bytes = kit_of(kit)?.capabilities_bytes().map_err(Failure::Core)?;
+        Ok(env.byte_array_from_slice(&bytes)?)
+    })
+}
+
+/// The kit's answer to `request` (the contract's JSON), its key sets the
+/// Arrow streams Java exported at `streams` by `ids`, as a `NativeArrow`.
+/// Each fetch is run by `run.run(plan, request, ids, keys)`, which returns
+/// the address of an `ArrowArrayStream` Java exported its answer into and
+/// keeps live until this call returns. An exception `run` throws is left
+/// pending, so Java sees it as thrown.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_sqlKitAnswer0<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    kit: jlong,
+    request: JByteArray<'caller>,
+    ids: JIntArray<'caller>,
+    streams: JLongArray<'caller>,
+    run: JObject<'caller>,
+) -> JObject<'caller> {
+    entry(&mut unowned, |env| {
+        let kit = kit_of(kit)?;
+        let request = env.convert_byte_array(&request)?;
+        let count = ids.len(env)?;
+        if streams.len(env)? != count {
+            return Err(Failure::Usage(
+                "a key set's ids and streams differ in length",
+            ));
+        }
+        let mut id_values = vec![0; count];
+        ids.get_region(env, 0, &mut id_values)?;
+        let mut addresses = vec![0; count];
+        streams.get_region(env, 0, &mut addresses)?;
+        let mut keys = BTreeMap::new();
+        for (&id, &address) in id_values.iter().zip(&addresses) {
+            let id = u32::try_from(id).map_err(|_| Failure::Usage("a negative key set id"))?;
+            match read_stream(address)? {
+                Ok(data) => {
+                    keys.insert(AttachmentId(id), data);
+                }
+                Err(_) => return Err(Failure::Usage("a key set could not be read as Arrow")),
+            }
+        }
+        let mut failed: Option<Failure> = None;
+        let answered = kit.answer_bytes(&request, keys, &mut |plan, asked, binds| {
+            let call = |env: &mut Env<'caller>| -> Result<ArrowData, Failure> {
+                let plan = env.byte_array_from_slice(plan)?;
+                let asked = env.byte_array_from_slice(asked)?;
+                let count = binds.len();
+                let bind_ids = env.new_int_array(count)?;
+                let values = JObjectArray::<JObject>::new(env, count, JObject::null())?;
+                let mut id_values = Vec::with_capacity(count);
+                for (index, (id, data)) in binds.into_iter().enumerate() {
+                    id_values.push(jint::try_from(id.0).map_err(|_| Failure::Usage("an id"))?);
+                    let value = attachment_object(env, Attachment::Arrow(data))?;
+                    values.set_element(env, index, &value)?;
+                    env.delete_local_ref(value);
+                }
+                bind_ids.set_region(env, 0, &id_values)?;
+                let address = env
+                    .call_method(
+                        &run,
+                        jni_str!("run"),
+                        jni_sig!("([B[B[I[Ljava/lang/Object;)J"),
+                        &[
+                            JValue::Object(&plan),
+                            JValue::Object(&asked),
+                            JValue::Object(&bind_ids),
+                            JValue::Object(&values),
+                        ],
+                    )?
+                    .j()?;
+                match read_stream(address)? {
+                    Ok(data) => Ok(data),
+                    Err(_) => Err(Failure::Usage(
+                        "the driver's answer could not be read as Arrow",
+                    )),
+                }
+            };
+            call(env).map_err(|failure| {
+                failed = Some(failure);
+                sdm_contract::data::ProviderError {
+                    kind: sdm_contract::ErrorKind::DataSource,
+                    retryable: false,
+                    sqlstate: None,
+                    vendor_code: None,
+                    error_class: None,
+                    driver_message: None,
+                }
+            })
+        });
+        if let Some(failure) = failed {
+            return Err(failure);
+        }
+        match answered {
+            Ok(data) => Ok(attachment_object(env, Attachment::Arrow(data))?),
+            Err(sdm_host::kit::KitFailure::Refused(out)) => Err(Failure::Core(out)),
+            Err(sdm_host::kit::KitFailure::Provider(_)) => {
+                Err(Failure::Usage("the driver failed without an exception"))
+            }
+        }
+    })
+}
+
+/// Releases a `NativeSqlKit`'s kit: its handle is invalid from here on.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_releaseSqlKit<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    kit: jlong,
+) {
+    entry(&mut unowned, |_env| {
+        if kit != 0 {
+            // SAFETY: as for `kit_of`; this is the handle's one release.
+            drop(unsafe { Box::from_raw(kit as *mut sdm_host::kit::HostKit) });
+        }
+        Ok(())
+    });
+}

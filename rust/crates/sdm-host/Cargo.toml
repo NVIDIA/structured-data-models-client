@@ -27,6 +27,7 @@ sdm-core = { path = "../sdm-core" }
 sdm-sql = { path = "../sdm-sql" }
 jiff.workspace = true
 jiff-tzdb.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 

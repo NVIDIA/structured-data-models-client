@@ -78,9 +78,7 @@ ALLOWED: dict[str, frozenset[str]] = {
             'sdm-engine',
             'sdm-schema',
             'sdm-data',
-            # Until the SQL provider choice leaves the contract (typed-request
-            # sources, step 3): the view-text types and the SQL data layer the
-            # core's tests plug in.
+            # The SQL data layer the core's tests plug in; no shipped edge.
             'sdm-sql',
             'sdm-wire',
             'sdm-contract',

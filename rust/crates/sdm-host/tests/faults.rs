@@ -277,6 +277,7 @@ fn expected(names: &[&str]) -> ExpectedSchema {
                 metadata: BTreeMap::new(),
             })
             .collect(),
+        optional: Vec::new(),
     }
 }
 
@@ -310,7 +311,7 @@ fn data_that_does_not_match_its_request_is_refused_by_check_b() {
     );
     // A column without the field metadata the request requires.
     let mut required = expected(&["a"]);
-    if let ExpectedSchema::Schema { fields } = &mut required {
+    if let ExpectedSchema::Schema { fields, .. } = &mut required {
         fields[0].metadata = BTreeMap::from([("role".to_owned(), "key".to_owned())]);
     }
     refused_by(
@@ -321,7 +322,7 @@ fn data_that_does_not_match_its_request_is_refused_by_check_b() {
     );
     // Nulls where the request takes none.
     let mut non_null = expected(&["a"]);
-    if let ExpectedSchema::Schema { fields } = &mut non_null {
+    if let ExpectedSchema::Schema { fields, .. } = &mut non_null {
         fields[0].nullable = false;
     }
     let nulls = batch(

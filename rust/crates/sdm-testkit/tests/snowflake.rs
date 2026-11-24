@@ -1086,7 +1086,7 @@ fn snowflake_declares_what_the_old_clients_sampler_does() {
     else {
         panic!("not SQL");
     };
-    let ExpectedSchema::Schema { fields } = expect else {
+    let ExpectedSchema::Schema { fields, .. } = expect else {
         panic!("no schema expected");
     };
     let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();

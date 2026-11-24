@@ -463,6 +463,7 @@ impl SqlDialect for Snowflake {
                     .iter()
                     .map(|name| field(name, ColumnType::Int64, false))
                     .collect(),
+                optional: Vec::new(),
             },
             _ => request.expected(),
         }

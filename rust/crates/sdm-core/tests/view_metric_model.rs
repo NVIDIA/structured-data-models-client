@@ -8,7 +8,7 @@
 use sdm_contract::CoreError;
 use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
-use sdm_core::pql::{spaces, yaml_rules};
+use sdm_core::pql::yaml_rules;
 use sdm_core::view::definition::{self as view_definition, Dimension};
 use sdm_core::view_steps::{self, JoinJudgement};
 use sdm_core::view_words;
@@ -600,4 +600,11 @@ joins:
     let kept = kept_joins(&spec, &walk);
     assert_eq!(kept.len(), 1);
     assert_eq!(kept[0]["alias"], "valid");
+}
+
+/// The core's white space as the data layer reads a view's text by.
+fn spaces() -> &'static sdm_sql::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    &SPACES
 }

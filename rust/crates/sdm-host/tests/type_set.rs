@@ -774,7 +774,7 @@ fn facts() -> HostFacts {
 /// The schema a request's answer must have, where the contract fixes it.
 fn expected_schema(request: &DataRequest) -> Option<Arc<Schema>> {
     match request.expected() {
-        ExpectedSchema::Schema { fields } => Some(Arc::new(Schema::new(
+        ExpectedSchema::Schema { fields, .. } => Some(Arc::new(Schema::new(
             fields
                 .iter()
                 .map(sdm_contract::types::Field::to_arrow)

@@ -16,6 +16,9 @@
 
 use sdm_contract::ops::Dtype;
 use sdm_contract::view::ViewKind;
+use sdm_contract::view::{
+    DefaultRefusal, ExprRefusal, FilterRefusal, MeasureReason, MeasureRefusal, Parameter, Unread,
+};
 use sdm_contract::{CoreWarning, Detail, Sentence};
 use sdm_schema::view::joins::{JoinMessage, SkipReason};
 use sdm_schema::view::model::{
@@ -24,10 +27,6 @@ use sdm_schema::view::model::{
 };
 use sdm_schema::view::spec::{Ignored, ViewSpec};
 use sdm_schema::view::yaml::{Document, NodeId};
-use sdm_sql::view_expr::ExprRefusal;
-use sdm_sql::view_expr::metric::{
-    DefaultRefusal, FilterRefusal, MeasureReason, MeasureRefusal, Parameter, Unread,
-};
 
 pub use crate::pql::TooLarge;
 use crate::pql::conversions::{not_an_integer_text, too_many_digits_text};
@@ -585,7 +584,11 @@ pub fn ignored_text(ignored: Ignored) -> String {
         Ignored::Materialization => {
             "Ignored the 'materialization' section since it cannot be represented in a graph".into()
         }
-        Ignored::Fields => sdm_sql::view_expr::metric::FIELDS_IGNORED.into(),
+        // The source's own name is the wording table's to give
+        // (`ViewFieldsIgnored`, from the warning's `database`).
+        Ignored::Fields => {
+            "Ignored the 'fields' section since the view also has 'dimensions', which the source reads instead".into()
+        }
     }
 }
 

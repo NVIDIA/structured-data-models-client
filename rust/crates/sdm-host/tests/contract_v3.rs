@@ -254,7 +254,10 @@ fn wide_fetch(pad: usize) -> TestFetch {
                 text: format!("SELECT * FROM orders{}", " ".repeat(pad)),
                 params: vec![],
             }],
-            expect: ExpectedSchema::Schema { fields },
+            expect: ExpectedSchema::Schema {
+                fields,
+                optional: Vec::new(),
+            },
         }),
         provider: None,
     }

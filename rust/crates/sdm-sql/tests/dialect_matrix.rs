@@ -1206,8 +1206,12 @@ fn key_counts_and_time_bounds_have_independent_fixed_schemas() {
                     .into_iter()
                     .map(|name| field(name, ColumnType::Int64, false))
                     .collect(),
+                    optional: Vec::new(),
                 },
-                _ => ExpectedSchema::Schema { fields },
+                _ => ExpectedSchema::Schema {
+                    fields,
+                    optional: Vec::new(),
+                },
             };
             assert_eq!(plan.expect(), &expected, "{dialect}: {request:?}");
         }

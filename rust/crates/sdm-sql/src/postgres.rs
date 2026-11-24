@@ -540,7 +540,10 @@ fn expected(request: &DataRequest) -> ExpectedSchema {
             return request.expected();
         }
     };
-    ExpectedSchema::Schema { fields }
+    ExpectedSchema::Schema {
+        fields,
+        optional: Vec::new(),
+    }
 }
 
 /// A Postgres answer to a `describe` of `part`, which holds [`expected`]'s

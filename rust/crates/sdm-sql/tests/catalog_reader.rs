@@ -93,7 +93,7 @@ fn answer(
     provider: &ProviderChoice,
     columns: Vec<ArrayRef>,
 ) -> Vec<RecordBatch> {
-    let ExpectedSchema::Schema { fields } = Data::new()
+    let ExpectedSchema::Schema { fields, .. } = Data::new()
         .plan(request, provider)
         .unwrap()
         .expect()

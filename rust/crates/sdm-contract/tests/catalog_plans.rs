@@ -46,7 +46,10 @@ fn sharing_a_catalog_reply_requires_the_same_complete_concrete_read() {
     assert!(!plan.same_catalog_read(&FetchPlan::Sql {
         result_conversions: Vec::new(),
         statements: vec![statement],
-        expect: ExpectedSchema::Schema { fields: vec![] },
+        expect: ExpectedSchema::Schema {
+            fields: vec![],
+            optional: vec![]
+        },
     }));
     // Host plans carry only the expected schema, not the request being read.
     // Equal host plans therefore do not establish equal catalog answers.

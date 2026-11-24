@@ -929,7 +929,7 @@ impl Out {
     /// The contract's fixed columns of `request`'s answer, holding
     /// `columns`.
     fn fixed(request: &DataRequest, columns: Vec<ArrayRef>) -> Result<Out, CoreError> {
-        let ExpectedSchema::Schema { fields } = request.expected() else {
+        let ExpectedSchema::Schema { fields, .. } = request.expected() else {
             return Err(internal("a request of fixed columns expects none"));
         };
         let fields: Vec<Field> = fields.iter().map(|f| f.to_arrow()).collect();

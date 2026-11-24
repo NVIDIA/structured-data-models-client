@@ -76,7 +76,7 @@ fn rendered(request: &DataRequest) -> String {
         } => {
             match request {
                 DataRequest::Describe { part, .. } => {
-                    let ExpectedSchema::Schema { fields } = &expect else {
+                    let ExpectedSchema::Schema { fields, .. } = &expect else {
                         panic!("a catalog answer has a fixed shape");
                     };
                     let names: Vec<&str> = fields.iter().map(|f| f.name.as_str()).collect();

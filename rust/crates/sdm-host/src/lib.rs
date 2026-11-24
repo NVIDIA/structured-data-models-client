@@ -135,37 +135,19 @@ pub fn normalized_query(query: &str) -> Option<String> {
 /// `sdm-sql`'s, built here where every binding reaches it (
 /// H14, E30).
 pub fn default_root() -> CompositionRoot {
-    CompositionRoot::new(std::sync::Arc::new(sdm_sql::Data::reading_views(
-        sdm_core::pql::spaces(),
-    )))
+    CompositionRoot::new(std::sync::Arc::new(sdm_sql::Data::reading_views(spaces())))
 }
 
-/// The SQL kit of the built-in source `provider` names (`sdm_sql::kit`),
-/// reading semantic models with the core's white space, as
-/// [`default_root`]'s data layer reads them. A binding builds one per
-/// built-in source and answers every typed request the core sends that
-/// source through it ([`answer_with_kit`]).
-pub fn sql_kit(
-    provider: sdm_contract::data::ProviderChoice,
-) -> Result<sdm_sql::kit::SqlKit, sdm_contract::CoreError> {
-    sdm_sql::kit::SqlKit::new(provider, Some(sdm_core::pql::spaces()))
+/// The white space the data layer reads a semantic model's text by: the
+/// core's rule of it (`sdm_core::pql::is_space`), with the class its
+/// patterns are compiled with derived from it once.
+pub(crate) fn spaces() -> &'static sdm_sql::view_expr::Spaces {
+    static SPACES: std::sync::LazyLock<sdm_sql::view_expr::Spaces> =
+        std::sync::LazyLock::new(|| sdm_sql::view_expr::Spaces::new(sdm_core::pql::is_space));
+    &SPACES
 }
 
-/// `kit`'s answer to `request`, its doubles written into SQL as the core
-/// writes them (`sdm_core::float_text`), every fetch run by `run`.
-pub fn answer_with_kit(
-    kit: &sdm_sql::kit::SqlKit,
-    request: &sdm_contract::data::DataRequest,
-    keys: &std::collections::BTreeMap<
-        sdm_contract::data::AttachmentId,
-        sdm_contract::data::KeyData,
-    >,
-    run: &mut dyn FnMut(
-        sdm_sql::kit::KitFetch<'_>,
-    ) -> Result<sdm_sql::kit::Answered, sdm_contract::data::ProviderError>,
-) -> Result<sdm_sql::kit::Answered, sdm_sql::kit::KitError> {
-    kit.answer(request, keys, sdm_core::float_text, run)
-}
+pub mod kit;
 
 #[cfg(test)]
 mod tests {
