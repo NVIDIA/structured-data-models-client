@@ -3,8 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """The Python host's DuckDB provider, through the core.
 
-Each fetch is planned by the core's data layer for DuckDB, answered by the
-provider, admitted by the core and echoed back by the test-only fetch, and
+Each fetch is asked by the core of the DuckDB source, answered through its
+SQL kit by the provider, admitted by the core and echoed back by the test-only fetch, and
 held to ``contract/provider-vectors.json``, which the pure-Rust host's
 provider tests read too: a result the driver hands over in several batches
 is admitted as one attachment of its rows, the same as when handed over
@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import kit_host
 import pyarrow as pa
 from request_kind_assertions import assert_source_answer, source_answer
 
@@ -32,6 +33,8 @@ from sdm_client._rust import codec
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 from sdm_client._rust.run import run
 
+#: The DuckDB source's SQL choice, its kit's database.
+_DUCKDB = {'provider': 'sql', 'dialect': 'duckdb'}
 VECTORS = json.loads(
     (
         Path(__file__).resolve().parents[3] / 'contract/provider-vectors.json'
@@ -55,23 +58,20 @@ def _admitted(
 ) -> tuple[pa.Table, list[int]]:
     r"""What the core admitted of ``request``'s answer, and how many batches
     the provider handed over."""
-    provider = DuckDBProvider(connection, batch_rows=batch_rows)
+    driver = DuckDBProvider(connection, batch_rows=batch_rows)
     handed: list[int] = []
 
     def answer(step: dict[str, Any], keys: Any) -> Any:
-        table = provider(step, keys)
+        table = driver(step, keys)
         handed.append(len(table.to_batches()))
         return table
 
-    fetch = {
-        'request': request,
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
-        'echo': True,
-    }
+    choice, provider = kit_host.chosen(_DUCKDB, answer)
+    fetch = {'request': request, 'provider': choice, 'echo': True}
     finished = run(
         {'op': 'test', 'test': 'fetch', 'fetch': 1},
         {1: codec.attachment(fetch)},
-        provider=answer,
+        provider=provider,
     )
     stream = finished.take(finished.result['data'])
     data = pa.RecordBatchReader._import_from_c_capsule(
@@ -154,24 +154,26 @@ def _keyed(
 ) -> tuple[pa.Table, dict[str, Any]]:
     r"""A lookup with ``seeds``, through the core: the core attaches them to
     the step as its own key set, the provider binds them and answers, and
-    the core echoes what it admitted. Also the step as the provider saw it,
-    and the key set it was handed."""
+    the core echoes what it admitted. Also the step as the source saw it,
+    the key set it was handed, and the key sets its kit handed the
+    provider."""
     from sdm_client._rust.codec import CONTROL_CAP
 
-    provider = DuckDBProvider(connection)
-    seen: dict[str, Any] = {}
+    seen: dict[str, Any] = {'bound': []}
+
+    def bound(fetch: dict[str, Any], binds: Any) -> None:
+        seen['bound'].append(_tables(binds))
+
+    choice, provider = kit_host.chosen(
+        _DUCKDB, kit_host.Driven(DuckDBProvider(connection), bound)
+    )
 
     def answer(step: dict[str, Any], keys: Any) -> Any:
         seen['step'] = step
-        seen['keys'] = {
-            attachment: pa.RecordBatchReader._import_from_c_capsule(
-                stream.__arrow_c_stream__()
-            ).read_all()
-            for attachment, stream in keys.items()
-        }
+        seen['keys'] = _tables(keys)
         seen['control'] = len(json.dumps(step).encode())
         assert seen['control'] < CONTROL_CAP
-        return provider(step, {a: t for a, t in seen['keys'].items()})
+        return provider(step, dict(seen['keys']))
 
     kinds = {
         'uint64': {'type': 'uint64'},
@@ -195,11 +197,7 @@ def _keyed(
             for field in seeds.schema
         ],
     }
-    fetch = {
-        'request': request,
-        'provider': {'provider': 'sql', 'dialect': 'duckdb'},
-        'echo': True,
-    }
+    fetch = {'request': request, 'provider': choice, 'echo': True}
     finished = run(
         {'op': 'test', 'test': 'keyed', 'fetch': 1, 'keys': 2},
         {1: codec.attachment(fetch), 2: seeds},
@@ -210,6 +208,16 @@ def _keyed(
         stream.__arrow_c_stream__()
     ).read_all()
     return data, seen
+
+
+def _tables(keys: Any) -> dict[int, pa.Table]:
+    r"""Each key set handed over, read whole, by attachment."""
+    return {
+        attachment: pa.RecordBatchReader._import_from_c_capsule(
+            stream.__arrow_c_stream__()
+        ).read_all()
+        for attachment, stream in (keys or {}).items()
+    }
 
 
 def _each_seed_finds_its_own_row(data: pa.Table, labels: list[str]) -> bool:
@@ -228,9 +236,12 @@ def test_keys_that_collide_as_float64_bind_join_and_answer_exactly() -> None:
     for case in cases:
         exact = _seeds(case['type'], case['values'])
         data, seen = _keyed(connection, case['request'], exact)
-        # The provider was handed the keys exactly as sent.
+        # The source was handed the keys exactly as sent, and its kit
+        # bound them for the provider so.
         [handed] = seen['keys'].values()
         assert handed.equals(exact), case['column']
+        [[bound]] = [b.values() for b in seen['bound'] if b]
+        assert bound.equals(exact), case['column']
         assert _each_seed_finds_its_own_row(data, case['labels']), case[
             'column'
         ]

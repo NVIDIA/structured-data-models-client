@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import kit_host
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -196,9 +197,18 @@ def _loader() -> Any:
     return module
 
 
+def sql_choice(dialect: str) -> dict[str, Any]:
+    r"""The SQL choice of ``dialect``'s source, its kit's database: a
+    Postgres read names its schema, the database's ``public``."""
+    return {'provider': 'sql', 'dialect': dialect} | (
+        {'namespace': ['public']} if dialect == 'postgres' else {}
+    )
+
+
 def _admitted(provider: Any, dialect: str, column: str) -> pa.Table | str:
-    r"""``column`` (with ``id``) read through ``provider`` and admitted by
-    the core, or the core's refusal by code."""
+    r"""``column`` (with ``id``) read through ``provider``, the statements
+    of ``dialect``'s SQL kit run on it, and admitted by the core, or the
+    core's refusal by code."""
     from sdm_client.errors import StructuredDataError
 
     request = {
@@ -208,21 +218,13 @@ def _admitted(provider: Any, dialect: str, column: str) -> pa.Table | str:
         'filters': [],
         'limit': None,
     }
-    fetch = {
-        'request': request,
-        # A Postgres read names its schema, the database's ``public``.
-        'provider': {
-            'provider': 'sql',
-            'dialect': dialect,
-            **({'namespace': ['public']} if dialect == 'postgres' else {}),
-        },
-        'echo': True,
-    }
+    choice, source = kit_host.chosen(sql_choice(dialect), provider)
+    fetch = {'request': request, 'provider': choice, 'echo': True}
     try:
         finished = run(
             {'op': 'test', 'test': 'fetch', 'fetch': 1},
             {1: codec.attachment(fetch)},
-            provider=provider,
+            provider=source,
         )
     except StructuredDataError as error:
         return f'refused {error.code}'
