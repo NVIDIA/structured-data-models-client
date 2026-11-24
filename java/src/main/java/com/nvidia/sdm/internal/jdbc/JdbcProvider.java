@@ -72,6 +72,25 @@ public final class JdbcProvider implements Host.Provider {
     public String dialect() {
       return dialect;
     }
+
+    /**
+     * The database {@code connection} is open on, by the product name its driver reports, for
+     * reading a caller's own SQL ({@code Readers}).
+     *
+     * @throws IllegalArgumentException for a database this library has no driver support for
+     */
+    public static Driver of(Connection connection) throws SQLException {
+      String product = connection.getMetaData().getDatabaseProductName();
+      String name = product == null ? "" : product.toLowerCase(java.util.Locale.ROOT);
+      if (name.contains("duckdb")) return DUCKDB;
+      if (name.contains("sqlite")) return SQLITE;
+      if (name.contains("postgres")) return POSTGRES;
+      if (name.contains("snowflake")) return SNOWFLAKE;
+      if (name.contains("databricks") || name.contains("spark")) return DATABRICKS;
+      throw new IllegalArgumentException(
+          "a connection to DuckDB, SQLite, Postgres, Databricks or Snowflake is read; got one to "
+              + product);
+    }
   }
 
   /** Rows per Arrow batch of a result built from rows; a larger result comes as several. */

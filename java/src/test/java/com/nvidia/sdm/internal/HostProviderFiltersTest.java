@@ -116,9 +116,9 @@ class HostProviderFiltersTest {
   }
 
   @Test
-  void aProviderSourceCarriesItsProviderAndItsDeclaredFiltersReachTheCore() {
-    com.nvidia.sdm.provider.DataProvider provider =
-        new com.nvidia.sdm.provider.DataProvider() {
+  void aSourcesDeclaredFiltersReachTheCore() {
+    com.nvidia.sdm.Source source =
+        new com.nvidia.sdm.Source() {
           @Override
           public Capabilities capabilities() {
             return Capabilities.builder().filters(DataRequest.FilterKind.HAS_ROWS).build();
@@ -132,11 +132,6 @@ class HostProviderFiltersTest {
             throw new UnsupportedOperationException();
           }
         };
-    com.nvidia.sdm.ProviderSource source = com.nvidia.sdm.ProviderSource.of(provider);
-    assertEquals(provider, source.provider());
-    assertEquals(new com.nvidia.sdm.ProviderSource(provider), source);
-    assertEquals(new com.nvidia.sdm.ProviderSource(provider).hashCode(), source.hashCode());
-    assertTrue(source.toString().startsWith("ProviderSource["));
     @SuppressWarnings("unchecked")
     Map<String, Object> declared =
         (Map<String, Object>) HostProviders.chosen(source).choice().get("capabilities");

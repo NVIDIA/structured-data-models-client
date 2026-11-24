@@ -9,16 +9,16 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from sdm_connectors import ConnectorError
 
-from sdm_connectors import (
-    ConnectorError,
+from sdm_client import (
     DatabricksSource,
     DuckDBSource,
     PostgresSource,
-    SemanticModel,
     SnowflakeSource,
     Source,
     SQLiteSource,
+    StructuredDataError,
 )
 
 
@@ -49,53 +49,43 @@ def _sqlite(tmp_path: Path) -> Any:
 
 
 @pytest.mark.parametrize(
-    'cls, connection, backend, namespace',
+    'cls, connection, namespace, choice',
     [
-        (DuckDBSource, _duckdb, 'duckdb', {}),
-        (SQLiteSource, _sqlite, 'sqlite', {}),
+        (DuckDBSource, _duckdb, {}, {'dialect': 'duckdb'}),
+        (SQLiteSource, _sqlite, {}, {'dialect': 'sqlite'}),
         (
             DatabricksSource,
             lambda _: _databricks(),
-            'databricks',
             {'catalog': 'main', 'schema': 'sales'},
+            {'dialect': 'databricks', 'namespace': ['main', 'sales']},
         ),
         (
             SnowflakeSource,
             lambda _: _snowflake(),
-            'snowflake',
             {'database': 'DB'},
+            {'dialect': 'snowflake', 'namespace': ['DB', None]},
         ),
         (
             PostgresSource,
             lambda _: _postgres(),
-            'postgres',
             {'schema': 'public'},
+            {'dialect': 'postgres', 'namespace': ['public']},
         ),
     ],
     ids=['duckdb', 'sqlite', 'databricks', 'snowflake', 'postgres'],
 )
-def test_a_source_is_the_class_that_fits_its_connection(
-    cls: type, connection: Any, backend: str, namespace: dict, tmp_path: Path
+def test_a_built_in_source_is_a_source_over_its_connection(
+    cls: type, connection: Any, namespace: dict, choice: dict, tmp_path: Path
 ) -> None:
     opened = connection(tmp_path)
 
-    for source in (cls(opened, **namespace), Source(opened, **namespace)):
-        assert type(source) is cls
-        assert source.connection is opened
-        assert (source.backend, source.namespace) == (backend, namespace)
-        assert source.kind == {'databricks': 'databricks-sql'}.get(
-            backend, backend
-        )
-        assert (
-            source.namespace_parts()
-            == {
-                'duckdb': [],
-                'sqlite': [],
-                'databricks': ['main', 'sales'],
-                'snowflake': ['DB', None],
-                'postgres': ['public'],
-            }[backend]
-        )
+    source = cls(opened, **namespace)
+    assert isinstance(source, Source)
+    assert source.connection is opened
+    assert source.namespace == namespace
+    # The namespace outermost first, by the class's order; a part left to
+    # the connection is None, and none given is left out.
+    assert source._sql_choice() == {'provider': 'sql', **choice}
 
 
 @pytest.mark.parametrize(
@@ -117,20 +107,9 @@ def test_a_source_is_the_class_that_fits_its_connection(
             'UNKNOWN_CONNECTOR',
         ),
         (
-            lambda: Source(_databricks(), database='DB'),
-            'catalog and schema',
-            'INVALID_CONNECTOR_ARGS',
-        ),
-        (
-            lambda: Source(_duckdb(Path()), schema='main'),
-            'no namespace',
-            'INVALID_CONNECTOR_ARGS',
-        ),
-        (lambda: Source(object()), 'got object', 'UNKNOWN_CONNECTOR'),
-        (
-            lambda: SemanticModel(PostgresSource(_postgres()), 'x'),  # type: ignore[arg-type]
-            'kept in Databricks or',
-            'INVALID_CONNECTOR_ARGS',
+            lambda: DuckDBSource(object()),  # type: ignore[arg-type]
+            'got object',
+            'UNKNOWN_CONNECTOR',
         ),
         (
             lambda: DatabricksSource(_databricks(), catalog='c').semantic_model(
@@ -195,25 +174,43 @@ def test_a_notebook_session_is_a_source(
 ) -> None:
     opened = session()
 
-    for source in (cls(opened, **namespace), Source(opened, **namespace)):
-        assert type(source) is cls
-        assert reaches(source, opened)
+    source = cls(opened, **namespace)
+    assert type(source) is cls
+    assert reaches(source, opened)
 
 
-def test_a_semantic_model_is_a_source_kept_in_databricks_or_snowflake() -> None:
+def test_both_databricks_connections_are_read_by_their_own_driver() -> None:
+    warehouse = DatabricksSource(_databricks(), catalog='main', schema='s')
+    spark = DatabricksSource(_spark_session(), schema='s')
+    assert warehouse._driver == 'DatabricksSqlProvider'
+    assert spark._driver == 'DatabricksSparkProvider'
+    assert spark.semantic_model('m')._driver == 'DatabricksSparkProvider'
+    assert spark._sql_choice()['namespace'] == [None, 's']
+
+
+def test_a_semantic_model_is_a_source_of_the_same_class() -> None:
     databricks = DatabricksSource(_databricks(), catalog='main', schema='s')
     model = databricks.semantic_model('sales_metrics')
 
-    assert isinstance(model, SemanticModel)
-    assert isinstance(model, Source)
-    assert model.source is databricks
-    assert model.name == 'sales_metrics'
-    assert model.backend == 'databricks'
+    assert type(model) is DatabricksSource
+    assert model.connection is databricks.connection
     assert model.namespace == {'catalog': 'main', 'schema': 's'}
-    assert (
-        SnowflakeSource(_snowflake()).semantic_model('SV').backend
-        == 'snowflake'
+    # Read in its source's namespace, which the source keeps unchanged.
+    assert model._sql_choice() == {
+        'provider': 'sql',
+        'dialect': 'databricks',
+        'namespace': ['main', 's'],
+        'view': {'name': 'sales_metrics', 'trust_expressions': False},
+    }
+    assert 'view' not in databricks._sql_choice()
+    snowflake = SnowflakeSource(_snowflake()).semantic_model(
+        'SV', trust_expressions=True
     )
+    assert type(snowflake) is SnowflakeSource
+    assert snowflake._sql_choice()['view'] == {
+        'name': 'SV',
+        'trust_expressions': True,
+    }
 
 
 def test_a_source_does_not_pickle_its_connection() -> None:
@@ -234,46 +231,10 @@ def test_the_repr_names_where_not_how() -> None:
     )
 
 
-def test_a_semantic_model_trusts_only_built_in_functions_by_default() -> None:
-    source = DatabricksSource(_databricks(), catalog='main', schema='sales')
-    assert source.semantic_model('m').trust_expressions is False
-    assert source.semantic_model('m', trust_expressions=True).trust_expressions
-
-
-def test_each_source_says_its_kind() -> None:
-    warehouse = DatabricksSource(_databricks(), catalog='main', schema='s')
-    spark = DatabricksSource(_spark_session(), schema='s')
-    snowflake = SnowflakeSource(_snowflake(), database='DB')
-    # Both Databricks connections report the backend; the kind tells them
-    # apart, and routing and providers key on it (design fix F).
-    assert warehouse.backend == spark.backend == 'databricks'
-    assert warehouse.kind == 'databricks-sql'
-    assert spark.kind == 'databricks-spark'
-    assert Source(_spark_session()).kind == 'databricks-spark'
-    # A metric view is its own kind, whichever connection keeps it.
-    assert warehouse.semantic_model('m').kind == 'databricks-metric-view'
-    assert spark.semantic_model('m').kind == 'databricks-metric-view'
-    assert snowflake.kind == 'snowflake'
-    assert snowflake.semantic_model('V').kind == 'snowflake-semantic-view'
-    assert PostgresSource(_postgres()).kind == 'postgres'
-
-
-def test_each_source_gives_its_namespace_parts_in_its_class_order() -> None:
-    # Outermost first, by the class's namespace; a part left to the
-    # connection is None (design fix C).
-    assert DatabricksSource(
-        _databricks(), schema='s', catalog='c'
-    ).namespace_parts() == ['c', 's']
-    assert DatabricksSource(_spark_session(), schema='s').namespace_parts() == [
-        None,
-        's',
-    ]
-    assert SnowflakeSource(_snowflake(), database='DB').namespace_parts() == [
-        'DB',
-        None,
-    ]
-    assert PostgresSource(_postgres(), schema='p').namespace_parts() == ['p']
-    assert PostgresSource(_postgres()).namespace_parts() == [None]
-    # A semantic model is read in its source's namespace.
-    warehouse = DatabricksSource(_databricks(), catalog='main', schema='s')
-    assert warehouse.semantic_model('m').namespace_parts() == ['main', 's']
+def test_a_built_in_source_is_not_asked_directly() -> None:
+    source = PostgresSource(_postgres())
+    with pytest.raises(StructuredDataError, match='own SQL') as error:
+        source.capabilities()
+    assert error.value.code == 'UNSUPPORTED_REQUEST'
+    with pytest.raises(StructuredDataError, match='own SQL'):
+        source.answer(None, None)  # type: ignore[arg-type]

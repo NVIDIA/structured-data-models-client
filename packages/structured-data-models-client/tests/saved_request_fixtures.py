@@ -212,7 +212,8 @@ REQUESTS: dict[str, tuple[str, dict[str, Any]]] = {
 def source() -> Any:
     r"""A DuckDB source holding :data:`SQL`'s tables."""
     import duckdb
-    from sdm_connectors import DuckDBSource
+
+    from sdm_client import DuckDBSource
 
     connection = duckdb.connect()
     for statement in SQL:

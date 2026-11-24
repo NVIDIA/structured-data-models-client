@@ -157,8 +157,7 @@ def observe(vector: dict[str, Any], dsn: str) -> dict[str, Any]:
             'payloads': None,
             'postgres': types,
         }
-        from sdm_client import PredictiveQuery, Schema
-        from sdm_connectors import PostgresSource
+        from sdm_client import PostgresSource, PredictiveQuery, Schema
 
         with psycopg.connect(scoped, autocommit=True) as connection:
             connection.execute(regressions.UTC)

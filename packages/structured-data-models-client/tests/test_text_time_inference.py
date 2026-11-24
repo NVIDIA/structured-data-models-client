@@ -10,9 +10,8 @@ from typing import Any
 
 import duckdb
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import Schema, StructuredDataError
+from sdm_client import DuckDBSource, Schema, StructuredDataError
 
 
 def _assert_text(schema: Any, table: str, column: str) -> None:

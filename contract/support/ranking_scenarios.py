@@ -785,7 +785,7 @@ def source(spec: dict[str, Any]) -> Iterator[Any]:
     ADBC, or into a new database on ``SDM_POSTGRES_TEST_DSN``'s server read
     through psycopg, as the case runner loads a case."""
     import duckdb
-    import sdm_connectors
+    import sdm_client
 
     duck = duckdb.connect()
     for statement in [*statements(), *spec.get('setup', [])]:
@@ -793,7 +793,7 @@ def source(spec: dict[str, Any]) -> Iterator[Any]:
     database = spec.get('database', 'duckdb')
     if database == 'duckdb':
         try:
-            yield sdm_connectors.DuckDBSource(duck)
+            yield sdm_client.DuckDBSource(duck)
         finally:
             duck.close()
         return
@@ -816,7 +816,7 @@ def source(spec: dict[str, Any]) -> Iterator[Any]:
             duck.close()
             connection = adbc_driver_sqlite.dbapi.connect(str(path))
             try:
-                yield sdm_connectors.SQLiteSource(connection)
+                yield sdm_client.SQLiteSource(connection)
             finally:
                 connection.close()
         return
@@ -836,7 +836,7 @@ def source(spec: dict[str, Any]) -> Iterator[Any]:
         duck.close()
         connection = psycopg.connect(scoped)
         try:
-            yield sdm_connectors.PostgresSource(connection)
+            yield sdm_client.PostgresSource(connection)
         finally:
             connection.close()
     finally:
@@ -944,8 +944,7 @@ def gathered(query: str, materialize: dict[str, Any]) -> dict[str, Any]:
     is gathered as."""
     import duckdb
     import pandas as pd
-    from sdm_client import PredictiveQuery, Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, PredictiveQuery, Schema
 
     connection = duckdb.connect()
     for statement in statements():

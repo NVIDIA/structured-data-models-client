@@ -182,8 +182,7 @@ def _facts(schema: Any) -> dict[tuple[str, str], Any]:
 
 
 def _shop() -> Any:
-    from sdm_client import Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, Schema
 
     connection = duckdb.connect()
     connection.execute(

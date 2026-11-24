@@ -34,7 +34,7 @@ def test_live_calculated_column_values_refresh_and_prediction(connector):
         pytest.skip(
             'set SDM_SQL_COLUMN_CONFIG to private source/endpoint config'
         )
-    from sdm_connectors import DatabricksSource, PostgresSource, SnowflakeSource
+    from sdm_client import DatabricksSource, PostgresSource, SnowflakeSource
 
     config = json.loads(Path(path).read_text())
     settings = config['sources'][connector]

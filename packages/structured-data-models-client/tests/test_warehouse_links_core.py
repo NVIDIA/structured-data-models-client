@@ -11,9 +11,14 @@ import duckdb
 import pandas as pd
 import pytest
 from adbc_driver_sqlite import dbapi as sqlite
-from sdm_connectors import DuckDBSource, SQLiteSource
 
-from sdm_client import KumoRelational, PredictiveQuery, Schema
+from sdm_client import (
+    DuckDBSource,
+    KumoRelational,
+    PredictiveQuery,
+    Schema,
+    SQLiteSource,
+)
 from sdm_client.errors import UnsupportedRequestError
 
 QUERY = (

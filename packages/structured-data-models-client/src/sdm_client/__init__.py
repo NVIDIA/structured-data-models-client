@@ -38,7 +38,7 @@ from sdm_client.explanations import (
 )
 from sdm_client.inference import InferenceConfig
 from sdm_client.models import KumoRelational, KumoTabular, Model
-from sdm_client.provider import ProviderSource
+from sdm_client.provider import Source
 from sdm_client.query import PredictiveQuery
 from sdm_client.relational_task import RelationalTask
 from sdm_client.reports import (
@@ -61,6 +61,13 @@ from sdm_client.schema import (
     Schema,
     SourceTable,
     Table,
+)
+from sdm_client.sources import (
+    DatabricksSource,
+    DuckDBSource,
+    PostgresSource,
+    SnowflakeSource,
+    SQLiteSource,
 )
 from sdm_client.summaries import ExplanationSummarizer
 
@@ -92,7 +99,6 @@ __all__ = [
     'ColumnExplanations',
     'Explanations',
     'PredictiveQuery',
-    'ProviderSource',
     'Relationship',
     'RelationshipOrigin',
     'Request',
@@ -103,7 +109,13 @@ __all__ = [
     'TableSanitizationReport',
     'Split',
     'SDMClient',
+    'Source',
     'SourceTable',
+    'DatabricksSource',
+    'DuckDBSource',
+    'PostgresSource',
+    'SQLiteSource',
+    'SnowflakeSource',
     'StructuredDataError',
     'Table',
     'Target',

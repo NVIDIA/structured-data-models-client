@@ -41,15 +41,14 @@ class ReadersTest {
     for (String url : List.of("jdbc:duckdb:", "jdbc:sqlite::memory:")) {
       try (var connection = DriverManager.getConnection(url); var statement = connection.createStatement();
           RootAllocator allocator = new RootAllocator()) {
-        Source source = url.contains("duckdb") ? DuckDbSource.of(connection) : SqliteSource.of(connection);
         statement.execute("CREATE TEMP TABLE \"private table\" (id BIGINT, label VARCHAR)");
         statement.execute("INSERT INTO \"private table\" VALUES (9007199254740993, 'a'), (NULL, NULL)");
-        try (Table rows = Readers.readTable(source, "private table", allocator)) {
+        try (Table rows = Readers.readTable(connection, "private table", allocator)) {
           assertEquals(2, rows.getRowCount());
           assertEquals(9007199254740993L, value(rows, 0, 0));
           assertNull(value(rows, 0, 1));
         }
-        try (Table rows = Readers.readQuery(source, "SELECT label FROM \"private table\" WHERE id IS NOT NULL", allocator)) {
+        try (Table rows = Readers.readQuery(connection, "SELECT label FROM \"private table\" WHERE id IS NOT NULL", allocator)) {
           assertEquals("a", value(rows, 0, 0).toString());
         }
         assertFalse(connection.isClosed());
@@ -209,7 +208,7 @@ class ReadersTest {
   public static class NoSpark {
     public static void main(String[] args) throws Exception {
       try (var connection = DriverManager.getConnection("jdbc:duckdb:"); RootAllocator allocator = new RootAllocator();
-          Table rows = Readers.readQuery(DuckDbSource.of(connection), "SELECT 1 AS value", allocator)) {
+          Table rows = Readers.readQuery(connection, "SELECT 1 AS value", allocator)) {
         if (rows.getRowCount() != 1) throw new AssertionError();
         System.out.println("no-spark-ok");
       }

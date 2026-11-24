@@ -135,8 +135,7 @@ def _connection() -> Any:
 
 
 def _schema(connection: Any) -> Any:
-    from sdm_client import Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, Schema
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')

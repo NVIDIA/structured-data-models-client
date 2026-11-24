@@ -9,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.nvidia.sdm.internal.ArrowData;
 import com.nvidia.sdm.internal.Json;
 import com.nvidia.sdm.provider.Capabilities;
-import com.nvidia.sdm.provider.DataProvider;
 import com.nvidia.sdm.provider.DataRequest.FilterKind;
 import com.nvidia.sdm.provider.DataRequest;
 import com.nvidia.sdm.provider.OptionalRequest;
@@ -64,7 +63,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * A caller's own {@link DataProvider} over Trino, a query engine that declares no primary or
+ * A caller's own {@link Source} over Trino, a query engine that declares no primary or
  * foreign keys, answering the core's requests through Trino's HTTP protocol.
  *
  * <p>The provider answers {@code describe}, {@code scan} and {@code sample_entities} itself, and
@@ -150,7 +149,7 @@ class TrinoProviderTest {
   void eachQueryKeepsExactlyTheExamplesTheSourceHolds(String declared, Map<String, Object> scenario)
       throws Exception {
     Set<FilterKind> kinds = declared.equals("every kind") ? EVERY : NO_OR_NO_SUBQUERY;
-    var source = ProviderSource.of(new TrinoProvider(kinds));
+    var source = new TrinoSource(kinds);
     var schema =
         com.nvidia.sdm.Schema.fromSource(
                 source,
@@ -218,10 +217,10 @@ class TrinoProviderTest {
   }
 
   /** A caller's provider over Trino: what a caller writes once for an engine of its own. */
-  final class TrinoProvider implements DataProvider {
+  final class TrinoSource extends Source {
     private final Set<FilterKind> kinds;
 
-    TrinoProvider(Set<FilterKind> kinds) {
+    TrinoSource(Set<FilterKind> kinds) {
       this.kinds = kinds;
     }
 

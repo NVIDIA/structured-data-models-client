@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.nvidia.sdm.internal.Json;
-import com.nvidia.sdm.internal.Providers;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,12 +29,12 @@ class SnowflakeTest {
   void sourceUsesExistingCoreDialectNamespaceAndViewWithoutChangingConnection() throws Exception {
     try (Connection connection = DriverManager.getConnection("jdbc:sqlite::memory:")) {
       var source = SnowflakeSource.of(connection, "db", "schema").semanticModel("view", false);
-      var choice = Providers.of(source).choice();
+      var choice = SourceAccess.sqlChoice(source);
       assertEquals("snowflake", choice.get("dialect"));
       assertEquals(List.of("db", "schema"), choice.get("namespace"));
       assertEquals(Map.of("name", "view", "trust_expressions", false), choice.get("view"));
       assertSame(connection, source.connection());
-      assertTrue(Providers.held(source).containsKey("semantic_model"));
+      assertTrue(SourceAccess.held(source).containsKey("semantic_model"));
       assertFalse(connection.isClosed());
     }
   }
@@ -67,7 +66,7 @@ class SnowflakeTest {
               + "'2024-03-10 01:23:45.123456789'::TIMESTAMP_NTZ(9) AS ntz, "
               + "'2024-03-10 01:23:45.123456789 -08:00'::TIMESTAMP_TZ(9) AS tz, "
               + "'2024-03-10 01:23:45.123456789 -08:00'::TIMESTAMP_LTZ(9) AS ltz";
-      try (Table table = Readers.readQuery(input, sql, allocator)) {
+      try (Table table = Readers.readQuery(input.connection(), sql, allocator)) {
         assertEquals(new BigDecimal("9007199254740993"), value(table, 0));
         assertEquals(new BigDecimal("1208925819614629174706177"), value(table, 1));
         assertEquals(new BigDecimal("1.234567890123456789"), value(table, 2));
@@ -93,7 +92,7 @@ class SnowflakeTest {
       }
       try (Table times =
           Readers.readQuery(
-              input,
+              input.connection(),
               "SELECT '2024-03-10 01:23:45'::TIMESTAMP_NTZ(0) AS s, "
                   + "'2024-03-10 01:23:45.123'::TIMESTAMP_NTZ(3) AS ms, "
                   + "'2024-03-10 01:23:45.123456'::TIMESTAMP_NTZ(6) AS us",
@@ -108,7 +107,7 @@ class SnowflakeTest {
       }
       try (Table vectors =
           Readers.readQuery(
-              input,
+              input.connection(),
               "SELECT CAST([1.25,2.5] AS VECTOR(FLOAT,2)) AS v, CAST([1,NULL,3] AS"
                   + " ARRAY(NUMBER(38,0))) AS a",
               allocator)) {

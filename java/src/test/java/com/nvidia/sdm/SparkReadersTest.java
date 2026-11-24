@@ -5,7 +5,6 @@
 package com.nvidia.sdm;
 
 import static org.junit.jupiter.api.Assertions.*;
-import com.nvidia.sdm.internal.Providers;
 import com.nvidia.sdm.internal.ReadTables;
 import java.util.List;
 import java.util.Map;
@@ -27,24 +26,24 @@ class SparkReadersTest {
           .createOrReplaceTempView("reader_private");
       Source source = DatabricksSparkSource.of(session);
       assertSame(session, ((DatabricksSparkSource) source).session());
-      try (Table rows = Readers.readTable(source, "reader_private", allocator)) {
+      try (Table rows = Readers.readSparkTable(session, "reader_private", allocator)) {
         assertEquals(9007199254740993L, ReadersTest.value(rows, 0, 0));
         assertEquals(new java.math.BigDecimal("12.123456789"), ReadersTest.value(rows, 1, 0));
         assertEquals(java.time.LocalDateTime.parse("2024-01-01T01:02:03.123456"), ReadersTest.value(rows, 2, 0));
         assertEquals(3, ((List<?>) ReadersTest.value(rows, 3, 0)).size());
         assertEquals(7, ((Map<?, ?>) ReadersTest.value(rows, 4, 0)).get("x"));
       }
-      var chosen = Providers.of(source);
-      assertEquals("databricks", chosen.choice().get("dialect"));
+      assertEquals("databricks", SourceAccess.sqlChoice(source).get("dialect"));
+      var driver = SourceAccess.driver(source);
       var plan = Map.<String, Object>of("plan", Map.of("plan", "sql", "statements", List.of(
           Map.of("dialect", "databricks", "text", "SELECT id FROM reader_private WHERE id = ?", "params", List.of(
               Map.of("param", "value", "value", Map.of("t", "i64", "v", "9007199254740993")))))));
-      try (Table rows = ReadTables.collect(chosen.provider().answer(plan, Map.of(), allocator), allocator)) {
+      try (Table rows = ReadTables.collect(driver.answer(plan, Map.of(), allocator), allocator)) {
         assertEquals(1, rows.getRowCount());
         assertEquals(9007199254740993L, ReadersTest.value(rows, 0, 0));
       }
       session.range(100_003).createOrReplaceTempView("reader_batches");
-      try (Table rows = Readers.readTable(source, "reader_batches", allocator)) {
+      try (Table rows = Readers.readSparkTable(session, "reader_batches", allocator)) {
         assertEquals(100_003, rows.getRowCount());
         assertEquals(100_002L, ReadersTest.value(rows, 0, 100_002));
       }

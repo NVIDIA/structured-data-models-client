@@ -1050,9 +1050,14 @@ def observe(spec: dict[str, Any]) -> dict[str, Any]:
     r"""The case's outcome on the route the environment selects."""
     import duckdb
     import pandas as pd
-    from sdm_connectors import DuckDBSource
 
-    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
+    from sdm_client import (
+        DuckDBSource,
+        KumoRelational,
+        PredictiveQuery,
+        Schema,
+        SDMClient,
+    )
 
     connection = duckdb.connect()
     for statement in spec['setup']:

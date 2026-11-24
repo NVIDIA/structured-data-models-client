@@ -109,7 +109,7 @@ def _marked_json(field: Any) -> bool:
 
 
 def _from_source(connection: Any, table: str) -> Any:
-    from sdm_connectors import PostgresSource
+    from sdm_client import PostgresSource
 
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')

@@ -37,9 +37,8 @@ def test_the_schema_built_from_the_description_is_the_description() -> None:
     import warnings
 
     import duckdb
-    from sdm_client import Schema
+    from sdm_client import DuckDBSource, Schema
     from sdm_client._rust import schema as bridge
-    from sdm_connectors import DuckDBSource
 
     runner = _runner()
     connection = duckdb.connect()

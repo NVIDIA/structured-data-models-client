@@ -111,7 +111,8 @@ def test_size_and_seed_bound_selection():
 def test_provider_ground_truth(connector, monkeypatch):
     import adbc_driver_sqlite.dbapi as sqlite3
     import duckdb
-    from sdm_connectors import DuckDBSource, SQLiteSource
+
+    from sdm_client import DuckDBSource, SQLiteSource
 
     connection = (
         duckdb.connect() if connector == 'duckdb' else sqlite3.connect()
@@ -155,9 +156,8 @@ def test_provider_ground_truth(connector, monkeypatch):
             Relationship('orders', 'user_id', 'users', 'user_id'),
             Relationship('orders', 'item_id', 'items', 'item_id'),
         ]
-        from sdm_client._rust import providers
-
-        original_provider = providers.for_source
+        watched = type(data.source)
+        original_provider = watched._sdm_chosen
         requests = []
 
         def observed(source):
@@ -169,7 +169,7 @@ def test_provider_ground_truth(connector, monkeypatch):
 
             return choice, answer
 
-        monkeypatch.setattr(providers, 'for_source', observed)
+        monkeypatch.setattr(watched, '_sdm_chosen', observed)
         zero = PredictiveQuery(
             'PREDICT users.value FOR EACH users.user_id', data
         ).labels(0)

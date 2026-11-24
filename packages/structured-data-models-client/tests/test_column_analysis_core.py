@@ -450,7 +450,8 @@ def test_public_policy_constants_remain_available():
 
 def test_sqlite_materialize_explain_uses_sampled_context_without_new_queries():
     from adbc_driver_sqlite import dbapi as sqlite
-    from sdm_connectors import SQLiteSource
+
+    from sdm_client import SQLiteSource
 
     connection = sqlite.connect()
     cursor = connection.cursor()

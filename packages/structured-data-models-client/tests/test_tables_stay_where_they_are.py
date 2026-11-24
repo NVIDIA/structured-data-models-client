@@ -22,18 +22,15 @@ import pytest
 duckdb = pytest.importorskip('duckdb')
 dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
-from sdm_connectors import (  # noqa: E402
-    DuckDBSource,
-    PostgresSource,
-    SQLiteSource,
-)
-
 from sdm_client import (  # noqa: E402
+    DuckDBSource,
     KumoTabular,
+    PostgresSource,
     PredictiveQuery,
     Relationship,
     Schema,
     SourceTable,
+    SQLiteSource,
     StructuredDataError,
     Table,
 )
@@ -254,7 +251,7 @@ def test_a_schema_built_by_hand_asks_what_from_source_asks(
     described = _schema(source)
     by_hand, read = (_payload(_by_hand(described, source)), _payload(described))
 
-    if source.backend == 'sqlite':
+    if type(source).__name__ == 'SQLiteSource':
         # SQLite cannot seed the context's draw, so only its shape compares.
         for payload in (by_hand, read):
             context = payload['context']
@@ -472,7 +469,7 @@ def test_a_one_table_source_schema_is_gathered_for_the_relational_model(
     [
         (
             lambda source: Schema.from_source(source.connection, TABLES),
-            'needs an sdm_connectors',
+            'needs a Source',
         ),
         (lambda source: Schema.from_source(source, {}), 'leave tables out'),
         (
@@ -618,12 +615,12 @@ def test_a_question_cannot_change_what_the_next_one_is_given(
 def _add_members(source: Any, request: pytest.FixtureRequest) -> None:
     r"""``app_users`` again, every member joining after the last order."""
     joined = pd.Timestamp('2025-06-01')
-    if source.backend == 'duckdb':
+    if type(source).__name__ == 'DuckDBSource':
         source.connection.execute(
             'CREATE TABLE app_members AS SELECT *, '
             f"TIMESTAMP '{joined}' AS joined FROM app_users"
         )
-    elif source.backend == 'sqlite':
+    elif type(source).__name__ == 'SQLiteSource':
         with source.connection.cursor() as cursor:
             cursor.adbc_ingest(
                 'app_members', USERS.assign(joined=joined), mode='create'

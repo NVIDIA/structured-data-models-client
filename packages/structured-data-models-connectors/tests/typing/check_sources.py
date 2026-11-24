@@ -2,7 +2,8 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""What a type checker makes of a source, checked by mypy rather than run.
+r"""What a type checker makes of a source over a connection these
+connectors open, checked by mypy rather than run.
 
 Named without ``test_`` so that pytest leaves it alone. Each ``assert_type`` is
 an inference that must not change, and each ``type: ignore`` a call that must
@@ -24,44 +25,17 @@ import pyspark.sql.connect.session
 import snowflake.connector
 import snowflake.snowpark
 from databricks.sdk import WorkspaceClient
-
-from sdm_connectors import (
+from sdm_client import (
     DatabricksSource,
     DuckDBSource,
     PostgresSource,
-    SemanticModel,
     SnowflakeSource,
     Source,
     SQLiteSource,
 )
+
 from sdm_connectors.backends.spark import SparkConnection
 from sdm_connectors.databricks import lakebase, warehouse
-
-
-def source_is_typed_as_the_class_it_returns(
-    warehouse: databricks.sql.client.Connection,
-    spark: pyspark.sql.SparkSession,
-    spark_connect: pyspark.sql.connect.session.SparkSession,
-    snowflake_connection: snowflake.connector.SnowflakeConnection,
-    snowpark: snowflake.snowpark.Session,
-    postgres: psycopg.Connection[Any],
-    duckdb_connection: duckdb.DuckDBPyConnection,
-    sqlite: adbc_driver_sqlite.dbapi.AdbcSqliteConnection,
-) -> None:
-    assert_type(
-        Source(warehouse, catalog='main', schema='sales'), DatabricksSource
-    )
-    assert_type(Source(spark, catalog='main'), DatabricksSource)
-    assert_type(Source(spark_connect), DatabricksSource)
-    assert_type(
-        Source(snowflake_connection, database='SALES', schema='PUBLIC'),
-        SnowflakeSource,
-    )
-    assert_type(Source(snowpark), SnowflakeSource)
-    assert_type(Source(postgres, schema='public'), PostgresSource)
-    assert_type(Source(duckdb_connection), DuckDBSource)
-    assert_type(Source(sqlite), SQLiteSource)
-    assert_type(Source(duckdb_connection).connection, duckdb.DuckDBPyConnection)
 
 
 def each_class_takes_its_driver_and_keeps_its_type(
@@ -103,11 +77,14 @@ def each_class_takes_its_driver_and_keeps_its_type(
         adbc_driver_sqlite.dbapi.AdbcSqliteConnection,
     )
     assert_type(
-        DatabricksSource(spark).semantic_model('sales_metrics'), SemanticModel
+        DatabricksSource(spark).semantic_model('sales_metrics'),
+        DatabricksSource,
     )
     assert_type(
-        SnowflakeSource(snowpark).semantic_model('SALES'), SemanticModel
+        SnowflakeSource(snowpark).semantic_model('SALES'), SnowflakeSource
     )
+    source: Source = DuckDBSource(duckdb_connection)
+    assert_type(source, Source)
 
 
 def the_databricks_helpers_return_the_drivers_own_connections(
@@ -122,11 +99,11 @@ def the_databricks_helpers_return_the_drivers_own_connections(
         psycopg.Connection[Any],
     )
     assert_type(
-        Source(warehouse('abc123'), catalog='main', schema='sales'),
+        DatabricksSource(warehouse('abc123'), catalog='main', schema='sales'),
         DatabricksSource,
     )
     assert_type(
-        Source(
+        PostgresSource(
             lakebase('e', database='postgres', workspace=workspace),
             schema='public',
         ),
@@ -147,21 +124,17 @@ def the_wrong_connection_is_refused(
     PostgresSource(duckdb_connection)  # type: ignore[arg-type]
     DuckDBSource(sqlite)  # type: ignore[arg-type]
     SQLiteSource(duckdb_connection)  # type: ignore[arg-type]
-    Source(42)  # type: ignore[call-overload]
-    Source('postgresql://localhost/sales')  # type: ignore[call-overload]
     # Each has a member of the driver it is not: the ADBC SQLite one's, and
     # psycopg's, without the synchronous commit the engine reads through.
-    Source(sqlite3_connection)  # type: ignore[call-overload]
     SQLiteSource(sqlite3_connection)  # type: ignore[arg-type]
-    Source(async_postgres)  # type: ignore[call-overload]
     PostgresSource(async_postgres)  # type: ignore[arg-type]
+    # A source is abstract: it is a built-in one, or the caller's subclass.
+    Source()  # type: ignore[abstract]
 
 
 def a_namespace_the_warehouse_lacks_is_refused(
     postgres: psycopg.Connection[Any],
     duckdb_connection: duckdb.DuckDBPyConnection,
 ) -> None:
-    Source(duckdb_connection, schema='main')  # type: ignore[call-overload]
-    Source(postgres, catalog='main')  # type: ignore[call-overload]
     DuckDBSource(duckdb_connection, schema='main')  # type: ignore[call-arg]
     PostgresSource(postgres, database='sales')  # type: ignore[call-arg]

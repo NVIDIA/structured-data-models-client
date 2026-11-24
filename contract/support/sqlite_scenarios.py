@@ -150,8 +150,12 @@ def run(scenario: dict[str, Any]) -> dict[str, Any]:
     call and the caller's temporary table after the call."""
     import adbc_driver_sqlite.dbapi
     import pandas as pd
-    from sdm_client import PredictiveQuery, Schema, StructuredDataError
-    from sdm_connectors import SQLiteSource
+    from sdm_client import (
+        PredictiveQuery,
+        Schema,
+        SQLiteSource,
+        StructuredDataError,
+    )
 
     runner = _runner()
     connection = adbc_driver_sqlite.dbapi.connect()

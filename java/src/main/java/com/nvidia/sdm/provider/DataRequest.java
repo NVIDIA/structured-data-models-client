@@ -12,7 +12,7 @@ import java.util.OptionalLong;
 import org.apache.arrow.vector.ipc.ArrowReader;
 
 /**
- * One request the core sends a {@link DataProvider}: the Java view of the contract's {@code
+ * One request the core sends a {@link com.nvidia.sdm.Source}: the Java view of the contract's {@code
  * DataRequest}. Every request is one of the records below.
  *
  * <p>Answers name their columns as the request does, in its order. A request that carries seeds

@@ -1456,8 +1456,7 @@ def test_a_warehouse_reads_the_same_whole_numbers_as_a_category():
     """
     duckdb = pytest.importorskip('duckdb')
 
-    from sdm_client import Relationship, Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, Relationship, Schema
 
     connection = duckdb.connect()
     connection.execute(
@@ -1846,24 +1845,20 @@ def test_the_source_table_is_every_source_there_is():
     Read from the package rather than copied: a backend added, renamed or
     given a different driver has to reach the reference.
     """
-    import sdm_connectors
+    import sdm_client.sources
 
     shown = table(WAREHOUSES, 'Source')
     del shown['Source']
     named = {only(row) for row in shown}
-    exported = {
-        name
-        for name in sdm_connectors.__all__
-        if name.endswith('Source') and name != 'Source'
-    }
+    exported = set(sdm_client.sources.__all__)
     assert named == exported, (
-        f'warehouses.md lists {sorted(named ^ exported)} that sdm_connectors '
+        f'warehouses.md lists {sorted(named ^ exported)} that sdm_client '
         f'does not, or the other way about'
     )
     import inspect
 
     for row, cells in shown.items():
-        source = getattr(sdm_connectors, only(row))
+        source = getattr(sdm_client.sources, only(row))
         takes, namespace, extra = cells
         wants = {
             name
@@ -1909,7 +1904,8 @@ def test_a_source_given_the_wrong_connection_says_which_it_wants():
     """The SQLite trap the reference leads with, and the message it quotes."""
     import sqlite3
 
-    from sdm_connectors import ConnectorError, SQLiteSource
+    from sdm_client import SQLiteSource
+    from sdm_connectors import ConnectorError
 
     with pytest.raises(ConnectorError, match='adbc_driver_sqlite'):
         SQLiteSource(sqlite3.connect(':memory:'))
@@ -1985,8 +1981,7 @@ def test_a_source_reads_the_catalogs_own_keys():
     duckdb = pytest.importorskip('duckdb')
     # Schema.from_source needs the engine, which is the extra this very
     # reference says the connector alone does not bring.
-    from sdm_client import Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, Schema
 
     connection = duckdb.connect()
     connection.execute('CREATE TABLE a (ref INTEGER PRIMARY KEY, v INTEGER)')
@@ -2018,9 +2013,8 @@ def test_describing_a_source_reads_a_thousand_rows_of_it(monkeypatch):
     the default core need not retain the legacy engine's pandas sample cache.
     """
     duckdb = pytest.importorskip('duckdb')
-    from sdm_client import Schema
+    from sdm_client import DuckDBSource, Schema
     from sdm_client._rust import providers
-    from sdm_connectors import DuckDBSource
 
     samples = {}
 
@@ -2070,9 +2064,8 @@ def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
     """
     duckdb = pytest.importorskip('duckdb')
 
-    from sdm_client import Schema
+    from sdm_client import DuckDBSource, Schema
     from sdm_client.errors import StructuredDataError
-    from sdm_connectors import DuckDBSource
 
     quoted = [
         block
@@ -2089,14 +2082,6 @@ def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
     assert said in ' '.join(str(raised.value).split()), (
         f'warehouses.md quotes {said!r} and the refusal is {raised.value}'
     )
-
-
-def test_a_source_type_is_chosen_for_you():
-    """``Source(connection)`` picks the backend, which the reference offers."""
-    duckdb = pytest.importorskip('duckdb')
-    from sdm_connectors import DuckDBSource, Source
-
-    assert isinstance(Source(duckdb.connect()), DuckDBSource)
 
 
 def test_a_connector_error_is_not_a_structured_data_error():

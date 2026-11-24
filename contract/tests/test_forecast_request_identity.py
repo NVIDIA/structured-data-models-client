@@ -100,13 +100,13 @@ def _ask(
     import duckdb
     import pandas as pd
     from sdm_client import (
+        DuckDBSource,
         KumoRelational,
         PredictiveQuery,
         Schema,
         SDMClient,
     )
     from sdm_client._rust import run
-    from sdm_connectors import DuckDBSource
 
     # Each run starts from the binding itself; whatever a capture installs
     # is undone after the test.

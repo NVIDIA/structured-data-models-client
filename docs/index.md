@@ -12,7 +12,7 @@ One Python client for NVIDIA's structured-data foundation models.
 - **[Stability](reference/stability.md):** public APIs, versioning and
   deprecation
 - **[Limits](reference/limits.md):** endpoint and client limits
-- **[Your own data provider](reference/data-providers.md):** reading data
+- **[Your own source](reference/data-providers.md):** reading data
   through your own code, in Python or Java
 
 For maintainers: [change guide](development/change-guide.md), [engine boundaries and diagrams](development/engine-boundaries.md), and [validation evidence](development/validation.md).

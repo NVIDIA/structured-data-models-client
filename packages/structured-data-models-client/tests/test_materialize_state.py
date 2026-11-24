@@ -15,9 +15,14 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Request, Schema, StructuredDataError
+from sdm_client import (
+    DuckDBSource,
+    PredictiveQuery,
+    Request,
+    Schema,
+    StructuredDataError,
+)
 from sdm_client._rust import codec
 from sdm_client._rust import materialize as _rust_materialize
 from sdm_client._rust import run as _rust_run

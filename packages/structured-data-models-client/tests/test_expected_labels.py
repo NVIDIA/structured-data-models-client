@@ -14,9 +14,8 @@ import duckdb
 import numpy as np
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema
+from sdm_client import DuckDBSource, PredictiveQuery, Schema
 from sdm_client.errors import StructuredDataError
 
 

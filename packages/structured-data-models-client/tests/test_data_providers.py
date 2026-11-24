@@ -32,11 +32,10 @@ from typing import Any
 import pandas as pd
 import pyarrow as pa
 import pytest
-from sql_data_provider import Engine, SqlDataProvider
+from sql_source import Engine, SqlSource
 
 from sdm_client import (
     PredictiveQuery,
-    ProviderSource,
     Relationship,
     Schema,
     StructuredDataError,
@@ -225,7 +224,7 @@ def test_each_capabilities_declared_is_sent_as_the_shared_vectors_say(
 # --- the public types ----------------------------------------------------
 
 
-class _Answers:
+class _Answers(p.Source):
     def __init__(self, answer: Any = None, failure: Any = None) -> None:
         self._answer = answer
         self._failure = failure
@@ -252,14 +251,43 @@ def test_capabilities_refuse_what_no_provider_declares() -> None:
     assert p.Capabilities(filters={'in'}).filters == {p.FilterKind.IN}
 
 
-def test_a_provider_source_takes_a_provider_and_is_not_pickled() -> None:
-    with pytest.raises(TypeError, match='DataProvider'):
-        ProviderSource(object())  # type: ignore[arg-type]
-    source = ProviderSource(_Answers())
-    assert source == ProviderSource(source.provider)
-    assert source.kind == 'provider'
+def test_a_source_is_abstract_and_is_not_pickled() -> None:
+    with pytest.raises(TypeError, match='abstract'):
+        p.Source()  # type: ignore[abstract]
+
+    class Half(p.Source):
+        def capabilities(self) -> p.Capabilities:
+            return p.Capabilities()
+
+    with pytest.raises(TypeError, match='answer'):
+        Half()  # type: ignore[abstract]
     with pytest.raises(TypeError, match='pickled'):
-        pickle.dumps(source)
+        pickle.dumps(_Answers())
+
+
+class _Picklable(_Answers):
+    def __reduce__(self) -> Any:
+        return (_Picklable, ())
+
+
+def test_a_schema_over_a_source_is_not_pickled_whatever_the_source() -> None:
+    pickle.dumps(_Picklable())
+    schema = Schema.__new__(Schema)
+    object.__setattr__(schema, '_source', _Picklable())
+    with pytest.raises(TypeError, match='cannot be pickled'):
+        pickle.dumps(schema)
+
+
+def test_an_object_that_only_looks_like_a_source_is_refused() -> None:
+    class Looks:
+        def capabilities(self) -> p.Capabilities:
+            return p.Capabilities()
+
+        def answer(self, request: Any, expected: Any) -> Any:
+            return None
+
+    with pytest.raises(StructuredDataError, match='needs a Source'):
+        Schema.from_source(Looks())  # type: ignore[arg-type]
 
 
 def test_an_answer_that_exports_no_arrow_is_the_provider_s_error() -> None:
@@ -447,11 +475,11 @@ def trino_engine() -> Iterator[Engine]:
         trino.run(f'DROP SCHEMA IF EXISTS memory.{schema}')
 
 
-def _materialize(provider: SqlDataProvider, scenario: dict[str, Any]) -> Any:
+def _materialize(provider: SqlSource, scenario: dict[str, Any]) -> Any:
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         schema = Schema.from_source(
-            ProviderSource(provider),
+            provider,
             # The engine declares no keys: the caller names them.
             primary_keys={'users': 'id', 'events': 'event', 'items': 'item'},
             time_columns={'events': 'event_time'},
@@ -506,7 +534,7 @@ def _kinds(declared: str) -> frozenset[p.FilterKind]:
 def test_a_provider_over_duckdb_keeps_exactly_the_examples_the_source_holds(
     duckdb_engine: Engine, scenario: dict[str, Any], declared: str
 ) -> None:
-    provider = SqlDataProvider(
+    provider = SqlSource(
         duckdb_engine,
         filters=_kinds(declared),
         optional=(p.OptionalRequest.SAMPLE_ENTITIES, p.OptionalRequest.LOOKUP),
@@ -522,7 +550,7 @@ def test_a_provider_over_duckdb_keeps_exactly_the_examples_the_source_holds(
 def test_a_provider_over_trino_keeps_exactly_the_examples_the_source_holds(
     trino_engine: Engine, scenario: dict[str, Any], declared: str
 ) -> None:
-    provider = SqlDataProvider(trino_engine, filters=_kinds(declared))
+    provider = SqlSource(trino_engine, filters=_kinds(declared))
     assert _drawn(_materialize(provider, scenario)) == _expected(
         scenario, declared
     )
@@ -534,12 +562,12 @@ def test_a_lookup_asked_in_parts_is_answered_as_one(
     scenario = next(
         s for s in _scenarios() if s['id'] == 'context.static-exhausted'
     )
-    parts = SqlDataProvider(
+    parts = SqlSource(
         duckdb_engine,
         optional=(p.OptionalRequest.SAMPLE_ENTITIES, p.OptionalRequest.LOOKUP),
         max_keys_per_request=2,
     )
-    whole = SqlDataProvider(
+    whole = SqlSource(
         duckdb_engine,
         optional=(p.OptionalRequest.SAMPLE_ENTITIES, p.OptionalRequest.LOOKUP),
     )
@@ -552,7 +580,7 @@ def test_a_lookup_asked_in_parts_is_answered_as_one(
 def test_a_provider_s_failure_is_the_operation_s_provider_error(
     duckdb_engine: Engine,
 ) -> None:
-    class Failing(SqlDataProvider):
+    class Failing(SqlSource):
         def answer(self, request: Any, expected: Any) -> Any:
             if isinstance(request, p.SampleEntities):
                 raise RuntimeError('the engine is down')

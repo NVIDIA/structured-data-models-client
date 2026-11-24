@@ -15,9 +15,8 @@ from typing import Any
 
 import duckdb
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import Schema
+from sdm_client import DuckDBSource, Schema
 from sdm_client._rust import providers
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 

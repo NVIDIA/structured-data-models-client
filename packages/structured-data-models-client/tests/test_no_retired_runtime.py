@@ -36,7 +36,7 @@ def test_public_warehouse_journey_cannot_import_retired_packages(
         Column, KumoRelational, PredictiveQuery, Relationship, SDMClient,
         Schema, StructuredDataError,
     )
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource
 
     import json, threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

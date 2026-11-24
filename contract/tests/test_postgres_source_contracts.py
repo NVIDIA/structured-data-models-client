@@ -11,8 +11,7 @@ import pandas as pd
 import psycopg
 import pytest
 from psycopg import sql
-from sdm_client import PredictiveQuery, Schema
-from sdm_connectors import PostgresSource
+from sdm_client import PostgresSource, PredictiveQuery, Schema
 
 
 @pytest.fixture

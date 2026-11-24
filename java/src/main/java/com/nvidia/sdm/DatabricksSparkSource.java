@@ -4,12 +4,16 @@
 
 package com.nvidia.sdm;
 
+import com.nvidia.sdm.internal.Host;
+import com.nvidia.sdm.internal.Providers;
+import com.nvidia.sdm.internal.jdbc.SparkProvider;
 import org.apache.spark.sql.SparkSession;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 /** Tables accessed through the caller's Databricks Spark session; Rust writes sampling SQL. */
-public final class DatabricksSparkSource implements Source {
+public final class DatabricksSparkSource extends BuiltInSource {
   private final SparkSession session;
   private final String catalog;
   private final String schema;
@@ -42,7 +46,19 @@ public final class DatabricksSparkSource implements Source {
     return new DatabricksSparkSource(session, catalog, schema);
   }
 
-  /** A metric view in this source's namespace, interpreted by the core. */
+  /**
+   * This source, reading the metric view {@code name} in its namespace, whose expressions calling
+   * functions other than pure built-ins are left out.
+   */
+  public DatabricksSparkSource semanticModel(String name) {
+    return semanticModel(name, false);
+  }
+
+  /**
+   * This source, reading the metric view {@code name} in its namespace; {@code trustExpressions}
+   * keeps the expressions that call functions other than pure built-ins, which run as SQL under
+   * the connection's credentials.
+   */
   public DatabricksSparkSource semanticModel(String name, boolean trustExpressions) {
     return new DatabricksSparkSource(session, catalog, schema,
         Objects.requireNonNull(name, "name"), trustExpressions);
@@ -71,6 +87,16 @@ public final class DatabricksSparkSource implements Source {
   /** The schema the tables are read in, when one was given. */
   public Optional<String> schema() {
     return Optional.ofNullable(schema);
+  }
+
+  @Override
+  Map<String, Object> sqlChoice() {
+    return Providers.sqlChoice("databricks", semanticModel, trustExpressions, catalog, schema);
+  }
+
+  @Override
+  Host.Provider driver() {
+    return new SparkProvider(session);
   }
 
   @Override
