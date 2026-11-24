@@ -17,36 +17,16 @@ from __future__ import annotations
 
 from typing import Any
 
-import pyarrow as pa
-
-from sdm_client import provider as p
 from sdm_client._rust import host_providers
 from sdm_client._rust.sql_kit import KitRun
-
-
-class _KitSource(p.Source):
-    r"""A built-in source's answers, its kit's statements run by ``driver``."""
-
-    def __init__(self, sql: dict[str, Any], driver: Any) -> None:
-        self._run = KitRun(sql, driver)
-
-    def capabilities(self) -> p.Capabilities:
-        return self._run.capabilities()
-
-    def answer(
-        self, request: p.DataRequest, expected: pa.Schema | None
-    ) -> p.ArrowStream:
-        return self._run.answer(request)
-
-    def failure(self, error: Exception) -> p.ProviderFailure:
-        return self._run.failure(error)
 
 
 def chosen(sql: dict[str, Any], driver: Any) -> tuple[dict[str, Any], Any]:
     r"""The core's provider choice for the built-in source of SQL choice
     ``sql`` on ``driver``, and the run loop's provider answering its
-    fetches, as :func:`sdm_client._rust.host_providers.chosen` makes them."""
-    return host_providers.chosen(_KitSource(sql, driver))
+    fetches, as :func:`sdm_client._rust.host_providers.chosen` makes them
+    for one operation's :class:`~sdm_client._rust.sql_kit.KitRun`."""
+    return host_providers.chosen(KitRun(sql, driver))
 
 
 class Driven:
