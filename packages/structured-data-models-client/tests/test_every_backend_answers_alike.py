@@ -318,6 +318,13 @@ def _text_schema() -> Schema:
     return schema
 
 
+def _schema_without_tier() -> Schema:
+    tables = graph()
+    return Schema.from_data(
+        {**tables, 'users': tables['users'].drop(columns=['tier'])}
+    )
+
+
 @pytest.mark.parametrize(
     ('model', 'ask', 'code'),
     [
@@ -367,16 +374,6 @@ def _text_schema() -> Schema:
         (
             'kumo-relational',
             lambda client: client.predict(
-                PredictiveQuery(COUNT, _text_schema()).materialize(
-                    indices=[0, 1]
-                ),
-                model=KumoRelational(),
-            ),
-            'UNSUPPORTED_DTYPE',
-        ),
-        (
-            'kumo-relational',
-            lambda client: client.predict(
                 PredictiveQuery(
                     COUNT, _a_table_named_like_the_scored_rows()
                 ).materialize(indices=[0, 1]),
@@ -406,6 +403,25 @@ def test_a_request_the_model_cannot_answer_is_refused_with_the_same_code(
             ask(client)
 
     assert refused.value.code == code
+
+
+def test_a_text_column_is_left_out_and_the_request_answered(client_for):
+    with pytest.warns(UserWarning, match='users.tier is typed text'):
+        request = PredictiveQuery(COUNT, _text_schema()).materialize(
+            indices=[0, 1]
+        )
+    without = PredictiveQuery(COUNT, _schema_without_tier()).materialize(
+        indices=[0, 1]
+    )
+    with client_for('kumo-relational') as client:
+        once = client.predict(request, model=KumoRelational()).to_pandas()
+        with client.fit(request, model=KumoRelational()) as fitted:
+            pinned = fitted.predict(request).to_pandas()
+        alone = client.predict(without, model=KumoRelational()).to_pandas()
+
+    assert once['id'].tolist() == [0, 1]
+    pd.testing.assert_frame_equal(once, pinned)
+    pd.testing.assert_frame_equal(once, alone)
 
 
 def hand_built(change) -> Request:

@@ -323,7 +323,10 @@ async fn run(
     } else {
         lookbacks(&mut memo, &times, &graph).await?
     };
-    let names = crate::subgraph::sample_columns(&graph, entity, &[]);
+    // The columns the model does not read, which the endpoint refuses, are
+    // left out of every call, as `materialize` leaves them out.
+    let unread = unread_columns(&graph, &[]);
+    let names = crate::subgraph::sample_columns(&graph, entity, &unread);
     let per_call = if forecasting {
         1
     } else {
@@ -336,6 +339,7 @@ async fn run(
             .map_err(|_| internal("batch size overflow"))?
     };
     let mut calls = Vec::new();
+    let mut sent = BTreeSet::new();
     for start in (0..predict.num_rows()).step_by(per_call) {
         let count = per_call.min(predict.num_rows() - start);
         let all_keys = arrow_select::concat::concat(&[
@@ -412,7 +416,7 @@ async fn run(
                 nulls,
                 entity,
                 neighbors: &hops,
-                excluded: &[],
+                excluded: &unread,
                 lookback: &lookback,
             },
             frames.as_ref(),
@@ -428,6 +432,7 @@ async fn run(
                 "link destination must be reachable in the sampled graph",
             ));
         }
+        sent.extend(walked.tables.iter().map(|t| t.name.clone()));
         let sampled = Sampled {
             num_train: context.num_rows(),
             num_test: count,
@@ -458,6 +463,7 @@ async fn run(
         )?;
         calls.push((built.bytes, count as u64));
     }
+    warn_of_unread_columns(&asker, &sent, &unread);
     let mut calls = calls.into_iter();
     let (first, _) = calls.next().ok_or_else(|| internal("no example payload"))?;
     let (payload, query) = attach_request(&asker, first, "")?;

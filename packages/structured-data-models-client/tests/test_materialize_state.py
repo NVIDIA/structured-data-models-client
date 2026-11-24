@@ -877,23 +877,17 @@ def _deeper(*setup: str, edit: bool = True) -> Request:
         )
 
 
-def test_a_second_hop_and_a_text_feature_are_sampled_as_the_old_route_samples_them() -> (
-    None
-):
+def test_a_second_hop_is_sampled_and_a_text_feature_left_out() -> None:
     core = _deeper()._payloads[0]
-    items = core['context']['related_tables']['items']
-    title = items['columns'].index('title')
-    assert items['rows'][0][title][:3] == ['item', '0', 'the']
     for half in ('context', 'predict'):
         tables = core[half]['related_tables']
         items = tables['items']
-        assert items['columns'] == ['instance_id', '__node_id', 'title', 'cost']
+        assert items['columns'] == ['instance_id', '__node_id', 'cost']
         lookup = {}
-        for instance, node, words, cost in items['rows']:
+        for instance, node, cost in items['rows']:
             item_id = int(cost / 2.5)
             assert item_id in range(5)
             assert cost == item_id * 2.5
-            assert words == ['item', str(item_id), 'the', 'best', 'one']
             assert (instance, node) not in lookup
             lookup[instance, node] = item_id
         orders = tables['orders']
@@ -906,10 +900,7 @@ def test_a_second_hop_and_a_text_feature_are_sampled_as_the_old_route_samples_th
     assert _crossing(core) == 0
     assert _unreferenced(core) == 0
 
-    assert core['schema']['related_tables']['items']['columns']['title'] == {
-        'dtype': 'stringlist',
-        'stype': 'text',
-    }
+    assert 'title' not in core['schema']['related_tables']['items']['columns']
 
 
 def _crossing(payload: dict[str, Any]) -> int:
