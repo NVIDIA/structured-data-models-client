@@ -320,11 +320,74 @@ fn a_host_provider_or_an_unknown_dialect_has_no_kit() {
 fn the_kit_declares_what_the_core_declares_for_its_source() {
     for dialect in ["duckdb", "sqlite", "postgres", "databricks", "snowflake"] {
         let provider = choice(dialect);
-        let kit = SqlKit::new(provider.clone(), None).unwrap();
+        let mut declared = SqlKit::new(provider.clone(), None)
+            .unwrap()
+            .capabilities()
+            .unwrap();
+        assert_eq!(declared.database.as_deref(), Some(dialect));
+        assert!(declared.reads_tables_as_they_stand, "{dialect}");
+        assert_eq!(declared.column_affinities, dialect == "sqlite", "{dialect}");
         assert_eq!(
-            kit.capabilities().unwrap(),
+            declared.tries_upper_case_names,
+            dialect == "snowflake",
+            "{dialect}"
+        );
+        let namespace: Vec<String> = if dialect == "postgres" {
+            vec!["public".to_owned()]
+        } else {
+            Vec::new()
+        };
+        assert_eq!(declared.namespace, namespace, "{dialect}");
+        declared.database = None;
+        declared.reads_tables_as_they_stand = false;
+        declared.column_affinities = false;
+        declared.tries_upper_case_names = false;
+        declared.namespace = Vec::new();
+        assert_eq!(
+            declared,
             Data::new().capabilities(&provider).unwrap(),
             "{dialect}"
         );
+    }
+}
+
+/// A source answering through the kit, as the core sees it (its declared
+/// capabilities), reads as the SQL source it is: the same database named,
+/// column types, tables read as they stand, names read under its
+/// namespace and spelled as it folds them.
+#[test]
+fn a_source_answering_through_the_kit_reads_as_its_sql_source() {
+    use sdm_contract::data::Relation;
+    for dialect in ["duckdb", "sqlite", "postgres", "databricks", "snowflake"] {
+        let sql = choice(dialect);
+        let host = ProviderChoice::Host {
+            capabilities: SqlKit::new(sql.clone(), None)
+                .unwrap()
+                .capabilities()
+                .unwrap(),
+        };
+        let data = Data::new();
+        assert_eq!(data.source_database(&host), data.source_database(&sql));
+        assert_eq!(
+            data.holds_column_types(&host),
+            data.holds_column_types(&sql)
+        );
+        assert_eq!(
+            data.reads_tables_as_they_stand(&host),
+            data.reads_tables_as_they_stand(&sql)
+        );
+        for relation in [
+            Relation::of(vec!["users".to_owned()]),
+            Relation::of(vec!["Main".to_owned(), "Users".to_owned()]),
+        ] {
+            assert_eq!(
+                data.read_as(&host, &relation),
+                data.read_as(&sql, &relation)
+            );
+            assert_eq!(
+                data.spellings(&host, &relation),
+                data.spellings(&sql, &relation)
+            );
+        }
     }
 }

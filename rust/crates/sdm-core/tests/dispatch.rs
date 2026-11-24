@@ -231,6 +231,11 @@ fn every_operation_dispatches_to_a_run() {
             sampling: Determinism::Unseeded,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         },
     };
     // A table named is read by its source name, with no listing of the
@@ -308,6 +313,11 @@ fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
         sampling: Determinism::SeededStable,
         fallback_text_order: None,
         fallback: None,
+        database: None,
+        column_affinities: false,
+        reads_tables_as_they_stand: false,
+        namespace: Vec::new(),
+        tries_upper_case_names: false,
     }
 }
 
@@ -664,6 +674,11 @@ fn materialize(seed: Option<Seed>) -> Operation {
                 sampling: Determinism::SeededStable,
                 fallback_text_order: None,
                 fallback: None,
+                database: None,
+                column_affinities: false,
+                reads_tables_as_they_stand: false,
+                namespace: Vec::new(),
+                tries_upper_case_names: false,
             },
         },
         schema: AttachmentId(1),

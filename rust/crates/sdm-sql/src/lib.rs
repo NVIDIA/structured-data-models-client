@@ -342,15 +342,26 @@ impl DataLayer for Data {
     }
 
     fn holds_column_types(&self, provider: &ProviderChoice) -> bool {
-        sql_dialect(provider).is_none_or(|dialect| dialect.holds_column_types())
+        match provider {
+            ProviderChoice::Host { capabilities } => !capabilities.column_affinities,
+            ProviderChoice::Sql { .. } => {
+                sql_dialect(provider).is_none_or(|dialect| dialect.holds_column_types())
+            }
+        }
     }
 
-    fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
-        Some(sql_dialect(provider)?.name())
+    fn source_database(&self, provider: &ProviderChoice) -> Option<String> {
+        match provider {
+            ProviderChoice::Host { capabilities } => capabilities.database.clone(),
+            ProviderChoice::Sql { .. } => Some(sql_dialect(provider)?.name().to_owned()),
+        }
     }
 
     fn reads_tables_as_they_stand(&self, provider: &ProviderChoice) -> bool {
-        sql_dialect(provider).is_some()
+        match provider {
+            ProviderChoice::Host { capabilities } => capabilities.reads_tables_as_they_stand,
+            ProviderChoice::Sql { .. } => sql_dialect(provider).is_some(),
+        }
     }
 
     fn unsettled(&self, provider: &ProviderChoice) -> bool {
@@ -417,7 +428,11 @@ impl DataLayer for Data {
     }
 
     fn spellings(&self, provider: &ProviderChoice, relation: &Relation) -> Vec<Relation> {
-        sql_dialect(provider).map_or_else(|| vec![relation.clone()], |d| d.spellings(relation))
+        match provider {
+            ProviderChoice::Host { capabilities } => capabilities.spellings(relation),
+            ProviderChoice::Sql { .. } => sql_dialect(provider)
+                .map_or_else(|| vec![relation.clone()], |d| d.spellings(relation)),
+        }
     }
 
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
@@ -427,6 +442,7 @@ impl DataLayer for Data {
                 // relation was read.
                 given_parts(namespace).unwrap_or_default()
             }
+            ProviderChoice::Host { capabilities } => return capabilities.read_as(relation),
             _ => Vec::new(),
         };
         Relation::of(

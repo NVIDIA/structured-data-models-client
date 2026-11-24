@@ -14834,6 +14834,32 @@
         "reads_nan_as_missing": {
           "description": "The reference reads the provider's rows into a frame of NumPy-backed\nfloats, where a NaN is missing and `-0.0` is `0.0` (Postgres's rows,\nread as Python objects); otherwise as Arrow-backed pandas does, where\na NaN is a value and the two zeros are two values. Left out,\n`false` (P2-MID2-2).",
           "type": "boolean"
+        },
+        "database": {
+          "description": "The database the source is, by the name the wording table names one\nby (`DATABASE_NAMES`), where its messages name it (contract v76):\na built-in source's dialect; none for a caller's source.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "column_affinities": {
+          "description": "Whether the source's declared column types are only affinities, so\na column's type is read from its values (SQLite's) (contract v76).",
+          "type": "boolean"
+        },
+        "reads_tables_as_they_stand": {
+          "description": "Whether the source's tables are read as they stand at every run,\nrather than as a schema the run was given holds them (contract v76).",
+          "type": "boolean"
+        },
+        "namespace": {
+          "description": "The namespace parts a relation of one part is read under, outermost\nfirst, as the source settled them: what messages and pins name a\ntable by (contract v76); none where the source names its tables\nalone.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tries_upper_case_names": {
+          "description": "Whether a name the catalog does not find as given is tried again\nupper-cased, as Snowflake folds an unquoted name (contract v76).",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,

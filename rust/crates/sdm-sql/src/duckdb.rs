@@ -325,6 +325,11 @@ impl SqlDialect for Duckdb {
             // DuckDB's driver hands a HUGEINT, UHUGEINT or VARINT over as
             // its opaque extension type (B-43).
             opaque_vendor: Some(OPAQUE_VENDOR.to_owned()),
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         }
     }
 

@@ -152,7 +152,7 @@ impl DataAccess {
 
     /// The database the run's provider reads, by name
     /// (`DataLayer::source_database`); `None` for a host provider.
-    pub fn source_database(&self) -> Option<&'static str> {
+    pub fn source_database(&self) -> Option<String> {
         self.layer.source_database(&self.provider)
     }
 

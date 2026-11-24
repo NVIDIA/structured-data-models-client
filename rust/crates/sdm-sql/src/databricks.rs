@@ -157,6 +157,11 @@ impl SqlDialect for Databricks {
             // read (`DatabricksTable`'s key reads).
             keys_optional: true,
             key_enforcement: false,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         }
     }
 

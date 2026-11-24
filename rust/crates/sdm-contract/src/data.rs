@@ -1492,6 +1492,29 @@ pub struct ProviderCapabilities {
     /// `false` (P2-MID2-2).
     #[serde(default, skip_serializing_if = "is_false")]
     pub reads_nan_as_missing: bool,
+    /// The database the source is, by the name the wording table names one
+    /// by (`DATABASE_NAMES`), where its messages name it (contract v76):
+    /// a built-in source's dialect; none for a caller's source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub database: Option<String>,
+    /// Whether the source's declared column types are only affinities, so
+    /// a column's type is read from its values (SQLite's) (contract v76).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub column_affinities: bool,
+    /// Whether the source's tables are read as they stand at every run,
+    /// rather than as a schema the run was given holds them (contract v76).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reads_tables_as_they_stand: bool,
+    /// The namespace parts a relation of one part is read under, outermost
+    /// first, as the source settled them: what messages and pins name a
+    /// table by (contract v76); none where the source names its tables
+    /// alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub namespace: Vec<String>,
+    /// Whether a name the catalog does not find as given is tried again
+    /// upper-cased, as Snowflake folds an unquoted name (contract v76).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub tries_upper_case_names: bool,
 }
 
 /// The in-memory fallback's limits, as a provider declares them
@@ -1569,6 +1592,34 @@ pub enum ProviderChoice {
     Host {
         capabilities: ProviderCapabilities,
     },
+}
+
+impl ProviderCapabilities {
+    /// `relation` as the source reads it: one of one part under the
+    /// namespace the source settled ([`ProviderCapabilities::namespace`]).
+    pub fn read_as(&self, relation: &Relation) -> Relation {
+        if relation.source.len() != 1 {
+            return relation.clone();
+        }
+        Relation::of(
+            self.namespace
+                .iter()
+                .chain(&relation.source)
+                .cloned()
+                .collect(),
+        )
+    }
+
+    /// The name forms a catalog read of `relation` tries, in order: as
+    /// given, then upper-cased where the source folds names so
+    /// ([`ProviderCapabilities::tries_upper_case_names`]).
+    pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
+        let upper: Vec<String> = relation.source.iter().map(|p| p.to_uppercase()).collect();
+        if !self.tries_upper_case_names || upper == relation.source {
+            return vec![relation.clone()];
+        }
+        vec![relation.clone(), Relation::of(upper)]
+    }
 }
 
 impl ProviderChoice {
@@ -1858,8 +1909,10 @@ pub trait DataLayer: Send + Sync {
     /// hold affinities only (SQLite's), where the old client reads any
     /// column as the type its caller gives.
     fn holds_column_types(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        true
+        match provider {
+            ProviderChoice::Host { capabilities } => !capabilities.column_affinities,
+            ProviderChoice::Sql { .. } => true,
+        }
     }
 
     /// Whether `provider` reads a source of tables, a database or warehouse
@@ -1869,17 +1922,21 @@ pub trait DataLayer: Send + Sync {
     /// the default and a host provider's: the host's tables are its own,
     /// and only a column holding no facts is read from it.
     fn reads_tables_as_they_stand(&self, provider: &ProviderChoice) -> bool {
-        let _ = provider;
-        false
+        match provider {
+            ProviderChoice::Host { capabilities } => capabilities.reads_tables_as_they_stand,
+            ProviderChoice::Sql { .. } => false,
+        }
     }
 
     /// The database the run's provider reads, by the name its built-in
     /// dialect has (`duckdb`, `sqlite`, `postgres`), which a host words a
     /// refusal naming the source with. `None`, the default and a
     /// host provider's: no database is named.
-    fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
-        let _ = provider;
-        None
+    fn source_database(&self, provider: &ProviderChoice) -> Option<String> {
+        match provider {
+            ProviderChoice::Host { capabilities } => capabilities.database.clone(),
+            ProviderChoice::Sql { .. } => None,
+        }
     }
 
     /// Whether `provider` leaves a namespace part to the connection that
@@ -1907,8 +1964,10 @@ pub trait DataLayer: Send + Sync {
     /// namespace where the layer reads one (contract v28), else as it is,
     /// the default and a host provider's.
     fn read_as(&self, provider: &ProviderChoice, relation: &Relation) -> Relation {
-        let _ = provider;
-        relation.clone()
+        match provider {
+            ProviderChoice::Host { capabilities } => capabilities.read_as(relation),
+            ProviderChoice::Sql { .. } => relation.clone(),
+        }
     }
 
     /// The kind of semantic model this provider reads, known before fetching
@@ -1936,8 +1995,10 @@ pub trait DataLayer: Send + Sync {
     /// and a host provider's. How names compare is another question, the
     /// dialect's `name_case`.
     fn spellings(&self, provider: &ProviderChoice, relation: &Relation) -> Vec<Relation> {
-        let _ = provider;
-        vec![relation.clone()]
+        match provider {
+            ProviderChoice::Host { capabilities } => capabilities.spellings(relation),
+            ProviderChoice::Sql { .. } => vec![relation.clone()],
+        }
     }
 
     /// `plan`, the run's provider's answer to `request`, with the key sets

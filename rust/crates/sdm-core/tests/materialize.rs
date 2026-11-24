@@ -188,6 +188,11 @@ fn host() -> ProviderChoice {
             sampling: Determinism::SeededStable,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         },
     }
 }
@@ -1721,7 +1726,7 @@ impl DataLayer for Changed {
         sdm_sql::Data::new().read(request, provider, batches)
     }
 
-    fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
+    fn source_database(&self, provider: &ProviderChoice) -> Option<String> {
         sdm_sql::Data::new().source_database(provider)
     }
 

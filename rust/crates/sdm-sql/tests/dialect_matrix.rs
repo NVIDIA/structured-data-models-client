@@ -892,7 +892,7 @@ fn provider_capabilities_and_namespace_probes_have_explicit_contracts() {
             capabilities.opaque_vendor.as_deref(),
             (dialect == "duckdb").then_some("DuckDB")
         );
-        assert_eq!(data.source_database(&p), Some(dialect));
+        assert_eq!(data.source_database(&p).as_deref(), Some(dialect));
         assert_eq!(
             data.read_as(&provider(dialect, &[Some("s")]), &relation(&["t"]))
                 .source,

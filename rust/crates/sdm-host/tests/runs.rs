@@ -333,6 +333,11 @@ fn fetching_run() -> Run {
             sampling: Determinism::Unseeded,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         },
     };
     let access = sdm_host::default_root().data_access(&host).unwrap();

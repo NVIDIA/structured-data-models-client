@@ -185,6 +185,11 @@ impl SqlDialect for Postgres {
             fallback: None,
             // Postgres's driver reads a NaN as missing.
             reads_nan_as_missing: true,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         }
     }
 

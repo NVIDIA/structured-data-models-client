@@ -587,7 +587,7 @@ pub(super) async fn convert(
         parameters.retain(|(name, _)| !columns.iter().any(|c| c.to_lowercase() == *name));
     }
     let database = reading.asker.source_database().unwrap_or_default();
-    let read: Definition = match definition::read(&mut spec, &parameters, &ask, database)? {
+    let read: Definition = match definition::read(&mut spec, &parameters, &ask, &database)? {
         Ok(read) => read,
         Err(refused) => return Err(refused.error()),
     };

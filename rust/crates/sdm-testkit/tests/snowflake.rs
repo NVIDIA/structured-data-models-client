@@ -1072,7 +1072,10 @@ fn snowflake_declares_what_the_old_clients_sampler_does() {
     // Semantic-view tables use derived relations.
     assert!(capabilities.derived_relations);
     assert!(capabilities.fallback.is_none());
-    assert_eq!(layer.source_database(&named()), Some("snowflake"));
+    assert_eq!(
+        layer.source_database(&named()).as_deref(),
+        Some("snowflake")
+    );
     assert!(layer.reads_tables_as_they_stand(&named()));
     // The key counts in the case Snowflake folds an unquoted alias to.
     let FetchPlan::Sql { expect, .. } = layer

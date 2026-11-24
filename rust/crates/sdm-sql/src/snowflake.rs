@@ -142,6 +142,11 @@ impl SqlDialect for Snowflake {
             neighbor_lookback: true,
             keys_optional: false,
             key_enforcement: true,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         }
     }
 

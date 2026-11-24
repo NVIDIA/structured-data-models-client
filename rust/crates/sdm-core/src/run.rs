@@ -525,7 +525,7 @@ impl Asker {
 
     /// The database the run's provider reads (`DataAccess::source_database`);
     /// `None` for a host provider or an operation that names no provider.
-    pub fn source_database(&self) -> Option<&'static str> {
+    pub fn source_database(&self) -> Option<String> {
         self.data.as_ref().and_then(DataAccess::source_database)
     }
 

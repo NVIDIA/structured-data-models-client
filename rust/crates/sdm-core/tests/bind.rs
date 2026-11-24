@@ -415,6 +415,11 @@ fn a_host_provider_is_handed_the_core_s_key_set_as_it_was_made() {
             sampling: Determinism::Unseeded,
             fallback_text_order: None,
             fallback: None,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         },
     };
     let made = seeds(vec![9, 8]);

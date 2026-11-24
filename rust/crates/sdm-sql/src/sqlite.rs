@@ -257,6 +257,11 @@ impl SqlDialect for Sqlite {
             compares_stored_times: true,
             // The seeded draw hashes an integer key ([`draw_order`]).
             samples_by_key_dtype: true,
+            database: None,
+            column_affinities: false,
+            reads_tables_as_they_stand: false,
+            namespace: Vec::new(),
+            tries_upper_case_names: false,
         }
     }
 

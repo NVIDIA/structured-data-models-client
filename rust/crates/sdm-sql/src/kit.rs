@@ -27,7 +27,7 @@ use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use sdm_contract::data::{
     AttachmentId, DataLayer, DataRequest, FailureFacts, FetchPlan, KeyData, ProviderCapabilities,
-    ProviderChoice, ProviderError,
+    ProviderChoice, ProviderError, Relation,
 };
 use sdm_contract::view::{ViewTextAnswer, ViewTextAsk};
 use sdm_contract::{CoreError, Detail, Sentence};
@@ -111,7 +111,17 @@ impl SqlKit {
     /// What the source answers: every request and filter its dialect
     /// writes.
     pub fn capabilities(&self) -> Result<ProviderCapabilities, CoreError> {
-        self.data.capabilities(&self.provider)
+        let mut declared = self.data.capabilities(&self.provider)?;
+        // The engine's traits the core reads by them, alike for every
+        // source (contract v76).
+        let probe = Relation::of(vec!["t".to_owned()]);
+        declared.database = self.data.source_database(&self.provider);
+        declared.column_affinities = !self.data.holds_column_types(&self.provider);
+        declared.reads_tables_as_they_stand = self.data.reads_tables_as_they_stand(&self.provider);
+        declared.namespace = self.data.read_as(&self.provider, &probe).source;
+        declared.namespace.pop();
+        declared.tries_upper_case_names = self.data.spellings(&self.provider, &probe).len() > 1;
+        Ok(declared)
     }
 
     /// The answer to `request`, its key sets `keys` by the id the request
