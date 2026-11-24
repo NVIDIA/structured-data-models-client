@@ -630,13 +630,21 @@ impl Data {
     ) -> Result<FetchPlan, CoreError> {
         match provider {
             // A source declaring a database this build writes answers as
-            // that engine answers (a built-in source through its kit): its
-            // answer is held to the engine's own shape, as a SQL plan's is;
-            // any other source's to the contract's.
-            ProviderChoice::Host { .. } => Ok(FetchPlan::host(
-                view_dialect(provider).map_or_else(|| request.expected(), |d| d.expected(request)),
-                request,
-            )),
+            // that engine answers (a built-in source through its kit): an
+            // answer the kit hands on as the engine gave it is held to the
+            // engine's own shape, as a SQL plan's is. Its catalog answers
+            // are written in the standard shape, but a semantic model's
+            // definition, and every answer of any other source is held to
+            // the contract's.
+            ProviderChoice::Host { .. } => {
+                let standard = matches!(request, DataRequest::Describe { part, .. }
+                    if *part != DescribePart::ViewDefinition);
+                let expect = match view_dialect(provider) {
+                    Some(dialect) if !standard => dialect.expected(request),
+                    _ => request.expected(),
+                };
+                Ok(FetchPlan::host(expect, request))
+            }
             ProviderChoice::Sql {
                 dialect, namespace, ..
             } => {
