@@ -15,9 +15,13 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError
+from sdm_client import (
+    DuckDBSource,
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]

@@ -9,20 +9,18 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from sdm_client._rust import codec, providers
+from sdm_client._rust import codec
 from sdm_client._rust.run import run
 from sdm_client._rust.schema import build
 from sdm_client._rust.spec import held_schema
 from sdm_client.errors import StructuredDataError
 
 if TYPE_CHECKING:
-    from sdm_connectors import Source
-
-    from sdm_client.provider import ProviderSource
+    from sdm_client.provider import Source
     from sdm_client.schema import Schema
 
 
-def rebind(schema: Schema, source: Source | ProviderSource) -> Schema:
+def rebind(schema: Schema, source: Source) -> Schema:
     from sdm_client.schema import _require_a_source
 
     if schema.source is None:
@@ -31,8 +29,8 @@ def rebind(schema: Schema, source: Source | ProviderSource) -> Schema:
             code='UNSUPPORTED_REQUEST',
         )
     _require_a_source(source)
-    previous, _ = providers.for_source(schema.source)
-    choice, provider = providers.for_source(source)
+    previous, _ = schema.source._sdm_chosen()
+    choice, provider = source._sdm_chosen()
     finished = run(
         {
             'op': 'rebind_source',
@@ -51,8 +49,9 @@ def rebind(schema: Schema, source: Source | ProviderSource) -> Schema:
     return result
 
 
-def _kind(source: Source | ProviderSource) -> str:
-    model = providers._model_of(source)
-    return (
-        source.kind if model is None else f'{model.source.kind}/{source.kind}'
-    )
+def _kind(source: Source) -> str:
+    r"""What the core compares a source and its replacement by, beyond
+    their choices: the source's class, and whether it reads a semantic
+    model, as the Java host names it."""
+    model = getattr(source, '_view', None) is not None
+    return type(source).__name__ + ('.semantic_model' if model else '')

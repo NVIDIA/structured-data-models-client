@@ -18,9 +18,13 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError
+from sdm_client import (
+    DuckDBSource,
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 
 QUERY = 'PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id'
 
@@ -128,10 +132,10 @@ def _copies() -> dict[str, Callable[[Schema], Schema]]:
 
 def _watched(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     r"""The kind of each request a source is asked from now on."""
-    from sdm_client._rust import providers
+    from sdm_client import DuckDBSource
 
     asked: list[str] = []
-    real = providers.for_source
+    real = DuckDBSource._sdm_chosen
 
     def watched(given):
         choice, provider = real(given)
@@ -142,7 +146,7 @@ def _watched(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
         return choice, answering
 
-    monkeypatch.setattr(providers, 'for_source', watched)
+    monkeypatch.setattr(DuckDBSource, '_sdm_chosen', watched)
     return asked
 
 

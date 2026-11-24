@@ -1,16 +1,18 @@
-# Your own data provider
+# Your own source
 
-A data provider lets the client read data through your own code instead of a database connection.
-Use one for an engine the client has no connector for, or to control exactly how each read runs.
-Python and Java take the same provider, with the same requests, in each language's own types.
+A `Source` is where a schema's data is read.
+The built-in sources (`DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource`, `SnowflakeSource`, and in Java `DatabricksSparkSource`) read a database through your connection, with SQL the library writes.
+To read data through your own code instead, subclass `Source`.
+Do that for an engine the client has no built-in source for, or to control exactly how each read runs.
+Python and Java take the same source, with the same requests, in each language's own types.
 
-The client never sends a provider SQL.
-It sends typed requests, such as "these columns of this table", and the provider answers each with Arrow data.
+The client never sends your source SQL.
+It sends typed requests, such as "these columns of this table", and the source answers each with Arrow data.
 
 ## A complete example
 
-This provider serves two in-memory tables.
-It answers the two requests every provider answers, `describe` and `scan`, and lets the client answer every other request in memory from scans.
+This source serves two in-memory tables.
+It answers the two requests every source answers, `describe` and `scan`, and lets the client answer every other request in memory from scans.
 
 ```python
 import datetime
@@ -18,7 +20,7 @@ import datetime
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from sdm_client import PredictiveQuery, ProviderSource, Relationship, Schema
+from sdm_client import PredictiveQuery, Relationship, Schema, Source
 from sdm_client.provider import (
     Capabilities,
     Describe,
@@ -44,7 +46,7 @@ TABLES = {
 }
 
 
-class InMemoryProvider:
+class InMemorySource(Source):
     def capabilities(self):
         # The client answers every request not declared here in memory, from
         # scans, within these limits.
@@ -97,7 +99,7 @@ def holds(table, condition):
 
 
 schema = Schema.from_source(
-    ProviderSource(InMemoryProvider()),
+    InMemorySource(),
     primary_keys={'users': 'id', 'orders': 'order_id'},
     time_columns={'orders': 'placed'},
     relationships=[Relationship('orders', 'user_id', 'users', 'id')],
@@ -109,11 +111,11 @@ request = PredictiveQuery(
 print(request.context_report)
 ```
 
-The same provider in Java implements `com.nvidia.sdm.provider.DataProvider`, whose `answer` returns an `ArrowReader`.
+The same source in Java extends `com.nvidia.sdm.Source`, whose `answer` returns an `ArrowReader`.
 The complete, runnable version is [`InMemoryProviderExampleTest.java`](../../java/src/test/java/com/nvidia/sdm/InMemoryProviderExampleTest.java); its core is:
 
 ```java
-class InMemoryProvider implements DataProvider {
+class InMemorySource extends Source {
   public Capabilities capabilities() {
     return Capabilities.builder().fallback(10_000_000, 1L << 31).build();
   }
@@ -127,7 +129,7 @@ class InMemoryProvider implements DataProvider {
   }
 }
 
-Source source = ProviderSource.of(new InMemoryProvider());
+Source source = new InMemorySource();
 var schema =
     Schema.fromSource(
             source,
@@ -141,18 +143,18 @@ var schema =
         .withRelationships(List.of(new Relationship("orders", "user_id", "users", "id")));
 ```
 
-[`TrinoProviderTest.java`](../../java/src/test/java/com/nvidia/sdm/TrinoProviderTest.java) is a provider over a query engine, applying every filter kind.
+[`TrinoProviderTest.java`](../../java/src/test/java/com/nvidia/sdm/TrinoProviderTest.java) is a source over a query engine, applying every filter kind.
 
-## What a provider must answer
+## What a source must answer
 
 | Request | Who answers it |
 |---|---|
-| `describe` | Always the provider |
-| `scan` | Always the provider |
-| `preview`, `count_rows`, `key_counts`, `time_bounds`, `column_ranges`, `repeated_key`, `sample_entities`, `neighbors`, `lookup` | The provider, where it declares the request in `Capabilities.optional`; otherwise the client, in memory, from scans, within `Capabilities.fallback` |
+| `describe` | Always the source |
+| `scan` | Always the source |
+| `preview`, `count_rows`, `key_counts`, `time_bounds`, `column_ranges`, `repeated_key`, `sample_entities`, `neighbors`, `lookup` | The source, where it declares the request in `Capabilities.optional`; otherwise the client, in memory, from scans, within `Capabilities.fallback` |
 
-Without a fallback, every request the provider does not declare fails with `UNSUPPORTED_REQUEST`, so a provider answering only `describe` and `scan` declares one.
-Declaring `sample_entities` lets the provider draw samples itself, which matters for a large table: the fallback reads the whole table to sample it.
+Without a fallback, every request the source does not declare fails with `UNSUPPORTED_REQUEST`, so a source answering only `describe` and `scan` declares one.
+Declaring `sample_entities` lets the source draw samples itself, which matters for a large table: the fallback reads the whole table to sample it.
 
 `expected` is the exact schema the answer must have, for the requests whose answer the client shapes: `describe`, `key_counts` and `time_bounds`.
 For the others it is empty, and the answer holds the columns the request names, in order, typed as the source stores them.
@@ -179,22 +181,22 @@ Keys and time columns given to `Schema.from_source` override what the source dec
 
 A `scan` or `sample_entities` carries the conditions its rows must meet; all of them hold.
 
-**Always applied.** `KeyIn` (the row's key is one of a key set's), `TimeRange` and `NotNull` reach every provider, which applies them: the client relies on the rows it gets meeting them.
+**Always applied.** `KeyIn` (the row's key is one of a key set's), `TimeRange` and `NotNull` reach every source, which applies them: the client relies on the rows it gets meeting them.
 
-**Applied where declared.** Value filters reach a provider only where it declares their kind in `Capabilities.filters`: comparisons (`Compare`), `In`, `IsNull`, `OR` (`AnyOf`), `AND` (`AllOf`), and the window check `HasRows`.
-The client applies every value filter itself to the rows it gets, so a provider may return more rows than a value filter holds for, but never fewer.
-A provider whose engine cannot write a value may leave that filter out, which only widens its read.
+**Applied where declared.** Value filters reach a source only where it declares their kind in `Capabilities.filters`: comparisons (`Compare`), `In`, `IsNull`, `OR` (`AnyOf`), `AND` (`AllOf`), and the window check `HasRows`.
+The client applies every value filter itself to the rows it gets, so a source may return more rows than a value filter holds for, but never fewer.
+A source whose engine cannot write a value may leave that filter out, which only widens its read.
 Declaring a kind the engine handles makes a selective query read fewer rows.
 
 ## Large key sets
 
-With a key limit (`max_keys_per_request` in Python, `maxKeysPerRequest` in Java), a `neighbors` or `lookup` with more seeds reaches the provider as several requests of at most that many seeds each.
+With a key limit (`max_keys_per_request` in Python, `maxKeysPerRequest` in Java), a `neighbors` or `lookup` with more seeds reaches the source as several requests of at most that many seeds each.
 Each seed's rows carry the seed's own batch position, so the client joins the answers, in order, into the request's one answer.
 
 ## Errors
 
-A provider's exception fails the operation with `PROVIDER_ERROR`.
-A provider may also define `failure(error)`, returning a `ProviderFailure` with the SQLSTATE, vendor code, error class and message it reads from its error; without it, the client reads a database driver's `sqlstate` and `vendor_code` attributes.
+A source's exception fails the operation with `PROVIDER_ERROR`.
+A source may also override `failure(error)`, returning a `ProviderFailure` with the SQLSTATE, vendor code, error class and message it reads from its error; by default, the client reads a database driver's `sqlstate` and `vendor_code` attributes.
 The message is kept internal and never shown to end users.
 
 ## Values
@@ -216,7 +218,7 @@ Values in requests are plain values of each language.
 Every value is exact.
 A nanosecond timestamp or duration is a `pandas.Timestamp` or `pandas.Timedelta`, which are `datetime.datetime` and `datetime.timedelta` keeping nanoseconds, and a time of day with nanoseconds is a `pandas.Timedelta` since midnight.
 A date or timestamp outside the years `datetime` holds, 1 to 9999, is a `numpy.datetime64`.
-So a time bound is never shifted, and a provider never reads fewer rows than a filter holds for.
+So a time bound is never shifted, and a source never reads fewer rows than a filter holds for.
 
-The library calls a provider from the thread that runs the operation, one request at a time.
-It never closes the provider, and a `ProviderSource` cannot be pickled or saved, as no source can.
+The library calls a source from the thread that runs the operation, one request at a time.
+It never closes the source, and a source, or a schema over one, cannot be pickled or saved.

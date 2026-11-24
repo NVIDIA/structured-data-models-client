@@ -14,9 +14,9 @@ from typing import Any
 
 import duckdb
 import pytest
-from sdm_connectors import DuckDBSource
 
 from sdm_client import (
+    DuckDBSource,
     PredictiveQuery,
     Relationship,
     Schema,

@@ -10,9 +10,8 @@ import warnings
 
 import pytest
 from adbc_driver_sqlite import dbapi
-from sdm_connectors import SQLiteSource
 
-from sdm_client import PredictiveQuery, Schema
+from sdm_client import PredictiveQuery, Schema, SQLiteSource
 
 
 @pytest.mark.parametrize(

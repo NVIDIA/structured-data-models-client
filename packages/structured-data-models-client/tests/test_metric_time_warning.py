@@ -16,9 +16,8 @@ from typing import Any
 
 import pyarrow as pa
 import pytest
-from sdm_connectors import DatabricksSource
 
-from sdm_client import Schema, SDMWarning
+from sdm_client import DatabricksSource, Schema, SDMWarning
 from sdm_client._rust import providers
 
 _VIEW = """

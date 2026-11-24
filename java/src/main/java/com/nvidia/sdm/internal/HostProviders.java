@@ -4,9 +4,8 @@
 
 package com.nvidia.sdm.internal;
 
-import com.nvidia.sdm.ProviderSource;
+import com.nvidia.sdm.Source;
 import com.nvidia.sdm.provider.Capabilities;
-import com.nvidia.sdm.provider.DataProvider;
 import com.nvidia.sdm.provider.DataRequest;
 import com.nvidia.sdm.provider.DataRequest.Bound;
 import com.nvidia.sdm.provider.DataRequest.Filter;
@@ -41,8 +40,8 @@ import org.apache.arrow.vector.types.pojo.FieldType;
 import org.apache.arrow.vector.types.pojo.Schema;
 
 /**
- * The bridge between the core's host-provider messages and the public {@link DataProvider}: the
- * provider choice a {@link ProviderSource} names, each fetch's request read into a {@link
+ * The bridge between the core's host-provider messages and a caller's {@link Source}: the
+ * provider choice it names, each fetch's request read into a {@link
  * DataRequest}, and the key sets it carries. A key set larger than the provider's limit is split by
  * the core, for every host alike. Not part of the API.
  */
@@ -50,13 +49,12 @@ public final class HostProviders {
   private HostProviders() {}
 
   /** The core's provider choice and the run loop's provider for {@code source}. */
-  public static Providers.Chosen chosen(ProviderSource source) {
-    DataProvider provider = source.provider();
-    Capabilities capabilities = provider.capabilities();
+  public static Providers.Chosen chosen(Source source) {
+    Capabilities capabilities = source.capabilities();
     Map<String, Object> choice = new LinkedHashMap<>();
     choice.put("provider", "host");
     choice.put("capabilities", capabilities(capabilities));
-    return new Providers.Chosen(choice, new Adapter(provider));
+    return new Providers.Chosen(choice, new Adapter(source));
   }
 
   /** The contract's {@code ProviderCapabilities} of {@code capabilities}. */
@@ -101,10 +99,10 @@ public final class HostProviders {
    * past the provider's {@code maxKeysPerRequest} reaches it already asked in parts, by the core.
    */
   static final class Adapter implements Host.Provider {
-    private final DataProvider provider;
+    private final Source source;
 
-    Adapter(DataProvider provider) {
-      this.provider = provider;
+    Adapter(Source source) {
+      this.source = source;
     }
 
     @Override
@@ -116,12 +114,12 @@ public final class HostProviders {
       Optional<Schema> expected = expected((Map<String, Object>) plan.get("expect"));
       Map<String, Object> wire = (Map<String, Object>) step.get("request");
       DataRequest request = Requests.read(wire, id -> keySet(keys, id));
-      return provider.answer(request, expected, allocator);
+      return source.answer(request, expected, allocator);
     }
 
     @Override
     public Map<String, Object> failure(Exception failure) {
-      ProviderFailure facts = provider.failure(failure);
+      ProviderFailure facts = source.failure(failure);
       Map<String, Object> told = new LinkedHashMap<>();
       facts.message().ifPresent(text -> told.put("driver_message", text));
       facts.sqlState().ifPresent(text -> told.put("sqlstate", text));

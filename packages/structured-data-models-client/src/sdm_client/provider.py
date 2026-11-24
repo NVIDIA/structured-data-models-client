@@ -1,23 +1,23 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
-r"""A caller's own data access, answering the core's data requests.
+r"""A caller's own source of data, answering the core's data requests.
 
-The core never sends SQL to a provider. It sends one of a fixed set of
-typed requests (:data:`DataRequest`), and the provider answers each with
-Arrow rows. Every request a provider receives is one its
+The core never sends SQL to a source. It sends one of a fixed set of
+typed requests (:data:`DataRequest`), and the source answers each with
+Arrow rows. Every request a source receives is one its
 :class:`Capabilities` declared, or :class:`Describe` and :class:`Scan`,
-which every provider answers. Wrap a provider in :class:`ProviderSource` to
-use it wherever a source is taken:
+which every source answers. Subclass :class:`Source` and pass an instance
+wherever a source is taken:
 
->>> schema = Schema.from_source(ProviderSource(MyProvider()), primary_keys=...)
+>>> schema = Schema.from_source(MySource(), primary_keys=...)
 
-The core checks every row a provider returns against the query's own
-rules, so a provider may return more rows than a value filter holds for,
-but never fewer. A filter kind the provider does not declare
+The core checks every row a source returns against the query's own
+rules, so a source may return more rows than a value filter holds for,
+but never fewer. A filter kind the source does not declare
 (``Capabilities.filters``) is never sent to it; the core applies it to the
 rows read. The seeds of a :class:`Neighbors` or :class:`Lookup` holding
-more keys than ``Capabilities.max_keys_per_request`` reach the provider
+more keys than ``Capabilities.max_keys_per_request`` reach the source
 already split into several requests.
 
 Values in requests are plain Python values, exactly as the core holds
@@ -31,16 +31,17 @@ types keeping nanoseconds, and a time of day with nanoseconds a
 years :mod:`datetime` holds is a :class:`numpy.datetime64`. A timestamp
 without a zone is a wall clock; one with a zone, an instant in that zone.
 
-The library calls a provider from the thread that runs the operation, one
+The library calls a source from the thread that runs the operation, one
 request at a time.
 """
 
 from __future__ import annotations
 
+import abc
 import enum
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -60,7 +61,6 @@ __all__ = [
     'CompareOp',
     'Count',
     'CountRows',
-    'DataProvider',
     'DataRequest',
     'Describe',
     'DescribePart',
@@ -81,13 +81,13 @@ __all__ = [
     'OptionalRequest',
     'Preview',
     'ProviderFailure',
-    'ProviderSource',
     'Relation',
     'RepeatedKey',
     'SampleEntities',
     'Sampling',
     'Scan',
     'SeedBound',
+    'Source',
     'TableColumn',
     'TableKey',
     'TieTerm',
@@ -113,7 +113,7 @@ SEED_BATCH = 'batch'
 
 
 class OptionalRequest(str, enum.Enum):
-    r"""A request a provider may answer itself; the core answers an
+    r"""A request a source may answer itself; the core answers an
     undeclared one in memory, from the rows a :class:`Scan` reads, within
     ``Capabilities.fallback``, or refuses it."""
 
@@ -129,7 +129,7 @@ class OptionalRequest(str, enum.Enum):
 
 
 class FilterKind(str, enum.Enum):
-    r"""A kind of value filter a provider may declare it applies
+    r"""A kind of value filter a source may declare it applies
     (``Capabilities.filters``)."""
 
     COMPARE = 'compare'
@@ -175,7 +175,7 @@ class Sampling(str, enum.Enum):
 
 
 class NullOrder(str, enum.Enum):
-    r"""Where nulls go when the provider orders rows."""
+    r"""Where nulls go when the source orders rows."""
 
     FIRST = 'first'
     LAST = 'last'
@@ -199,29 +199,29 @@ class Fallback:
 
 @dataclass(frozen=True)
 class Capabilities:
-    r"""What a :class:`DataProvider` answers, and how.
+    r"""What a :class:`Source` answers, and how.
 
-    Every provider answers :class:`Describe` and :class:`Scan`. Each other
-    request is answered by the provider when declared in ``optional``;
+    Every source answers :class:`Describe` and :class:`Scan`. Each other
+    request is answered by the source when declared in ``optional``;
     otherwise the core answers it itself, in memory, from the rows a scan
     reads, within ``fallback``'s limits, or refuses it with
     ``UNSUPPORTED_REQUEST`` when no fallback is declared.
 
     Attributes:
-        optional: The optional requests the provider answers itself.
+        optional: The optional requests the source answers itself.
         max_keys_per_request: The most seeds one :class:`Neighbors` or
-            :class:`Lookup` may carry; more reach the provider as several
+            :class:`Lookup` may carry; more reach the source as several
             requests, whose answers the core joins. ``None`` is no limit.
         sampling: Whether a sample drawn with the same seed is the same
             rows every time.
-        max_seed: The largest sampling seed the provider takes.
-        null_order: Where the provider puts nulls when it orders rows;
+        max_seed: The largest sampling seed the source takes.
+        null_order: Where the source puts nulls when it orders rows;
             ``None``, and the core never asks it for rows in an order.
         fallback: The limits within which the core answers undeclared
             optional requests in memory; ``None`` declares no fallback.
-        filters: The value filters the provider applies to a sample or
+        filters: The value filters the source applies to a sample or
             scan; the core sends it no other kind, and checks every row it
-            keeps itself, so a provider may return more rows than a value
+            keeps itself, so a source may return more rows than a value
             filter holds for but never fewer.
     """
 
@@ -255,7 +255,7 @@ class Capabilities:
 
 @dataclass(frozen=True)
 class ProviderFailure:
-    r"""What a provider's failure tells the core: each field where the
+    r"""What a source's failure tells the core: each field where the
     failure says one.
 
     Attributes:
@@ -626,23 +626,32 @@ DataRequest = (
 )
 
 
-# --- the provider and its source ------------------------------------------
+# --- the source -----------------------------------------------------------
 
 
-@runtime_checkable
-class DataProvider(Protocol):
-    r"""A caller's own data access, answering the core's data requests.
+class Source(abc.ABC):
+    r"""Where a schema's data is read, answering the core's data requests.
 
-    A provider may also define ``failure(error: Exception) ->
-    ProviderFailure``, what one of its failures tells the core beyond its
-    class; without it, a failure's ``sqlstate`` and ``vendor_code``
-    attributes, as database drivers set them, and its message are read.
+    Subclass it to read data your own way: implement :meth:`capabilities`
+    and :meth:`answer`, and pass an instance wherever a source is taken:
+
+    >>> schema = Schema.from_source(MySource(), primary_keys=...)
+
+    The built-in sources (:class:`~sdm_client.DuckDBSource`,
+    :class:`~sdm_client.PostgresSource`, :class:`~sdm_client.SQLiteSource`,
+    :class:`~sdm_client.DatabricksSource`,
+    :class:`~sdm_client.SnowflakeSource`) are sources too, each answered by
+    the library's own SQL for its database.
+
+    A source holds live data access, so a source, and a schema over one,
+    cannot be pickled. The library never closes it.
     """
 
+    @abc.abstractmethod
     def capabilities(self) -> Capabilities:
-        r"""What this provider answers; read once per operation."""
-        ...
+        r"""What this source answers; read once per operation."""
 
+    @abc.abstractmethod
     def answer(self, request: DataRequest, expected: pa.Schema | None) -> Any:
         r"""Answers one request with every row it asks for.
 
@@ -663,54 +672,28 @@ class DataProvider(Protocol):
             Exception: Any failure; the operation then fails with
                 ``PROVIDER_ERROR``.
         """
-        ...
 
+    def failure(self, error: Exception) -> ProviderFailure | None:
+        r"""What one of this source's failures tells the core beyond its
+        class.
 
-class ProviderSource:
-    r"""A source whose data the caller's own :class:`DataProvider` reads:
-    no database connection, and no SQL. Use it wherever a source is taken:
+        By default ``None``: the failure's ``sqlstate`` and ``vendor_code``
+        attributes, as database drivers set them, and its message are read.
+        """
+        return None
 
-    >>> schema = Schema.from_source(ProviderSource(my_provider))
+    def _sdm_chosen(self) -> tuple[dict[str, Any], Any]:
+        r"""The core's provider choice for this source, and the run loop's
+        provider answering its fetches. Not part of the API: a built-in
+        source answers through its SQL kit instead."""
+        from sdm_client._rust import host_providers
 
-    It holds a live provider, so, like every source, it cannot be pickled.
-    The library never closes the provider.
-    """
-
-    __slots__ = ('_provider',)
-
-    #: The kind of source, as ``Source.kind`` names a connector's.
-    kind = 'provider'
-
-    def __init__(self, provider: DataProvider) -> None:
-        if not isinstance(provider, DataProvider):
-            raise TypeError(
-                'ProviderSource takes a DataProvider: an object with '
-                'capabilities() and answer(request, expected) methods, '
-                f'got {type(provider).__name__}'
-            )
-        self._provider = provider
-
-    @property
-    def provider(self) -> DataProvider:
-        r"""The provider answering every data request."""
-        return self._provider
-
-    def __eq__(self, other: object) -> bool:
-        return (
-            isinstance(other, ProviderSource)
-            and other._provider is self._provider
-        )
-
-    def __hash__(self) -> int:
-        return hash(id(self._provider))
+        return host_providers.chosen(self)
 
     def __reduce__(self) -> Any:
         raise TypeError(
-            'a ProviderSource holds a live provider, which cannot be pickled'
+            'a Source holds an open connection, which cannot be pickled'
         )
-
-    def __repr__(self) -> str:
-        return f'ProviderSource({self._provider!r})'
 
 
 # --- helpers --------------------------------------------------------------

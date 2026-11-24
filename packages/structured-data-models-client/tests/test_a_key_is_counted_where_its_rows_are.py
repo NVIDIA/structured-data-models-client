@@ -33,15 +33,12 @@ import pytest
 duckdb = pytest.importorskip('duckdb')
 dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
-from sdm_connectors import (  # noqa: E402
+from sdm_client import (  # noqa: E402
     DuckDBSource,
     PostgresSource,
-    SQLiteSource,
-)
-
-from sdm_client import (  # noqa: E402
     PredictiveQuery,
     Schema,
+    SQLiteSource,
     StructuredDataError,
 )
 

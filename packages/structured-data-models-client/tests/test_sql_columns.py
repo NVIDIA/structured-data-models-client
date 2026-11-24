@@ -15,7 +15,7 @@ from sdm_client.errors import StructuredDataError
 
 @pytest.fixture(params=['duckdb', 'sqlite'])
 def source(request):
-    from sdm_connectors import DuckDBSource, SQLiteSource
+    from sdm_client import DuckDBSource, SQLiteSource
 
     if request.param == 'duckdb':
         import duckdb
@@ -167,7 +167,7 @@ def test_engine_projection_preserves_filtered_aliases_and_indexed_key(source):
     """Exercise the engine relation contract beneath semantic-source adapters."""
     import json
 
-    from sdm_client._rust import codec, providers
+    from sdm_client._rust import codec
     from sdm_client._rust.run import run
     from sdm_client._rust.schema import build
     from sdm_client._rust.spec import held_schema
@@ -187,7 +187,7 @@ def test_engine_projection_preserves_filtered_aliases_and_indexed_key(source):
         ],
         'filter': 'quantity > 10',
     }
-    choice, provider = providers.for_source(source)
+    choice, provider = source._sdm_chosen()
     described = run(
         {
             'op': 'describe_source',

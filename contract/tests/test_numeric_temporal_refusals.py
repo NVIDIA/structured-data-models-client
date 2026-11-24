@@ -62,8 +62,7 @@ def _call(
     chooses: the payload on a success; otherwise the call that raised, the
     error's class, code and details; and the missing-index warnings shown
     from the edit on."""
-    from sdm_client import PredictiveQuery, Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, PredictiveQuery, Schema
 
     connection = duckdb.connect()
     for statement in [*run_python.load_bases()['shop'], *setup]:

@@ -162,13 +162,15 @@ def test_arrow_nonnull_nan_and_invalid_contracts():
 def test_sql_supplied_labels_and_repeated_entities(provider):
     if provider == 'duckdb':
         import duckdb
-        from sdm_connectors import DuckDBSource
+
+        from sdm_client import DuckDBSource
 
         connection = duckdb.connect()
         source = DuckDBSource(connection)
     else:
         import adbc_driver_sqlite.dbapi
-        from sdm_connectors import SQLiteSource
+
+        from sdm_client import SQLiteSource
 
         connection = adbc_driver_sqlite.dbapi.connect()
         source = SQLiteSource(connection)
@@ -210,7 +212,8 @@ def test_sql_supplied_labels_and_repeated_entities(provider):
 
 def test_supplied_link_examples_are_refused_before_any_read(source_reads):
     import duckdb
-    from sdm_connectors import DuckDBSource
+
+    from sdm_client import DuckDBSource
 
     connection = duckdb.connect()
     try:
@@ -346,9 +349,13 @@ def test_live_warehouse_supplied_examples(provider):
     import importlib
     import os
 
-    from sdm_connectors import DatabricksSource, PostgresSource, SnowflakeSource
-
-    from sdm_client import KumoRelational, SDMClient
+    from sdm_client import (
+        DatabricksSource,
+        KumoRelational,
+        PostgresSource,
+        SDMClient,
+        SnowflakeSource,
+    )
 
     path = os.environ.get('SDM_EXAMPLES_CONFIG')
     if not path:

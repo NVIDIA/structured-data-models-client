@@ -445,16 +445,13 @@ def decoded(given: Mapping[str, Any]) -> dict[str, Any]:
 def source_values(source: Any) -> dict[str, Callable[[dict[str, Any]], Any]]:
     r"""What a sentence names of the source of the call in progress
     (``{host.source}``), and, for a semantic model, the model
-    (``{host.semantic_model}``, whose ``repr`` the old client wrote:
-    ``SemanticModel('name' in DatabricksSource(...))``), for
+    (``{host.semantic_model}``, whose ``repr`` is the one the old client
+    wrote: ``SemanticModel('name' in DatabricksSource(...))``), for
     :func:`holding`."""
     values: dict[str, Callable[[dict[str, Any]], Any]] = {
         'source': lambda fields: source
     }
-    if getattr(source, 'kind', None) in (
-        'databricks-metric-view',
-        'snowflake-semantic-view',
-    ):
+    if getattr(source, '_view', None) is not None:
         values['semantic_model'] = lambda fields: source
     return values
 

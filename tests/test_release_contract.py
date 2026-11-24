@@ -127,18 +127,6 @@ HANDED_OUT_THOUGH_NOT_EXPORTED = frozenset(
         # sampling has one interface to run through. The connector's typing
         # check pins that type, so changing it is a change to sources.
         'sdm_connectors.backends.spark.SparkConnection',
-        # What each `Source` overload says its connection must look like. They
-        # are protocols, matched by shape: a caller passes a live connection
-        # and never names, imports or builds one of these. Exporting seven
-        # names to describe an argument nobody writes would be a larger
-        # promise than the one it closes.
-        'sdm_connectors._types.DatabricksLike',
-        'sdm_connectors._types.DuckDBLike',
-        'sdm_connectors._types.PostgresLike',
-        'sdm_connectors._types.SQLiteLike',
-        'sdm_connectors._types.SnowflakeLike',
-        'sdm_connectors._types.SnowparkLike',
-        'sdm_connectors._types.SparkLike',
     }
 )
 

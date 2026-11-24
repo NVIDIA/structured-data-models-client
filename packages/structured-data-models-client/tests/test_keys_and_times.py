@@ -25,9 +25,8 @@ import duckdb
 import numpy as np
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import Schema, StructuredDataError
+from sdm_client import DuckDBSource, Schema, StructuredDataError
 from sdm_client._rust.providers.duckdb import DuckDBProvider
 
 

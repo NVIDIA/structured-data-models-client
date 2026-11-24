@@ -1170,7 +1170,50 @@ public final class ParityRunner {
                       Boolean.TRUE.equals(settings.get("trust_expressions")));
       }
       for (var name : names.entrySet())
-        tables.put(name.getKey(), Readers.readTable(source, name.getValue(), allocator));
+        tables.put(name.getKey(), readTable(source, name.getValue(), allocator));
+    }
+
+    /**
+     * The table {@code name} of {@code source}, read through its connection or session: an
+     * unqualified name in the source's namespace, as the case gives it.
+     */
+    private static Table readTable(Source source, String name, RootAllocator allocator)
+        throws Exception {
+      List<String> parts = new ArrayList<>();
+      if (source instanceof DatabricksSparkSource spark) {
+        spark.catalog().ifPresent(parts::add);
+        spark.schema().ifPresent(parts::add);
+        parts.add(name);
+        String qualified = name.contains(".") ? name : String.join(".", parts);
+        String quoted =
+            java.util.Arrays.stream(qualified.split("\\.", -1))
+                .map(part -> "`" + part.replace("`", "``") + "`")
+                .collect(java.util.stream.Collectors.joining("."));
+        return com.nvidia.sdm.internal.ReadTables.collect(
+            new com.nvidia.sdm.internal.jdbc.SparkProvider(spark.session())
+                .readQuery("SELECT * FROM " + quoted, allocator),
+            allocator);
+      }
+      Connection connection;
+      if (source instanceof DatabricksSource databricks) {
+        databricks.catalog().ifPresent(parts::add);
+        databricks.schema().ifPresent(parts::add);
+        connection = databricks.connection();
+      } else if (source instanceof SnowflakeSource snowflake) {
+        snowflake.database().ifPresent(parts::add);
+        snowflake.schema().ifPresent(parts::add);
+        connection = snowflake.connection();
+      } else if (source instanceof PostgresSource postgres) {
+        postgres.schema().ifPresent(parts::add);
+        connection = postgres.connection();
+      } else if (source instanceof DuckDbSource duckdb) {
+        connection = duckdb.connection();
+      } else {
+        connection = ((SqliteSource) source).connection();
+      }
+      parts.add(name);
+      return Readers.readTable(
+          connection, name.contains(".") ? name : String.join(".", parts), allocator);
     }
 
     void restoreFixtureTypes(RootAllocator allocator, Map<String, Object> fixture) {

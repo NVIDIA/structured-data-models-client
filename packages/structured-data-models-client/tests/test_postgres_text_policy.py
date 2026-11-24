@@ -9,10 +9,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from sdm_connectors import PostgresSource
 from sdm_connectors.providers import PlanNotRun
 
-from sdm_client import Schema, StructuredDataError
+from sdm_client import PostgresSource, Schema, StructuredDataError
 from sdm_client._rust import providers
 from sdm_client._rust.providers.postgres import PostgresProvider
 

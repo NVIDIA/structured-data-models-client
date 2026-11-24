@@ -402,8 +402,13 @@ def answer(setup: list[Any]) -> dict[str, Any]:
     if runners not in sys.path:
         sys.path.insert(0, runners)
     from scripted_endpoint import serve
-    from sdm_client import KumoRelational, PredictiveQuery, Schema, SDMClient
-    from sdm_connectors import DuckDBSource
+    from sdm_client import (
+        DuckDBSource,
+        KumoRelational,
+        PredictiveQuery,
+        Schema,
+        SDMClient,
+    )
 
     connection = source(setup)
     got: dict[str, Any] = {'described': None}

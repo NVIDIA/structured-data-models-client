@@ -19,10 +19,10 @@ import pytest
 
 duckdb = pytest.importorskip('duckdb')
 
-from sdm_connectors import DuckDBSource, PostgresSource  # noqa: E402
-
 from sdm_client import (  # noqa: E402
     Column,
+    DuckDBSource,
+    PostgresSource,
     PredictiveQuery,
     Schema,
     SourceTable,

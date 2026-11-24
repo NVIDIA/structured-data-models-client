@@ -15,8 +15,7 @@ import pytest
 
 
 def test_a_materialized_request_refuses_pickle_by_its_source() -> None:
-    from sdm_client import PredictiveQuery, Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, PredictiveQuery, Schema
 
     connection = duckdb.connect()
     connection.execute(

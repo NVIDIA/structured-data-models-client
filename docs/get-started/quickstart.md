@@ -77,8 +77,7 @@ Describe them with `Schema.from_source`, and `materialize()` samples them there 
 
 ```python
 from databricks.sdk import WorkspaceClient
-from sdm_client import PredictiveQuery, Schema
-from sdm_connectors import DatabricksSource
+from sdm_client import DatabricksSource, PredictiveQuery, Schema
 from sdm_connectors.databricks import warehouse
 
 # In a Databricks notebook this is the notebook's own identity. Elsewhere it is

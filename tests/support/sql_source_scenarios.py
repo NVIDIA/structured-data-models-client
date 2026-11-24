@@ -54,9 +54,8 @@ def run(orders: str, setup: tuple[str, ...]) -> tuple[Any, list[list[str]]]:
     the statement texts of each fetch the provider was handed, in order."""
     import duckdb
     import pandas as pd
-    from sdm_client import PredictiveQuery, Schema
+    from sdm_client import DuckDBSource, PredictiveQuery, Schema
     from sdm_client._rust.providers.duckdb import DuckDBProvider
-    from sdm_connectors import DuckDBSource
 
     seen: list[list[str]] = []
     answer = DuckDBProvider.__call__

@@ -14,9 +14,13 @@ from collections.abc import Iterator
 from typing import Any
 
 import pytest
-from sdm_connectors import PostgresSource
 
-from sdm_client import PredictiveQuery, Schema, StructuredDataError
+from sdm_client import (
+    PostgresSource,
+    PredictiveQuery,
+    Schema,
+    StructuredDataError,
+)
 
 QUERY = 'PREDICT users.target FOR EACH users.id'
 

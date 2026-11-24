@@ -4,9 +4,9 @@
 
 package com.nvidia.sdm;
 
-import com.nvidia.sdm.internal.Providers;
 import com.nvidia.sdm.internal.ReadTables;
 import com.nvidia.sdm.internal.jdbc.JdbcProvider;
+import com.nvidia.sdm.internal.jdbc.SparkProvider;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,61 +21,35 @@ import org.apache.arrow.vector.table.Table;
 public final class Readers {
   private Readers() {}
 
-  /** Read a qualified table name; each dot-separated component is quoted as an identifier. */
-  public static Table readTable(Source source, String name, BufferAllocator allocator)
+  /**
+   * Read the table {@code name} through the caller's {@code connection}, which stays open. Each
+   * dot-separated part is quoted as an identifier, by the quote the driver names; an unqualified
+   * name is a table of the connection's current schema.
+   */
+  public static Table readTable(Connection connection, String name, BufferAllocator allocator)
       throws Exception {
-    Objects.requireNonNull(name, "table");
-    if (source instanceof ProviderSource) {
-      return readQuery(source, "", allocator);
-    }
-    if (!name.contains(".")) {
-      String catalog = null;
-      String schema = null;
-      if (source instanceof PostgresSource postgres) schema = postgres.schema().orElse(null);
-      else if (source instanceof DatabricksSource databricks) {
-        catalog = databricks.catalog().orElse(null);
-        schema = databricks.schema().orElse(null);
-      } else if (source instanceof SnowflakeSource snowflake) {
-        catalog = snowflake.database().orElse(null);
-        schema = snowflake.schema().orElse(null);
-      } else if (source instanceof DatabricksSparkSource spark) {
-        catalog = spark.catalog().orElse(null);
-        schema = spark.schema().orElse(null);
-      }
-      if (catalog != null && schema == null) {
-        try (Table current = readQuery(source, "SELECT current_schema()", allocator);
-            var column = current.getVectorCopy(0)) {
-          schema = column.getObject(0).toString();
-        }
-      }
-      if (schema != null) name = schema + "." + name;
-      if (catalog != null) name = catalog + "." + name;
-    }
-    String quote = source instanceof DatabricksSource || source instanceof DatabricksSparkSource
-        ? "`" : "\"";
-    String sql = java.util.Arrays.stream(name.split("\\.", -1))
-        .map(part -> {
-          if (part.isEmpty()) throw new IllegalArgumentException("empty table-name component");
-          return quote + part.replace(quote, quote + quote) + quote;
-        }).collect(java.util.stream.Collectors.joining("."));
-    return readQuery(source, "SELECT * FROM " + sql, allocator);
+    Objects.requireNonNull(connection, "connection");
+    String quote = connection.getMetaData().getIdentifierQuoteString().trim();
+    return readQuery(connection, "SELECT * FROM " + quoted(name, quote), allocator);
   }
 
-  /** Execute caller SQL on the supplied connection/session without closing it. */
-  public static Table readQuery(Source source, String sql, BufferAllocator allocator)
+  /** Execute caller SQL on the caller's {@code connection} without closing it. */
+  public static Table readQuery(Connection connection, String sql, BufferAllocator allocator)
       throws Exception {
+    Objects.requireNonNull(connection, "connection");
     Objects.requireNonNull(sql, "sql");
-    if (Objects.requireNonNull(source, "source") instanceof ProviderSource) {
-      throw new StructuredDataException(
-          "a ProviderSource runs no SQL; read its tables through its own provider",
-          "UNSUPPORTED_REQUEST", java.util.Map.of(), null);
-    }
-    var provider = Providers.of(source).provider();
-    if (provider instanceof JdbcProvider jdbc) {
-      return ReadTables.collect(jdbc.readQuery(sql, allocator), allocator);
-    }
-    return ReadTables.collect(
-        ((com.nvidia.sdm.internal.jdbc.SparkProvider) provider).readQuery(sql, allocator), allocator);
+    JdbcProvider provider = new JdbcProvider(connection, JdbcProvider.Driver.of(connection));
+    return ReadTables.collect(provider.readQuery(sql, allocator), allocator);
+  }
+
+  private static String quoted(String name, String quote) {
+    Objects.requireNonNull(name, "table");
+    String mark = quote.isEmpty() ? "\"" : quote;
+    return java.util.Arrays.stream(name.split("\\.", -1))
+        .map(part -> {
+          if (part.isEmpty()) throw new IllegalArgumentException("empty table-name component");
+          return mark + part.replace(mark, mark + mark) + mark;
+        }).collect(java.util.stream.Collectors.joining("."));
   }
 
   public static Table read(Path path, BufferAllocator allocator) throws Exception {
@@ -154,7 +128,7 @@ public final class Readers {
         }
         read = "read_parquet(" + files + ", hive_partitioning=true, union_by_name=true)";
       }
-      Table raw = readQuery(DuckDbSource.of(connection), "SELECT * FROM " + read, allocator);
+      Table raw = readQuery(connection, "SELECT * FROM " + read, allocator);
       if (format != ReadOptions.Format.CSV) return raw;
       try (raw) {
         return com.nvidia.sdm.internal.CsvTypes.infer(raw, options.csvTypes(), allocator);

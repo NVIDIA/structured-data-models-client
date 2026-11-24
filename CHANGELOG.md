@@ -11,23 +11,44 @@ these packages. The three Python distributions share one version.
 
 - `SDMClient(..., exact_url=True, bearer_token=True)` in Python, and `ClientOptions.builder().exactUrl(true).bearerToken(true)` in Java, call an endpoint that serves predictions at one URL and reads the key as a bearer token, such as a hosted model in the NVIDIA API catalog.
   Such an endpoint has no sessions, model list or readiness route, so those calls fail with a named error; without the options, every URL is a base, as before.
-- Java callers can read data through their own code instead of a database connection: `ProviderSource.of(provider)` takes a `com.nvidia.sdm.provider.DataProvider`, which answers the core's typed data requests with Arrow data and declares what it answers in its `Capabilities`.
-- Python callers can read data through their own code, as Java callers can: `sdm_client.ProviderSource` takes a `sdm_client.provider.DataProvider`, which answers the core's typed data requests with Arrow rows and declares what it answers in its `Capabilities`.
-  It is accepted wherever a source is, and the requests, filters, capabilities and failures are Java's, in Python's types.
-  The seeds of a `neighbors` or `lookup` past a provider's `max_keys_per_request` are split by the core into requests of at most that many seeds, for Python and Java providers alike.
-  See [Your own data provider](docs/reference/data-providers.md).
+- Python and Java callers can read data through their own code instead of a database connection, by subclassing `Source` (`sdm_client.Source`, an abstract base class; `com.nvidia.sdm.Source`, an abstract class) and implementing `capabilities()` and `answer(request, expected)` (Java: `answer(request, expected, allocator)`).
+  The core sends it typed data requests, never SQL; it answers each with Arrow data and declares what it answers in its `Capabilities`.
+  An instance is passed wherever a source is taken, as a built-in source is, and the requests, filters, capabilities and failures are the same in both languages, in each one's own types.
+  The seeds of a `neighbors` or `lookup` past a source's `max_keys_per_request` are split by the core into requests of at most that many seeds, for Python and Java sources alike.
+  See [Your own source](docs/reference/data-providers.md).
 - `Request.context_report` (Python) and `Request.contextReport()` (Java) say how the context examples were drawn from the source: for each part, the draws, the rows they read, the candidates labelled, how many the query's conditions kept, whether any condition went to the source, and why drawing stopped (`full`, `source_exhausted`, `row_budget` or `time_limit`).
   A request whose context comes up short, from a condition only the client checks, is drawn again, larger, sized by the share of the first draw that qualified, until the context holds as many examples as were asked for, the source has no more rows, 5,000,000 rows have been drawn, or `context_time_limit` has passed.
 - `context_time_limit` (Python `materialize()` keyword, in seconds or as a `timedelta`; Java `MaterializeOptions.Builder.contextTimeLimit(Duration)`) bounds the time a request spends drawing its context, five minutes by default.
   No draw starts once it has passed, and the examples kept so far are the context; a draw already reading runs on.
   The time is read by the host layer the Python and Java clients share, as the core reads no clock.
-- Java `DataProvider`s can declare the value filters they apply (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf`, `AllOf` and `HasRows` on samples and scans.
-  A provider that declares none receives none, as before.
+- A caller's own Java `Source` can declare the value filters it applies (`Capabilities.builder().filters(...)`) and receive them as `DataRequest.Compare`, `In`, `IsNull`, `AnyOf`, `AllOf` and `HasRows` on samples and scans.
+  A source that declares none receives none.
 
 ### Changed
 
+- `Source` is the one public source type in Python and Java.
+  The unreleased `DataProvider` is renamed `Source`, and `ProviderSource` is removed: a caller passes its own source directly.
+  `Schema.from_source`, `with_source` and `.source` (Java: `fromSource`, `withSource`, `source()`) take exactly a `Source`; an object that only has the methods of one is refused with `INVALID_REQUEST`.
+- The built-in Python sources moved from `sdm_connectors` to `sdm_client`: import `DuckDBSource`, `SQLiteSource`, `PostgresSource`, `DatabricksSource` and `SnowflakeSource` from `sdm_client`.
+  They take the same connections and raise the same `ConnectorError` codes as before.
+  `sdm_connectors` keeps its readers, `quote_ident`, `resolve_sql` and the Databricks connection helpers, and no longer holds any source.
+- A semantic model is a source of the same class: `DatabricksSource.semantic_model(name, trust_expressions=False)` returns a `DatabricksSource` reading the metric view, and `SnowflakeSource.semantic_model(...)` a `SnowflakeSource` reading the semantic view.
+  Java's `semanticModel(name)` is added beside `semanticModel(name, trustExpressions)`.
+- Java's `Readers.readTable` and `Readers.readQuery` take the caller's `java.sql.Connection` instead of a source, as Python's `read_table` does, and read an unqualified table name in the connection's current schema.
+  Java no longer reads a whole table or query through a Spark session; a Databricks schema is still read in place through the session (`DatabricksSparkSource`), and a Spark DataFrame can be converted to Arrow by the caller.
+- A built-in source's `capabilities()` and `answer()` are refused with `UNSUPPORTED_REQUEST`: the library answers it with its own SQL.
+- Rebinding a schema to another source (`with_source`, `withSource`) compares the sources' classes, and whether each reads a semantic model, in both languages.
+  A Python schema over a SQL warehouse connection can now be rebound to a notebook's Spark session over the same catalog, and back.
+- A schema over any source refuses to be pickled, whatever the source's own class allows.
 - The Java library's Databricks SDK, AWS S3 SDK, commons-compress and xz dependencies are optional.
   A feature that needs a missing one is refused with `INVALID_CONFIGURATION` naming the artifact to add, before any of its classes load.
+
+### Removed
+
+- `sdm_connectors.Source`, `DatabricksSource`, `SnowflakeSource`, `PostgresSource`, `DuckDBSource`, `SQLiteSource` and `SemanticModel`; the built-in sources are in `sdm_client`, and a semantic model is the source class itself.
+- `Source(connection)`, which chose a built-in source class by the connection's driver: name the class instead.
+- `Source.kind`, `Source.backend` and `Source.namespace_parts()`.
+- Java's `ProviderSource`, `com.nvidia.sdm.provider.DataProvider` and `JdbcSource`.
 
 ### Fixed
 

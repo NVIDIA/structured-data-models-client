@@ -15,9 +15,14 @@ from typing import Any
 import duckdb
 import pandas as pd
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import PredictiveQuery, Request, Schema, StructuredDataError
+from sdm_client import (
+    DuckDBSource,
+    PredictiveQuery,
+    Request,
+    Schema,
+    StructuredDataError,
+)
 from sdm_client._rust import codec
 from sdm_client._rust import materialize as _rust_materialize
 from sdm_client._rust import run as _rust_run
@@ -490,7 +495,13 @@ class _Located:
                 control, sent = self._handle.next()
                 step = codec.read(control, sent)
                 if step.get('step') == 'fetch':
-                    located.requests.extend(step['requests'])
+                    # A built-in source's SQL is recorded where its kit
+                    # hands it to the driver, below.
+                    located.requests.extend(
+                        asked
+                        for asked in step['requests']
+                        if asked['plan'].get('plan') == 'sql'
+                    )
                     for asked in step['requests']:
                         if asked.get('purpose') == 'locate':
                             located.statements += len(
@@ -521,12 +532,46 @@ class _Located:
 
         imported = self._native
         run.native = lambda: _Native(imported())
+
+        # A built-in source's statements are written by its SQL kit, below
+        # the core's typed request: each fetch the kit hands the driver is
+        # one plan, of the purpose of the step that asked it.
+        from sdm_client._rust import sql_kit
+
+        self._call = sql_kit.KitProvider.__call__
+        answer = self._call
+
+        def call(provider: Any, step: Any, keys: Any = None) -> Any:
+            driver = provider._driver
+
+            def recording(fetch: Any, binds: Any) -> Any:
+                located.requests.append(
+                    {
+                        'plan': fetch['plan'],
+                        'request': fetch['request'],
+                        'purpose': step.get('purpose'),
+                    }
+                )
+                if step.get('purpose') == 'locate':
+                    located.statements += len(
+                        fetch['plan'].get('statements', [])
+                    )
+                return driver(fetch, binds)
+
+            provider._driver = recording
+            try:
+                return answer(provider, step, keys)
+            finally:
+                provider._driver = driver
+
+        sql_kit.KitProvider.__call__ = call
         return self
 
     def __exit__(self, *_: Any) -> None:
-        from sdm_client._rust import run
+        from sdm_client._rust import run, sql_kit
 
         run.native = self._native
+        sql_kit.KitProvider.__call__ = self._call
 
 
 def _calls(
