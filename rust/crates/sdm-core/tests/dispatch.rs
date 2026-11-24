@@ -236,6 +236,8 @@ fn every_operation_dispatches_to_a_run() {
             reads_tables_as_they_stand: false,
             namespace: Vec::new(),
             tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         },
     };
     // A table named is read by its source name, with no listing of the
@@ -318,6 +320,8 @@ fn capabilities(optional: &[OptionalRequest]) -> ProviderCapabilities {
         reads_tables_as_they_stand: false,
         namespace: Vec::new(),
         tries_upper_case_names: false,
+        namespace_first: false,
+        view: None,
     }
 }
 
@@ -679,6 +683,8 @@ fn materialize(seed: Option<Seed>) -> Operation {
                 reads_tables_as_they_stand: false,
                 namespace: Vec::new(),
                 tries_upper_case_names: false,
+                namespace_first: false,
+                view: None,
             },
         },
         schema: AttachmentId(1),

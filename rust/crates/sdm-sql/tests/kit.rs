@@ -353,6 +353,12 @@ fn the_kit_declares_what_the_core_declares_for_its_source() {
             Vec::new()
         };
         assert_eq!(declared.namespace, namespace, "{dialect}");
+        assert_eq!(
+            declared.namespace_first,
+            Data::new().unsettled(&provider),
+            "{dialect}"
+        );
+        declared.namespace_first = false;
         declared.database = None;
         declared.reads_tables_as_they_stand = false;
         declared.column_affinities = false;
@@ -391,6 +397,7 @@ fn a_source_answering_through_the_kit_reads_as_its_sql_source() {
             data.reads_tables_as_they_stand(&host),
             data.reads_tables_as_they_stand(&sql)
         );
+        assert_eq!(data.unsettled(&host), data.unsettled(&sql));
         for relation in [
             Relation::of(vec!["users".to_owned()]),
             Relation::of(vec!["Main".to_owned(), "Users".to_owned()]),
@@ -404,5 +411,56 @@ fn a_source_answering_through_the_kit_reads_as_its_sql_source() {
                 data.spellings(&sql, &relation)
             );
         }
+    }
+}
+
+/// A source leaving its namespace to its connection is asked it first, as
+/// the core asks a SQL source's: the kit runs the namespace read, answers
+/// the namespace in full, and reads every later table under it for the
+/// rest of the run.
+#[test]
+fn a_namespace_left_to_the_connection_is_settled_once_and_kept_for_the_run() {
+    use sdm_contract::data::DescribePart;
+    let sql = choice("databricks");
+    let kit = SqlKit::new(sql.clone(), None).unwrap();
+    assert!(kit.capabilities().unwrap().namespace_first);
+    let asked = DataRequest::Describe {
+        tables: Vec::new(),
+        part: DescribePart::Namespace,
+    };
+    let session: SchemaRef = Arc::new(Schema::new(vec![Field::new("name", DataType::Utf8, false)]));
+    let row = RecordBatch::try_new(
+        Arc::clone(&session),
+        vec![Arc::new(StringArray::from(vec!["main", "shop"]))],
+    )
+    .unwrap();
+    // What the core reads of the same answer from a SQL source today.
+    let data = Data::new();
+    let read = data.read(&asked, &sql, std::slice::from_ref(&row));
+    let (answer, _) = ask(&kit, &asked, &BTreeMap::new(), |_, _| {
+        Ok(Answered {
+            schema: Arc::clone(&session),
+            batches: vec![row.clone()],
+        })
+    });
+    let answer = answer.unwrap();
+    let names = answer.batches[0]
+        .column(0)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .unwrap();
+    let full: Vec<&str> = names.iter().flatten().collect();
+    assert_eq!(full, ["main", "shop"]);
+    if let Ok(sdm_contract::catalog::CatalogAnswer::Namespace(parts)) = read {
+        let settled = data.settled(&sql, parts);
+        assert_eq!(kit.provider(), settled);
+        // Every later table of one part is read under it, as the core reads
+        // it on the settled source.
+        let lookup = lookup(r#""users""#);
+        let (_, fetched) = ask(&kit, &lookup, &seeds(1), |at, _| Ok(rows(at)));
+        assert_eq!(fetched, core_fetches(&settled, &lookup, &seeds(1)));
+        assert!(!kit.capabilities().unwrap().namespace_first);
+    } else {
+        panic!("the namespace read");
     }
 }

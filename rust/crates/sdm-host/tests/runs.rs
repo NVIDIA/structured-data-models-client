@@ -338,6 +338,8 @@ fn fetching_run() -> Run {
             reads_tables_as_they_stand: false,
             namespace: Vec::new(),
             tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         },
     };
     let access = sdm_host::default_root().data_access(&host).unwrap();

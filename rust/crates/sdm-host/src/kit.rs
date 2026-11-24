@@ -21,8 +21,8 @@ pub use sdm_sql::kit::{Answered, KitError, KitFetch};
 use crate::ArrowData;
 use crate::admission::admit_from;
 
-/// A built-in source's SQL kit, as a binding holds it.
-#[derive(Debug, Clone)]
+/// A built-in source's SQL kit, as a binding holds it: one per run.
+#[derive(Debug)]
 pub struct HostKit {
     kit: sdm_sql::kit::SqlKit,
     vendor: Option<String>,
@@ -38,7 +38,7 @@ impl HostKit {
     }
 
     /// The source the kit answers for, as the core names it.
-    pub fn provider(&self) -> &ProviderChoice {
+    pub fn provider(&self) -> ProviderChoice {
         self.kit.provider()
     }
 

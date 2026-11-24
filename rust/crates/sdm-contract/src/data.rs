@@ -1515,6 +1515,18 @@ pub struct ProviderCapabilities {
     /// upper-cased, as Snowflake folds an unquoted name (contract v76).
     #[serde(default, skip_serializing_if = "is_false")]
     pub tries_upper_case_names: bool,
+    /// Whether the source must be asked its namespace (`describe` of the
+    /// `namespace` part) before a table of one part is read, since it leaves
+    /// a part to its connection (contract v76); its answer is the namespace
+    /// in full, which the core then reads every such table under.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub namespace_first: bool,
+    /// The semantic model the source is read through, where it is one
+    /// (contract v76): a built-in source's Databricks metric view or
+    /// Snowflake semantic view, whose definition and text the core's own
+    /// data layer reads by the source's database.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewChoice>,
 }
 
 /// The in-memory fallback's limits, as a provider declares them
@@ -1639,7 +1651,7 @@ impl ProviderChoice {
     pub fn view(&self) -> Option<&ViewChoice> {
         match self {
             ProviderChoice::Sql { view, .. } => view.as_ref(),
-            ProviderChoice::Host { .. } => None,
+            ProviderChoice::Host { capabilities } => capabilities.view.as_ref(),
         }
     }
 }

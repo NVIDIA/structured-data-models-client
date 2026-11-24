@@ -421,6 +421,8 @@ fn a_host_provider_is_handed_the_core_s_key_set_as_it_was_made() {
             reads_tables_as_they_stand: false,
             namespace: Vec::new(),
             tries_upper_case_names: false,
+            namespace_first: false,
+            view: None,
         },
     };
     let made = seeds(vec![9, 8]);

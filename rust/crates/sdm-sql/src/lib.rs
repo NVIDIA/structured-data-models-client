@@ -121,6 +121,17 @@ fn rendered(dialect: &Dialect) -> Result<&'static dyn SqlDialect, CoreError> {
     sql::dialect(dialect.name()).ok_or_else(|| no_dialect(dialect))
 }
 
+/// The dialect whose semantic models a source is read through: a SQL
+/// provider's own, or, for a source answering typed requests, the one its
+/// declared database names (contract v76). Only a semantic model's
+/// definition and text are read by it; such a source writes its own SQL.
+fn view_dialect(provider: &ProviderChoice) -> Option<&'static dyn SqlDialect> {
+    match provider {
+        ProviderChoice::Sql { .. } => sql_dialect(provider),
+        ProviderChoice::Host { capabilities } => sql::dialect(capabilities.database.as_deref()?),
+    }
+}
+
 /// The dialect of `provider`, if it is a built-in SQL provider of a
 /// dialect this build renders.
 fn sql_dialect(provider: &ProviderChoice) -> Option<&'static dyn SqlDialect> {
@@ -157,7 +168,7 @@ impl Data {
         &self,
         provider: &ProviderChoice,
     ) -> Option<(view_expr::ExprDialect, &'static view_expr::Spaces)> {
-        Some((sql_dialect(provider)?.expr_dialect()?, self.spaces?))
+        Some((view_dialect(provider)?.expr_dialect()?, self.spaces?))
     }
 }
 
@@ -376,7 +387,7 @@ impl DataLayer for Data {
                             && namespace.iter().flatten().count() < d.namespace_depth()
                     })
             }
-            ProviderChoice::Host { .. } => false,
+            ProviderChoice::Host { capabilities } => capabilities.namespace_first,
         }
     }
 
@@ -402,12 +413,19 @@ impl DataLayer for Data {
                     view: view.clone(),
                 }
             }
-            ProviderChoice::Host { .. } => provider.clone(),
+            // A source asked its namespace first answers it in full.
+            ProviderChoice::Host { capabilities } => ProviderChoice::Host {
+                capabilities: ProviderCapabilities {
+                    namespace: parts,
+                    namespace_first: false,
+                    ..capabilities.clone()
+                },
+            },
         }
     }
 
     fn view_kind(&self, provider: &ProviderChoice) -> Option<sdm_contract::view::ViewKind> {
-        sql_dialect(provider)?.view_kind()
+        view_dialect(provider)?.view_kind()
     }
 
     fn failure(&self, provider: &ProviderChoice, error: &ProviderError) -> FailureFacts {
@@ -428,7 +446,7 @@ impl DataLayer for Data {
         provider: &ProviderChoice,
         ask: ViewTextAsk,
     ) -> Result<ViewTextAnswer, CoreError> {
-        let (Some((dialect, spaces)), Some(sql)) = (self.views(provider), sql_dialect(provider))
+        let (Some((dialect, spaces)), Some(sql)) = (self.views(provider), view_dialect(provider))
         else {
             return Err(views_unread());
         };
@@ -477,6 +495,14 @@ impl DataLayer for Data {
             .with_field("request", Detail::text(request.name())));
         };
         let answer = match provider {
+            // A semantic model's definition, in its dialect's own shape,
+            // read by the database the source declares.
+            ProviderChoice::Host { .. } if *part == DescribePart::ViewDefinition => {
+                let spaces = self.spaces.ok_or_else(views_unread)?;
+                view_dialect(provider)
+                    .ok_or_else(views_unread)?
+                    .read_view(request, batches, spaces)?
+            }
             ProviderChoice::Host { .. } => read::host(*part, batches)?,
             ProviderChoice::Sql { dialect, .. } if *part == DescribePart::ViewDefinition => {
                 let spaces = self.spaces.ok_or_else(views_unread)?;

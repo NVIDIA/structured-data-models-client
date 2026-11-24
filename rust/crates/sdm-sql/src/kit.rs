@@ -73,11 +73,12 @@ impl From<CoreError> for KitError {
 
 /// A built-in source's SQL: its dialect, the namespace it reads under, the
 /// semantic model it reads through, and the timestamp transport its driver
-/// needs.
-#[derive(Debug, Clone)]
+/// needs. One kit answers one run: the namespace it settles is kept for
+/// the run, as the core keeps a run's, and never between runs.
+#[derive(Debug)]
 pub struct SqlKit {
     data: Data,
-    provider: ProviderChoice,
+    provider: std::sync::Mutex<ProviderChoice>,
 }
 
 impl SqlKit {
@@ -100,27 +101,37 @@ impl SqlKit {
             None => Data::new(),
         };
         data.capabilities(&provider)?;
-        Ok(SqlKit { data, provider })
+        Ok(SqlKit {
+            data,
+            provider: std::sync::Mutex::new(provider),
+        })
     }
 
-    /// The source this kit answers for, as the core names it.
-    pub fn provider(&self) -> &ProviderChoice {
-        &self.provider
+    /// The source this kit answers for, as the core names it, its
+    /// namespace settled once the run asked it.
+    pub fn provider(&self) -> ProviderChoice {
+        self.provider
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     /// What the source answers: every request and filter its dialect
     /// writes.
     pub fn capabilities(&self) -> Result<ProviderCapabilities, CoreError> {
-        let mut declared = self.data.capabilities(&self.provider)?;
+        let provider = self.provider();
+        let mut declared = self.data.capabilities(&provider)?;
         // The engine's traits the core reads by them, alike for every
         // source (contract v76).
         let probe = Relation::of(vec!["t".to_owned()]);
-        declared.database = self.data.source_database(&self.provider);
-        declared.column_affinities = !self.data.holds_column_types(&self.provider);
-        declared.reads_tables_as_they_stand = self.data.reads_tables_as_they_stand(&self.provider);
-        declared.namespace = self.data.read_as(&self.provider, &probe).source;
+        declared.database = self.data.source_database(&provider);
+        declared.column_affinities = !self.data.holds_column_types(&provider);
+        declared.reads_tables_as_they_stand = self.data.reads_tables_as_they_stand(&provider);
+        declared.namespace = self.data.read_as(&provider, &probe).source;
         declared.namespace.pop();
-        declared.tries_upper_case_names = self.data.spellings(&self.provider, &probe).len() > 1;
+        declared.tries_upper_case_names = self.data.spellings(&provider, &probe).len() > 1;
+        declared.namespace_first = self.data.unsettled(&provider);
+        declared.view = provider.view().cloned();
         Ok(declared)
     }
 
@@ -135,8 +146,9 @@ impl SqlKit {
         float_text: fn(f64) -> String,
         run: &mut dyn FnMut(KitFetch<'_>) -> Result<Answered, ProviderError>,
     ) -> Result<Answered, KitError> {
-        let mut plan = self.data.plan(request, &self.provider)?;
-        if let Some(metadata) = self.data.result_metadata(&self.provider, request, &plan)? {
+        let provider = self.provider();
+        let mut plan = self.data.plan(request, &provider)?;
+        if let Some(metadata) = self.data.result_metadata(&provider, request, &plan)? {
             // A schema-only read binds empty key sets: the source query is
             // never run to learn its result's types.
             let empty: BTreeMap<AttachmentId, KeyData> = keys
@@ -151,16 +163,34 @@ impl SqlKit {
                     )
                 })
                 .collect();
-            let described = self.run_bound(request, metadata, &empty, float_text, run)?;
+            let described =
+                self.run_bound(&provider, request, metadata, &empty, float_text, run)?;
             plan = self
                 .data
-                .project_result(&self.provider, request, &plan, &described.batches)?;
+                .project_result(&provider, request, &plan, &described.batches)?;
         }
-        let answered = self.run_bound(request, plan, keys, float_text, run)?;
+        let answered = self.run_bound(&provider, request, plan, keys, float_text, run)?;
         // A catalog answer is read from the dialect's own rows and written
         // in the standard shape every source answers in.
-        if let DataRequest::Describe { .. } = request {
-            let read = self.data.read(request, &self.provider, &answered.batches)?;
+        if let DataRequest::Describe { part, .. } = request {
+            let mut read = self.data.read(request, &provider, &answered.batches)?;
+            // The namespace a source leaves to its connection, settled with
+            // the parts it names, as the core settles a run's: kept for the
+            // rest of the run, and answered in full.
+            if *part == sdm_contract::data::DescribePart::Namespace
+                && self.data.unsettled(&provider)
+                && let sdm_contract::catalog::CatalogAnswer::Namespace(parts) = read
+            {
+                let settled = self.data.settled(&provider, parts);
+                let probe = Relation::of(vec!["t".to_owned()]);
+                let mut full = self.data.read_as(&settled, &probe).source;
+                full.pop();
+                *self
+                    .provider
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) = settled;
+                read = sdm_contract::catalog::CatalogAnswer::Namespace(full);
+            }
             if let Some((schema, batch)) = crate::standard::catalog(&read)? {
                 return Ok(Answered {
                     schema,
@@ -175,6 +205,7 @@ impl SqlKit {
     /// answers joined and read as the reference reads them.
     fn run_bound(
         &self,
+        provider: &ProviderChoice,
         request: &DataRequest,
         plan: FetchPlan,
         keys: &BTreeMap<AttachmentId, KeyData>,
@@ -189,7 +220,7 @@ impl SqlKit {
             .collect();
         let bound = self
             .data
-            .bind(&self.provider, request, plan, &given, float_text)?;
+            .bind(provider, request, plan, &given, float_text)?;
         let mut joined: Option<Answered> = None;
         for fetch in bound.fetches {
             // Each fetch is handed what its statements bind and nothing
@@ -209,7 +240,7 @@ impl SqlKit {
             .map_err(|mut error| {
                 // What the failure means, read by the engine that failed,
                 // so the core reads it as it reads every source's.
-                error.facts = Some(self.data.failure(&self.provider, &error));
+                error.facts = Some(self.data.failure(provider, &error));
                 KitError::Provider(error)
             })?;
             joined = Some(match joined {
@@ -243,7 +274,7 @@ impl SqlKit {
         Ok(
             match self
                 .data
-                .conform(&self.provider, &whole.schema, &whole.batches, float_text)?
+                .conform(provider, &whole.schema, &whole.batches, float_text)?
             {
                 Some((schema, batches)) => Answered { schema, batches },
                 None => whole,
@@ -253,12 +284,12 @@ impl SqlKit {
 
     /// What the driver's failure `error` tells the core.
     pub fn failure(&self, error: &ProviderError) -> FailureFacts {
-        self.data.failure(&self.provider, error)
+        self.data.failure(&self.provider(), error)
     }
 
     /// The answer to a question about a semantic model's text, in the
     /// source's dialect.
     pub fn view_text(&self, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-        self.data.view_text(&self.provider, ask)
+        self.data.view_text(&self.provider(), ask)
     }
 }

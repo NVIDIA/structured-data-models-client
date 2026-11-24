@@ -14860,6 +14860,21 @@
         "tries_upper_case_names": {
           "description": "Whether a name the catalog does not find as given is tried again\nupper-cased, as Snowflake folds an unquoted name (contract v76).",
           "type": "boolean"
+        },
+        "namespace_first": {
+          "description": "Whether the source must be asked its namespace (`describe` of the\n`namespace` part) before a table of one part is read, since it leaves\na part to its connection (contract v76); its answer is the namespace\nin full, which the core then reads every such table under.",
+          "type": "boolean"
+        },
+        "view": {
+          "description": "The semantic model the source is read through, where it is one\n(contract v76): a built-in source's Databricks metric view or\nSnowflake semantic view, whose definition and text the core's own\ndata layer reads by the source's database.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ViewChoice"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,
