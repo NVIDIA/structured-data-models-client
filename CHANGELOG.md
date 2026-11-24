@@ -9,6 +9,9 @@ these packages. The three Python distributions share one version.
 
 ### Added
 
+- Snowflake Container Runtime quickstarts for Kumo Relational and Kumo Tabular in `examples/snowflake/`.
+  The relational example samples uploaded AdventureWorks tables through `SnowflakeSource`; the tabular example reads `Cleaned_data.csv` from a stage.
+  Both call a deployed NIM.
 - `SDMClient(..., exact_url=True, bearer_token=True)` in Python, and `ClientOptions.builder().exactUrl(true).bearerToken(true)` in Java, call an endpoint that serves predictions at one URL and reads the key as a bearer token, such as a hosted model in the NVIDIA API catalog.
   Such an endpoint has no sessions, model list or readiness route, so those calls fail with a named error; without the options, every URL is a base, as before.
 - Python and Java callers can read data through their own code instead of a database connection, by subclassing `Source` (`sdm_client.Source`, an abstract base class) or implementing it (`com.nvidia.sdm.Source`, an interface), with `capabilities()` and `answer(request, expected)` (Java: `answer(request, expected, allocator)`).
