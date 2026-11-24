@@ -17,7 +17,7 @@ public final class NativeLog {
   /** The loggers of the core's crates, whose levels decide what crosses from the core. */
   private static final String[] ROOTS = {
     "sdm_contract", "sdm_core", "sdm_data", "sdm_engine", "sdm_host", "sdm_pql", "sdm_request",
-    "sdm_schema", "sdm_wire",
+    "sdm_schema", "sdm_sql", "sdm_wire",
   };
 
   private NativeLog() {}

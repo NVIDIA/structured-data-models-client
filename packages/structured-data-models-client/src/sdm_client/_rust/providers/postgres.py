@@ -8,7 +8,7 @@ psycopg connection, and hands back the last one's rows as an Arrow table,
 built from the driver's values with no pandas, an empty result keeping its
 schema.
 
-The statements are the core's (``sdm-data`` renders Postgres's SQL); this
+The statements are the core's (``sdm-sql`` renders Postgres's SQL); this
 module writes none. Each request gets its own cursor, in a transaction of
 its own as the reference's reads take one (``own_transaction``): none under
 autocommit, a savepoint inside a transaction the caller opened, so a failed
@@ -35,7 +35,7 @@ by the type's name in the driver's registry, never by its number (a type
 the registry does not name, a user's composite or enum, is read as text,
 which is how the driver reads it); the values are the driver's, moved into
 Arrow by pyarrow, and how the reference reads each is the core's
-(``sdm-data``'s Postgres value rules). The driver reads each value
+(``sdm-sql``'s Postgres value rules). The driver reads each value
 as it reads the reference's (its own loaders, so the statements' results
 are the reference's): a ``json`` or ``jsonb`` value is handed over as the
 JSON text of the value the driver read, its field marked as JSON (Arrow's

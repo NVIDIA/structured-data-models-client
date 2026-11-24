@@ -10,7 +10,7 @@ r"""Recomputes the provider kit's expected answers from its dataset.
 Builds ``dataset.sql`` in DuckDB, reads each table's rows whole, and
 computes every answer ``expected.json`` holds in plain Python, from the
 request's meaning as the contract states it (``sdm_contract::data``),
-never through ``sdm-data``'s SQL: so the answers are not the rendering's
+never through ``sdm-sql``'s SQL: so the answers are not the rendering's
 own, and a rendering that drifts is caught by the kit, not copied into
 it. Exits 0 when every committed answer is the recomputed one, and 1,
 printing each recomputed answer that differs, otherwise. It writes

@@ -188,7 +188,7 @@ fn a_key_set_past_the_budget_is_asked_as_chunks_in_one_hop_and_joined_in_order()
     let seen = Arc::new(Mutex::new(Seen::default()));
     let keys = many();
     let mut run = keyed_run(
-        Arc::new(sdm_data::Data::new()),
+        Arc::new(sdm_sql::Data::new()),
         &databricks(),
         USERS,
         seeds(keys.clone()),
@@ -255,7 +255,7 @@ fn a_key_set_past_the_budget_is_asked_as_chunks_in_one_hop_and_joined_in_order()
 fn a_later_chunk_failing_fails_the_request() {
     let seen = Arc::new(Mutex::new(Seen::default()));
     let mut run = keyed_run(
-        Arc::new(sdm_data::Data::new()),
+        Arc::new(sdm_sql::Data::new()),
         &databricks(),
         USERS,
         seeds(many()),
@@ -295,7 +295,7 @@ fn a_later_chunk_failing_fails_the_request() {
 fn a_key_set_within_the_budget_is_one_fetch_of_one_text() {
     let seen = Arc::new(Mutex::new(Seen::default()));
     let mut run = keyed_run(
-        Arc::new(sdm_data::Data::new()),
+        Arc::new(sdm_sql::Data::new()),
         &databricks(),
         USERS,
         seeds(vec![5, 6]),
@@ -319,9 +319,9 @@ fn a_key_set_within_the_budget_is_one_fetch_of_one_text() {
 
 // --- bind's default, round-tripped through the core ------------------------------
 
-/// `sdm-data`'s plans and catalog reads, bound by the contract's default
+/// `sdm-sql`'s plans and catalog reads, bound by the contract's default
 /// `bind`: one fetch, the plan as it is, the key sets as the core made them.
-struct Unbound(sdm_data::Data);
+struct Unbound(sdm_sql::Data);
 
 impl DataLayer for Unbound {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
@@ -352,7 +352,7 @@ fn bind_s_default_round_trips_one_fetch_of_the_plan_and_the_core_s_key_set() {
     let seen = Arc::new(Mutex::new(Seen::default()));
     let made = seeds(vec![1, 2, 3]);
     let mut run = keyed_run(
-        Arc::new(Unbound(sdm_data::Data::new())),
+        Arc::new(Unbound(sdm_sql::Data::new())),
         &postgres(),
         &["users"],
         made.clone(),
@@ -365,7 +365,7 @@ fn bind_s_default_round_trips_one_fetch_of_the_plan_and_the_core_s_key_set() {
         panic!("one fetch")
     };
     let original = seen.lock().unwrap().keys.unwrap();
-    let planned = sdm_data::Data::new()
+    let planned = sdm_sql::Data::new()
         .plan(&lookup(&["users"], original), &postgres())
         .unwrap();
     assert_eq!(step.plan, planned, "the plan as it is");
@@ -419,7 +419,7 @@ fn a_host_provider_is_handed_the_core_s_key_set_as_it_was_made() {
     };
     let made = seeds(vec![9, 8]);
     let mut run = keyed_run(
-        Arc::new(sdm_data::Data::new()),
+        Arc::new(sdm_sql::Data::new()),
         &host,
         &["users"],
         made.clone(),
@@ -476,7 +476,7 @@ fn wide(batches: &[i64], values: &[&str]) -> FetchResult {
 fn chunked_postgres(answers: Vec<FetchResult>) -> Option<Reply> {
     let seen = Arc::new(Mutex::new(Seen::default()));
     let mut run = keyed_run(
-        Arc::new(sdm_data::Data::new()),
+        Arc::new(sdm_sql::Data::new()),
         &postgres(),
         &["wide_numbers"],
         seeds(many()),
@@ -580,7 +580,7 @@ fn timestamp_preflight_binds_empty_keys_then_preserves_the_original_lookup() {
         r#"{"provider":"sql","dialect":"databricks","timestamp_encoding":"microseconds"}"#,
     )
     .unwrap();
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::new()));
     let seen = Arc::new(Mutex::new(Seen::default()));
     let saved = Arc::clone(&seen);
     let mut run = Run::with_data(
@@ -717,7 +717,7 @@ fn both_timestamp_kinds_survive_first_and_later_key_text_chunks_without_reprojec
         r#"{"provider":"sql","dialect":"databricks","timestamp_encoding":"microseconds"}"#,
     )
     .unwrap();
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::new()));
     let mut run = Run::with_data(root.data_access(&provider).unwrap(), |asker| async move {
         let id = asker.attach(Attachment::Arrow(seeds(many())))?;
         let mut request = lookup(USERS, id);

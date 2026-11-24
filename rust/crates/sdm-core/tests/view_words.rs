@@ -10,12 +10,12 @@ use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{ViewKind, ViewTextAnswer, ViewTextAsk};
 use sdm_core::pql::{spaces, yaml_rules};
 use sdm_core::{view_steps, view_words};
-use sdm_data::Data;
-use sdm_data::view_expr::metric::{self as data, DefaultRefusal, FilterRefusal};
-use sdm_data::view_expr::{self, ExprDialect};
 use sdm_schema::view::metric;
 use sdm_schema::view::model::{self, Edge, MeasureNote, TimeColumnNote};
 use sdm_schema::view::yaml;
+use sdm_sql::Data;
+use sdm_sql::view_expr::metric::{self as data, DefaultRefusal, FilterRefusal};
+use sdm_sql::view_expr::{self, ExprDialect};
 
 /// The data layer's answers in Databricks's dialect, as the routine asks
 /// them (`DataLayer::view_text`).

@@ -4,10 +4,10 @@
 
 //! Legacy scalar-seeded MT19937 and the unweighted RandomState permutation.
 //!
-//! The generator/tempering is the audited algorithm in sdm-data's MT19937.
+//! The generator/tempering is the audited algorithm in sdm-sql's MT19937.
 //! It intentionally remains local: the frozen crate layers permit neither an
 //! engine-to-data nor a data-to-engine dependency. Warehouse coefficients and
-//! their seed-array initialization stay untouched in sdm-data.
+//! their seed-array initialization stay untouched in sdm-sql.
 //!
 //! NumPy v2.3.0 sources: `numpy/random/src/mt19937/mt19937.c` (scalar seed),
 //! `mt19937.h` (32/64-bit outputs), `src/distributions/distributions.c`

@@ -691,6 +691,7 @@ fn a_proposed_improvement_s_sentence_is_marked_and_used_by_none() {
     for krate in [
         "sdm-core",
         "sdm-data",
+        "sdm-sql",
         "sdm-schema",
         "sdm-engine",
         "sdm-request",

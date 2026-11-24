@@ -138,7 +138,7 @@ fn predict_run_setting(
         ),
     ]);
     start(
-        &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+        &CompositionRoot::new(Arc::new(sdm_sql::Data::new())),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),
@@ -262,7 +262,7 @@ fn a_ranking_s_state_naming_its_candidates_out_of_order_is_refused_by_name() {
             (AttachmentId(4), Attachment::Bytes(query)),
         ]);
         start(
-            &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+            &CompositionRoot::new(Arc::new(sdm_sql::Data::new())),
             StartRun {
                 contract: CONTRACT_VERSION,
                 facts: facts(),

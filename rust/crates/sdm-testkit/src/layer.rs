@@ -4,8 +4,8 @@
 
 //! A second data layer (plan section 3, "Data access"): the data
 //! port (`sdm_contract::data::DataLayer`) implemented apart
-//! from `sdm-data`, for host providers alone, composed at the composition
-//! root in place of `sdm-data`'s ([`root`]). Dev-only.
+//! from `sdm-sql`, for host providers alone, composed at the composition
+//! root in place of `sdm-sql`'s ([`root`]). Dev-only.
 //!
 //! It renders no SQL and serves no dialect: a run naming one is refused
 //! before it exists, `UNSUPPORTED_REQUEST` naming the dialect. A host
@@ -41,7 +41,7 @@ use sdm_host::CompositionRoot;
 pub struct HostLayer;
 
 /// The composition root over [`HostLayer`], in place of
-/// `sdm_host::default_root`'s, over `sdm-data`.
+/// `sdm_host::default_root`'s, over `sdm-sql`.
 pub fn root() -> CompositionRoot {
     CompositionRoot::new(Arc::new(HostLayer))
 }
@@ -132,7 +132,7 @@ fn flag(batch: &RecordBatch, name: &str, row: usize) -> Result<bool, CoreError> 
 
 /// Row `row` of the list-of-names column `name`: its names in order, a
 /// null name dropped and the others kept, none where the list is null, as
-/// `sdm-data`'s catalog reader reads a key's and a foreign key's columns
+/// `sdm-sql`'s catalog reader reads a key's and a foreign key's columns
 /// (P2--1).
 fn kept_names(batch: &RecordBatch, name: &str, row: usize) -> Result<Vec<String>, CoreError> {
     let lists = column(batch, name)?
@@ -152,7 +152,7 @@ fn kept_names(batch: &RecordBatch, name: &str, row: usize) -> Result<Vec<String>
 }
 
 /// Row `row` of the list-of-names column `name`: its names in order, or
-/// `None` where the list, or any name in it, is null, as `sdm-data` reads
+/// `None` where the list, or any name in it, is null, as `sdm-sql` reads
 /// an index's columns (unresolved, never the names left over).
 fn names(batch: &RecordBatch, name: &str, row: usize) -> Result<Option<Vec<String>>, CoreError> {
     let lists = column(batch, name)?

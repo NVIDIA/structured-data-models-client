@@ -27,7 +27,7 @@
 //!
 //! An opaque type (`arrow.opaque`) is read only when its metadata's
 //! `vendor_name` is the vendor the run's provider declares at the data
-//! boundary (`DataLayer::opaque_vendor`, which `sdm-data` answers for its
+//! boundary (`DataLayer::opaque_vendor`, which `sdm-sql` answers for its
 //! DuckDB dialect): another vendor's `hugeint` or `bit` need not have
 //! DuckDB's layout, and a fixed-size integer's bytes always decode, so a
 //! column naming another vendor, or none, is admitted by its storage as it
@@ -72,7 +72,7 @@ fn is_binary(data_type: &DataType) -> bool {
 /// storage it comes in. An opaque type is read by its vendor's layout only
 /// when its metadata's `vendor_name` is `vendor`, the vendor the run's
 /// provider declares at the data boundary (`DataLayer::opaque_vendor`; the
-/// dialect's name stays in `sdm-data`); a column naming another vendor, or
+/// dialect's name stays in `sdm-sql`); a column naming another vendor, or
 /// none, is left to admission by its storage, never decoded by a layout it
 /// may not have. A canonical `arrow.uuid` has one layout and no vendor.
 fn meaning(field: &Field, vendor: Option<&str>) -> Option<Meaning> {

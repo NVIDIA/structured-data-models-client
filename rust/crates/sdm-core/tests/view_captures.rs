@@ -338,7 +338,7 @@ fn describe_spec(
         "view": {"name": view_name(case), "trust_expressions": trust},
     }))
     .unwrap();
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::reading_views(
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::reading_views(
         sdm_core::pql::spaces(),
     )));
     let mut run = start(
@@ -1058,7 +1058,7 @@ fn materialize_query(
         vec![Arc::new(arrow_array::Int64Array::from(vec![0, 1])) as arrow_array::ArrayRef],
     )
     .unwrap();
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::reading_views(
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::reading_views(
         sdm_core::pql::spaces(),
     )));
     let mut run = start(

@@ -4,7 +4,7 @@
 
 //! A Snowflake semantic view's conversion (V1 to V7) over a fake data
 //! layer, the Snowflake dialect being: the layer answers the view's
-//! text in Snowflake's rules (`sdm-data`'s), every read as a host provider
+//! text in Snowflake's rules (`sdm-sql`'s), every read as a host provider
 //! would, and the test answers each read from tables it holds. S5's third
 //! sequence: each table is finished, its columns read, its expressions
 //! sampled and its rows read, before the next table's first read.
@@ -31,7 +31,7 @@ use sdm_contract::{CONTRACT_VERSION, CoreError, HostFacts, Scalar, Step, Unit};
 use sdm_core::{
     ArrowData, Attachment, Attachments, CompositionRoot, FetchResult, UnknownZone, Zones, start,
 };
-use sdm_data::view_expr::ExprDialect;
+use sdm_sql::view_expr::ExprDialect;
 use serde_json::json;
 
 struct NoZones;
@@ -79,8 +79,7 @@ struct Fake {
 impl DataLayer for Fake {
     fn capabilities(&self, _: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
         // A warehouse's: it reads a derived relation.
-        let mut capabilities =
-            sdm_data::Data::new().capabilities(&ProviderChoice::sql("duckdb"))?;
+        let mut capabilities = sdm_sql::Data::new().capabilities(&ProviderChoice::sql("duckdb"))?;
         capabilities.derived_relations = true;
         Ok(capabilities)
     }
@@ -140,7 +139,7 @@ impl DataLayer for Fake {
     }
 
     fn view_text(&self, _: &ProviderChoice, ask: ViewTextAsk) -> Result<ViewTextAnswer, CoreError> {
-        Ok(sdm_data::view_expr::answer(
+        Ok(sdm_sql::view_expr::answer(
             ask,
             ExprDialect::Snowflake,
             sdm_core::pql::spaces(),
@@ -418,7 +417,7 @@ fn converted_temporal_facts_reach_the_existing_zoned_window_planner() {
         panic!("no temporal window");
     };
     assert_eq!(window.source_type.as_deref(), Some("TIMESTAMP_LTZ(6)"));
-    let FetchPlan::Sql { statements, .. } = sdm_data::Data::new()
+    let FetchPlan::Sql { statements, .. } = sdm_sql::Data::new()
         .plan(&request, &ProviderChoice::sql("snowflake"))
         .unwrap()
     else {

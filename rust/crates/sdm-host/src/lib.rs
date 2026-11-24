@@ -40,12 +40,12 @@ pub use sdm_core::{
 pub use zones::{ZoneError, ZoneResolver, ZoneRoot, ZoneSource, session_zone_offset};
 
 /// A Postgres `json` or `jsonb` value, given as the server's text, as the
-/// reference's provider hands it to the core (`sdm_data::json_text`, the
+/// reference's provider hands it to the core (`sdm_sql::json_text`, the
 /// reference's float text): for a host whose driver gives the server's
 /// text, so how the value is read stays in the data layer.
 /// `None` where the text is not JSON; `Some(None)` for a JSON null.
 pub fn json_value_text(text: &str) -> Option<Option<String>> {
-    let read = || sdm_data::json_text(text, sdm_core::float_text);
+    let read = || sdm_sql::json_text(text, sdm_core::float_text);
     // The reader recurses once per level: a deep value is read on a stack
     // of its own, as the core reads a deep query, a shallow one on the
     // caller's (a JVM thread's stack is small).
@@ -90,7 +90,7 @@ fn nesting(text: &str) -> usize {
 /// fills each error's and warning's sentence from it, formatting nothing
 /// the table does not name.
 pub fn templates() -> String {
-    sdm_contract::wording::table_json_naming(sdm_data::DATABASE_NAMES)
+    sdm_contract::wording::table_json_naming(sdm_sql::DATABASE_NAMES)
 }
 
 /// What each model supports, as the client describes it to a caller
@@ -120,9 +120,9 @@ pub fn capabilities() -> String {
 }
 
 /// The databases the data layer of [`default_root`] provides for
-/// (`sdm_data::PROVIDERS`), which a binding reports as plain data.
+/// (`sdm_sql::PROVIDERS`), which a binding reports as plain data.
 pub fn providers() -> &'static [&'static str] {
-    sdm_data::PROVIDERS
+    sdm_sql::PROVIDERS
 }
 
 /// `query` as the PQL library writes it back (`sdm_core::pql::normalized`),
@@ -132,12 +132,39 @@ pub fn normalized_query(query: &str) -> Option<String> {
 }
 
 /// The composition root a binding starts its runs with: the one data layer,
-/// `sdm-data`'s, built here where every binding reaches it (
+/// `sdm-sql`'s, built here where every binding reaches it (
 /// H14, E30).
 pub fn default_root() -> CompositionRoot {
-    CompositionRoot::new(std::sync::Arc::new(sdm_data::Data::reading_views(
+    CompositionRoot::new(std::sync::Arc::new(sdm_sql::Data::reading_views(
         sdm_core::pql::spaces(),
     )))
+}
+
+/// The SQL kit of the built-in source `provider` names (`sdm_sql::kit`),
+/// reading semantic models with the core's white space, as
+/// [`default_root`]'s data layer reads them. A binding builds one per
+/// built-in source and answers every typed request the core sends that
+/// source through it ([`answer_with_kit`]).
+pub fn sql_kit(
+    provider: sdm_contract::data::ProviderChoice,
+) -> Result<sdm_sql::kit::SqlKit, sdm_contract::CoreError> {
+    sdm_sql::kit::SqlKit::new(provider, Some(sdm_core::pql::spaces()))
+}
+
+/// `kit`'s answer to `request`, its doubles written into SQL as the core
+/// writes them (`sdm_core::float_text`), every fetch run by `run`.
+pub fn answer_with_kit(
+    kit: &sdm_sql::kit::SqlKit,
+    request: &sdm_contract::data::DataRequest,
+    keys: &std::collections::BTreeMap<
+        sdm_contract::data::AttachmentId,
+        sdm_contract::data::KeyData,
+    >,
+    run: &mut dyn FnMut(
+        sdm_sql::kit::KitFetch<'_>,
+    ) -> Result<sdm_sql::kit::Answered, sdm_contract::data::ProviderError>,
+) -> Result<sdm_sql::kit::Answered, sdm_sql::kit::KitError> {
+    kit.answer(request, keys, sdm_core::float_text, run)
 }
 
 #[cfg(test)]

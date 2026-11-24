@@ -662,7 +662,7 @@ impl Source<'_> {
     }
 
     /// The composition root a run over this source starts with: the one
-    /// the non-SQL provider's run was given; `sdm-data`'s for every
+    /// the non-SQL provider's run was given; `sdm-sql`'s for every
     /// other.
     fn root(self) -> CompositionRoot {
         match self {
@@ -845,7 +845,7 @@ fn require_replayed_completion(
 /// into the minimal non-SQL test provider ([`crate::memory`]), every
 /// run started with `root`: the second data layer's
 /// ([`crate::layer::root`]) to run it swapped, or `default_root`, over
-/// `sdm-data`, to run the same provider on the default layer. Every
+/// `sdm-sql`, to run the same provider on the default layer. Every
 /// operation the case names, its fetches answered from in-memory Arrow
 /// tables, never by a statement; its run records no driver.
 pub fn run_memory(case: &Case, bases: &Bases, root: &CompositionRoot) -> Result<Observed> {

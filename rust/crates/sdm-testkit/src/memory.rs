@@ -545,7 +545,7 @@ impl Memory {
     /// A copy of the tables of `connection`'s current schema, in the order
     /// DuckDB's catalog lists them, each with its rows as DuckDB's driver
     /// hands them over and its catalog as DuckDB declares it (a key's
-    /// kind read as `sdm-data` reads DuckDB's: a primary key, a unique
+    /// kind read as `sdm-sql` reads DuckDB's: a primary key, a unique
     /// key, or another kind). Read once, to build a fixture.
     pub fn from_duckdb(connection: &duckdb::Connection) -> Result<Memory> {
         const HERE: &str = "database_name = current_database() AND schema_name = current_schema()";

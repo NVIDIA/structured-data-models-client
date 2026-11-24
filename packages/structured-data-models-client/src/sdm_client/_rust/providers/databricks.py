@@ -14,7 +14,7 @@ runs ``spark.sql`` and fetches with ``DataFrame.toArrow``. Both bind
 positional ``?`` markers from ``execute(sql, parameters=[...])``, as the
 reference's sampler binds them (``DB/sampler.py``).
 
-The statements are the core's (``sdm-data`` renders Databricks' SQL); this
+The statements are the core's (``sdm-sql`` renders Databricks' SQL); this
 module writes none. A statement's parameters are bound in order: a scalar
 as the Python value the contract's scalar holds (mod:`..codec`), a key set
 (the seeds of a ``neighbors`` or ``lookup`` request) as the one JSON text the

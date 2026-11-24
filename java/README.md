@@ -244,7 +244,7 @@ The model endpoint's own refusal is a `ModelEndpointException`, with the endpoin
 A Databricks serving endpoint's refusal is a `ModelEndpointException` too, under the endpoint's status and its own code, in the core's words, as Python's serving client raises it.
 A panic inside the core is contained: the call raises `INTERNAL_ERROR` with `details().get("panic") == true`, and the JVM goes on.
 
-The core's log events reach SLF4J under the loggers its crates name (`sdm_core`, `sdm_host`, `sdm_data` and their modules), and its warnings under `com.nvidia.sdm.warnings`, at `WARN`.
+The core's log events reach SLF4J under the loggers its crates name (`sdm_core`, `sdm_host`, `sdm_sql` and their modules), and its warnings under `com.nvidia.sdm.warnings`, at `WARN`.
 
 ## Your own data provider
 

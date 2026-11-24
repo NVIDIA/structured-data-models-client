@@ -14,11 +14,11 @@ use sdm_contract::data::{DataLayer, ProviderChoice};
 use sdm_contract::view::{TypeClass, ViewTextAnswer, ViewTextAsk};
 use sdm_core::pql::{spaces, yaml_rules};
 use sdm_core::{view_steps, view_words};
-use sdm_data::Data;
-use sdm_data::view_expr::metric::DefaultRefusal;
 use sdm_schema::view::metric;
 use sdm_schema::view::spec::ColumnItem;
 use sdm_schema::view::yaml;
+use sdm_sql::Data;
+use sdm_sql::view_expr::metric::DefaultRefusal;
 
 const TYPES: &[&str] = &[
     "STRING",

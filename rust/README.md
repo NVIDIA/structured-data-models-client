@@ -16,11 +16,12 @@ The last column is what `scripts/rust_core/dependency_policy.py` allows, for any
 | `sdm-pql` | The PQL lexer, parser and validators | nothing |
 | `sdm-wire` | The model API's JSON: the payload and the response | `sdm-contract` |
 | `sdm-schema` | Schema inference over Arrow, assembly and edits (the schema's types are `sdm-contract`'s) | `sdm-contract` |
-| `sdm-data` | The data layer: SQL for each dialect (DuckDB, SQLite, Postgres) and reading the answers | `sdm-contract` |
+| `sdm-data` | The engine-neutral data layer: time-series preparation | `sdm-contract` |
+| `sdm-sql` | The SQL kit: each dialect's statements (DuckDB, SQLite, Postgres, Databricks, Snowflake), key-set binding, catalog reading, view-text answers | `sdm-contract` |
 | `sdm-engine` | Time and zones, random streams, sampling rules, labels | `sdm-schema`, `sdm-contract` |
 | `sdm-request` | The model request's payload and options, the ranking and the result layout | `sdm-engine`, `sdm-schema`, `sdm-wire`, `sdm-contract` |
-| `sdm-core` | The run state machine and the operations: describe, edit, validate, materialize, predict | every crate above |
-| `sdm-host` | The layer every binding shares: message codec, Arrow admission, run ownership, panic containment, zones | `sdm-core`, `sdm-data`, `sdm-contract` |
+| `sdm-core` | The run state machine and the operations: describe, edit, validate, materialize, predict | every crate above (`sdm-sql` only until the typed-request sources' step 3) |
+| `sdm-host` | The layer every binding shares: message codec, Arrow admission, run ownership, panic containment, zones | `sdm-core`, `sdm-data`, `sdm-sql`, `sdm-contract` |
 | `sdm-py` (in `bindings/`) | The Python module `sdm_client._native` | exactly `sdm-host` and `sdm-contract` |
 | `sdm-jni` (in `bindings/`) | The JNI bridge used by the Java client | exactly `sdm-host` and `sdm-contract` |
 | `sdm-testkit` (dev only) | A pure-Rust test host and the `sdm-contract-run` program for the contract cases | `sdm-host`, `sdm-contract` |
@@ -30,9 +31,10 @@ The Java binding, `sdm-jni`, lives under `bindings/` with the same dependency ru
 ## Dependency diagram
 
 The normal (non-test) dependencies in use today.
-Shipped `sdm-core` code reaches the data layer only through the `DataLayer` trait in `sdm-contract`, and `sdm-host` plugs `sdm-data` in.
+Shipped `sdm-core` code reaches the data layer only through the `DataLayer` trait in `sdm-contract`, and `sdm-host` plugs `sdm-sql` in.
+Until the typed-request sources' step 3, `sdm-core` also takes `sdm-sql`'s view-text types.
 `sdm-engine` depends on `sdm-schema` only to implement its `infer::TextTimes` trait, which is how inference reads text as times.
-Test-only dependencies, not drawn: `sdm-core`'s tests use `sdm-data`, and the tests of `sdm-host` and `sdm-testkit` use `test-ops` builds of `sdm-core` and `sdm-host`.
+Test-only dependencies, not drawn: the tests of `sdm-host` and `sdm-testkit` use `test-ops` builds of `sdm-core` and `sdm-host`.
 Each crate's own README repeats its part of this graph.
 
 ```mermaid
@@ -42,7 +44,9 @@ flowchart TD
     sdm_py["sdm-py"] --> sdm_host["sdm-host"]
     sdm_testkit["sdm-testkit (dev only)"] --> sdm_host
     sdm_host --> sdm_core["sdm-core"]
-    sdm_host --> sdm_data["sdm-data"]
+    sdm_host --> sdm_sql["sdm-sql"]
+    sdm_core --> sdm_data["sdm-data"]
+    sdm_core --> sdm_sql
     sdm_core --> sdm_request["sdm-request"]
     sdm_core --> sdm_engine["sdm-engine"]
     sdm_core --> sdm_schema["sdm-schema"]
@@ -54,6 +58,7 @@ flowchart TD
     sdm_schema --> sdm_contract["sdm-contract"]
     sdm_wire --> sdm_contract
     sdm_data --> sdm_contract
+    sdm_sql --> sdm_contract
     sdm_engine --> sdm_contract
     sdm_request --> sdm_contract
     sdm_core --> sdm_contract
@@ -72,7 +77,9 @@ sdm-testkit -----+--> sdm-host --+--> sdm-core --+--> sdm-request --+--> sdm-wir
                                  |               +--> sdm-schema
                                  |               +--> sdm-wire
                                  |               +--> sdm-pql
-                                 +--> sdm-data
+                                 |               +--> sdm-data
+                                 |               +--> sdm-sql
+                                 +--> sdm-sql
 
 sdm-contract: the leaf every crate but sdm-pql shares
 sdm-pql: depends on no crate of ours
@@ -80,8 +87,8 @@ sdm-pql: depends on no crate of ours
 
 ## Rules the boundaries enforce
 
-- Only `sdm-data` writes SQL or knows a dialect; `sdm-schema`, `sdm-engine`, `sdm-request` and `sdm-core` hold neither.
-- The Python providers in `sdm_client/_rust/providers/` write no SQL either; they run what `sdm-data` rendered.
+- Only `sdm-sql` writes SQL or knows a dialect; `sdm-data`, `sdm-schema`, `sdm-engine`, `sdm-request` and `sdm-core` hold neither.
+- The Python providers in `sdm_client/_rust/providers/` write no SQL either; they run what `sdm-sql` rendered.
 - `sdm-pql` depends on no crate of ours, and only `sdm-core` depends on it, through `sdm-core/src/pql.rs` (and the test-only `test_ops.rs`).
 - `sdm-contract` depends on no crate of ours and does no I/O; a change of its message shapes bumps the contract version, and `sdm-contract/schema/contract.lock` holds the shapes.
 - No shipped crate links a database driver, and only a binding links a language runtime, its own (`pyo3` for `sdm-py`).

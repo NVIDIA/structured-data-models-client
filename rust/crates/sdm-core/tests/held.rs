@@ -171,7 +171,7 @@ fn try_run(
     given: Attachments,
 ) -> Result<Run, CoreError> {
     start(
-        &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+        &CompositionRoot::new(Arc::new(sdm_sql::Data::new())),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

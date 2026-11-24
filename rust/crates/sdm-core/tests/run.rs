@@ -35,13 +35,13 @@ fn describe(table: &str) -> DataRequest {
     }
 }
 
-/// A run whose data requests a host provider answers, through `sdm-data`'s
+/// A run whose data requests a host provider answers, through `sdm-sql`'s
 /// data layer.
 fn data_run<F>(make: impl FnOnce(Asker) -> F) -> Run
 where
     F: Future<Output = Result<OperationResult, CoreError>> + Send + 'static,
 {
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::new()));
     let host = ProviderChoice::Host {
         capabilities: ProviderCapabilities {
             opaque_vendor: None,

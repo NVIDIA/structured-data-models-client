@@ -115,7 +115,7 @@ def test_sql_cli_discovers_error_members_once_and_refreshes_next_invocation(
         *[
             f'sql: rust/crates/{crate}/src/lib.rs:1: the strings '
             'of a statement hold `select a from t where`, SQL or a '
-            "provider's name; SQL and providers are sdm-data's alone"
+            "provider's name; SQL and providers are sdm-sql's alone"
             for crate in present
         ],
         'sql: FAIL',

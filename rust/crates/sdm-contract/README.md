@@ -10,7 +10,7 @@ Feature `test-ops` adds operations only tests reach; `schema-check` checks JSON 
 Must not hold: logic, I/O, SQL, or anything that decides an answer; those belong in the crates that use these types.
 
 ```text
-used by:     sdm-wire, sdm-schema, sdm-data, sdm-engine, sdm-request, sdm-core, sdm-host, sdm-py, sdm-testkit
+used by:     sdm-wire, sdm-schema, sdm-data, sdm-sql, sdm-engine, sdm-request, sdm-core, sdm-host, sdm-py, sdm-testkit
      |
 sdm-contract
      |

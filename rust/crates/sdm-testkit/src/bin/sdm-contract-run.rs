@@ -32,7 +32,7 @@
 //! the composition root ([`sdm_testkit::layer`]), each observation keyed
 //! `<case>@memory`; a case that reads no data is not run there. With
 //! `--layer default` the same provider runs through
-//! `sdm_host::default_root`'s layer (`sdm-data`'s) instead, keyed the
+//! `sdm_host::default_root`'s layer (`sdm-sql`'s) instead, keyed the
 //! same, so the two runs differ in their data layer alone.
 //!
 //! `--replay` runs each case that runs on Postgres there, its fetches

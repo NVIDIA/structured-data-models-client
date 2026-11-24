@@ -22,7 +22,7 @@ import org.apache.arrow.vector.types.pojo.Field;
  * The JDBC-to-Arrow conversion table (plan section 3: "JDBC types: host, as a reviewed table"):
  * for each driver, the Arrow type each of its columns reaches the core as, and how each value is
  * read, so the same table reaches the core as the same Arrow through Java's driver as through
- * Python's (L5 for Java). How the reference reads a value is the core's ({@code sdm-data}'s value
+ * Python's (L5 for Java). How the reference reads a value is the core's ({@code sdm-sql}'s value
  * rules); this table only moves the driver's values into Arrow, as Python's providers do.
  *
  * <table>

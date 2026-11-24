@@ -28,7 +28,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
  * The Java host's one data provider: it answers a fetch step by running the statements its plan
  * carries, in order, on the source's {@link Connection}, and hands back the last one's result as
  * Arrow, as Python's providers do ({@code sdm_client._rust.providers}). The statements are the
- * core's ({@code sdm-data} renders each dialect's SQL); this class writes none, reads no value's
+ * core's ({@code sdm-sql} renders each dialect's SQL); this class writes none, reads no value's
  * meaning, and decides nothing (structure design rule 6). What differs by driver is two things
  * only:
  *

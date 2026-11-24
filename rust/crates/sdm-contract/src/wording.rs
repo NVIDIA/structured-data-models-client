@@ -224,7 +224,7 @@ pub const PROPOSED: &[Sentence] = &[Sentence::NullAnchor];
 
 /// A database a sentence names: by the name the core gives it, as a
 /// product (`backend`), and as the place a table is held (`place`). The
-/// data layer holds each database's (`sdm_data::DATABASE_NAMES`), since a
+/// data layer holds each database's (`sdm_sql::DATABASE_NAMES`), since a
 /// dialect is its alone; the host's table carries them beside the
 /// sentences.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

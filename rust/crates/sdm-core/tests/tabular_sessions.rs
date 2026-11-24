@@ -32,7 +32,7 @@ fn run(
 ) -> Run {
     attached.insert(AttachmentId(900), bytes(input));
     sdm_core::start(
-        &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+        &CompositionRoot::new(Arc::new(sdm_sql::Data::new())),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: HostFacts {

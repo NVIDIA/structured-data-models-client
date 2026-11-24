@@ -26,6 +26,7 @@ arrow-select.workspace = true
 jiff.workspace = true
 sdm-contract = { path = "../sdm-contract" }
 sdm-data = { path = "../sdm-data" }
+sdm-sql = { path = "../sdm-sql" }
 sdm-engine = { path = "../sdm-engine" }
 sdm-pql = { path = "../sdm-pql" }
 sdm-request = { path = "../sdm-request" }

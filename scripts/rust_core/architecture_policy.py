@@ -43,6 +43,7 @@ CORE_CRATES = (
     'sdm-core',
     'sdm-pql',
     'sdm-data',
+    'sdm-sql',
     'sdm-schema',
     'sdm-engine',
     'sdm-wire',
@@ -841,7 +842,7 @@ PROVIDER_WORDS = frozenset(
 # Provider-computed columns and typed example sources use
 # sdm-contract/src/sql_column.rs,
 # data.rs (ProviderChoice), and examples.rs (ExampleSource). Core orchestrates
-# these opaque requests; SQL rendering and provider knowledge stay in sdm-data.
+# these opaque requests; SQL rendering and provider knowledge stay in sdm-sql.
 # Match reviewed qualified references/declarations, never entire files or words.
 _SQL_ORCHESTRATION = {
     'describe.rs': (r'crate::sql_column',),
@@ -908,7 +909,7 @@ def check_sql(root: Path) -> list[str]:
                     problems.append(
                         f'{rel}:{source.line(offset)}: the strings '
                         f'of a statement hold `{evidence}`, SQL or a '
-                        "provider's name; SQL and providers are sdm-data's "
+                        "provider's name; SQL and providers are sdm-sql's "
                         'alone'
                     )
             for match in _INCLUDE.finditer(source.skeleton):
@@ -932,11 +933,12 @@ def check_sql(root: Path) -> list[str]:
 # --- dialects ---------------------------------------------------------------
 
 # The shared crates that hold no dialect knowledge: every
-# shipped crate but sdm-data, whose dialects they are, and the parser,
+# shipped crate but sdm-sql, whose dialects they are, and the parser,
 # which reads no data. sdm-testkit is dev-only.
 DIALECT_FREE_CRATES = (
     'sdm-contract',
     'sdm-core',
+    'sdm-data',
     'sdm-request',
     'sdm-schema',
     'sdm-engine',
@@ -1024,7 +1026,7 @@ def check_dialects(root: Path) -> list[str]:
                     problems.append(
                         f'{rel}:{source.line(offset)}: `{name}` names a '
                         f'dialect ({", ".join(hit)}); a dialect is '
-                        f"sdm-data's alone, and {crate} holds none"
+                        f"sdm-sql's alone, and {crate} holds none"
                     )
     return problems
 
@@ -1097,7 +1099,7 @@ def check_provider_sql(root: Path) -> list[str]:
                     problems.append(
                         f'{rel}:{node.lineno}: a string holds '
                         f'`{" ".join(match.group(0).split())[:40]}`, SQL; '
-                        "the statements a provider runs are sdm-data's"
+                        "the statements a provider runs are sdm-sql's"
                     )
     return problems
 

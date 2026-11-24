@@ -43,9 +43,9 @@ fn start(
     start_with_zones(root, start, attachments, Arc::new(NoZones))
 }
 
-/// The root a binding gets, over `sdm-data`'s data layer.
+/// The root a binding gets, over `sdm-sql`'s data layer.
 fn root() -> CompositionRoot {
-    CompositionRoot::new(Arc::new(sdm_data::Data::new()))
+    CompositionRoot::new(Arc::new(sdm_sql::Data::new()))
 }
 
 fn facts() -> HostFacts {
@@ -344,7 +344,7 @@ fn the_root_s_data_layer_serves_a_built_in_dialect_or_a_host_provider() {
         view: None,
     };
     let access = root.data_access(&duckdb).unwrap();
-    // The dialect declares what sdm-data renders for it: every request
+    // The dialect declares what sdm-sql renders for it: every request
     // kind a count of rows and a scan among them (an
     // undeclared optional request is refused by name before it is
     // planned: a_host_provider_is_asked_only_for_what_it_declared).

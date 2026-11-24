@@ -16,7 +16,7 @@
 //! returns ([`FetchPlan`]), and reads each `describe` answer the provider
 //! returned into the catalog's answer, in no dialect's shape
 //! ([`crate::catalog`]). The core holds one data layer, in
-//! its composition root, and names no dialect; `sdm-data` implements it.
+//! its composition root, and names no dialect; `sdm-sql` implements it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -232,7 +232,7 @@ pub struct KeySet {
 /// named `a.b` and `["main", "t"]` the table `t` of `main` (design choice
 /// 12). Plain data, a list of strings, as easily built by a host in any
 /// language as a name is. How many parts a source takes is its dialect's:
-/// `sdm-data` renders every dialect's `FROM` from a relation through one
+/// `sdm-sql` renders every dialect's `FROM` from a relation through one
 /// function and refuses one of no part, or of more parts than its dialect
 /// accepts, by name (rule `relation`); a host provider refuses one it
 /// cannot read the same way. Two schema tables over one source are two
@@ -1647,7 +1647,7 @@ pub struct ViewChoice {
 
 /// A statement's parameter: a scalar, or a key set the statement's text
 /// reads under `relation`. How the keys come to be read by that name is
-/// the dialect's, which `sdm-data` renders and its provider binds: the
+/// the dialect's, which `sdm-sql` renders and its provider binds: the
 /// DuckDB provider registers the attachment as a relation of that name; a
 /// PostgreSQL dialect may bind the keys as JSON text that a common table
 /// expression of that name unpacks, as the reference's PostgreSQL sampler
@@ -2069,7 +2069,7 @@ impl BoundRequest {
 ///
 /// A `describe` answer is a catalog's, whose columns a SQL dialect's own
 /// catalog fixes: a SQL plan expects the shape of the statement its dialect
-/// runs, which `sdm-data` reads ([`DataLayer::read`]), and a host provider
+/// runs, which `sdm-sql` reads ([`DataLayer::read`]), and a host provider
 /// answers in the dialect-neutral shape of [`catalog_columns`] (decision
 /// E54).
 pub mod results {

@@ -661,7 +661,7 @@ class WriteGuard:
                     and _upper(before) not in RESERVED
                 )
                 or (
-                    # The core's seed-time read on Postgres (sdm-data's
+                    # The core's seed-time read on Postgres (sdm-sql's
                     # seed CTE): CROSS JOIN (SELECT ROW(t.*)::<table>...),
                     # then CROSS JOIN LATERAL jsonb_populate_record(b.base,
                     # jsonb_build_object(...)).

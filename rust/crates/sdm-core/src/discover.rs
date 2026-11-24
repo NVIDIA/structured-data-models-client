@@ -701,7 +701,7 @@ pub(crate) async fn not_held(asker: &Asker, table: &Relation) -> CoreError {
 
 /// Whether the source holds a relation, a table or a view, under `source`,
 /// as the source itself resolves the name: `describe` of the tables with
-/// `source` named, whose answer is empty when it holds none (sdm-data's
+/// `source` named, whose answer is empty when it holds none (sdm-sql's
 /// rendering decides how the dialect matches a name; the core matches
 /// none).
 async fn holds(asker: &Asker, source: &Relation) -> Result<bool, CoreError> {

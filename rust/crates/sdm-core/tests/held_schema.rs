@@ -214,7 +214,7 @@ const QUERY: &str = "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_
 
 fn run_of(operation: Operation, attachments: Attachments) -> Result<Run, CoreError> {
     start(
-        &CompositionRoot::new(Arc::new(sdm_data::Data::new())),
+        &CompositionRoot::new(Arc::new(sdm_sql::Data::new())),
         StartRun {
             contract: CONTRACT_VERSION,
             facts: facts(),

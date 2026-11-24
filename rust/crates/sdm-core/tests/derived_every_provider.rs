@@ -34,7 +34,7 @@ fn scan(table: serde_json::Value) -> DataRequest {
 }
 
 fn root() -> CompositionRoot {
-    CompositionRoot::new(Arc::new(sdm_data::Data::new()))
+    CompositionRoot::new(Arc::new(sdm_sql::Data::new()))
 }
 
 #[test]

@@ -204,7 +204,7 @@ fn materialize(
     seed: Option<Seed>,
 ) -> Result<Run, CoreError> {
     let (operation, attachments) = materialize_start(provider, description, query, seed);
-    materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments)
+    materialize_on(Arc::new(sdm_sql::Data::new()), operation, attachments)
 }
 
 /// The operation and attachments of a `materialize` start.
@@ -421,7 +421,7 @@ fn shop_source(request: &DataRequest) -> Option<FetchResult> {
 }
 
 /// What [`catalog`] answers, but the indexes in DuckDB's own catalog
-/// shape, which a DuckDB plan expects and `sdm-data` reads.
+/// shape, which a DuckDB plan expects and `sdm-sql` reads.
 fn duckdb_catalog(request: &DataRequest) -> Option<FetchResult> {
     match request {
         DataRequest::Describe {
@@ -602,7 +602,7 @@ fn a_host_provider_s_declared_range_is_the_one_the_core_holds_it_to() {
 
 /// The shipped data layer, but for the seed range it gives DuckDB, which
 /// it widens to every seed: a seeded fault in the capability.
-struct Forgetful(sdm_data::Data);
+struct Forgetful(sdm_sql::Data);
 
 impl DataLayer for Forgetful {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
@@ -637,7 +637,7 @@ fn without_the_capability_no_invalid_request_is_given() {
     // error. So the refusal above is the capability's, not a fallback.
     let (operation, attachments) =
         materialize_start(duckdb(), &shop(), QUERY, Some(Seed::from(1_u128 << 31)));
-    let layer: Arc<dyn DataLayer> = Arc::new(Forgetful(sdm_data::Data::new()));
+    let layer: Arc<dyn DataLayer> = Arc::new(Forgetful(sdm_sql::Data::new()));
     let forgetful = materialize_on(layer, operation, attachments).unwrap();
     let err = at_the_sample(forgetful, duckdb_catalog).unwrap_err();
     assert_eq!(err.code, ErrorCode::InternalError, "{err:?}");
@@ -1125,7 +1125,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
         };
         change(request);
         let mut run =
-            materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
+            materialize_on(Arc::new(sdm_sql::Data::new()), operation, attachments).unwrap();
         run.next()
     };
     // With the call's option values: `values`, and the options
@@ -1142,7 +1142,7 @@ fn the_options_the_host_passes_through_are_refused_by_name() {
             Attachment::Bytes(values.as_bytes().to_vec()),
         );
         let mut run =
-            materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
+            materialize_on(Arc::new(sdm_sql::Data::new()), operation, attachments).unwrap();
         run.next()
     };
     // An unseeded sample and an anchor at each entity's own time are taken
@@ -1247,7 +1247,7 @@ fn valued_run(values: &str) -> Run {
         AttachmentId(9),
         Attachment::Bytes(values.as_bytes().to_vec()),
     );
-    materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap()
+    materialize_on(Arc::new(sdm_sql::Data::new()), operation, attachments).unwrap()
 }
 
 #[test]
@@ -1699,7 +1699,7 @@ struct Changed(fn(&mut ProviderCapabilities));
 
 impl DataLayer for Changed {
     fn capabilities(&self, provider: &ProviderChoice) -> Result<ProviderCapabilities, CoreError> {
-        let mut capabilities = sdm_data::Data::new().capabilities(provider)?;
+        let mut capabilities = sdm_sql::Data::new().capabilities(provider)?;
         (self.0)(&mut capabilities);
         Ok(capabilities)
     }
@@ -1709,7 +1709,7 @@ impl DataLayer for Changed {
         request: &DataRequest,
         provider: &ProviderChoice,
     ) -> Result<FetchPlan, CoreError> {
-        sdm_data::Data::new().plan(request, provider)
+        sdm_sql::Data::new().plan(request, provider)
     }
 
     fn read(
@@ -1718,15 +1718,15 @@ impl DataLayer for Changed {
         provider: &ProviderChoice,
         batches: &[RecordBatch],
     ) -> Result<CatalogAnswer, CoreError> {
-        sdm_data::Data::new().read(request, provider, batches)
+        sdm_sql::Data::new().read(request, provider, batches)
     }
 
     fn source_database(&self, provider: &ProviderChoice) -> Option<&'static str> {
-        sdm_data::Data::new().source_database(provider)
+        sdm_sql::Data::new().source_database(provider)
     }
 
     fn reads_tables_as_they_stand(&self, provider: &ProviderChoice) -> bool {
-        sdm_data::Data::new().reads_tables_as_they_stand(provider)
+        sdm_sql::Data::new().reads_tables_as_they_stand(provider)
     }
 }
 
@@ -1781,7 +1781,7 @@ fn the_sampler_s_null_order_is_the_one_the_provider_declares() {
         // The time column, latest first, then the key.
         assert_eq!(reads[0].0, [nulls_last, nulls_last], "{declared:?}");
     }
-    // A SQL provider: DuckDB as `sdm-data` declares it orders nulls last,
+    // A SQL provider: DuckDB as `sdm-sql` declares it orders nulls last,
     // its statement unchanged (H9's traces hold its text and rows); a test
     // provider rendering DuckDB's SQL but declaring nulls first is asked
     // for nulls first in both its window's order and the result's.
@@ -1791,7 +1791,7 @@ fn the_sampler_s_null_order_is_the_one_the_provider_declares() {
         let (steps, _) = steps_to_the_result(&mut run, &|| duckdb_indexes(&[]));
         ordered_reads(&steps)
     };
-    let shipped = duckdb_order(Arc::new(sdm_data::Data::new()));
+    let shipped = duckdb_order(Arc::new(sdm_sql::Data::new()));
     assert_eq!(shipped.len(), 1);
     assert_eq!(shipped[0].0, [true, true]);
     let text = &shipped[0].1[0];
@@ -1911,7 +1911,7 @@ fn a_provider_without_index_advice_is_neither_asked_for_indexes_nor_warned() {
         silent.iter().map(|(r, _)| r).collect::<Vec<_>>(),
         advised[1..].iter().map(|(r, _)| r).collect::<Vec<_>>()
     );
-    // DuckDB as `sdm-data` declares it reads its indexes, in one statement;
+    // DuckDB as `sdm-sql` declares it reads its indexes, in one statement;
     // with the declaration forgotten (seeded), no statement reads them and
     // nothing is warned of: the read and the warning are the capability's.
     let duckdb_run = |layer: Arc<dyn DataLayer>| {
@@ -1930,7 +1930,7 @@ fn a_provider_without_index_advice_is_neither_asked_for_indexes_nor_warned() {
             })
             .collect()
     };
-    let (shipped, warnings) = duckdb_run(Arc::new(sdm_data::Data::new()));
+    let (shipped, warnings) = duckdb_run(Arc::new(sdm_sql::Data::new()));
     assert_eq!(warnings, ["MISSING_INDICES"]);
     let shipped = statements(&shipped);
     // The index read comes once the tables are read as they stand (the
@@ -1961,7 +1961,7 @@ fn an_index_the_reader_cannot_resolve_covers_nothing() {
     let warned = |expressions: &[&str]| -> Vec<String> {
         let (operation, attachments) = materialize_start(duckdb(), &shop(), QUERY, None);
         let mut run =
-            materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
+            materialize_on(Arc::new(sdm_sql::Data::new()), operation, attachments).unwrap();
         let answer = duckdb_indexes(expressions);
         steps_to_the_result(&mut run, &|| answer.clone()).1
     };
@@ -2061,7 +2061,7 @@ fn handing_back_changed(
         Attachment::Arrow(ArrowData::new(entities.schema(), vec![entities])),
     );
     change(&mut attachments);
-    materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments)
+    materialize_on(Arc::new(sdm_sql::Data::new()), operation, attachments)
 }
 
 /// Each request's kind, in order.
@@ -2180,8 +2180,7 @@ fn a_failure_after_the_check_keeps_it() {
         zone: None,
         value: 0,
     });
-    let mut early =
-        materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments).unwrap();
+    let mut early = materialize_on(Arc::new(sdm_sql::Data::new()), operation, attachments).unwrap();
     let err = run_to_error(&mut early, &|| indexes(&[]));
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let kept = memo(&left(&mut early).unwrap());
@@ -2369,7 +2368,7 @@ fn inference_options_nested_past_the_reader_s_depth_are_refused_by_name() {
         };
         request.values = Some(AttachmentId(9));
         attachments.insert(AttachmentId(9), Attachment::Bytes(text.into_bytes()));
-        materialize_on(Arc::new(sdm_data::Data::new()), operation, attachments)
+        materialize_on(Arc::new(sdm_sql::Data::new()), operation, attachments)
     };
     let deep = format!(
         r#"{{"inference_config": {{"num_estimators": {}1{}}}}}"#,

@@ -122,7 +122,7 @@ fn run_with(
     seeds: Option<RecordBatch>,
     answer: impl Fn(&DataRequest) -> FetchResult,
 ) -> Ran {
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::new()));
     let kept: Arc<Mutex<Option<ArrowData>>> = Arc::default();
     let into = Arc::clone(&kept);
     let mut run = Run::with_data(
@@ -861,7 +861,7 @@ fn preview_budget_counts_returned_slice_not_its_large_parent() {
 
 #[test]
 fn a_range_budget_refusal_can_recover_with_preview_in_the_same_run() {
-    let root = CompositionRoot::new(Arc::new(sdm_data::Data::new()));
+    let root = CompositionRoot::new(Arc::new(sdm_sql::Data::new()));
     let provider = host(&[], Some(limits(1, 4096)));
     let mut run = Run::with_data(root.data_access(&provider).unwrap(), |asker| async move {
         let failed = asker

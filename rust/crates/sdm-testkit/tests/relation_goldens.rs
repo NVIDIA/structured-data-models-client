@@ -4,7 +4,7 @@
 
 //! Contract v26's table source on DuckDB: the
 //! relation forms DuckDB takes, one to three parts, each rendered through
-//! `sdm-data`'s one `FROM` function with every part quoted alone, the
+//! `sdm-sql`'s one `FROM` function with every part quoted alone, the
 //! statement's text pinned and the statement executed on DuckDB, so each
 //! reads the table its parts name and no other: `["a.b"]` the table named
 //! `a.b`, not the decoy `b` of schema `a`; a part holding a double quote
