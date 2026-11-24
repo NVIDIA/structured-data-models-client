@@ -220,4 +220,12 @@ impl HostKit {
             (Err(KitError::Provider(error)), None) => Err(KitFailure::Provider(error)),
         }
     }
+
+    /// What a driver's failure means, for the provider error as the
+    /// contract writes it: the facts the core reads it by, as the contract
+    /// writes them.
+    pub fn failure_bytes(&self, error: &[u8]) -> Result<Vec<u8>, crate::Outgoing> {
+        let error: ProviderError = from_json(error, "provider error")?;
+        to_json(&self.failure(&error))
+    }
 }

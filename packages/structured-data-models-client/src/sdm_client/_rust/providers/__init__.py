@@ -127,7 +127,9 @@ def for_source(source: Any) -> tuple[dict[str, Any], Any]:
         choice['namespace'] = parts
     if model is not None:
         choice['view'] = view_choice(model)
-    return choice, made(kept.connection)
+    from sdm_client._rust import sql_kit
+
+    return sql_kit.chosen(choice, made(kept.connection))
 
 
 def view_choice(model: Any) -> dict[str, Any]:

@@ -69,7 +69,7 @@ public final class Providers {
                 spark.semanticModel().orElseThrow(),
                 "trust_expressions",
                 spark.trustExpressions()));
-      return new Chosen(choice, new SparkProvider(spark.session()));
+      return SqlKitProvider.chosen(choice, new SparkProvider(spark.session()));
     }
     JdbcProvider.Driver driver;
     if (source instanceof DuckDbSource) {
@@ -128,6 +128,7 @@ public final class Providers {
                 "trust_expressions",
                 snowflake.trustExpressions()));
     }
-    return new Chosen(choice, new JdbcProvider(((JdbcSource) source).connection(), driver));
+    return SqlKitProvider.chosen(
+        choice, new JdbcProvider(((JdbcSource) source).connection(), driver));
   }
 }

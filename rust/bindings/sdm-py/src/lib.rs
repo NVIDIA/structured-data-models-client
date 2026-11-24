@@ -668,6 +668,15 @@ impl SqlKit {
             .map_err(|out| core_error(py, out))
     }
 
+    /// What a driver's failure means: the facts the core reads it by, for
+    /// the provider error `error`, both as the contract writes them.
+    fn failure(&self, py: Python<'_>, error: &[u8]) -> PyResult<Py<PyBytes>> {
+        self.kit
+            .failure_bytes(error)
+            .map(|bytes| PyBytes::new(py, &bytes).unbind())
+            .map_err(|out| core_error(py, out))
+    }
+
     /// The answer to `request` (as the contract writes it), its key sets
     /// `keys` by id, as an [`ArrowStream`]. `run(plan, request, keys)` runs
     /// one fetch on the caller's driver: the plan and request as the

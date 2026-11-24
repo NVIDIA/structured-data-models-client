@@ -33,12 +33,35 @@ public final class NativeSqlKit implements AutoCloseable {
     long run(byte[] plan, byte[] request, int[] ids, Object[] keys) throws Exception;
   }
 
-  private long handle;
+  private static final java.lang.ref.Cleaner CLEANER = java.lang.ref.Cleaner.create();
 
-  /** The kit of the built-in source {@code provider} names, the contract's JSON. */
+  /** The handle, shared with the cleaning action; zero once released. */
+  private final java.util.concurrent.atomic.AtomicLong handle;
+
+  private final java.lang.ref.Cleaner.Cleanable cleanable;
+
+  /**
+   * The kit of the built-in source {@code provider} names, the contract's JSON; released when
+   * closed, or once unreachable.
+   */
   public NativeSqlKit(byte[] provider) throws NativeError {
     NativeCore.load();
-    this.handle = NativeCore.sqlKit0(provider);
+    this.handle = new java.util.concurrent.atomic.AtomicLong(NativeCore.sqlKit0(provider));
+    java.util.concurrent.atomic.AtomicLong held = this.handle;
+    this.cleanable =
+        CLEANER.register(
+            this,
+            () -> {
+              long released = held.getAndSet(0);
+              if (released != 0) {
+                NativeCore.releaseSqlKit(released);
+              }
+            });
+  }
+
+  /** What a driver's failure means, for the provider error {@code error}, as the contract's JSON. */
+  public synchronized byte[] failure(byte[] error) throws NativeError {
+    return NativeCore.sqlKitFailure0(held(), error);
   }
 
   /** What the source answers, as the contract's JSON. */
@@ -92,18 +115,16 @@ public final class NativeSqlKit implements AutoCloseable {
   }
 
   private long held() {
-    if (handle == 0) {
+    long current = handle.get();
+    if (current == 0) {
       throw new IllegalStateException("this SQL kit was closed");
     }
-    return handle;
+    return current;
   }
 
   /** Releases the native kit; closing again does nothing. */
   @Override
   public synchronized void close() {
-    if (handle != 0) {
-      NativeCore.releaseSqlKit(handle);
-      handle = 0;
-    }
+    cleanable.clean();
   }
 }

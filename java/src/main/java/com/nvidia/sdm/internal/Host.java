@@ -65,6 +65,14 @@ public final class Host {
      * vendor_code}, {@code error_class} and internal {@code driver_message}), each where it says one: a driver's {@link
      * java.sql.SQLException}'s state and vendor code, by default.
      */
+    /**
+     * What the failure {@code provided} (the contract's {@code ProviderError}) means, where the
+     * source reads it itself, as the contract's {@code FailureFacts}; null where it reads none.
+     */
+    default Map<String, Object> facts(Map<String, Object> provided) throws Exception {
+      return null;
+    }
+
     default Map<String, Object> failure(Exception failure) {
       Map<String, Object> facts = new LinkedHashMap<>();
       if (failure instanceof java.sql.SQLException sql) {
@@ -479,6 +487,10 @@ public final class Host {
       outcome.put("outcome", "data");
       outcome.put("data", 1);
       attached.put(1, stream);
+    } catch (SqlKitProvider.Refused refused) {
+      // The source refused the request by name, with an error the core gives.
+      outcome.put("outcome", "refused");
+      outcome.put("error", refused.error());
     } catch (StructuredDataException e) {
       // The host's own refusal (the flag Arrow needs), never a provider's failure.
       cancel(run);
@@ -496,6 +508,15 @@ public final class Host {
       }
       if (facts.get("driver_message") != null) {
         provided.put("driver_message", facts.get("driver_message"));
+      }
+      // What the failure means, where the source reads it itself.
+      try {
+        Map<String, Object> meaning = provider.facts(provided);
+        if (meaning != null) {
+          provided.put("facts", meaning);
+        }
+      } catch (Exception unread) {
+        // Unread facts leave the failure as the driver said it.
       }
       outcome.put("outcome", "error");
       outcome.put("error", provided);

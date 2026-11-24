@@ -39,6 +39,7 @@ and class), and names.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Mapping
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
@@ -389,8 +390,19 @@ def _steps(
                 # it, say), which is no provider's error to hand the core.
                 handle.cancel()
                 raise
+            except core.CoreError as refusal:
+                # The source refused the request by name, with an error the
+                # core gives (a built-in source's SQL kit, say).
+                outcome = {
+                    'outcome': 'refused',
+                    'error': json.loads(refusal.control)['error'],
+                }
             except Exception as failure:  # noqa: BLE001 - the provider's
                 provided, driver_class = _driver(failure, provider)
+                # What the failure means, where the source reads it itself.
+                read = getattr(provider, 'failure_facts', None)
+                if callable(read):
+                    provided['facts'] = read(provided)
                 outcome = {'outcome': 'error', 'error': provided}
             reply = codec.encode(
                 {

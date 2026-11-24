@@ -1062,6 +1062,23 @@ pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_sqlKitAnswer0<'ca
     })
 }
 
+/// What a driver's failure means: the facts the core reads it by, for the
+/// provider error `error`, both the contract's JSON.
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_nvidia_sdm_internal_NativeCore_sqlKitFailure0<'caller>(
+    mut unowned: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    kit: jlong,
+    error: JByteArray<'caller>,
+) -> JByteArray<'caller> {
+    entry(&mut unowned, |env| {
+        let error = env.convert_byte_array(&error)?;
+        let bytes = kit_of(kit)?.failure_bytes(&error).map_err(Failure::Core)?;
+        Ok(env.byte_array_from_slice(&bytes)?)
+    })
+}
+
 /// Releases a `NativeSqlKit`'s kit: its handle is invalid from here on.
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]

@@ -313,6 +313,9 @@ public final class NativeCore {
       long kit, byte[] request, int[] ids, long[] streams, NativeSqlKit.Run run)
       throws NativeError;
 
+  /** What a driver's failure means, for a provider error, as the contract's JSON. */
+  static native byte[] sqlKitFailure0(long kit, byte[] error) throws NativeError;
+
   /** Releases a kit's handle. */
   static native void releaseSqlKit(long kit);
 }

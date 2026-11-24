@@ -10,7 +10,7 @@ object with ``__arrow_c_stream__``; out, an :class:`ArrowStream`. Only
 ``sdm_client._rust`` imports this module, and only on a core route.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Literal, Protocol, final
 
 #: The codes an error of the core carries, the contract's ``ErrorCode``, in
@@ -119,6 +119,20 @@ class Run:
     def take_attachment(self, id: int) -> _AttachmentOut | None: ...
     def take_warnings(self) -> _Outgoing | None: ...
     def take_sampler_state(self) -> _Outgoing | None: ...
+
+@final
+class SqlKit:
+    """A built-in source's SQL kit; one per run."""
+
+    def __init__(self, provider: bytes) -> None: ...
+    def capabilities(self) -> bytes: ...
+    def failure(self, error: bytes) -> bytes: ...
+    def answer(
+        self,
+        request: bytes,
+        keys: Mapping[int, _AttachmentIn],
+        run: Callable[[bytes, bytes, dict[int, ArrowStream]], object],
+    ) -> ArrowStream: ...
 
 def reset_log_cache() -> None:
     """Forget the logger levels the logging bridge cached."""
