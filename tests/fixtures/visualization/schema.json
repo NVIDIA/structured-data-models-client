@@ -1,0 +1,14 @@
+{
+  "tables": [
+    {"name": "customers \"quoted\"", "source": {"source": ["customers"]}, "columns": [
+      {"name": "tenant", "dtype": "int64", "stype": "ID"},
+      {"name": "id", "dtype": "int64", "stype": "ID"},
+      {"name": "</script><script>window.pwned=1</script>\n\" --> attacker[bad]", "dtype": "string", "stype": "text"}
+    ], "primary_key": ["tenant", "id"], "time_column": null},
+    {"name": "orders", "source": {"source": ["orders"]}, "columns": [
+      {"name": "customer_id", "dtype": "int64", "stype": "ID"},
+      {"name": "created", "dtype": "timestamp[us]", "stype": "timestamp"}
+    ], "primary_key": [], "time_column": "created"}
+  ],
+  "links": [{"source_table": "orders", "source_column": "customer_id", "target_table": "customers \"quoted\"", "target_column": "id"}]
+}

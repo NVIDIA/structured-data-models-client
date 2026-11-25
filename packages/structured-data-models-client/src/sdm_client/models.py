@@ -19,7 +19,7 @@ rather than what any design document says they should.
 
 **A runtime contract describes a deployment, and one model id may have more
 than one.** The relational declaration below is the broader of those in
-service: six task kinds and all seven output fields. A narrower build of the
+service: five task kinds and all seven output fields. A narrower build of the
 same id serves only classification and regression, and produces only
 ``prediction``, ``probabilities`` and ``quantiles``. Asking that one for a
 forecast passes the checks here and is refused by the endpoint.
@@ -28,46 +28,24 @@ Reading this from the endpoint instead would settle it, but the Universal TFM
 contract has no capabilities route and ``/v1/models`` returns an id and nothing
 else. So this is the broader of the two on purpose: refusing locally what one
 deployment can answer would be worse than letting the other say no.
+
+Candidate-free temporal link prediction is the exception: no released
+deployment serves it, so it is not declared, and the client refuses it before
+anything is read or sent. A ranking with candidates is asked as one
+classification per candidate, which every deployment serves.
 """
 
 from __future__ import annotations
 
-from predictive_query import RELATIONAL, TABULAR
 from sdm_api import TFM_MODEL_KUMO_RELATIONAL, TFM_MODEL_KUMO_TABULAR
 
 from sdm_client.base import ModelSpec, RuntimeContract
 from sdm_client.errors import StructuredDataError, UnknownModelError
 
-# Sizes the relational endpoint enforces. `predict_rows_max` is the serving
-# layer's own `TFM_MAX_TEST_ROWS`, measured at the boundary rather than read
-# from a document: 10,000 rows to score are answered, and 10,001 come back
-#
-#   [422 UNSUPPORTED_SHAPE] N_test 10001 exceeds limit 10000.
-#
-# A deployment may be configured to hold to less, which is what the
-# `rows_per_call` option on materialize() is for.
-#
-# The endpoint refuses past these, so the client refuses first with a message
-# that names the limit. See the architecture note on inference knobs:
-# `run_mode` is derived from these rather than being set.
-#
-# `predict_rows_max` and `predict_rows_temporal_link_prediction` restate the
-# engine's own `_MAX_PRED_SIZE`, which defaults to the first and holds the
-# second for `TaskType.TEMPORAL_LINK_PREDICTION`
-# (sdm_relational_engine/rfm/rfm.py). The duplication predates this client,
-# and it is load-bearing: this value is what the client asks the engine to
-# batch at, so a drift would gather batches the endpoint refuses, or ask for
-# smaller ones than it would take, and the engine's own refusal names a
-# `batch_size=` argument this client's callers have not got. Change them
-# together; `test_the_two_ceilings_are_the_engine_s_own` fails if they move
-# apart.
+# Fixed properties of the relational model. The client holds a request to no
+# size of its own: the endpoint's limits are the endpoint's to enforce.
 RELATIONAL_LIMITS = {
     'context_rows_fast': 1_000,
-    'context_rows_max': 10_000,
-    'predict_rows_max': 10_000,
-    'predict_rows_temporal_link_prediction': 200,
-    'hops_max': 6,
-    'tables_max': 15,
     'classes_max': 10,
 }
 
@@ -78,21 +56,9 @@ DEFAULT_PREDICTION_STATISTIC = 'median'
 PREDICTION_STATISTICS = frozenset({'mean', 'median'})
 SUMMARISED_TASK_KINDS = frozenset({'regression', 'forecasting'})
 
-# The tabular endpoint refuses a context past this, exactly:
-#
-#   [422 UNSUPPORTED_SHAPE] N_train 10001 exceeds limit 10000.
-#
-# Measured against the deployment rather than read from a document, at the
-# boundary: 10,000 rows answer, 10,001 refuse. Declared so the client refuses
-# first, because the alternative is encoding and transmitting an arbitrarily
-# large context to be told the limit at the far end.
-TABULAR_LIMITS = {
-    'context_rows_max': 10_000,
-}
-
 KUMO_TABULAR = ModelSpec(
     model_id=TFM_MODEL_KUMO_TABULAR,
-    profile=TABULAR,
+    profile='TABULAR',
     runtime=RuntimeContract(
         # The endpoint takes the coarse kind only and decides binary versus
         # multiclass itself, so this client never narrows it here.
@@ -100,13 +66,13 @@ KUMO_TABULAR = ModelSpec(
         outputs=frozenset(
             {'prediction', 'probabilities', 'quantiles', 'explanation'}
         ),
-        limits=TABULAR_LIMITS,
+        explanation_formats=('sdm_gradient_v1',),
     ),
 )
 
 KUMO_RELATIONAL = ModelSpec(
     model_id=TFM_MODEL_KUMO_RELATIONAL,
-    profile=RELATIONAL,
+    profile='RELATIONAL',
     runtime=RuntimeContract(
         tasks=frozenset(
             {
@@ -115,7 +81,6 @@ KUMO_RELATIONAL = ModelSpec(
                 'multiclass_classification',
                 'regression',
                 'forecasting',
-                'temporal_link_prediction',
             }
         ),
         outputs=frozenset(
@@ -132,7 +97,7 @@ KUMO_RELATIONAL = ModelSpec(
         # Empty because nothing here takes a format argument: the contract's
         # `OutputSpec` is only `{fields: [...]}`, and the endpoint names the
         # shape it returns. Two names declared here appeared in no response.
-        explanation_formats=(),
+        explanation_formats=('sdm_gradient_v1',),
         limits=RELATIONAL_LIMITS,
         unread_feature_stypes=frozenset({'text'}),
         # Inference-config keys this client forwards, rather than keys the
@@ -195,11 +160,13 @@ class KumoTabular(Model):
 class KumoRelational(Model):
     r"""Several related tables, joined as a graph.
 
-    Takes every task kind the contract carries except ``ranking``, and produces
-    all seven output fields including ``explanation``.
+    Takes every task kind the contract carries except ``ranking`` and
+    ``temporal_link_prediction``, and produces all seven output fields
+    including ``explanation``. A ranking is asked as one classification per
+    candidate; a temporal link prediction asked without candidates is refused
+    before anything is read, since no released model serves it.
 
-    Needs ``pip install structured-data-models-client[relational]``: building the graph and
-    sampling it is heavy client-side work that lives in a native package.
+    Building the graph and sampling it run in the client's Rust core.
     """
 
     _spec = KUMO_RELATIONAL

@@ -5,6 +5,5 @@
 r"""Model-specific implementations behind query materialization."""
 
 from sdm_client.materializers.relational import RelationalMaterializer
-from sdm_client.materializers.tabular import TabularMaterializer
 
-__all__ = ['RelationalMaterializer', 'TabularMaterializer']
+__all__ = ['RelationalMaterializer']

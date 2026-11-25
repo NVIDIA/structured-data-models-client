@@ -1,0 +1,32 @@
+[
+  {
+    "name": "top-level-null-suppresses-nested-prose",
+    "payload": {"summary": null, "warnings": null, "details": {"summary": "hidden", "warning": "hidden"}},
+    "summary": null, "warnings": null, "cohorts": null, "subgraphs": null
+  },
+  {
+    "name": "top-level-singular-overrides-nested-plural",
+    "payload": {"warning": "top", "details": {"summary": "nested", "warnings": ["hidden"]}},
+    "summary": "nested", "warnings": ["top"], "cohorts": null, "subgraphs": null
+  },
+  {
+    "name": "supported-format-reads-nested-sequences",
+    "payload": {"format": "kumo_rfm_v2_1", "cohorts": ["hidden"], "subgraphs": ["hidden"], "details": {"cohorts": [null, {"unknown": [1]}], "subgraphs": []}},
+    "summary": null, "warnings": null, "cohorts": [null, {"unknown": [1]}], "subgraphs": []
+  },
+  {
+    "name": "future-format-retains-top-level-sequences",
+    "payload": {"format": "future", "cohorts": [], "subgraphs": [null], "details": {"cohorts": ["hidden"]}},
+    "summary": null, "warnings": null, "cohorts": [], "subgraphs": [null]
+  },
+  {
+    "name": "malformed-details-do-not-break-prose",
+    "payload": {"format": "kumo_rfm_v2_1", "summary": "usable", "details": []},
+    "summary": "usable", "warnings": null, "error_field": "cohorts", "error_path": "$.details"
+  },
+  {
+    "name": "malformed-warning-is-lazy",
+    "payload": {"summary": "usable", "warnings": ["fine", 1]},
+    "summary": "usable", "error_field": "warnings", "error_path": "$.warnings"
+  }
+]

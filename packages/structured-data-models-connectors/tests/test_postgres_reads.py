@@ -90,16 +90,12 @@ def test_an_async_connection_is_refused_since_the_engine_reads_synchronously(
     postgres_dsn: str,
 ) -> None:
     import psycopg
-
-    from sdm_connectors import PostgresSource, Source
+    from sdm_client import PostgresSource
 
     async def build_each() -> None:
         async with await psycopg.AsyncConnection.connect(postgres_dsn) as conn:
-            for build in (PostgresSource, Source):
-                with pytest.raises(
-                    ConnectorError, match='synchronous'
-                ) as error:
-                    build(conn, schema='public')
-                assert error.value.code == 'UNKNOWN_CONNECTOR'
+            with pytest.raises(ConnectorError, match='synchronous') as error:
+                PostgresSource(conn, schema='public')
+            assert error.value.code == 'UNKNOWN_CONNECTOR'
 
     asyncio.run(build_each())

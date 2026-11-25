@@ -20,11 +20,8 @@ columns they had never seen.
 from __future__ import annotations
 
 import pandas as pd
-import pytest
 
 from sdm_client import PredictiveQuery, Schema
-
-pytest.importorskip('sdm_relational_engine')
 
 QUERY = 'PREDICT users.tier FOR EACH users.user_id'
 

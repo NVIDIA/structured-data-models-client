@@ -1,0 +1,71 @@
+{
+  "base": "shop.json",
+  "user_columns": [
+    {
+      "name": "tags",
+      "type": "list<string>",
+      "values": [
+        [
+          "red",
+          "blue"
+        ],
+        [],
+        null,
+        [
+          "green",
+          null
+        ],
+        [
+          "red",
+          "blue"
+        ],
+        [],
+        null,
+        [
+          "green",
+          null
+        ],
+        [
+          "red",
+          "blue"
+        ],
+        [],
+        null,
+        [
+          "green",
+          null
+        ],
+        [
+          "red",
+          "blue"
+        ],
+        [],
+        null,
+        [
+          "green",
+          null
+        ],
+        [
+          "red",
+          "blue"
+        ],
+        [],
+        null,
+        [
+          "green",
+          null
+        ],
+        [
+          "red",
+          "blue"
+        ],
+        [],
+        null,
+        [
+          "green",
+          null
+        ]
+      ]
+    }
+  ]
+}

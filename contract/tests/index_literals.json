@@ -1,0 +1,22 @@
+{
+  "format": "sdm-index-literals/1",
+  "description": "Raw JSON literals for one entity key in a case's input.materialize.indices. Both case loaders (contract/runners/run_python.py and sdm-testkit) accept every literal under accepted, keeping an integer's digits exactly, and refuse every one under refused: an index is a JSON integer literal of any size, or a string.",
+  "accepted": [
+    "0",
+    "9223372036854775808",
+    "18446744073709551616",
+    "1180591620717411303424",
+    "-9223372036854775809",
+    "-1180591620717411303424",
+    "\"u0\"",
+    "\"0.5\""
+  ],
+  "refused": [
+    "1.0",
+    "-0.0",
+    "1e3",
+    "1.5",
+    "true",
+    "null"
+  ]
+}

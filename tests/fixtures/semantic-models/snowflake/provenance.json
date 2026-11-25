@@ -1,0 +1,12 @@
+{
+  "source_case": "view.semantic.from-source",
+  "recording_commit": "b08dee3d2d7101e72b957a0ef613506f99a2638a",
+  "reference_commit": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+  "sha256": {
+    "definition.arrows": "ec01be01556b0fcbe640f23576b39c8f7dfac2e7e6c89b16772871c047dff8b7",
+    "orders-catalog.arrows": "74c34866c72d51676862e9b710be0502bb7b2695e13af17ecb09778a9ddca795",
+    "orders-preview.arrows": "998d3173491ec2ed2aabc6ac5bf469f5bb9c733eb8cab6630a409cb9ae321ac1",
+    "users-catalog.arrows": "13692c468098b9ea2cc652ce0815310cabcfedfa6133f50d5d58c3b1663f10e5",
+    "users-preview.arrows": "f13c0ee1cbf40ef2129cac4d6abf36fed8b4cea8a148fca66c59ca6e0ab4c869"
+  }
+}

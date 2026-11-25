@@ -29,17 +29,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
-from sdm_connectors import (  # noqa: E402
+from sdm_client import (  # noqa: E402
     DuckDBSource,
     PostgresSource,
+    PredictiveQuery,
+    Relationship,
+    Schema,
     SQLiteSource,
 )
-
-from sdm_client import PredictiveQuery, Relationship, Schema  # noqa: E402
 
 # More rows than the engine reads to describe a table, so a column constant
 # in the rows read is checked against the whole table.
@@ -149,6 +149,16 @@ TIME_COLUMN_NOTICE = (
     'column holds:\n'
 )
 
+#: The code the core's route puts before a warning's words (decisions
+#: E41(i), E59(d)); the two routes are compared on the words after it.
+CORE_CODE = re.compile(r'^\[[A-Z][A-Z0-9_]*\] ')
+
+
+def _bare(message: object) -> str:
+    r"""A warning's words, without the core route's leading ``[CODE] ``."""
+    return CORE_CODE.sub('', str(message))
+
+
 Build = Callable[[dict[str, pd.DataFrame]], Any]
 
 
@@ -248,9 +258,9 @@ def _described(describe: Callable[[], Schema]) -> tuple[Schema, list[str]]:
         warnings.simplefilter('always')
         schema = describe()
     said = [
-        str(item.message)
+        _bare(item.message)
         for item in caught
-        if str(item.message).startswith(TIME_COLUMN_NOTICE)
+        if _bare(item.message).startswith(TIME_COLUMN_NOTICE)
     ]
     return schema, said
 
@@ -426,47 +436,6 @@ def test_a_table_given_its_time_column_is_not_told_about_the_others() -> None:
     assert not any('- orders.' in notice for notice in said)
 
 
-def test_a_column_the_whole_table_could_not_check_is_kept_and_named(
-    build_duckdb: Build, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The query over the whole table times out, as it can on a large
-    view. Every row read holds one day, which the first rows of a table
-    kept in time order often do, so the column is kept, and said.
-    """
-    from sdm_relational_engine.rfm.backend.duckdb import DuckDBTable
-
-    fetch = DuckDBTable._fetch_rows
-
-    def timed_out(self: DuckDBTable, sql: str) -> list[tuple]:
-        if sql.startswith('SELECT COUNT(*), MIN('):
-            raise RuntimeError('canceling statement due to statement timeout')
-        return fetch(self, sql)
-
-    monkeypatch.setattr(DuckDBTable, '_fetch_rows', timed_out)
-    source = build_duckdb(_frames({'ordered': ONE_DAY}))
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter('always')
-        schema = Schema.from_source(source)
-    assert schema['orders'].time_column == 'ordered'
-    # Said once, by the schema, not again by the engine it reads through.
-    said = [
-        str(item.message)
-        for item in caught
-        if 'orders.ordered' in str(item.message)
-    ]
-    assert said == [
-        TIME_COLUMN_NOTICE
-        + '- customers.ModifiedDate was not taken as the time column because '
-        'every row holds 2025-09-11 00:00:00. If it does say when a row '
-        "became true, name it: time_columns={'customers': 'ModifiedDate'}.\n"
-        '- orders.ordered was taken as the time column although every one of '
-        'the 1,000 rows read holds 2025-09-11 00:00:00, because the query '
-        'over the whole table failed and the rows past them were not '
-        'checked. If the whole table is like that, clear it: '
-        "time_columns={'orders': None}."
-    ]
-
-
 def test_a_customer_can_be_counted_once_its_edit_stamp_is_refused(
     build_duckdb: Build,
 ) -> None:
@@ -482,3 +451,31 @@ def test_a_customer_can_be_counted_once_its_edit_stamp_is_refused(
             schema,
         ).materialize(indices=[1, 2, 3])
     assert request is not None
+
+
+@pytest.mark.parametrize(
+    ('time_columns', 'declared'),
+    [
+        (None, {'ts'}),
+        ({'t': 'sdate'}, {'ts', 'sdate'}),
+        ({'t': None}, {'ts'}),
+    ],
+    ids=['inferred', 'named', 'none'],
+)
+def test_a_frames_time_column_is_a_declared_meaning(
+    time_columns: Any, declared: set[str]
+) -> None:
+    frame = pd.DataFrame(
+        {
+            'id': [1, 2, 3],
+            'ts': pd.to_datetime(['2024-01-01', '2024-01-02', '2024-01-03']),
+            'sdate': ['2024-01-01', '2024-01-02', '2024-01-03'],
+        }
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        table = Schema.from_data({'t': frame}, time_columns=time_columns)['t']
+
+    assert {
+        name for name, column in table.columns.items() if column.stype_declared
+    } == declared

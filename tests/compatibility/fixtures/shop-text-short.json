@@ -1,0 +1,34 @@
+{
+  "base": "shop.json",
+  "user_columns": [
+    {
+      "name": "description",
+      "values": [
+        null,
+        "Café 東京 – waterproof jacket",
+        "",
+        "A detailed description of a durable outdoor coat.",
+        "A customer looking for durable hiking shoes.",
+        "Café 東京 – waterproof jacket",
+        "",
+        null,
+        "A customer looking for durable hiking shoes.",
+        "Café 東京 – waterproof jacket",
+        "",
+        "A detailed description of a durable outdoor coat.",
+        "A customer looking for durable hiking shoes.",
+        "Café 東京 – waterproof jacket",
+        null,
+        "A detailed description of a durable outdoor coat.",
+        "A customer looking for durable hiking shoes.",
+        "Café 東京 – waterproof jacket",
+        "",
+        "A detailed description of a durable outdoor coat.",
+        "A customer looking for durable hiking shoes.",
+        null,
+        "",
+        "A detailed description of a durable outdoor coat."
+      ]
+    }
+  ]
+}

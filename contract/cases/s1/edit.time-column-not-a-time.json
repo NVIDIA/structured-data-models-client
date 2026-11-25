@@ -1,0 +1,55 @@
+{
+  "format": "sdm-case/1",
+  "id": "edit.time-column-not-a-time",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "edits": [
+      {
+        "op": "set_time_column",
+        "table": "users",
+        "column": "age"
+      }
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "from_source",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST"
+  },
+  "why": "A time column named for a column whose values cannot hold a time is refused at the assignment",
+  "source": "Correctness case edit.time-column-not-a-time using the shop fixture."
+}

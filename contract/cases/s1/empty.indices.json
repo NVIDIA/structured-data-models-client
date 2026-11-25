@@ -1,0 +1,68 @@
+{
+  "format": "sdm-case/1",
+  "id": "empty.indices",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb"
+  ],
+  "seam": "empty-null",
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INVALID_REQUEST",
+    "message": "indices names no entity"
+  },
+  "why": "An empty batch is refused for a relational request (the message points to Request(predict=<no rows>))",
+  "source": "plan (empty and all-null data)"
+}

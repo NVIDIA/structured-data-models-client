@@ -1,0 +1,92 @@
+{
+  "format": "sdm-case/1",
+  "id": "time.timestamp-ns",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "time",
+  "cells": [
+    "timestamp-ns/time-column"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE orders ALTER ts TYPE TIMESTAMP_NS"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "i64",
+          "v": "0"
+        },
+        {
+          "t": "i64",
+          "v": "1"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "The first attempt refused a ts[ns] time column (\"Found no valid rows\")",
+  "source": "probe#2; dtypes:time:arrow_timestamp_ns"
+}

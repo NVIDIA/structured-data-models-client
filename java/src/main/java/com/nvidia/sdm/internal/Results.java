@@ -1,0 +1,253 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+package com.nvidia.sdm.internal;
+
+import com.nvidia.sdm.StructuredDataException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * The core's results, as this host reads them (the structure design's fix D, rule 10): every
+ * result a run finishes with (the contract's {@code OperationResult}) decoded once into the
+ * records here, with the same fields as the Python host's ({@code sdm_client._rust.results}); a
+ * result of another operation or shape than the contract's is the core's defect, {@code
+ * INTERNAL_ERROR}, never read as it is. Not part of the API.
+ */
+public final class Results {
+  private Results() {}
+
+  public interface RequestFacts { String entityTable(); String problemType(); boolean windowed(); long numForecasts(); }
+  public record ExampleFacts(String entityTable, String problemType, boolean windowed, long numForecasts) implements RequestFacts {}
+  public static ExampleFacts exampleFacts(Object value) {
+    if(value==null)return null;
+    if (!(value instanceof Map<?, ?> data)) throw invalidExamples();
+    String entity=data.get("entity_table") instanceof String e ? e : null;
+    String kind=data.get("kind") instanceof String k ? k : null;
+    Object window=data.get("windowed");
+    long count=exampleCount(data.get("num_forecasts"));
+    if(entity==null || entity.isBlank() || kind==null
+        || !java.util.Set.of("regression","binary_classification","multiclass_classification","temporal_link_prediction","forecasting").contains(kind)
+        || !(window instanceof Boolean temporal)
+        || temporal != (kind.equals("forecasting") || kind.equals("temporal_link_prediction"))
+        || (!kind.equals("forecasting") && count!=1)) throw invalidExamples();
+    return new ExampleFacts(entity,kind,(Boolean)window,count);
+  }
+
+  /** Decode an exact positive contract u32, including when reading a saved request. */
+  public static long exampleCount(Object value) {
+    long count;
+    try {
+      if(value instanceof Integer n) count=n.longValue();
+      else if(value instanceof Long n) count=n;
+      else if(value instanceof java.math.BigInteger n) count=n.longValueExact();
+      else throw invalidExamples();
+    } catch(ArithmeticException error) { throw invalidExamples(); }
+    if(count<1 || count>0xffff_ffffL) throw invalidExamples();
+    return count;
+  }
+
+  private static StructuredDataException invalidExamples() {
+    return new StructuredDataException("invalid supplied example metadata", "INVALID_REQUEST", Map.of(), null);
+  }
+
+  /** What the core resolved of a query (the contract's {@code QueryFacts}). */
+  public record QueryFacts(
+      String entityTable, String problemType, boolean windowed, long numForecasts, String text) implements RequestFacts {}
+
+  /** One diagnostic of a query: its code, message and severity. */
+  public record Diagnostic(String code, String message, String severity) {}
+
+  /** {@code validate_query}'s result. */
+  public record Validated(boolean accepted, List<Diagnostic> diagnostics, QueryFacts query) {}
+
+  /** {@code describe_source}'s result: the attachment of the {@code SourceDescription}. */
+  public record Described(int description, List<ViewNote> notes) {}
+
+  /** A view conversion's core-owned sentence, and which table or time it describes. */
+  public record ViewNote(
+      String sentence, Map<String, Object> fields, String table, String timeColumn) {}
+
+  /** {@code edit_schema}'s result: the attachment of the schema edited. */
+  public record Edited(int schema, Map<String, Object> declared) {}
+
+  /** A later call of a request asked in several: its payload's attachment and rows. */
+  public record Batch(int payload, long rows) {}
+
+  /** The request state {@code materialize} wrote, its attachments by id. */
+  public record State(
+      long version, int payload, int query, List<Batch> batches, boolean inParts) {}
+
+  /** {@code materialize}'s result. */
+  public record Gathered(State state, QueryFacts query, ExampleFacts examples) {}
+
+  /** {@code predict}'s result. */
+  public record Predicted(
+      int result,
+      String model,
+      String requestId,
+      int metadata,
+      List<String> outputs,
+      List<Long> unscoredCandidates) {}
+
+  public record ItemField(String name, String encoding) {}
+  public record ItemSegment(int table, List<ItemField> fields) {}
+  public record Items(List<ItemSegment> segments) {}
+
+  private static Items items(Map<String, Object> result) {
+    List<ItemSegment> segments = new ArrayList<>();
+    for (Object value : list(result.get("segments"))) {
+      Map<String, Object> segment = map(value);
+      List<ItemField> fields = new ArrayList<>();
+      java.util.Set<String> names = new java.util.HashSet<>();
+      for (Object raw : list(segment.get("fields"))) {
+        Map<String, Object> field = map(raw);
+        String name = text(field, "name"), encoding = text(field, "encoding");
+        if (!names.add(name) || !java.util.Set.of("native", "value", "mapping", "mappings", "candidate_list", "candidate_rankings").contains(encoding))
+          throw new IllegalArgumentException("invalid projected item field");
+        fields.add(new ItemField(name, encoding));
+      }
+      segments.add(new ItemSegment(count(segment, "table"), List.copyOf(fields)));
+    }
+    if (segments.isEmpty()) throw new IllegalArgumentException("item projection has no segments");
+    return new Items(List.copyOf(segments));
+  }
+
+  /** Read-only request data attachments; null IDs denote unselected tables. */
+  public record Split(Integer instance, List<SplitTable> relatedTables) {}
+  public record SplitTable(String name, Integer data) {}
+
+  private static Split split(Map<String, Object> result) {
+    List<SplitTable> related = new ArrayList<>();
+    for (Object value : list(result.get("related_tables"))) {
+      Map<String, Object> table = map(value);
+      related.add(new SplitTable(text(table, "name"), table.get("data") == null ? null : count(table, "data")));
+    }
+    return new Split(result.get("instance") == null ? null : count(result, "instance"), List.copyOf(related));
+  }
+
+  /** {@code result}, the result of {@code op}, decoded. */
+  public static Object expect(Map<String, Object> result, String op) {
+    try {
+      if (result == null || !op.equals(result.get("op"))) {
+        throw new IllegalArgumentException("another operation than the one started");
+      }
+      return switch (op) {
+        case "result_items" -> items(result);
+        case "request_split" -> split(result);
+        case "validate_query" -> validated(result);
+        case "describe_source" -> described(result);
+        case "edit_schema" -> new Edited(count(result, "schema"), map(result.get("declared")));
+        case "materialize" -> new Gathered(state(map(result.get("state"))), facts(result.get("query")), exampleFacts(result.get("examples")));
+        case "predict" -> predicted(result);
+        default -> throw new IllegalArgumentException("an operation this host does not know");
+      };
+    } catch (IllegalArgumentException | ClassCastException | NullPointerException e) {
+      throw new StructuredDataException(
+          "the core answered a result this host does not read: " + e.getMessage(),
+          "INTERNAL_ERROR",
+          Map.of(),
+          null);
+    }
+  }
+
+  private static Described described(Map<String, Object> read) {
+    List<ViewNote> notes = new ArrayList<>();
+    if (read.get("notes") != null) {
+      for (Object item : list(read.get("notes"))) {
+        Map<String, Object> note = map(item);
+        Map<String, Object> fields = note.get("fields") == null ? Map.of() : map(note.get("fields"));
+        notes.add(new ViewNote(text(note, "sentence"), Map.copyOf(fields),
+            (String) note.get("table"), (String) note.get("time_column")));
+      }
+    }
+    return new Described(count(read, "description"), List.copyOf(notes));
+  }
+
+  private static Validated validated(Map<String, Object> read) {
+    List<Diagnostic> diagnostics = new ArrayList<>();
+    for (Object item : list(read.get("diagnostics"))) {
+      Map<String, Object> each = map(item);
+      diagnostics.add(
+          new Diagnostic(
+              text(each, "code"), text(each, "message"), text(each, "severity")));
+    }
+    return new Validated(
+        Boolean.TRUE.equals(read.get("accepted")), List.copyOf(diagnostics), facts(read.get("query")));
+  }
+
+  private static QueryFacts facts(Object value) {
+    if (value == null) {
+      return null;
+    }
+    Map<String, Object> read = map(value);
+    return new QueryFacts(
+        text(read, "entity_table"),
+        (String) read.get("problem_type"),
+        Boolean.TRUE.equals(read.get("windowed")),
+        ((Number) read.get("num_forecasts")).longValue(),
+        (String) read.get("text"));
+  }
+
+  private static State state(Map<String, Object> read) {
+    List<Batch> batches = null;
+    if (read.get("batches") != null) {
+      batches = new ArrayList<>();
+      for (Object item : list(read.get("batches"))) {
+        Map<String, Object> each = map(item);
+        batches.add(new Batch(count(each, "payload"), ((Number) each.get("rows")).longValue()));
+      }
+      batches = List.copyOf(batches);
+    }
+    boolean inParts = read.get("forecast") != null || read.get("ranking") != null;
+    return new State(
+        ((Number) read.get("version")).longValue(),
+        count(read, "payload"),
+        count(read, "query"),
+        batches,
+        inParts);
+  }
+
+  private static Predicted predicted(Map<String, Object> read) {
+    List<String> outputs = new ArrayList<>();
+    for (Object item : list(read.get("outputs"))) {
+      outputs.add((String) item);
+    }
+    List<Long> unscored = new ArrayList<>();
+    if (read.get("unscored_candidates") != null) {
+      for (Object item : list(read.get("unscored_candidates"))) {
+        unscored.add(((Number) item).longValue());
+      }
+    }
+    return new Predicted(
+        count(read, "result"),
+        text(read, "model"),
+        text(read, "request_id"),
+        count(read, "metadata"),
+        List.copyOf(outputs),
+        List.copyOf(unscored));
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Map<String, Object> map(Object value) {
+    return value == null ? null : (Map<String, Object>) value;
+  }
+
+  private static List<?> list(Object value) {
+    return (List<?>) value;
+  }
+
+  private static int count(Map<String, Object> read, String field) {
+    return ((Number) read.get(field)).intValue();
+  }
+
+  private static String text(Map<String, Object> read, String field) {
+    Object value = read.get(field);
+    if (!(value instanceof String text)) {
+      throw new IllegalArgumentException(field + " is not text");
+    }
+    return text;
+  }
+}

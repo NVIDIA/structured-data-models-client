@@ -4,10 +4,9 @@
 
 """What the endpoint will not take, and what the answer did not contain.
 
-Two silences. The tabular endpoint caps a context at 10,000 rows and the client
-did not know it, so a caller could encode and transmit a table of any size to
-be refused at the far end, while the identical overage on the other model was
-refused locally with a message naming the limit.
+The context the client sends: sampled to 10,000 rows by default, or to the
+count the caller names, which the client holds to no size of its own; a
+context larger than the endpoint takes is the endpoint's refusal.
 
 And a field a caller names is validated against the model and never against
 what comes back. The endpoint answers 200, leaves the field out, and the frame
@@ -27,7 +26,6 @@ import pytest
 from sdm_client import PredictiveQuery, Schema
 from sdm_client.client import _report_absent
 from sdm_client.errors import StructuredDataError
-from sdm_client.models import KUMO_TABULAR
 from sdm_client.result import PredictionResult
 
 
@@ -59,16 +57,12 @@ def query(schema: Schema) -> PredictiveQuery:
 # --- the context the endpoint will take ------------------------------------
 
 
-def test_the_declared_cap_is_the_one_the_endpoint_enforces():
-    """Measured at the boundary: 10,000 answer, 10,001 refuse."""
-    assert KUMO_TABULAR.runtime.limits['context_rows_max'] == 10_000
-
-
-def test_a_context_above_the_cap_is_refused_before_it_is_encoded():
+def test_a_count_past_the_rows_there_takes_them_all():
     schema = table(200)
-    with pytest.raises(StructuredDataError) as raised:
-        query(schema).materialize(indices=[0, 1], num_context_samples=50_000)
-    assert 'accepts at most 10,000 context rows' in str(raised.value)
+    request = query(schema).materialize(
+        indices=[0, 1], num_context_samples=50_000
+    )
+    assert len(request.context.instance_table) == 198
 
 
 def test_the_cap_itself_is_allowed():
@@ -130,13 +124,13 @@ class FakeItem:
             setattr(self, name, value)
 
 
-def result(outputs=(), explanations=None, **fields) -> PredictionResult:
+def result(outputs=(), explanation=None, **fields) -> PredictionResult:
     return PredictionResult(
         model='kumo-tabular',
         request_id='r1',
         items=[FakeItem(row_index=0, **fields)],
         outputs=outputs,
-        explanations=explanations,
+        explanation=explanation,
     )
 
 
@@ -167,14 +161,14 @@ def test_a_repeated_request_is_reported_once():
 
 def test_explanation_is_looked_for_where_it_lives():
     assert result(prediction=1.0).absent(['explanation']) == ('explanation',)
-    assert result(prediction=1.0, explanations={}).absent(['explanation']) == (
+    assert result(prediction=1.0, explanation=None).absent(['explanation']) == (
         'explanation',
     )
     carried = PredictionResult(
         model='m',
         request_id='r',
         items=[FakeItem(row_index=0)],
-        explanations={0: {'outputs': []}},
+        explanation={'feature_importance': {}},
     )
     assert carried.absent(['explanation']) == ()
 
@@ -220,13 +214,13 @@ def test_the_result_is_returned_unchanged():
         assert _report_absent(answer, ['quantiles'], 'kumo-x') is answer
 
 
-def test_a_materialized_context_above_the_cap_is_refused_not_merely_the_number():
-    """A small table makes this a check on the argument. The rows have to be
-    there for it to be a check on the context."""
+def test_a_count_past_the_default_is_gathered():
+    """The rows are there, so the count is the context's size."""
     schema = table(12_000)
-    with pytest.raises(StructuredDataError) as raised:
-        query(schema).materialize(indices=[0, 1], num_context_samples=10_001)
-    assert 'accepts at most 10,000 context rows' in str(raised.value)
+    request = query(schema).materialize(
+        indices=[0, 1], num_context_samples=10_001
+    )
+    assert len(request.context.instance_table) == 10_001
 
 
 def test_the_predict_route_advises_something_that_route_allows():
@@ -285,52 +279,38 @@ def gathered(
     run_mode: str | None,
     target=None,
     predict_rows: int = 1,
-) -> object:
+    classification: bool = False,
+):
+    from sdm_client import KumoRelational
+
     values = target if target is not None else list(range(context_rows))
-    payload = {
-        'task': {'kind': 'regression', 'target': {'column_name': 'TARGET'}},
-        'schema': {'instance_table': {'columns': {}}},
-        'context': {
-            'instance_table': {
-                'columns': ['TARGET'],
-                'rows': [[value] for value in values],
-            }
-        },
-        'predict': {
-            'instance_table': {
-                'columns': ['TARGET'],
-                'rows': [[0]] * predict_rows,
-            }
-        },
-    }
-    if run_mode is not None:
-        payload['inference'] = {'run_mode': run_mode}
-
-    class Gathered:
-        payloads = (payload,)
-        requested_inference: dict = {}
-        query = None
-
-    return Gathered()
+    frame = pd.DataFrame(
+        {
+            'uid': range(len(values) + predict_rows),
+            'label': list(values) + [None] * predict_rows,
+        }
+    )
+    schema = Schema.from_data({'users': frame}, primary_keys={'users': 'uid'})
+    schema['users']['label'].stype = (
+        'categorical' if classification else 'numerical'
+    )
+    request = PredictiveQuery(
+        'PREDICT users.label FOR EACH users.uid', schema
+    ).materialize(
+        indices=list(range(len(values), len(values) + predict_rows)),
+        model=KumoRelational(),
+        num_context_samples=1500 if run_mode == 'best' else context_rows,
+    )
+    if run_mode is None:
+        request.payloads[0]['inference'].pop('run_mode', None)
+    return request
 
 
 def explanation_plan(request):
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    return list(
-        RelationalAdapter().prediction_plan(
-            request, ('prediction', 'explanation')
-        )
-    )
+    return sent(request, outputs=('prediction', 'explanation'))
 
 
 def test_explains_larger_context():
-    """An explanation is sent under the larger-context run mode.
-
-    Assumptions:
-    - The Kumo Relational SDM NIM explains under either context budget.
-    - The payload scores one entity.
-    """
     assert explanation_plan(gathered(context_rows=120, run_mode='best'))
 
 
@@ -338,13 +318,9 @@ def test_a_small_context_asked_for_smally_still_explains():
     assert explanation_plan(gathered(context_rows=120, run_mode='fast'))
 
 
-def test_explains_without_mode():
-    """An explanation is sent whatever the context size when no run mode is
-    named.
-
-    Assumptions:
-    - The payload scores one entity and names no run_mode.
-    """
+def test_a_payload_naming_no_mode_is_judged_on_the_rows_it_carries():
+    """Nothing the engine gathers arrives without a run_mode, but a hand-built
+    payload can, and the rows are then all there is to read."""
     assert explanation_plan(gathered(context_rows=120, run_mode=None))
     assert explanation_plan(gathered(context_rows=1_001, run_mode=None))
 
@@ -353,16 +329,19 @@ def test_explains_without_mode():
 
 
 def relational_constant(kind: str, asked: str | None = None) -> object:
-    request = gathered(context_rows=50, run_mode='fast', target=[50] * 50)
-    request.payloads[0]['task']['kind'] = kind
-    request.query = asked
+    request = gathered(
+        context_rows=50,
+        run_mode='fast',
+        target=[50] * 50,
+        classification=kind == 'binary_classification',
+    )
+    if asked is not None:
+        request.query = asked
     return request
 
 
 def plan(request):
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    return list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    return sent(request)
 
 
 def test_a_constant_classification_target_is_refused_relationally_too():
@@ -412,15 +391,14 @@ def test_a_target_that_varies_is_left_alone():
     assert not any('every context row' in s for s in said)
 
 
-def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
-    """The client's own preamble says it refuses first where it can tell, and
-    the model is known by the time this check runs, so sending 12,500 rows to
-    be told the limit at the far end was work nobody needed to do."""
+def test_a_context_past_10_000_rows_is_sent():
+    """The client holds a context to no size of its own: 12,500 rows are
+    sent, for the endpoint to answer or refuse."""
     import numpy as np
     import pandas as pd
+    from test_adapter_and_result import envelope
 
-    from sdm_client import Request, UnsupportedRequestError
-    from sdm_client.base import check_request_against_model
+    from sdm_client import Request
 
     rng = np.random.default_rng(0)
     rows = 12_500
@@ -433,16 +411,15 @@ def test_a_context_past_the_models_cap_is_refused_before_it_is_sent():
         task='classification',
     )
 
-    with pytest.raises(UnsupportedRequestError, match='12,500'):
-        check_request_against_model(request, KUMO_TABULAR, ('prediction',))
+    envelope(request)
 
 
 def test_a_context_within_the_cap_is_not_refused():
     import numpy as np
     import pandas as pd
+    from test_adapter_and_result import envelope
 
     from sdm_client import Request
-    from sdm_client.base import check_request_against_model
 
     rng = np.random.default_rng(0)
     context = pd.DataFrame({'k': range(500), 'x': rng.normal(size=500)})
@@ -454,14 +431,13 @@ def test_a_context_within_the_cap_is_not_refused():
         task='classification',
     )
 
-    check_request_against_model(request, KUMO_TABULAR, ('prediction',))
+    envelope(request)
 
 
 # --- a context this client emptied is not sent -----------------------------
 
 
 def entity_table(rows: int = 60) -> Schema:
-    pytest.importorskip('sdm_relational_engine')
     rng = np.random.default_rng(0)
     frame = pd.DataFrame(
         {'mid': range(rows), 'label': rng.choice(list('abc'), rows)}
@@ -483,10 +459,39 @@ def gathered_scoring(count: int):
         ).materialize(indices=list(range(count)), model=KumoRelational())
 
 
-def sent(request):
-    from sdm_client.adapters.relational import RelationalAdapter
+def sent(request, outputs=('prediction',)):
+    import json
 
-    return list(RelationalAdapter().prediction_plan(request, ('prediction',)))
+    from test_tabular_direct_core import Endpoint, client
+
+    class RelationalEndpoint(Endpoint):
+        def predict_body(self, body):
+            payload = json.loads(body)
+            self.calls.append(payload)
+            table = payload['predict']['instance_table']
+            key = table['columns'].index('instance_id')
+            target = payload['task']['target']
+            label = target.get('classes', [1.0])[0]
+            return json.dumps(
+                {
+                    'id': 'answer',
+                    'model': 'kumo-relational',
+                    'metadata': {},
+                    'predictions': [
+                        {
+                            'id': str(row[key]),
+                            'row_index': i,
+                            'prediction': label,
+                        }
+                        for i, row in enumerate(table['rows'])
+                    ],
+                }
+            ).encode()
+
+    endpoint = RelationalEndpoint()
+    with client(endpoint) as model_client:
+        model_client.predict(request, model='kumo-relational', outputs=outputs)
+    return endpoint.calls
 
 
 def test_scoring_every_entity_is_refused_rather_than_sent_with_no_context():
@@ -507,54 +512,4 @@ def test_a_context_of_two_rows_is_still_sent():
     assert sent(request)
 
 
-def test_the_cap_refusal_does_not_promise_a_sampling_the_model_does_not_do():
-    """`materialize()` never samples a relational context down to the cap: it
-    refuses `num_context_samples` past it and otherwise gathers the smaller
-    budget."""
-    from sdm_client import KumoRelational, Request
-    from sdm_client.base import check_request_against_model
-    from sdm_client.models import spec_for
-
-    context = pd.DataFrame(
-        {'x': range(12_500), 'y': [i % 2 for i in range(12_500)]}
-    )
-    request = Request(
-        context=context,
-        predict=pd.DataFrame({'x': [1, 2]}),
-        target='y',
-        task='classification',
-    )
-    with pytest.raises(StructuredDataError) as raised:
-        check_request_against_model(
-            request, spec_for(KumoRelational()), ('prediction',)
-        )
-    message = str(raised.value)
-    assert 'reads at most 10,000' in message
-    assert 'sampled to that' not in message
-    assert 'gather it with materialize()' in message
-
-
 # --- a judgement is about the rows the call sends ---------------------------
-
-
-def single_class_relational():
-    """A gathered payload whose context teaches nothing."""
-    request = gathered(context_rows=50, run_mode='fast', target=[7] * 50)
-    request.payloads[0]['task']['kind'] = 'binary_classification'
-    request.query = None
-    return request
-
-
-def test_a_session_scoring_call_is_not_judged_on_a_context_it_discards():
-    """The context was pinned at fit(); a scoring call carries only rows, so
-    judging its context refuses a request over rows that are thrown away."""
-    from sdm_client.adapters.relational import RelationalAdapter
-
-    adapter = RelationalAdapter()
-    request = single_class_relational()
-
-    with pytest.raises(StructuredDataError, match='two classes'):
-        list(adapter.prediction_plan(request, ('prediction',)))
-
-    sent = list(adapter.session_prediction_plan(request, ('prediction',)))
-    assert sent and 'context' not in sent[0]

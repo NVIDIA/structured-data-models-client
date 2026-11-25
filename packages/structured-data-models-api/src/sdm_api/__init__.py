@@ -5,8 +5,8 @@
 """The Universal TFM API as this client speaks it.
 
 Wire types only. Nothing here parses a query, samples a graph or opens a
-socket: those belong to ``predictive_query``, ``sdm_relational_engine`` and
-``sdm_client`` respectively.
+socket: query parsing and sampling belong to the shared Rust core;
+network transport belongs to the client host adapters.
 
 Everything under :mod:`sdm_api.generated` is produced from the canonical
 OpenAPI contract by ``scripts/generate_sdm_api.py`` and must not be edited by

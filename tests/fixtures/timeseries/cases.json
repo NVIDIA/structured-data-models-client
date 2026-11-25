@@ -1,0 +1,12 @@
+[
+ {"name":"synthetic","histories":[[10,20],[30]],"timestamps":null,"step_minutes":1440,"anchor_ns":1704240000000000000,"expected_times":[1704067200000000000,1704153600000000000,1704153600000000000],"expected_ids":[1,1,2],"expected_values":[10,20,30]},
+ {"name":"explicit_irregular","histories":[[10,20,30],[40]],"timestamps":[[1704067200000000000,1704153600000000000,1704326400000000000],[1704067200000000000]],"step_minutes":null,"anchor_ns":null,"expected_times":[1704067200000000000,1704153600000000000,1704326400000000000,1704067200000000000],"expected_ids":[1,1,1,2],"expected_values":[10,20,30,40]},
+ {"name":"opposing_length_mismatch","histories":[[10,20],[30]],"timestamps":[[1704067200000000000],[1704153600000000000,1704240000000000000]],"step_minutes":1440,"anchor_ns":null,"error":true},
+ {"name":"empty_entity","histories":[[],[30]],"timestamps":null,"step_minutes":60,"anchor_ns":1704240000000000000,"expected_times":[1704236400000000000],"expected_ids":[2],"expected_values":[30]},
+ {"name":"all_empty","histories":[[],[]],"timestamps":null,"step_minutes":60,"anchor_ns":1704240000000000000,"error":true},
+ {"name":"null_list","histories":[null,[30]],"timestamps":null,"step_minutes":60,"anchor_ns":1704240000000000000,"error":true},
+ {"name":"null_value","histories":[[null,20],[30]],"timestamps":null,"step_minutes":1440,"anchor_ns":1704240000000000000,"expected_times":[1704067200000000000,1704153600000000000,1704153600000000000],"expected_ids":[1,1,2],"expected_values":[null,20,30]},
+ {"name":"duplicate_time","histories":[[10,20]],"timestamps":[[1704067200000000000,1704067200000000000]],"step_minutes":1440,"anchor_ns":null,"expected_times":[1704067200000000000,1704067200000000000],"expected_ids":[1,1],"expected_values":[10,20]},
+ {"name":"zero_inferred_interval","histories":[[10,20]],"timestamps":[[1704067200000000000,1704067200000000000]],"step_minutes":null,"anchor_ns":null,"error":true},
+ {"name":"null_timestamp","histories":[[10]],"timestamps":[[null]],"step_minutes":60,"anchor_ns":null,"error":true}
+]

@@ -1,0 +1,56 @@
+{
+  "format": "sdm-case/1",
+  "id": "nested.struct",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "seam": "nested",
+  "cells": [
+    "struct/feature"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id::INTEGER, 'b': 'x' || user_id} AS f FROM users"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "RuntimeError",
+    "code": null,
+    "message": "Could not determine semantic type for column 'f' with data type 'int'"
+  },
+  "register": "An unnamed RuntimeError naming the wrong type; the plan's set accepts struct",
+  "why": "The first attempt turned STRUCT features into nulls, and its nested-type refusal fix broke 24 working cases",
+  "source": "DV142; DV149; learnings.md section 7"
+}

@@ -202,3 +202,6 @@ Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
    See the License for the specific language governing permissions and
    limitations under the License.
 
+Third-party components included in this distribution are attributed in
+NOTICE, THIRD-PARTY-NOTICES-RUST.txt and
+sdm_client/assets/THIRD-PARTY-NOTICES-MERMAID.txt.

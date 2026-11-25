@@ -7,11 +7,8 @@ its graph samplers) don't each carry their own copy.
 
 It provides:
 
-- `DatabricksSource`, `SnowflakeSource`, `PostgresSource`, `DuckDBSource` and `SQLiteSource`: a connection and the namespace its tables live in, for `Schema.from_source` to sample in place.
-  Each takes the driver's own connection, opened with the driver's own `connect`, or a Spark or Snowpark session.
-  A source never closes it: the caller owns the connection and closes it.
 - `sdm_connectors.databricks.warehouse(warehouse_id, workspace=w)` and `lakebase(endpoint, database=..., workspace=w)`: open a Databricks SQL warehouse or Lakebase connection as the caller's own `WorkspaceClient`.
-  Each returns the driver's native connection, for a source to take and the caller to close.
+  Each returns the driver's native connection, for a source (`sdm_client.DatabricksSource`, `sdm_client.PostgresSource`) to take and the caller to close.
   Databricks requires a partner product to identify every connection and API request it opens, so each names structured-data-models-client as `nvidia_structured-data-models-client/<version>`.
   A warehouse connection carries it in the driver's User-Agent, ahead of any `user_agent_entry` you pass, and tags its statements `structured_data_models_client_purpose: sampling` beside your own query tags, unless you set `structured_data_models_client_purpose` yourself.
   A Lakebase connection carries it as `application_name`, ahead of any you pass, within the 63 bytes Postgres keeps.
@@ -24,7 +21,7 @@ It provides:
 ```python
 import duckdb
 from databricks.sdk import WorkspaceClient
-from sdm_connectors import DatabricksSource, DuckDBSource, PostgresSource
+from sdm_client import DatabricksSource, DuckDBSource, PostgresSource
 from sdm_connectors.databricks import lakebase, warehouse
 
 warehouse_id = '0123456789abcdef'
@@ -67,7 +64,7 @@ connection = duckdb.connect('w.db', read_only=True)
 read_table(connection, query=f'SELECT * FROM {quote_ident("café")}')
 ```
 
-Failures raised by the sources, `read`, `read_table` and the Databricks helpers surface as `ConnectorError` with a stable `code`: `UNKNOWN_CONNECTOR`, `INVALID_CONNECTOR_ARGS`, `CONNECT_FAILED`, `QUERY_FAILED`, `READ_FAILED`, or `NOT_FOUND`.
+Failures raised by `read`, `read_table` and the Databricks helpers, and by the client's built-in sources given a connection they cannot read, surface as `ConnectorError` with a stable `code`: `UNKNOWN_CONNECTOR`, `INVALID_CONNECTOR_ARGS`, `CONNECT_FAILED`, `QUERY_FAILED`, `READ_FAILED`, or `NOT_FOUND`.
 Where a driver raised, its exception is chained as `__cause__`; an unknown connector, and an argument refused before any driver is reached, have none.
 A missing driver, or a databricks-sdk too old for `lakebase()`, is refused with code `MISSING_BACKEND`; a missing driver raises it as `MissingBackendError`, which is also a `ModuleNotFoundError`.
 A broken or incompatible driver installation stays unwrapped by design and raises `ImportError` (consumers map it to their own broken-install category, e.g. structured-data-models-client's `DRIVER_LOAD_FAILED`).
@@ -79,7 +76,7 @@ pip install "structured-data-models-connectors[sqlite]"      # or [duckdb] / [po
 ```
 
 Consumers depend on it and surface these extras under their own name, e.g.
-`structured-data-models-client[snowflake]` and `structured-data-models-relational-engine[databricks]` both resolve the corresponding
+`structured-data-models-client[snowflake]` and `structured-data-models-client[databricks]` both resolve the corresponding
 `structured-data-models-connectors` extra.
 
 ## Local development
@@ -94,5 +91,5 @@ wire, so they need `structured-data-models-client` as well. They skip without it
 to run them:
 
 ```bash
-pip install -e ../structured-data-models-api -e ../structured-data-models-pql -e ../structured-data-models-client
+RUSTUP_TOOLCHAIN=1.97.0 CARGO_BUILD_JOBS=2 pip install -e ../structured-data-models-api -e ../structured-data-models-client
 ```

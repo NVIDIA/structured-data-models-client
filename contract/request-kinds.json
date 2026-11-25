@@ -1,0 +1,827 @@
+{
+  "about": "Authored typed data requests and seed inputs over the shared database fixtures; results are asserted against source data.",
+  "fetches": [
+    {
+      "base": "shop",
+      "name": "describe the tables",
+      "request": {
+        "request": "describe",
+        "tables": [],
+        "part": "tables"
+      }
+    },
+    {
+      "base": "shop",
+      "name": "describe the columns",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "orders"
+            ]
+          }
+        ],
+        "part": "columns"
+      }
+    },
+    {
+      "base": "shop",
+      "name": "describe the keys",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "orders"
+            ]
+          }
+        ],
+        "part": "keys"
+      }
+    },
+    {
+      "base": "shop",
+      "name": "describe the foreign keys",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "orders"
+            ]
+          }
+        ],
+        "part": "foreign_keys"
+      }
+    },
+    {
+      "base": "shop",
+      "name": "describe the indexes",
+      "request": {
+        "request": "describe",
+        "tables": [],
+        "part": "indexes"
+      }
+    },
+    {
+      "base": "shop",
+      "name": "scan",
+      "request": {
+        "request": "scan",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "columns": [
+          "user_id"
+        ],
+        "filters": [],
+        "limit": null
+      }
+    },
+    {
+      "base": "shop",
+      "name": "scan with a filter and a limit",
+      "request": {
+        "request": "scan",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "columns": [
+          "user_id",
+          "user_id"
+        ],
+        "filters": [
+          {
+            "column": "user_id",
+            "filter": "not_null"
+          }
+        ],
+        "limit": 5
+      }
+    },
+    {
+      "base": "shop",
+      "name": "count the rows a filter keeps",
+      "request": {
+        "request": "count_rows",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "filters": [
+          {
+            "column": "user_id",
+            "filter": "not_null"
+          }
+        ]
+      }
+    },
+    {
+      "base": "shop",
+      "name": "preview",
+      "request": {
+        "request": "preview",
+        "table": {
+          "source": [
+            "orders"
+          ]
+        },
+        "columns": [
+          "order_id",
+          "price",
+          "ts"
+        ],
+        "limit": 3
+      }
+    },
+    {
+      "base": "shop",
+      "name": "count the rows",
+      "request": {
+        "request": "count_rows",
+        "table": {
+          "source": [
+            "orders"
+          ]
+        },
+        "filters": []
+      }
+    },
+    {
+      "base": "shop",
+      "name": "count the keys",
+      "request": {
+        "request": "key_counts",
+        "keys": [
+          {
+            "table": {
+              "source": [
+                "users"
+              ]
+            },
+            "columns": [
+              "user_id"
+            ]
+          },
+          {
+            "table": {
+              "source": [
+                "orders"
+              ]
+            },
+            "columns": [
+              "order_id"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "base": "shop",
+      "name": "the time bounds",
+      "request": {
+        "request": "time_bounds",
+        "columns": [
+          {
+            "table": {
+              "source": [
+                "orders"
+              ]
+            },
+            "column": "ts"
+          }
+        ]
+      }
+    },
+    {
+      "base": "shop",
+      "name": "sample entities",
+      "request": {
+        "request": "sample_entities",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "key": [
+          "user_id"
+        ],
+        "n": 3,
+        "seed": {
+          "t": "u64",
+          "v": "42"
+        },
+        "columns": [
+          "user_id"
+        ],
+        "filters": [
+          {
+            "column": "user_id",
+            "filter": "not_null"
+          }
+        ]
+      }
+    },
+    {
+      "base": "shop",
+      "name": "neighbors",
+      "request": {
+        "request": "neighbors",
+        "table": {
+          "source": [
+            "orders"
+          ]
+        },
+        "key": [
+          "user_id"
+        ],
+        "columns": [
+          "order_id"
+        ],
+        "window": null,
+        "per_seed": null,
+        "order": null
+      },
+      "keys": [
+        1,
+        2
+      ]
+    },
+    {
+      "base": "shop",
+      "name": "lookup",
+      "request": {
+        "request": "lookup",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "key": [
+          "user_id"
+        ],
+        "columns": [
+          "user_id"
+        ]
+      },
+      "keys": [
+        3,
+        99
+      ]
+    },
+    {
+      "base": "declared",
+      "name": "describe the tables",
+      "request": {
+        "request": "describe",
+        "tables": [],
+        "part": "tables"
+      }
+    },
+    {
+      "base": "declared",
+      "name": "describe the columns",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "orders"
+            ]
+          }
+        ],
+        "part": "columns"
+      }
+    },
+    {
+      "base": "declared",
+      "name": "describe the keys",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "orders"
+            ]
+          }
+        ],
+        "part": "keys"
+      }
+    },
+    {
+      "base": "declared",
+      "name": "describe the foreign keys",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "orders"
+            ]
+          }
+        ],
+        "part": "foreign_keys"
+      }
+    },
+    {
+      "base": "declared",
+      "name": "describe the indexes",
+      "request": {
+        "request": "describe",
+        "tables": [],
+        "part": "indexes"
+      }
+    },
+    {
+      "base": "declared",
+      "name": "scan",
+      "request": {
+        "request": "scan",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "columns": [
+          "uid"
+        ],
+        "filters": [],
+        "limit": null
+      }
+    },
+    {
+      "base": "declared",
+      "name": "scan with a filter and a limit",
+      "request": {
+        "request": "scan",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "columns": [
+          "uid",
+          "uid"
+        ],
+        "filters": [
+          {
+            "column": "uid",
+            "filter": "not_null"
+          }
+        ],
+        "limit": 5
+      }
+    },
+    {
+      "base": "declared",
+      "name": "count the rows a filter keeps",
+      "request": {
+        "request": "count_rows",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "filters": [
+          {
+            "column": "uid",
+            "filter": "not_null"
+          }
+        ]
+      }
+    },
+    {
+      "base": "declared",
+      "name": "preview",
+      "request": {
+        "request": "preview",
+        "table": {
+          "source": [
+            "orders"
+          ]
+        },
+        "columns": [
+          "oid",
+          "price",
+          "ts"
+        ],
+        "limit": 3
+      }
+    },
+    {
+      "base": "declared",
+      "name": "count the rows",
+      "request": {
+        "request": "count_rows",
+        "table": {
+          "source": [
+            "orders"
+          ]
+        },
+        "filters": []
+      }
+    },
+    {
+      "base": "declared",
+      "name": "count the keys",
+      "request": {
+        "request": "key_counts",
+        "keys": [
+          {
+            "table": {
+              "source": [
+                "users"
+              ]
+            },
+            "columns": [
+              "uid"
+            ]
+          },
+          {
+            "table": {
+              "source": [
+                "orders"
+              ]
+            },
+            "columns": [
+              "oid"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "base": "declared",
+      "name": "the time bounds",
+      "request": {
+        "request": "time_bounds",
+        "columns": [
+          {
+            "table": {
+              "source": [
+                "orders"
+              ]
+            },
+            "column": "ts"
+          }
+        ]
+      }
+    },
+    {
+      "base": "declared",
+      "name": "sample entities",
+      "request": {
+        "request": "sample_entities",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "key": [
+          "uid"
+        ],
+        "n": 3,
+        "seed": {
+          "t": "u64",
+          "v": "42"
+        },
+        "columns": [
+          "uid"
+        ],
+        "filters": [
+          {
+            "column": "uid",
+            "filter": "not_null"
+          }
+        ]
+      }
+    },
+    {
+      "base": "declared",
+      "name": "neighbors",
+      "request": {
+        "request": "neighbors",
+        "table": {
+          "source": [
+            "orders"
+          ]
+        },
+        "key": [
+          "buyer"
+        ],
+        "columns": [
+          "oid"
+        ],
+        "window": null,
+        "per_seed": null,
+        "order": null
+      },
+      "keys": [
+        1,
+        2
+      ]
+    },
+    {
+      "base": "declared",
+      "name": "lookup",
+      "request": {
+        "request": "lookup",
+        "table": {
+          "source": [
+            "users"
+          ]
+        },
+        "key": [
+          "uid"
+        ],
+        "columns": [
+          "uid"
+        ]
+      },
+      "keys": [
+        3,
+        99
+      ]
+    },
+    {
+      "base": "adventureworks",
+      "name": "describe the tables",
+      "request": {
+        "request": "describe",
+        "tables": [],
+        "part": "tables"
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "describe the columns",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "adventureworks_sales_order_headers"
+            ]
+          }
+        ],
+        "part": "columns"
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "describe the keys",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "adventureworks_sales_order_headers"
+            ]
+          }
+        ],
+        "part": "keys"
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "describe the foreign keys",
+      "request": {
+        "request": "describe",
+        "tables": [
+          {
+            "source": [
+              "adventureworks_sales_order_headers"
+            ]
+          }
+        ],
+        "part": "foreign_keys"
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "describe the indexes",
+      "request": {
+        "request": "describe",
+        "tables": [],
+        "part": "indexes"
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "scan",
+      "request": {
+        "request": "scan",
+        "table": {
+          "source": [
+            "adventureworks_customers"
+          ]
+        },
+        "columns": [
+          "CustomerID"
+        ],
+        "filters": [],
+        "limit": null
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "scan with a filter and a limit",
+      "request": {
+        "request": "scan",
+        "table": {
+          "source": [
+            "adventureworks_customers"
+          ]
+        },
+        "columns": [
+          "CustomerID",
+          "StoreID"
+        ],
+        "filters": [
+          {
+            "column": "StoreID",
+            "filter": "not_null"
+          }
+        ],
+        "limit": 1000
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "count the rows a filter keeps",
+      "request": {
+        "request": "count_rows",
+        "table": {
+          "source": [
+            "adventureworks_customers"
+          ]
+        },
+        "filters": [
+          {
+            "column": "StoreID",
+            "filter": "not_null"
+          }
+        ]
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "preview",
+      "request": {
+        "request": "preview",
+        "table": {
+          "source": [
+            "adventureworks_sales_order_headers"
+          ]
+        },
+        "columns": [
+          "SalesOrderID",
+          "TotalDue",
+          "OrderDate"
+        ],
+        "limit": 3
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "count the rows",
+      "request": {
+        "request": "count_rows",
+        "table": {
+          "source": [
+            "adventureworks_sales_order_headers"
+          ]
+        },
+        "filters": []
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "count the keys",
+      "request": {
+        "request": "key_counts",
+        "keys": [
+          {
+            "table": {
+              "source": [
+                "adventureworks_customers"
+              ]
+            },
+            "columns": [
+              "CustomerID"
+            ]
+          },
+          {
+            "table": {
+              "source": [
+                "adventureworks_sales_order_headers"
+              ]
+            },
+            "columns": [
+              "SalesOrderID"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "the time bounds",
+      "request": {
+        "request": "time_bounds",
+        "columns": [
+          {
+            "table": {
+              "source": [
+                "adventureworks_sales_order_headers"
+              ]
+            },
+            "column": "OrderDate"
+          }
+        ]
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "sample entities",
+      "request": {
+        "request": "sample_entities",
+        "table": {
+          "source": [
+            "adventureworks_customers"
+          ]
+        },
+        "key": [
+          "CustomerID"
+        ],
+        "n": 3,
+        "seed": {
+          "t": "u64",
+          "v": "42"
+        },
+        "columns": [
+          "CustomerID"
+        ],
+        "filters": [
+          {
+            "column": "CustomerID",
+            "filter": "not_null"
+          }
+        ]
+      }
+    },
+    {
+      "base": "adventureworks",
+      "name": "neighbors",
+      "request": {
+        "request": "neighbors",
+        "table": {
+          "source": [
+            "adventureworks_sales_order_headers"
+          ]
+        },
+        "key": [
+          "CustomerID"
+        ],
+        "columns": [
+          "SalesOrderID"
+        ],
+        "window": null,
+        "per_seed": null,
+        "order": null
+      },
+      "keys": [
+        12196,
+        12880
+      ]
+    },
+    {
+      "base": "adventureworks",
+      "name": "lookup",
+      "request": {
+        "request": "lookup",
+        "table": {
+          "source": [
+            "adventureworks_customers"
+          ]
+        },
+        "key": [
+          "CustomerID"
+        ],
+        "columns": [
+          "CustomerID"
+        ]
+      },
+      "keys": [
+        11205,
+        1
+      ]
+    }
+  ]
+}

@@ -16,6 +16,7 @@ serving endpoint hosts one model and answers one request at a time.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import math
@@ -26,6 +27,7 @@ from typing import Any
 
 from sdm_client.core.databricks_user_agent import sdm_client_user_agent
 from sdm_client.core.transport import (
+    EndpointFailed,
     _check_encodable,
     _diagnosis_in,
     _validate_limits,
@@ -101,7 +103,7 @@ _NO_SESSIONS = (
 class DatabricksServingTransport:
     r"""The wire layer to one Databricks Model Serving endpoint.
 
-    Not part of the public API surface; :meth:`SDMClient.for_databricks_serving`
+    Not part of the public API surface;:meth:`SDMClient.for_databricks_serving`
     builds one.
 
     Args:
@@ -198,6 +200,49 @@ class DatabricksServingTransport:
         )
 
     def predict(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._decoded(self._answered(payload))
+
+    @property
+    def model_endpoint(self) -> dict[str, Any]:
+        r"""This endpoint as the core is told of it (``Predict``'s
+        ``model_endpoint``): its name and the caller's limit. The
+        core writes each call's envelope and reads every answer."""
+        return {
+            'endpoint': 'serving_endpoint',
+            'name': self._endpoint,
+            'max_request_bytes': self._max_request_bytes,
+        }
+
+    def predict_body(self, body: bytes) -> bytes:
+        r"""Posts the bytes the core wrote, this endpoint's envelope as they
+        are, through the workspace's own client (``api_client.do``, which
+        rewinds a byte body to retry it), and gives back the bytes the
+        endpoint answered with, for the core to read. A failure is
+        raised as:class:`EndpointFailed`, carrying what the SDK's error
+        says, for the core to name; anything but an ``OSError`` escapes, as
+        from:meth:`predict`."""
+        self._require_open()
+        try:
+            answered = self._workspace.api_client.do(
+                'POST',
+                f'/serving-endpoints/{self._endpoint}/invocations',
+                headers={'Content-Type': 'application/json'},
+                data=_Body(body),
+                raw=True,
+            )
+            contents = answered['contents']
+            try:
+                return bytes(contents.read())
+            finally:
+                contents.close()
+        # The SDK's errors and its retry deadline are all OSError, as are
+        # requests' own, as in predict.
+        except OSError as error:
+            raise _failed(error) from None
+
+    def _answered(self, payload: dict[str, Any]) -> str:
+        r"""The served model's answer to ``payload``, as the text it
+        wrote."""
         self._require_open()
         _check_encodable(payload)
         try:
@@ -229,7 +274,7 @@ class DatabricksServingTransport:
         # carries no rows.
         except OSError as error:
             raise self._error_from(error) from None
-        return self._decoded(_response_body(reply, self._endpoint))
+        return _response_body(reply, self._endpoint)
 
     def _decoded(self, body: str) -> dict[str, Any]:
         try:
@@ -237,12 +282,16 @@ class DatabricksServingTransport:
             # RuntimeError and would otherwise escape the error contract. Not
             # chained: a JSONDecodeError holds the whole body, rows and all.
             answer = json.loads(body)
-        except (ValueError, RecursionError):
-            raise StructuredDataError(
+        except (ValueError, RecursionError) as error:
+            failed = StructuredDataError(
                 f'serving endpoint {self._endpoint!r} answered with a '
                 f'response that is not JSON',
                 code='TRANSPORT_ERROR',
-            ) from None
+            )
+            # Nested past what this interpreter's reader reads: said so, for
+            # the core route (StructuredDataError._response_too_deep).
+            failed._response_too_deep = isinstance(error, RecursionError)
+            raise failed from None
         if not isinstance(answer, dict):
             raise StructuredDataError(
                 f'expected a JSON object from serving endpoint '
@@ -378,6 +427,40 @@ class DatabricksServingTransport:
         )
 
 
+class _Body(io.BytesIO):
+    r"""The core's bytes as the SDK posts them: a stream it rewinds to try
+    again, as it wraps bytes itself, which is true only until it is sent.
+
+    The SDK's report of a failure whose body it cannot parse dumps the
+    request's body, taking it for text, and fails with ``TypeError`` on any
+    stream; once sent this one is false, so the report leaves it out, and
+    the caller's rows with it.
+    """
+
+    def __init__(self, body: bytes) -> None:
+        super().__init__(body)
+        self._size = len(body)
+
+    def __bool__(self) -> bool:
+        return self.tell() < self._size
+
+
+def _failed(error: BaseException) -> EndpointFailed:
+    r"""The SDK's failure as the core reads it: the status its class gives
+    (as:meth:`DatabricksServingTransport._error_from` takes it), its
+    message and code, and its class's name. Neither logged nor repeated
+    here: the message can hold the request body, which is the caller's
+    rows."""
+    said = getattr(error, 'message', None)
+    code = getattr(error, 'error_code', None)
+    return EndpointFailed(
+        _status_of(error),
+        said if isinstance(said, str) else str(error),
+        code if isinstance(code, str) else None,
+        type(error).__name__,
+    )
+
+
 def _leading_code(text: str) -> str | None:
     r"""The code ``text`` opens with, as ``CODE: detail``, if it does."""
     found = _MODEL_DIAGNOSIS.match(text)
@@ -392,7 +475,7 @@ def _model_diagnosis(text: str, provider_code: str | None) -> str | None:
     provider's own ``CODE: `` prefix, or in the ``Error '...'`` right after
     the gateway's fixed wrapper. An upper-case word anywhere else can be the
     caller's value.
-    The provider's code is skipped: ``BAD_REQUEST: ...`` is Databricks
+    The provider's code is skipped: ``BAD_REQUEST:...`` is Databricks
     describing the call, not the model describing the request.
     """
     prefix = f'{provider_code}: '
@@ -552,7 +635,7 @@ def _named_copy(
                 "retry_timeout_seconds on the client's own Config instead",
                 code='INVALID_CONFIGURATION',
             )
-        # copy() shares the attribute dict with the caller's config, so a
+        # copy shares the attribute dict with the caller's config, so a
         # bound set without this would change their client too.
         config._inner = dict(config._inner)
         # The SDK retries for its own retry_timeout_seconds whatever one

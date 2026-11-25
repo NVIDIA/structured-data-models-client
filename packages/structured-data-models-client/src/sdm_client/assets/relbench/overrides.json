@@ -1,0 +1,74 @@
+{
+  "rel-hm": {
+    "article": {
+      "exclude": [
+        "product_type_name",
+        "graphical_appearance_name",
+        "colour_group_name",
+        "perceived_colour_value_name",
+        "perceived_colour_master_name",
+        "department_name",
+        "index_name",
+        "index_group_name",
+        "section_name",
+        "garment_group_name",
+        "product_code"
+      ]
+    }
+  },
+  "rel-amazon": {
+    "customer": {
+      "exclude": [
+        "customer_name"
+      ]
+    },
+    "product": {
+      "exclude": [
+        "brand",
+        "title",
+        "description"
+      ]
+    },
+    "review": {
+      "exclude": [
+        "review_text",
+        "summary"
+      ]
+    }
+  },
+  "rel-salt": {
+    "salesdocument": {
+      "stypes": {
+        "SALESOFFICE": "categorical",
+        "SALESGROUP": "categorical",
+        "CUSTOMERPAYMENTTERMS": "categorical",
+        "SHIPPINGCONDITION": "categorical",
+        "SALESDOCUMENTTYPE": "categorical",
+        "SALESORGANIZATION": "categorical",
+        "DISTRIBUTIONCHANNEL": "categorical",
+        "ORGANIZATIONDIVISION": "categorical",
+        "BILLINGCOMPANYCODE": "categorical",
+        "TRANSACTIONCURRENCY": "categorical",
+        "HEADERINCOTERMSCLASSIFICATION": "categorical",
+        "CREATIONTIMESTAMP": "timestamp"
+      }
+    },
+    "salesdocumentitem": {
+      "stypes": {
+        "SALESDOCUMENTITEM": "categorical",
+        "PLANT": "categorical",
+        "SHIPPINGPOINT": "categorical",
+        "SALESDOCUMENTITEMCATEGORY": "categorical",
+        "PRODUCT": "categorical",
+        "ITEMINCOTERMSCLASSIFICATION": "categorical",
+        "CREATIONTIMESTAMP": "timestamp"
+      }
+    },
+    "address": {
+      "stypes": {
+        "COUNTRY": "categorical",
+        "REGION": "categorical"
+      }
+    }
+  }
+}

@@ -18,14 +18,7 @@ import pandas as pd
 import pytest
 
 from sdm_client import PredictiveQuery, Relationship, Schema
-from sdm_client.core.backend import NimBackend
 from sdm_client.errors import StructuredDataError
-from sdm_client.materializers.relational import (
-    RelationalMaterializer,
-    _warn_of_columns_the_model_does_not_read,
-)
-
-pytest.importorskip('sdm_relational_engine')
 
 
 def users(rows: int = 40) -> pd.DataFrame:
@@ -61,8 +54,21 @@ def query(text: str = 'PREDICT users.churn FOR EACH users.user_id'):
 
 
 def edges_of(built: Schema) -> set:
-    graph = RelationalMaterializer(built)._build_graph()
-    return {(edge.src_table, edge.fkey, edge.dst_table) for edge in graph.edges}
+    request = PredictiveQuery(
+        'PREDICT users.age FOR EACH users.user_id', built
+    ).materialize(
+        indices=[1],
+        num_context_samples=20,
+    )
+    edges = [
+        (edge['source_table'], edge['source_columns'][0], edge['target_table'])
+        for edge in request.payloads[0]['schema']['relationships']
+        if 'source_table' in edge
+    ]
+    assert len(edges) == len(set(edges)), (
+        'duplicate relationships in the wire payload'
+    )
+    return set(edges)
 
 
 def described(built: Schema) -> set:
@@ -135,47 +141,20 @@ def test_an_entity_that_is_not_in_the_table_is_a_structured_data_error():
         query().materialize(indices=[-1, -2], num_context_samples=20)
 
 
-def linked() -> Schema:
-    items = pd.DataFrame(
-        {'item_id': range(5), 'price': [1.0, 2.0, 3.0, 4.0, 5.0]}
-    )
-    bought = orders().assign(item_id=[index % 5 for index in range(80)])
-    return Schema.from_data(
-        {'users': users(), 'items': items, 'orders': bought}
-    )
-
-
-@pytest.mark.parametrize(
-    ('text', 'data', 'sizes'),
-    [
-        ('PREDICT users.age FOR EACH users.user_id', schema, [2, 2, 1]),
-        (
-            'PREDICT LIST_DISTINCT(orders.item_id, 0, 30, days) '
-            'FOR EACH users.user_id',
-            linked,
-            [1, 1, 1, 1, 1],
-        ),
-    ],
-    ids=['regression', 'link_prediction'],
-)
-def test_more_entities_than_one_call_scores_are_gathered_in_batches(
-    monkeypatch, text, data, sizes
-):
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
-    monkeypatch.setitem(
-        RELATIONAL_LIMITS, 'predict_rows_temporal_link_prediction', 1
-    )
+def test_more_entities_than_one_call_scores_are_gathered_in_batches():
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        request = PredictiveQuery(text, data()).materialize(
-            indices=[5, 6, 7, 8, 9], num_context_samples=20
+        request = PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', schema()
+        ).materialize(
+            indices=[5, 6, 7, 8, 9],
+            num_context_samples=20,
+            rows_per_call=2,
         )
     assert [
         len(payload['predict']['instance_table']['rows'])
         for payload in request.payloads
-    ] == sizes
+    ] == [2, 2, 1]
 
 
 class Echo:
@@ -213,17 +192,16 @@ def test_a_request_asked_in_several_calls_is_answered_as_one(
     monkeypatch, pinned
 ):
     from sdm_client import KumoRelational, SDMClient
-    from sdm_client.models import RELATIONAL_LIMITS
 
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
     asked = query('PREDICT users.age FOR EACH users.user_id')
     scored = [5, 6, 7, 8, 9]
     client = SDMClient(url='http://localhost:8000')
-    transport = Echo()
-    client._backend = NimBackend(transport)
+    client._transport = transport = Echo()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        request = asked.materialize(indices=scored, num_context_samples=20)
+        request = asked.materialize(
+            indices=scored, num_context_samples=20, rows_per_call=2
+        )
         if pinned:
             fitted = client.fit(
                 asked.materialize(indices=[30], num_context_samples=20),
@@ -241,29 +219,17 @@ def test_a_request_asked_in_several_calls_is_answered_as_one(
 
 @pytest.mark.parametrize(
     ('asked', 'sizes'),
-    [(None, [2, 2, 1]), (1, [1, 1, 1, 1, 1]), (10, [2, 2, 1])],
-    ids=['default', 'smaller', 'larger_than_the_endpoint_takes'],
+    [(None, [5]), (1, [1, 1, 1, 1, 1]), (2, [2, 2, 1]), (10001, [5])],
+    ids=['default', 'one', 'two', 'larger_than_the_endpoint_takes'],
 )
 def test_rows_per_call_asks_in_the_batches_the_caller_named(asked, sizes):
-    """It only ever goes down: the endpoint refuses a call past its own cap,
-    so a larger number would buy a 422 rather than a bigger call.
-
-    The cap is held low here so that a number above it is a number the engine
-    would have batched at. Against the real 10,000, every value a test could
-    pass is below it, and the clamp could be dropped without a failure.
-    """
-    from sdm_client.materializers import relational as materializer
-    from sdm_client.models import RELATIONAL_LIMITS
-
+    """Public batch sizes split the request; an oversized value stays valid."""
     how = {} if asked is None else {'rows_per_call': asked}
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.MonkeyPatch.context() as held:
-            held.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
-            held.setattr(materializer, 'MOST_CALLS', 10)
-            request = query().materialize(
-                indices=[5, 6, 7, 8, 9], num_context_samples=20, **how
-            )
+        request = query().materialize(
+            indices=[5, 6, 7, 8, 9], num_context_samples=20, **how
+        )
     assert [
         len(payload['predict']['instance_table']['rows'])
         for payload in request.payloads
@@ -311,116 +277,41 @@ def test_a_rows_per_call_that_is_not_a_size_is_refused(given, text):
     assert 'a call scores a whole number of rows' in str(refused.value)
 
 
-def test_a_batch_size_of_one_is_refused_for_the_contexts_it_would_hold(
-    monkeypatch,
-):
-    """A context is gathered per call, so a small enough batch holds one per
-    entity however few entities there are."""
-    from sdm_client.materializers import relational as materializer
-
-    monkeypatch.setattr(materializer, 'MOST_CALLS', 3)
+def test_a_batch_size_of_one_gathers_a_call_per_entity():
+    """A context is gathered per call, and the client sets no most on the
+    calls: a batch of one is a call for each entity."""
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as refused:
-            query().materialize(
-                indices=[5, 6, 7, 8, 9],
-                num_context_samples=20,
-                rows_per_call=1,
-            )
-    assert refused.value.details['calls'] == 5
-    assert '3 calls' in str(refused.value)
-
-
-@pytest.mark.parametrize(
-    ('splittable', 'says'),
-    [(True, 'rows_per_call=N) below the 2'), (False, 'no smaller one')],
-    ids=['a_batch_with_rows_to_lose', 'a_batch_of_one'],
-)
-def test_a_size_refusal_is_answered_in_options_this_client_takes(
-    monkeypatch, splittable, says
-):
-    """The engine offers the run mode, which this client derives rather than
-    takes, so a caller following its advice lands on another refusal.
-
-    Whether a smaller call is worth offering is read off the engine's own
-    message, which omits its entity remedy exactly when the batch that failed
-    holds one row. Only the engine knows which batch that was: a request
-    gathered as `2, 2, 1` can fail on the one nothing can divide.
-    """
-    from sdm_relational_engine.rfm.rfm import _FEWER_ENTITIES, _SIZE_LIMIT_MSG
-
-    def too_large(*args, **kwargs):
-        raise ValueError(
-            _SIZE_LIMIT_MSG.format(
-                stats='9 nodes.',
-                entities=_FEWER_ENTITIES if splittable else '',
-            )
+        request = query().materialize(
+            indices=[5, 6, 7, 8, 9],
+            num_context_samples=20,
+            rows_per_call=1,
         )
+    assert len(request.payloads) == 5
 
-    built = query()
-    monkeypatch.setattr(
-        type(built._relational_materializer._get_model()),
-        'materialize_task',
-        too_large,
+
+def test_more_than_100_000_entities_are_gathered():
+    """The client sets no most on the entities one materialize gathers."""
+    from sdm_client import KumoRelational
+
+    count = 100_001
+    frame = pd.DataFrame(
+        {'uid': range(count + 10), 'label': [*range(count), *[None] * 10]}
     )
+    users = Schema.from_data({'users': frame}, primary_keys={'users': 'uid'})
+    users['users']['label'].stype = 'numerical'
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as refused:
-            built.materialize(
-                indices=[5, 6, 7, 8, 9],
-                num_context_samples=20,
-                rows_per_call=2,
-            )
-    said = str(refused.value)
-    assert '9 nodes' in said
-    assert 'run mode' not in said
-    assert says in said
-    assert refused.value.details['batch_too_large_to_send']
-
-
-def test_a_population_past_the_ceiling_is_refused_before_the_engine_is_reached(
-    monkeypatch,
-):
-    """Reaching the engine means building the graph and labelling every index,
-    which for a population far past the ceiling is minutes of work and the
-    memory with it before anything says no."""
-    from sdm_client.materializers import relational as materializer
-
-    monkeypatch.setattr(materializer, 'MOST_ENTITIES', 4)
-    monkeypatch.setattr(
-        materializer.RelationalMaterializer,
-        '_get_model',
-        lambda self: pytest.fail('the engine was reached'),
-    )
-    with pytest.raises(StructuredDataError) as refused:
-        query().materialize(indices=list(range(5)), num_context_samples=20)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['entities'] == 5
-
-
-def test_more_calls_than_fit_in_memory_are_refused_before_they_are_built(
-    monkeypatch,
-):
-    """The calls a population comes to is known only once the engine has said
-    how many entities it really holds, so this one is checked there, and still
-    before the batches themselves are built.
-    """
-    from sdm_client.materializers import relational as materializer
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
-    monkeypatch.setattr(materializer, 'MOST_CALLS', 2)
-    monkeypatch.setattr(
-        type(query()._relational_materializer._get_model()),
-        'materialize_task',
-        lambda *args, **how: pytest.fail('the batches were built'),
-    )
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        with pytest.raises(StructuredDataError) as refused:
-            query().materialize(indices=[5, 6, 7, 8, 9], num_context_samples=20)
-    assert refused.value.code == 'UNSUPPORTED_REQUEST'
-    assert refused.value.details['calls'] == 3
+        request = PredictiveQuery(
+            'PREDICT users.label FOR EACH users.uid', users
+        ).materialize(
+            indices=list(range(count)),
+            model=KumoRelational(),
+            rows_per_call=50_001,
+        )
+    assert [
+        len(p['predict']['instance_table']['rows']) for p in request.payloads
+    ] == [50_001, 50_000]
 
 
 def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
@@ -432,9 +323,6 @@ def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
     were paid for too.
     """
     from sdm_client import KumoRelational, SDMClient
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    monkeypatch.setitem(RELATIONAL_LIMITS, 'predict_rows_max', 2)
 
     class FailsOnTheSecondCall(Echo):
         def predict(self, payload: dict) -> dict:
@@ -443,11 +331,11 @@ def test_a_call_that_fails_keeps_the_answers_already_paid_for(monkeypatch):
             return super().predict(payload)
 
     client = SDMClient(url='http://localhost:8000')
-    client._backend = NimBackend(FailsOnTheSecondCall())
+    client._transport = FailsOnTheSecondCall()
     with warnings.catch_warnings():
         warnings.simplefilter('ignore')
         request = query('PREDICT users.age FOR EACH users.user_id').materialize(
-            indices=[5, 6, 7, 8, 9], num_context_samples=20
+            indices=[5, 6, 7, 8, 9], num_context_samples=20, rows_per_call=2
         )
         with pytest.raises(RuntimeError) as failed:
             client.predict(request, model=KumoRelational())
@@ -477,33 +365,6 @@ def test_an_ordinary_call_is_unaffected():
     assert request.payloads
 
 
-def test_the_two_ceilings_are_the_engine_s_own():
-    """A drift between these and the engine refuses work the engine allows.
-
-    The client reads the lower ceiling off the task kind's name, and only
-    `temporal_link_prediction` carries it. Were the engine to hold a second
-    task to a size of its own, the client would batch that task too large.
-    """
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    engine = pytest.importorskip('sdm_relational_engine.rfm.rfm')
-    from predictive_query import TaskType
-
-    assert (
-        RELATIONAL_LIMITS['predict_rows_temporal_link_prediction']
-        == engine._MAX_PRED_SIZE[TaskType.TEMPORAL_LINK_PREDICTION]
-    )
-    assert (
-        RELATIONAL_LIMITS['predict_rows_max']
-        == engine._MAX_PRED_SIZE[TaskType.BINARY_CLASSIFICATION]
-    )
-    assert {
-        kind
-        for kind in TaskType
-        if engine._MAX_PRED_SIZE[kind] != RELATIONAL_LIMITS['predict_rows_max']
-    } == {TaskType.TEMPORAL_LINK_PREDICTION}
-
-
 def test_a_relationship_listed_twice_is_linked_once():
     """`graph.link()` became unconditional, and the engine refuses an edge it
     already has, which a caller appending to an inferred list produces."""
@@ -517,86 +378,8 @@ def test_a_relationship_listed_twice_is_linked_once():
     link = Relationship('orders', 'user_id', 'users', 'user_id')
     schema.relationships = [link, link]
 
-    graph = RelationalMaterializer(schema)._build_graph()
-    edges = {(e.src_table, e.fkey, e.dst_table) for e in graph.edges}
+    edges = edges_of(schema)
     assert edges == {('orders', 'user_id', 'users')}
-
-
-def test_a_type_error_is_sorted_by_whether_the_call_bound():
-    """The engine uses TypeError for both a caller's bad value and this
-    client's bad call, so the type alone cannot tell them apart.
-
-    Argument binding fails before the callee is entered, so a signature
-    error's deepest frame is the calling line; a refused value was raised
-    from inside the engine.
-    """
-
-    def engine_fn(*, indices):
-        return indices
-
-    def validator(value):
-        raise TypeError("'anchor_time' must be a pandas.Timestamp")
-
-    try:
-        engine_fn(nope=1)
-    except TypeError as error:
-        assert RelationalMaterializer._is_call_signature_error(error)
-
-    try:
-        validator('2024-01-01')
-    except TypeError as error:
-        assert not RelationalMaterializer._is_call_signature_error(error)
-
-
-def test_the_frame_test_decides_it_without_help_from_the_message():
-    """The message fallback would answer this one too, so it has to be shown
-    that the frames alone do.
-
-    A bad call made from the relational materializer leaves its deepest frame
-    there, and the two are told apart even when the wording carries no
-    signature phrase at all, which is the point of not depending on
-    CPython's wording.
-    """
-    import sdm_client.materializers.relational as relational
-
-    def engine_fn(*, indices):
-        return indices
-
-    # Raised from the relational module, with an unmatched message.
-    source = compile(
-        "def call():\n    raise TypeError('an entirely unrecognised wording')",
-        relational.__file__,
-        'exec',
-    )
-    namespace: dict = {'__name__': relational.__name__}
-    exec(source, namespace)
-    try:
-        namespace['call']()
-    except TypeError as error:
-        assert RelationalMaterializer._is_call_signature_error(error), (
-            'a TypeError whose deepest frame is the relational materializer '
-            'is a bad call, however it is worded'
-        )
-
-    # Raised from anywhere else, same unrecognised wording.
-    def elsewhere():
-        raise TypeError('an entirely unrecognised wording')
-
-    try:
-        elsewhere()
-    except TypeError as error:
-        assert not RelationalMaterializer._is_call_signature_error(error)
-
-
-def test_the_message_fallback_covers_a_traceback_free_type_error():
-    """A TypeError with no traceback, reconstructed, or raised across a
-    boundary, still has to be sorted, and only the message is left."""
-    assert RelationalMaterializer._is_call_signature_error(
-        TypeError("f() got an unexpected keyword argument 'verbose'")
-    )
-    assert not RelationalMaterializer._is_call_signature_error(
-        TypeError("'anchor_time' must be a pandas.Timestamp")
-    )
 
 
 def test_a_bad_anchor_time_is_the_callers_fault_not_the_libraries():
@@ -606,24 +389,13 @@ def test_a_bad_anchor_time_is_the_callers_fault_not_the_libraries():
     from sdm_client.errors import StructuredDataError
 
     with pytest.raises(StructuredDataError) as error:
-        with RelationalMaterializer(schema())._engine_errors(None):
-            raise TypeError(
-                "'anchor_time' must be a pandas.Timestamp or the literal "
-                "'entity' (got str '2024-01-01'); try pd.Timestamp(...)"
-            )
+        query(
+            'PREDICT COUNT(orders.*, 0, 30, days) FOR EACH users.user_id'
+        ).materialize(
+            indices=[1],
+            anchor_time='2024-01-01',
+        )
     assert error.value.code == 'INVALID_REQUEST'
-
-
-def test_a_wrong_keyword_into_the_engine_is_reported_as_our_bug():
-    """The other half of the same type: this one a user cannot act on."""
-    from sdm_client.errors import StructuredDataError
-
-    with pytest.raises(StructuredDataError) as error:
-        with RelationalMaterializer(schema())._engine_errors(None):
-            raise TypeError(
-                "_get_task_table() got an unexpected keyword argument 'verbose'"
-            )
-    assert error.value.code == 'INTERNAL_ERROR'
 
 
 # --- the schema decides the time column, and nothing else does --------------
@@ -645,6 +417,7 @@ def rated() -> pd.DataFrame:
             'item_id': [(index % 120) + 1 for index in range(600)],
             'user_id': [index % 40 for index in range(600)],
             'when': pd.date_range('2000-01-01', periods=600, freq='D'),
+            'edited': [pd.Timestamp('2100-01-01')] * 600,
         }
     )
 
@@ -665,15 +438,37 @@ def test_a_table_the_schema_gives_no_time_column_is_given_none():
     built = catalogue_schema()
     assert built['items'].time_column is None
 
-    graph = RelationalMaterializer(built)._build_graph()
-
-    assert graph['items'].time_column is None
+    payload = (
+        PredictiveQuery('PREDICT users.age FOR EACH users.user_id', built)
+        .materialize(
+            indices=[1],
+            num_context_samples=20,
+        )
+        .payloads[0]
+    )
+    assert (
+        payload['schema']['related_tables']['items']['columns']['release'][
+            'stype'
+        ]
+        == 'categorical'
+    )
 
 
 def test_a_time_column_the_schema_names_is_the_one_the_graph_gets():
-    graph = RelationalMaterializer(catalogue_schema())._build_graph()
-
-    assert graph['ratings'].time_column.name == 'when'
+    cutoff = pd.Timestamp('2001-03-01')
+    request = PredictiveQuery(
+        'PREDICT COUNT(ratings.*, 0, 30, days) FOR EACH users.user_id',
+        catalogue_schema(),
+    ).materialize(indices=[1], num_context_samples=20, anchor_time=cutoff)
+    table = request.payloads[0]['predict']['related_tables']['ratings']
+    assert table['rows']
+    when = table['columns'].index('when')
+    edited = table['columns'].index('edited')
+    dates = [pd.Timestamp(row[when]).tz_localize(None) for row in table['rows']]
+    assert all(date <= cutoff for date in dates)
+    assert max(dates) >= pd.Timestamp('2001-01-01')
+    # Selecting the competing timestamp would exclude every row.
+    assert all(pd.Timestamp(row[edited]).year == 2100 for row in table['rows'])
 
 
 def test_a_date_shaped_string_the_schema_ignores_does_not_stop_the_build():
@@ -682,20 +477,45 @@ def test_a_date_shaped_string_the_schema_ignores_does_not_stop_the_build():
     a guess that failed while it was being made."""
     built = catalogue_schema()
 
-    graph = RelationalMaterializer(built)._build_graph()
-
-    assert graph['items'].time_column is None
+    payload = (
+        PredictiveQuery('PREDICT users.age FOR EACH users.user_id', built)
+        .materialize(
+            indices=[1],
+            num_context_samples=20,
+        )
+        .payloads[0]
+    )
+    assert (
+        payload['schema']['related_tables']['items']['columns']['release'][
+            'stype'
+        ]
+        == 'categorical'
+    )
     assert built['items']['release'].stype == 'categorical'
 
 
 def test_a_key_the_schema_withholds_is_not_taken_from_a_column_name():
     frame = pd.DataFrame({'ID': [1, 1, 2, 2, 3], 'value': [1.0, 2, 3, 4, 5]})
-    built = Schema.from_data({'t': frame})
+    built = Schema.from_data(
+        {'t': frame, 'users': users()},
+        primary_keys={'users': 'user_id'},
+        relationships=[Relationship('t', 'ID', 'users', 'user_id')],
+    )
     built['t'].primary_key = None
 
-    graph = RelationalMaterializer(built)._build_graph()
-
-    assert graph['t'].primary_key is None
+    request = PredictiveQuery(
+        'PREDICT users.age FOR EACH users.user_id', built
+    ).materialize(
+        indices=[1, 2],
+        num_context_samples=3,
+    )
+    assert request.predict_rows == 2
+    assert (
+        'ID'
+        not in request.payloads[0]['schema']['related_tables']['t'][
+            'primary_key'
+        ]
+    )
 
 
 # --- a column the model will not read is said to be unread ------------------
@@ -712,6 +532,7 @@ def prose_schema(columns: int = 1, stype: str = 'text') -> Schema:
     cited = pd.DataFrame(
         {
             'paper_id': [index % 120 for index in range(400)],
+            'prose0': range(400),
             'when': pd.date_range('2020-01-01', periods=400, freq='D'),
         }
     )
@@ -744,8 +565,8 @@ def unread_warnings(built: Schema) -> list[str]:
 
 
 def test_a_text_column_is_said_to_contribute_nothing():
-    """It is accepted and dropped at the model, so the request succeeds and
-    the column that looked most informative carried nothing."""
+    """It is left out of the request, so the request succeeds and the column
+    that looked most informative carried nothing."""
     said = unread_warnings(prose_schema())
 
     assert len(said) == 1
@@ -768,10 +589,18 @@ def test_a_column_the_model_reads_is_not_mentioned():
 def unread_named(built: Schema, left_out: dict) -> list[str]:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        _warn_of_columns_the_model_does_not_read(
-            built, left_out, frozenset(built.tables)
+        PredictiveQuery(
+            'PREDICT papers.target FOR EACH papers.paper_id', built
+        ).materialize(
+            indices=[1],
+            exclude_cols_dict=left_out,
+            num_context_samples=20,
         )
-    return [str(item.message) for item in caught]
+    return [
+        str(item.message)
+        for item in caught
+        if 'does not read' in str(item.message)
+    ]
 
 
 def test_a_column_already_left_out_is_not_reported_as_lost():
@@ -861,44 +690,18 @@ def gathered_from(built: Schema) -> set[str]:
     return set(request.payloads[0]['schema']['related_tables'])
 
 
-def test_a_schema_wider_than_the_cap_is_gathered_when_its_subgraph_is_not():
-    """21 declared tables, 6 gathered, and the endpoint reads 15."""
-    from sdm_client.models import RELATIONAL_LIMITS
-
+def test_a_schema_wider_than_fifteen_tables_is_gathered_as_its_subgraph():
+    """21 declared tables, 6 gathered: what is sent is what the query reaches."""
     built = star(satellites=20, joining=5)
-    assert len(built) > RELATIONAL_LIMITS['tables_max']
+    assert len(built) > 15
 
     assert len(gathered_from(built)) == 6
 
 
-def test_a_subgraph_wider_than_the_cap_is_still_refused():
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    with pytest.raises(StructuredDataError) as error:
-        gathered_from(star(satellites=20, joining=20))
-    assert str(RELATIONAL_LIMITS['tables_max']) in str(error.value)
-
-
-def test_the_table_cap_is_checked_against_the_payload_that_was_built():
-    """The client keeps its own check, on the quantity the request carries."""
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    class Part:
-        payload = {
-            'predict': {'instance_table': {'rows': [[1]]}},
-            'task': {'kind': 'binary_classification'},
-            'schema': {
-                'related_tables': {
-                    f't{index}': {}
-                    for index in range(RELATIONAL_LIMITS['tables_max'] + 1)
-                }
-            },
-        }
-
-    with pytest.raises(StructuredDataError) as error:
-        RelationalMaterializer._check_limits(Part(), RELATIONAL_LIMITS)
-    assert error.value.code == 'UNSUPPORTED_REQUEST'
-    assert 'carries 16 tables' in str(error.value)
+def test_a_subgraph_wider_than_fifteen_tables_is_gathered_whole():
+    """The client sets no most on the tables a request carries: a subgraph
+    of 21 is gathered whole."""
+    assert len(gathered_from(star(satellites=20, joining=20))) == 21
 
 
 # --- a table the request leaves out is said to be left out ------------------
@@ -950,9 +753,9 @@ def test_a_table_nothing_links_is_said_to_be_missing_from_the_request():
 
 
 def test_an_unread_column_of_a_table_never_sent_is_not_named():
-    """`orphan.notes` is typed text and does not reach the model to be
-    dropped there, so the loss the warning describes did not happen and its
-    remedy would change nothing."""
+    """`orphan.notes` is typed text and its table is not sent, so the loss
+    the warning describes did not happen and its remedy would change
+    nothing."""
     said = said_while_materializing(orphaned())
 
     assert [line for line in said if 'does not read' in line] == []
@@ -986,23 +789,30 @@ def disjoint(joining: bool = False) -> Schema:
 
 
 def joins_nothing_warnings(built: Schema) -> list[str]:
-    from sdm_client.materializers.relational import (
-        _warn_of_relationships_that_join_nothing,
-    )
-
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        _warn_of_relationships_that_join_nothing(built)
-    return [str(item.message) for item in caught]
+        PredictiveQuery(
+            'PREDICT airports.city FOR EACH airports.code', built
+        ).materialize(
+            indices=['ATL'],
+            num_context_samples=3,
+        )
+    return [
+        str(item.message)
+        for item in caught
+        if 'TABLES_UNREACHED' in str(item.message)
+    ]
 
 
 def test_a_relationship_whose_values_match_nothing_is_reported():
     said = joins_nothing_warnings(disjoint())
 
     assert len(said) == 1
-    assert 'joins none of the rows given' in said[0]
+    assert 'flights' in said[0]
+    assert 'sampler reached no row' in said[0]
     assert (
-        "Relationship('flights', <that column>, 'airports', 'code')" in said[0]
+        'check the foreign key holds values the parent key actually has'
+        in said[0]
     )
 
 
@@ -1010,12 +820,16 @@ def test_a_relationship_whose_values_match_is_not_reported():
     assert joins_nothing_warnings(disjoint(joining=True)) == []
 
 
-def test_an_empty_child_is_not_reported_as_joining_nothing():
-    """A child with no rows yet joins nothing for a reason that is legal."""
+def test_an_empty_child_reports_missing_rows_before_sampling():
+    """An empty input table is refused explicitly, rather than misdiagnosed as a bad join."""
     built = disjoint()
     built['flights'].data = built['flights'].data.iloc[:0]
 
-    assert joins_nothing_warnings(built) == []
+    with pytest.raises(
+        StructuredDataError, match='Found no valid rows'
+    ) as raised:
+        joins_nothing_warnings(built)
+    assert raised.value.code == 'INVALID_REQUEST'
 
 
 # --- sampling options refuse in this client's own voice ---------------------
@@ -1192,14 +1006,11 @@ def test_a_table_with_several_timestamps_is_told_which_was_taken():
         {'orders': two_timestamps(), 'users': pd.DataFrame({'uid': range(20)})},
         primary_keys={'orders': 'oid', 'users': 'uid'},
     )
-    assert said == [
-        'Some time columns were inferred, or refused, on a guess about what '
-        'a column holds:\n'
-        '- orders.shipped was taken as the time column because its values '
-        "start earliest of 'shipped' and 'delivered'. If another says when a "
-        "row became true, name it: time_columns={'orders': 'delivered'}. If "
-        "none does, clear it: time_columns={'orders': None}."
-    ]
+    assert len(said) == 1
+    assert 'orders.shipped' in said[0]
+    assert 'earliest' in said[0]
+    assert "time_columns={'orders': 'delivered'}" in said[0]
+    assert "time_columns={'orders': None}" in said[0]
 
 
 def test_the_remedy_never_shows_a_column_that_cannot_be_the_time_column():
@@ -1239,8 +1050,8 @@ def test_a_lone_table_is_not_told_which_was_taken():
     ids=['an empty num_neighbors', 'num_hops of zero'],
 )
 def test_both_spellings_of_no_hop_are_refused_alike(option, names):
-    """They are one request written two ways, and the endpoint reads between 1
-    and 6 hops, so one slipping through to be taken literally was the defect."""
+    """They are one request written two ways, and a request samples at least
+    one hop, so one slipping through to be taken literally was the defect."""
     built = catalogue_schema()
 
     with pytest.raises(StructuredDataError, match='no hop at all') as raised:
@@ -1265,7 +1076,12 @@ def test_a_reserved_name_is_not_told_to_rename_itself_to_itself(reserved):
         built = Schema.from_data({'users': users(), 'orders': frame})
 
     with pytest.raises(StructuredDataError) as raised:
-        RelationalMaterializer(built)._refuse_a_name_the_wire_reserves()
+        PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', built
+        ).materialize(
+            indices=[1],
+            num_context_samples=20,
+        )
 
     message = str(raised.value)
     assert f'orders.{reserved}' in message
@@ -1282,7 +1098,12 @@ def test_two_reserved_names_are_each_given_their_own_rename():
         built = Schema.from_data({'users': users(), 'orders': frame})
 
     with pytest.raises(StructuredDataError) as raised:
-        RelationalMaterializer(built)._refuse_a_name_the_wire_reserves()
+        PredictiveQuery(
+            'PREDICT users.age FOR EACH users.user_id', built
+        ).materialize(
+            indices=[1],
+            num_context_samples=20,
+        )
 
     message = str(raised.value)
     assert 'use names' in message

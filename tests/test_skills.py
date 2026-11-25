@@ -14,7 +14,9 @@ to the client, which answers without connecting. The rest is marked
 ``SDM_RELATIONAL_URL``. Those re-run every example that can be run -- see
 ``complete()`` -- and compare what it printed to the block pasted beneath it,
 and probe the handful of claims the skills make about a deployment rather than
-about this client.
+about this client. The in-process references need no endpoint but load the
+published weights, so they are marked ``in_process`` and run only with
+``SDM_IN_PROCESS`` set.
 """
 
 from __future__ import annotations
@@ -49,8 +51,19 @@ PREDICTS = re.compile(r'\b\w+\.predict\(')
 LINK = re.compile(r'\]\(([^)]+)\)')
 
 
+#: Files the NVIDIA skills catalog requires beside each skill. They are written
+#: for the catalog, not for an agent. A skill links to none of them, and none
+#: holds an example. The governance card is HTML-laced markdown in the catalog's
+#: own template. NVSkills CI writes the benchmark report on each signing run.
+#: Holding either to the markdown read here would fail on a file nobody here
+#: writes by hand.
+CATALOG_FILES = frozenset({'skill-card.md', 'BENCHMARK.md'})
+
+
 def documents() -> list[Path]:
-    return sorted(SKILLS.rglob('*.md'))
+    return sorted(
+        path for path in SKILLS.rglob('*.md') if path.name not in CATALOG_FILES
+    )
 
 
 def fences(path: Path, language: str) -> list[str]:
@@ -62,8 +75,8 @@ def fences(path: Path, language: str) -> list[str]:
 
 
 def test_there_is_a_skill_for_each_model():
-    assert (SKILLS / 'tabular' / 'SKILL.md').exists()
-    assert (SKILLS / 'relational' / 'SKILL.md').exists()
+    assert (SKILLS / 'sdm-tabular' / 'SKILL.md').exists()
+    assert (SKILLS / 'sdm-relational' / 'SKILL.md').exists()
     assert (SKILLS / 'README.md').exists()
 
 
@@ -147,7 +160,7 @@ def test_an_example_that_predicts_shows_what_came_back(path):
             )
 
 
-@pytest.mark.parametrize('name', ['tabular', 'relational'])
+@pytest.mark.parametrize('name', ['sdm-tabular', 'sdm-relational'])
 def test_a_skill_shows_output_it_has_run(name):
     """Each skill has to stake something on a live endpoint.
 
@@ -160,19 +173,38 @@ def test_a_skill_shows_output_it_has_run(name):
     assert '**Verified**' in body, f'{name} marks no output as verified'
 
 
-@pytest.mark.parametrize('name', ['tabular', 'relational'])
+@pytest.mark.parametrize('name', ['sdm-tabular', 'sdm-relational'])
 def test_a_skill_announces_itself(name):
-    """An agent finds a skill by its frontmatter, so it has to be there."""
+    """An agent finds a skill by its frontmatter, so it has to be there.
+
+    The name is the directory's. The skills catalog copies each directory to
+    one named for the skill, so a skill that links to its sibling as
+    ``../<directory>/`` reaches it only where the two agree.
+    """
     yaml = pytest.importorskip('yaml')
     body = (SKILLS / name / 'SKILL.md').read_text(encoding='utf-8')
     assert body.startswith('---\n'), f'{name} opens with no frontmatter'
     front = yaml.safe_load(body[4 : body.index('\n---\n', 3)])
     assert isinstance(front, dict), f'{name} frontmatter is not a mapping'
-    assert front.get('name') == f'sdm-{name}', (
+    assert front.get('name') == name, (
         f'{name} is announced as {front.get("name")!r}'
     )
     assert 'Triggers:' in front.get('description', ''), (
         f'{name} gives no triggers, so nothing would load it'
+    )
+
+
+@pytest.mark.parametrize('name', ['sdm-tabular', 'sdm-relational'])
+def test_a_skill_says_how_to_run_its_model_here(name):
+    """A skill assumes a URL. Where there is none, the model runs in the
+    agent's own process, and the skill has to say so where it is found: in
+    the skill itself, and in the index an agent starts from."""
+    reference = f'{name}/references/in-process.md'
+    assert '](references/in-process.md)' in rendered(
+        SKILLS / name / 'SKILL.md'
+    ), f'{name} never says how to run its model in this process'
+    assert f']({reference})' in rendered(SKILLS / 'README.md'), (
+        f'the index does not list {reference}'
     )
 
 
@@ -285,26 +317,30 @@ EVERY_TABLE = {
         (['Skill', 'Model', 'Load it when'], False),
         (['Reference', ''], False),
     ],
-    'skills/relational/SKILL.md': [
+    'skills/sdm-relational/SKILL.md': [
         (['', '`kumo-relational`'], True),
         (['Limit', 'Value'], True),
         (['Refusal', 'Cause'], False),
     ],
-    'skills/relational/references/beyond-one-answer.md': [],
-    'skills/relational/references/warehouses.md': [
+    'skills/sdm-relational/references/beyond-one-answer.md': [],
+    'skills/sdm-relational/references/in-process.md': [],
+    'skills/sdm-relational/references/warehouses.md': [
         (['Source', 'Connection it takes', 'Namespace', 'Extra'], True)
     ],
-    'skills/relational/pql.md': [
+    'skills/sdm-relational/pql.md': [
         (['Clause', 'Least', 'Most'], True),
         (['Target', 'Task', 'Calls'], True),
         (['Aggregation', ''], True),
         (['Comparison', ''], True),
     ],
-    'skills/tabular/SKILL.md': [
+    'skills/sdm-tabular/SKILL.md': [
         (['', '`kumo-tabular`'], True),
         (['Refusal', 'Cause'], False),
     ],
-    'skills/tabular/references/pql.md': [(['Clause', 'On one table'], True)],
+    'skills/sdm-tabular/references/in-process.md': [],
+    'skills/sdm-tabular/references/pql.md': [
+        (['Clause', 'On one table'], True)
+    ],
 }
 
 
@@ -332,6 +368,26 @@ def test_every_link_resolves(path):
         assert (path.parent / target).resolve().exists(), (
             f'{path.name} links to {target}, which is not there'
         )
+
+
+@pytest.mark.parametrize(
+    'path', [p for p in documents() if p.parent != SKILLS], ids=str
+)
+def test_a_skill_links_only_to_skills(path):
+    """The skills catalog copies each skill directory and nothing around it.
+
+    A relative link out of ``skills/`` into the rest of this repository
+    resolves here and nowhere the skill is installed. Link to a sibling skill
+    by its directory, or to anything else by its URL.
+    """
+    for target in LINK.findall(path.read_text(encoding='utf-8')):
+        if target.startswith(('http://', 'https://', '#')):
+            continue
+        resolved = (path.parent / target).resolve()
+        assert any(
+            resolved.is_relative_to(skill.parent.resolve())
+            for skill in SKILLS.glob('*/SKILL.md')
+        ), f'{path.relative_to(SKILLS)} links to {target}, outside every skill'
 
 
 @pytest.mark.parametrize('path', documents(), ids=str)
@@ -567,7 +623,6 @@ def test_no_example_trains_anything(path):
 
 @pytest.fixture
 def schema():
-    pytest.importorskip('sdm_relational_engine')
     pd = pytest.importorskip('pandas')
     from sdm_client import Relationship, Schema
 
@@ -600,7 +655,6 @@ def schema():
 
 @pytest.fixture
 def schema_with_text():
-    pytest.importorskip('sdm_relational_engine')
     pd = pytest.importorskip('pandas')
     from sdm_client import Relationship, Schema
 
@@ -633,7 +687,7 @@ def resolve(query, schema, **extra):
     )
 
 
-PQL = SKILLS / 'relational' / 'pql.md'
+PQL = SKILLS / 'sdm-relational' / 'pql.md'
 
 
 FENCED = re.compile(r'^```[a-z]*\n.*?^```$', re.DOTALL | re.MULTILINE)
@@ -1401,10 +1455,8 @@ def test_a_warehouse_reads_the_same_whole_numbers_as_a_category():
     regression of a warehouse and get a multiclass question.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
 
-    from sdm_client import Relationship, Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, Relationship, Schema
 
     connection = duckdb.connect()
     connection.execute(
@@ -1641,9 +1693,9 @@ def test_a_temporal_assumption_is_answered(schema):
     assert request.task.kind == 'regression'
 
 
-TABULAR_PQL = SKILLS / 'tabular' / 'references' / 'pql.md'
+TABULAR_PQL = SKILLS / 'sdm-tabular' / 'references' / 'pql.md'
 
-#: Each row of the clause table in tabular/references/pql.md, written as a
+#: Each row of the clause table in sdm-tabular/references/pql.md, written as a
 #: query over one table. The claim is that every one is refused there, and
 #: several of them are ordinary relational queries.
 ON_ONE_TABLE = {
@@ -1696,7 +1748,7 @@ def test_the_tabular_clause_table_is_every_clause_it_refuses(one_table):
     shown = table(TABULAR_PQL, 'Clause')
     del shown['Clause']
     assert set(shown) == set(ON_ONE_TABLE), (
-        f'tabular/references/pql.md lists {sorted(set(shown) ^ set(ON_ONE_TABLE))} '
+        f'sdm-tabular/references/pql.md lists {sorted(set(shown) ^ set(ON_ONE_TABLE))} '
         f'that this does not ask about'
     )
     assert all(cells == ['refused'] for cells in shown.values()), (
@@ -1728,28 +1780,6 @@ BY_CAPABILITY = {
     '`WHERE` on the entity': 'entity_filters',
     '`ASSUMING`': 'counterfactuals',
 }
-
-
-@pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
-def test_a_clause_refused_on_one_table_is_the_tabular_profiles_doing(clause):
-    """The sentence under that table: all seven are the profile refusing.
-
-    The reference used to call three of them the grammar's, whatever the
-    model, which the relational reference contradicts by teaching them. Asked
-    of the profiles rather than of a query, because a query on a single table
-    is refused for several reasons at once and the message names one.
-    """
-    from predictive_query.profiles import RELATIONAL, TABULAR
-
-    capability = BY_CAPABILITY[clause]
-    assert getattr(TABULAR.capabilities, capability) is False, (
-        f'the tabular profile allows {capability}, and the reference says '
-        f'{clause} is refused on one table'
-    )
-    assert getattr(RELATIONAL.capabilities, capability) is True, (
-        f'the relational profile refuses {capability} too, and the reference '
-        f'says the relational model takes all seven'
-    )
 
 
 @pytest.mark.parametrize('clause', sorted(ON_ONE_TABLE), ids=lambda v: v[:28])
@@ -1806,7 +1836,7 @@ def test_a_plain_column_is_what_the_tabular_reference_promises(one_table):
         )
 
 
-WAREHOUSES = SKILLS / 'relational' / 'references' / 'warehouses.md'
+WAREHOUSES = SKILLS / 'sdm-relational' / 'references' / 'warehouses.md'
 
 
 def test_the_source_table_is_every_source_there_is():
@@ -1815,24 +1845,20 @@ def test_the_source_table_is_every_source_there_is():
     Read from the package rather than copied: a backend added, renamed or
     given a different driver has to reach the reference.
     """
-    import sdm_connectors
+    import sdm_client.sources
 
     shown = table(WAREHOUSES, 'Source')
     del shown['Source']
     named = {only(row) for row in shown}
-    exported = {
-        name
-        for name in sdm_connectors.__all__
-        if name.endswith('Source') and name != 'Source'
-    }
+    exported = set(sdm_client.sources.__all__)
     assert named == exported, (
-        f'warehouses.md lists {sorted(named ^ exported)} that sdm_connectors '
+        f'warehouses.md lists {sorted(named ^ exported)} that sdm_client '
         f'does not, or the other way about'
     )
     import inspect
 
     for row, cells in shown.items():
-        source = getattr(sdm_connectors, only(row))
+        source = getattr(sdm_client.sources, only(row))
         takes, namespace, extra = cells
         wants = {
             name
@@ -1878,7 +1904,8 @@ def test_a_source_given_the_wrong_connection_says_which_it_wants():
     """The SQLite trap the reference leads with, and the message it quotes."""
     import sqlite3
 
-    from sdm_connectors import ConnectorError, SQLiteSource
+    from sdm_client import SQLiteSource
+    from sdm_connectors import ConnectorError
 
     with pytest.raises(ConnectorError, match='adbc_driver_sqlite'):
         SQLiteSource(sqlite3.connect(':memory:'))
@@ -1954,9 +1981,7 @@ def test_a_source_reads_the_catalogs_own_keys():
     duckdb = pytest.importorskip('duckdb')
     # Schema.from_source needs the engine, which is the extra this very
     # reference says the connector alone does not bring.
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_client import Schema
-    from sdm_connectors import DuckDBSource
+    from sdm_client import DuckDBSource, Schema
 
     connection = duckdb.connect()
     connection.execute('CREATE TABLE a (ref INTEGER PRIMARY KEY, v INTEGER)')
@@ -1981,49 +2006,54 @@ def test_a_source_reads_the_catalogs_own_keys():
     )
 
 
-def test_describing_a_source_reads_a_thousand_rows_of_it():
+def test_describing_a_source_reads_a_thousand_rows_of_it(monkeypatch):
     """What the reference says leaves the warehouse before any prediction.
 
-    Counted by giving the source more rows than the sample takes and asking
-    what was read: a table left in place is not a table nothing is read from.
+    Observe the real provider's preview replies while the public call runs:
+    the default core need not retain the legacy engine's pandas sample cache.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
-    from sdm_client import Schema
-    from sdm_connectors import DuckDBSource
-    from sdm_relational_engine.rfm.base.table import Table
+    from sdm_client import DuckDBSource, Schema
+    from sdm_client._rust import providers
 
-    connection = duckdb.connect()
-    connection.execute(
-        'CREATE TABLE t AS SELECT i AS id, i * 2 AS v FROM range(5000) x(i)'
-    )
-    schema = Schema.from_source(
-        DuckDBSource(connection), {'t': 't'}, primary_keys={'t': 'id'}
-    )
-    assert Table._NUM_SAMPLE_ROWS == 1000, (
-        f'the sample is {Table._NUM_SAMPLE_ROWS} rows and both files say a '
-        f'thousand'
-    )
-    sampled = schema._engine_tables._tables['t']._source_sample_df
-    read = len(sampled)
-    assert read == 1000, (
-        f'describing a 5,000-row source read {read} rows, and the reference '
-        f'says up to a thousand of each leave the warehouse'
-    )
+    samples = {}
 
-    connection.execute(
-        'CREATE TABLE small AS SELECT i AS id FROM range(12) y(i)'
-    )
-    smaller = Schema.from_source(
-        DuckDBSource(connection),
-        {'small': 'small'},
-        primary_keys={'small': 'id'},
-    )
-    whole = len(smaller._engine_tables._tables['small']._source_sample_df)
-    assert whole == 12, (
-        f'a 12-row source gave {whole} rows, and the reference says all of a '
-        f'table that small is what leaves'
-    )
+    class ObservingDuckDBProvider(providers.DuckDBProvider):
+        def __call__(self, step, keys=None):
+            result = super().__call__(step, keys)
+            request = step['request']
+            if request['request'] == 'preview':
+                table = tuple(request['table']['source'])
+                samples.setdefault(table, []).append(result.num_rows)
+            return result
+
+    monkeypatch.setattr(providers, 'DuckDBProvider', ObservingDuckDBProvider)
+    with duckdb.connect() as connection:
+        connection.execute(
+            'CREATE TABLE t AS SELECT i AS id, i * 2 AS v FROM range(5000) x(i)'
+        )
+        schema = Schema.from_source(
+            DuckDBSource(connection), {'t': 't'}, primary_keys={'t': 'id'}
+        )
+        assert set(schema.tables) == {'t'}
+        assert samples == {('t',): [1000]}, (
+            f'describing a 5,000-row source read previews {samples}, and the '
+            'reference says up to a thousand of each leave the warehouse'
+        )
+
+        connection.execute(
+            'CREATE TABLE small AS SELECT i AS id FROM range(12) y(i)'
+        )
+        smaller = Schema.from_source(
+            DuckDBSource(connection),
+            {'small': 'small'},
+            primary_keys={'small': 'id'},
+        )
+        assert set(smaller.tables) == {'small'}
+        assert samples == {('t',): [1000], ('small',): [12]}, (
+            f'the preview reads were {samples}, and the reference says all '
+            'of the 12-row source leaves'
+        )
 
 
 def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
@@ -2033,11 +2063,9 @@ def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
     the reference tells a reader to pass ``read_only=True``.
     """
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
 
-    from sdm_client import Schema
+    from sdm_client import DuckDBSource, Schema
     from sdm_client.errors import StructuredDataError
-    from sdm_connectors import DuckDBSource
 
     quoted = [
         block
@@ -2056,14 +2084,6 @@ def test_an_empty_source_is_refused_in_the_words_the_reference_quotes():
     )
 
 
-def test_a_source_type_is_chosen_for_you():
-    """``Source(connection)`` picks the backend, which the reference offers."""
-    duckdb = pytest.importorskip('duckdb')
-    from sdm_connectors import DuckDBSource, Source
-
-    assert isinstance(Source(duckdb.connect()), DuckDBSource)
-
-
 def test_a_connector_error_is_not_a_structured_data_error():
     """The reference says catching one does not catch the other."""
     from sdm_client.errors import StructuredDataError
@@ -2074,7 +2094,7 @@ def test_a_connector_error_is_not_a_structured_data_error():
 
 
 def test_the_tabular_model_refuses_a_second_table(schema):
-    """The sentence ``skills/tabular/SKILL.md`` quotes."""
+    """The sentence ``skills/sdm-tabular/SKILL.md`` quotes."""
     from sdm_client import KumoTabular, PredictiveQuery
     from sdm_client.errors import StructuredDataError
 
@@ -2090,6 +2110,7 @@ def test_the_tabular_model_refuses_a_second_table(schema):
 
 TABULAR_URL = os.environ.get('SDM_TABULAR_URL')
 RELATIONAL_URL = os.environ.get('SDM_RELATIONAL_URL')
+IN_PROCESS = os.environ.get('SDM_IN_PROCESS')
 
 #: The placeholder every example points at, swapped for a real one below.
 PLACEHOLDER = 'http://localhost:8000'
@@ -2120,11 +2141,15 @@ def examples(path: Path) -> list[tuple[str, str | None]]:
     ]
 
 
-def assert_every_example_prints_what_it_shows(path: Path, url: str):
+def assert_every_example_prints_what_it_shows(
+    path: Path, url: str | None = None
+):
     """Output marked **Verified** has to be what that example printed.
 
     Pasted results are the first thing to rot, and a number that drifted is
-    worse than no number: it reads as measured.
+    worse than no number: it reads as measured. ``url`` replaces the
+    placeholder the examples point at; a document whose examples run the
+    model here points at none and passes none.
     """
     import io
     from contextlib import redirect_stdout
@@ -2144,7 +2169,9 @@ def assert_every_example_prints_what_it_shows(path: Path, url: str):
         with redirect_stdout(printed):
             exec(  # noqa: S102 - running the documentation is the test
                 compile(
-                    code.replace(PLACEHOLDER, url), f'{path}#{index}', 'exec'
+                    code if url is None else code.replace(PLACEHOLDER, url),
+                    f'{path}#{index}',
+                    'exec',
                 ),
                 namespace,
             )
@@ -2199,7 +2226,7 @@ def test_a_quoted_refusal_from_the_endpoint_is_the_refusal(query, said, schema):
     not TABULAR_URL, reason='set SDM_TABULAR_URL to a kumo-tabular NIM'
 )
 @pytest.mark.parametrize(
-    'name', ['tabular/SKILL.md', 'tabular/references/pql.md']
+    'name', ['sdm-tabular/SKILL.md', 'sdm-tabular/references/pql.md']
 )
 def test_the_tabular_examples_print_what_the_skill_shows(name):
     assert_every_example_prints_what_it_shows(SKILLS / name, TABULAR_URL)
@@ -2212,17 +2239,53 @@ def test_the_tabular_examples_print_what_the_skill_shows(name):
 @pytest.mark.parametrize(
     'name',
     [
-        'relational/SKILL.md',
-        'relational/pql.md',
-        'relational/references/beyond-one-answer.md',
-        'relational/references/warehouses.md',
+        'sdm-relational/SKILL.md',
+        'sdm-relational/pql.md',
+        'sdm-relational/references/beyond-one-answer.md',
+        'sdm-relational/references/warehouses.md',
         'README.md',
     ],
 )
 def test_the_relational_examples_print_what_the_skill_shows(name):
-    pytest.importorskip('sdm_relational_engine')
     pytest.importorskip('duckdb')
     assert_every_example_prints_what_it_shows(SKILLS / name, RELATIONAL_URL)
+
+
+def installed(module: str, extra: str) -> None:
+    """Fail, rather than skip, when an opt-in run is missing what it needs."""
+    try:
+        importlib.import_module(module)
+    except ImportError:  # pragma: no cover
+        pytest.fail(
+            f'SDM_IN_PROCESS is set but {module} is not installed. '
+            f"Install it with: pip install '{extra}'"
+        )
+
+
+@pytest.mark.in_process
+@pytest.mark.skipif(
+    not IN_PROCESS,
+    reason='set SDM_IN_PROCESS=1 to load the published weights and run them',
+)
+@pytest.mark.parametrize(
+    'name',
+    [
+        'sdm-tabular/references/in-process.md',
+        'sdm-relational/references/in-process.md',
+    ],
+)
+def test_the_in_process_examples_print_what_the_skill_shows(name):
+    """These examples open no connection: they fetch the published weights
+    and run the model here, which is what the reference claims they do.
+
+    ``SDM_IN_PROCESS`` is the reader asking for exactly this, so a missing
+    piece is a broken setup and fails here rather than skipping quietly. The
+    extra is the whole of it: these examples gather from frames, which reach
+    none of the connectors package (``test_core_route_without_connectors.py``
+    holds the client to that).
+    """
+    installed('sdm', 'structured-data-models-client[in-process]')
+    assert_every_example_prints_what_it_shows(SKILLS / name)
 
 
 # --- What the tables in the skills claim ----------------------------------
@@ -2230,7 +2293,7 @@ def test_the_relational_examples_print_what_the_skill_shows(name):
 
 @pytest.mark.parametrize(
     'name, model_name',
-    [('tabular', 'KumoTabular'), ('relational', 'KumoRelational')],
+    [('sdm-tabular', 'KumoTabular'), ('sdm-relational', 'KumoRelational')],
 )
 def test_the_capability_table_is_the_clients_own(name, model_name):
     """Every row of the table both skills open with, against the client."""
@@ -2252,11 +2315,8 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
         'Relationships': capabilities.relationships,
         'Sessions': capabilities.sessions,
     }
-    if name == 'tabular':
-        from sdm_client.models import TABULAR_LIMITS
-
+    if name == 'sdm-tabular':
         said['Explanations'] = 'explanation' in capabilities.outputs
-        said['Context rows'] = TABULAR_LIMITS['context_rows_max']
     assert set(shown) == set(said), (
         f'{name} shows rows nothing checks: {sorted(set(shown) ^ set(said))}'
     )
@@ -2280,19 +2340,12 @@ def test_the_capability_table_is_the_clients_own(name, model_name):
             )
 
 
-#: Each row of the limits table in ``skills/relational/SKILL.md``, against the
+#: Each row of the limits table in ``skills/sdm-relational/SKILL.md``, against the
 #: constant it reports. Every key is spoken for in both directions: a limit the
 #: client enforces and the skill omits is a refusal an agent cannot see coming,
 #: and a row naming no limit is a number nobody is holding to anything.
 LIMIT_ROWS = {
     'context rows, by default': 'context_rows_fast',
-    'context rows, with `num_context_samples`': 'context_rows_max',
-    'rows scored at once': 'predict_rows_max',
-    'rows scored for a link prediction': (
-        'predict_rows_temporal_link_prediction'
-    ),
-    'tables in the gathered graph': 'tables_max',
-    'hops gathered': 'hops_max',
     'classes': 'classes_max',
 }
 
@@ -2303,7 +2356,7 @@ def test_the_limits_table_is_the_shipped_limits():
     assert set(LIMIT_ROWS.values()) == set(RELATIONAL_LIMITS), (
         'the client enforces a limit this table does not account for'
     )
-    path = SKILLS / 'relational' / 'SKILL.md'
+    path = SKILLS / 'sdm-relational' / 'SKILL.md'
     assert heading(path, 'Limit') == 'Value'
     shown = table(path, 'Limit')
     shown.pop('Limit')
@@ -2320,16 +2373,16 @@ def test_the_limits_table_is_the_shipped_limits():
 
 
 def spelled_in_the_grammar(token: str) -> set[str]:
-    """Every operator ``token`` covers, as the grammar spells it."""
-    import predictive_query
-
-    body = (
-        Path(predictive_query.__file__).parent / 'grammar' / 'PQLGrammar.g4'
-    ).read_text(encoding='utf-8')
-    at = body.index(f'{token}:')
-    block = body[at : body.index(';', at)]
+    """Read the operator inventory from the maintained Rust lexer."""
+    source = SKILLS.parent / 'rust/crates/sdm-pql/src/lexer.rs'
+    name = {'AGGR': 'AGGRS', 'REL_OP': 'REL_OPS'}[token]
+    body = source.read_text(encoding='utf-8')
+    block = re.search(rf'const {name}: &\[&str\] = &\[(.*?)\];', body, re.S)
+    assert block is not None, f'Rust lexer has no {name} inventory'
     return {
-        name for name in re.findall(r"'([^']+)'", block) if name == name.upper()
+        spelling
+        for spelling in re.findall(r'"([^"]+)"', block.group(1))
+        if spelling == spelling.upper()
     }
 
 
@@ -2408,7 +2461,7 @@ def test_the_tabular_outputs_narrow_by_task_as_the_skill_says():
     assert len(deciles) == 9, f'quantiles came back as {deciles}'
 
 
-#: The output matrix skills/relational/SKILL.md gives for the deployment:
+#: The output matrix skills/sdm-relational/SKILL.md gives for the deployment:
 #: what each task is served, and everything the client would send that it
 #: will not. Asked of the endpoint, so a deployment that gains or loses one
 #: fails here rather than making the skill quietly wrong.
@@ -2436,7 +2489,9 @@ def not_served(outputs: tuple[str, ...]) -> list[str]:
     the endpoint happens to allow.
     """
     advertised = set(
-        listed(table(SKILLS / 'relational' / 'SKILL.md', 'Tasks')['Outputs'][0])
+        listed(
+            table(SKILLS / 'sdm-relational' / 'SKILL.md', 'Tasks')['Outputs'][0]
+        )
     )
     return sorted(advertised - set(outputs))
 
@@ -2493,10 +2548,10 @@ def test_the_relational_endpoint_explains_every_entity(target, schema):
     # `resolve` asks about users 1 and 2.
     asked = [1, 2]
     assert sorted(int(one) for one in result.to_pandas()['id']) == asked
-    assert sorted(int(key) for key in result.explanations) == asked, (
-        f'{target} explained {sorted(result.explanations)}, asked {asked}'
+    assert sorted(int(key) for key in result.explanations.gradients) == asked, (
+        f'{target} explained {sorted(result.explanations.gradients)}, asked {asked}'
     )
-    for key, entry in result.explanations.items():
+    for key, entry in result.explanations.gradients.items():
         assert set(entry) == {'outputs', 'related'}, (
             f'{target} gave {key} the blocks {sorted(entry)}'
         )

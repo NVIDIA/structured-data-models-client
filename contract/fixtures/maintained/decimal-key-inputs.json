@@ -1,0 +1,67 @@
+{
+  "question": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+  "indices": [
+    0,
+    1
+  ],
+  "anchor_time": "2024-03-01",
+  "vectors": [
+    {
+      "id": "key.both.d9-0",
+      "setup": [
+        "ALTER TABLE users ALTER user_id TYPE DECIMAL(9, 0)",
+        "ALTER TABLE orders ALTER user_id TYPE DECIMAL(9, 0)"
+      ]
+    },
+    {
+      "id": "key.pair.d10-2.d12-4",
+      "setup": [
+        "ALTER TABLE users ALTER user_id TYPE DECIMAL(10, 2)",
+        "ALTER TABLE orders ALTER user_id TYPE DECIMAL(12, 4)"
+      ]
+    },
+    {
+      "id": "key.pair.d12-4.d10-2",
+      "setup": [
+        "ALTER TABLE users ALTER user_id TYPE DECIMAL(12, 4)",
+        "ALTER TABLE orders ALTER user_id TYPE DECIMAL(10, 2)"
+      ]
+    },
+    {
+      "id": "key.pair.d18-0.d20-2",
+      "setup": [
+        "ALTER TABLE users ALTER user_id TYPE DECIMAL(18, 0)",
+        "ALTER TABLE orders ALTER user_id TYPE DECIMAL(20, 2)"
+      ]
+    },
+    {
+      "id": "key.pair.d20-2.d18-0",
+      "setup": [
+        "ALTER TABLE users ALTER user_id TYPE DECIMAL(20, 2)",
+        "ALTER TABLE orders ALTER user_id TYPE DECIMAL(18, 0)"
+      ]
+    },
+    {
+      "id": "key.pair-merging.d38-0.d38-2",
+      "setup": [
+        "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 0) USING user_id + '100000000000000000'::DECIMAL(38, 0)",
+        "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 2) USING user_id + '100000000000000000'::DECIMAL(38, 2)"
+      ],
+      "indices": [
+        100000000000000000,
+        100000000000000001
+      ]
+    },
+    {
+      "id": "key.pair-merging.d38-2.d38-0",
+      "setup": [
+        "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 2) USING user_id + '100000000000000000'::DECIMAL(38, 2)",
+        "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 0) USING user_id + '100000000000000000'::DECIMAL(38, 0)"
+      ],
+      "indices": [
+        100000000000000000,
+        100000000000000001
+      ]
+    }
+  ]
+}

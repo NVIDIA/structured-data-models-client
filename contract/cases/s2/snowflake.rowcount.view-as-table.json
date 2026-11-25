@@ -1,0 +1,65 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.rowcount.view-as-table",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/tables/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "client.predict/regression/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int8/primary-key",
+    "int8/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "users_v",
+        "orders": "orders"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "warehouse_setup": [
+      "CREATE VIEW \"{catalog}\".\"{schema}\".\"users_v\" AS SELECT * FROM \"{catalog}\".\"{schema}\".\"users\""
+    ]
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "refusal",
+    "stage": "materialize",
+    "error": "StructuredDataError",
+    "code": "INTERNAL_ERROR"
+  },
+  "why": "A plain Snowflake view used as a source table; row counts must refer to the view itself.",
+  "source": "Correctness case snowflake.rowcount.view-as-table using the shop fixture."
+}

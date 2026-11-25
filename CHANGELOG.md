@@ -3,116 +3,148 @@
 Kept in the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) shape, and
 versioned by [semantic versioning](https://semver.org) as
 [`docs/reference/stability.md`](docs/reference/stability.md) defines it for
-these packages. All five distributions share one version and one entry.
+these packages. The three Python distributions share one version.
 
 ## Unreleased
 
+### Fixed
+
+- Resolve quoted Snowflake semantic-view base-table identifiers.
+
+## 2.0.0 - 2026-11-25
+
+2.0 moves the client's core logic into one shared Rust engine and adds Java support.
+Python and Java now build the same requests, raise the same errors and return the same predictions.
+This release has breaking changes, so read [Upgrading from 1.0.0](#upgrading-from-100) first.
+
+### Highlights
+
+- **One engine for Python and Java.**
+  Validating queries, sampling data, building requests and reading results now happen in one Rust engine inside the client package.
+  The separate relational-engine and PQL packages are retired.
+- **Java support.**
+  You can build the Java library from source; it has the same API as Python and uses the same engine.
+- **Your own data sources.**
+  One `Source` interface covers the built-in databases and any source you write yourself, in Python or Java.
+- **Models without a NIM.**
+  `SDMClient.in_process()` runs Kumo Tabular and Kumo Relational inside your Python process.
+- **More and better context.**
+  Filtered queries now get the full number of context examples they ask for, and every request tells you how its context was gathered.
+- **Explanations.**
+  `EXPLAIN PREDICT` shows which inputs drove each prediction, for both models.
+
+### Upgrading from 1.0.0
+
+1. **Uninstall the retired packages before upgrading.**
+
+   ```bash
+   pip uninstall structured-data-models-relational-engine structured-data-models-pql
+   ```
+
+   The old engine pins `structured-data-models-api==1.0.0`, which conflicts with 2.0.
+   Write predictive queries with `sdm_client.PredictiveQuery` instead of `predictive_query`.
+2. **Import the built-in sources from `sdm_client`.**
+
+   ```python
+   from sdm_client import DatabricksSource, DuckDBSource, PostgresSource, SnowflakeSource, SQLiteSource
+   ```
+
+   They take the same connections as before.
+   Name the class you want: `Source(connection)`, which guessed it from the connection, is removed.
+   A semantic model is now `source.semantic_model(name)`, which returns the same source class.
+3. **Check your Python and platform.**
+   2.0 contains compiled code, so it needs standard Python (CPython) 3.10 or newer on Linux (x86-64 or ARM64), macOS (Intel or Apple silicon) or Windows (x86-64).
+   It no longer installs on PyPy, Alpine Linux, 32-bit systems or Windows on ARM.
+4. **Update error handling.**
+   - An empty table raises `StructuredDataError` (code `INVALID_REQUEST`) instead of `RuntimeError`.
+   - A column of an unsupported type, such as a struct or a map, raises `UnsupportedRequestError` instead of `ValueError`.
+   - A failing database query raises `StructuredDataError` with code `PROVIDER_ERROR` instead of `INTERNAL_ERROR`.
+5. **Expect small differences in predictions.**
+   2.0 sends more complete and more exact data than 1.0; see [Improved](#improved).
+6. **Features of the old engine that are gone:** Snowflake SPCS serving, the engine's telemetry and progress logging, and the extras `snowflake-serving`, `explain` and `relbench`.
+   `generate_summary` is replaced by `ExplanationSummarizer`.
+   A schema can no longer be pickled.
+
 ### Added
 
-- `SDMClient.in_process()` runs `kumo-tabular` and `kumo-relational` in this
-  Python process with structured-data-models, through the same calls as a NIM:
-  predictions, fitted sessions, rankings, forecasts and explanations. It loads each model
-  from its published weights on first use, or uses one passed in. The request
-  is prepared as it is for a NIM and the model run on it directly, the context
-  fitted as the NIM fits it. A request the model cannot answer is refused with
-  a `StructuredDataError` whose code says why. Install it with the
-  `in-process` extra. In-process explanations are written against the released
-  sdm 0.2.1 API: the converter reads a table's numerical columns from
-  `TableTensor.columns` by stype, not the newer `numerical_columns` property.
-  Revisit when the pinned sdm moves past 0.2.1.
-- A Snowflake session the client opens names itself to Snowflake as
-  `nvidia/kumo-sdm`, so Snowflake can attribute its queries. An application
-  named any other way is kept: an `application` argument, one in the
-  `connections.toml` profile, `SF_PARTNER`, or the connector's own detection
-  of Streamlit and notebooks. A connection or Snowpark session you open
-  yourself is used as it is.
-- A Databricks get-started notebook for the tabular model,
-  `examples/databricks/kumo_tabular_quickstart.ipynb`, which deploys it to a
-  serving endpoint and fills in a column of the AdventureWorks products table.
-- The relational engine publishes wheels for macOS (Apple silicon and Intel)
-  and 64-bit Windows, and for CPython 3.14, alongside the `manylinux_2_28`
-  x86-64 and aarch64 wheels it already built, so `structured-data-models-client[relational]`
-  installs on a laptop rather than on Linux only. The engine ships no source
-  distribution, so those wheels remain the full set of platforms it supports:
-  `structured-data-models-client` itself is pure Python and stays broader.
-- `kumo-tabular` accepts `explanation` in `outputs`.
-- `result.explanations` holds a prediction's explanations in two parts,
-  `gradients` and `columns`. `result.explanations.gradients` maps each
-  explained row's key to its explanation: the row's `id`, `(id,
-  forecast_step)` on a forecast, or `row_index` when the request has no entity
-  id. Each entry is a plain dict of `outputs` and, on `kumo-tabular`, the
-  row's own columns under `instance`, or, on `kumo-relational`, every table,
-  the entity's own included, under `related`, whose rows always carry their
-  values as sent; `keys` is present when the table's key column is one the
-  model receives, i.e. a column a relationship joins on; otherwise rows are
-  identified by their values. It is kept out of `result.to_pandas()`;
-  `result.explanations.gradients.to_pandas()` flattens it into one line per
-  row, output and column, with each row's `hop` from the entity.
-- `result.explanations.columns` is a column analysis the client computes from
-  the labelled context rows: each column split into cohorts, each cohort's
-  share and mean outcome, and a score per column, normalized to sum to 1.
-  `result.explanations.columns.to_pandas()` gives one line per table, hop,
-  column, cohort and class. `predict()` computes it on each call that asks for
-  explanations; a session computes it once at `fit()`, after `holdout` is
-  taken out, and attaches it to every answer when `fit()` asked for
-  `'explanation'`, otherwise only to a prediction whose query begins
-  `EXPLAIN`. It is `None` when explanations were not asked for.
-- The `EXPLAIN` query prefix: `EXPLAIN PREDICT …` adds `'explanation'` to the
-  call's outputs. A ranking refuses it; a forecast explains each step.
+- **Java support.**
+  Build the JAR from source as described in [`java/README.md`](java/README.md).
+  It has the same API as Python and runs on the same platforms.
+  It is not yet published to a Maven repository.
+- **Your own data source.**
+  Write a class with two methods, `capabilities()` and `answer()`, to read data from any system, such as Trino.
+  The client asks it for data and it answers with Arrow tables; it never has to handle SQL from the client.
+  See [Your own source](docs/reference/data-providers.md).
+- **Running models in process.**
+  `SDMClient.in_process()` runs both models in your Python process, with the same calls as a NIM.
+  Install it with the `in-process` extra.
+- **Explanations.**
+  `EXPLAIN PREDICT` returns gradient explanations for both models, including each forecast step.
+  `result.explanations` also shows which context columns go with each outcome.
+  `ExplanationSummarizer` writes a short summary of an explanation with an LLM.
+- **Context report and time limit.**
+  `Request.context_report` tells you how many examples were drawn, how many qualified and why drawing stopped.
+  `context_time_limit` caps the time spent drawing context (five minutes by default).
+- **Schema tools.**
+  Infer metadata and links (`infer_metadata`, `infer_links`), review them (`metadata_report`, `link_report`), edit a schema (`with_relationship`, `without_table`, `with_sql_column` and more), and draw it (`to_mermaid`, `to_html`, `visualize`).
+- **Questions without a predictive query.**
+  `RelationalTask` and `Schema.materialize_examples` ask a question from labelled examples, and `build_timeseries` builds a forecast's input from a series.
+  `PredictiveQuery.labels` computes a query's historical labels without calling a model.
+- **RelBench datasets** load with `Schema.from_relbench`.
+- **Hosted endpoints.**
+  `exact_url=True, bearer_token=True` calls an endpoint at one exact URL with a bearer token, such as a model in the NVIDIA API catalog.
+- **Snowflake quickstarts** for both models in `examples/snowflake/`.
+- **Smaller additions:** `end_time_column` on tables, `InferenceConfig` for relational settings, and `Request.sanitization_report`, which lists rows left out of an in-memory request.
 
-### Changed
+### Improved
 
-- The refusal of a request over a Databricks serving endpoint's 16 MB limit
-  now asks for fewer context rows or fewer rows to score, covering both
-  directly supplied rows and requests built through predictive queries.
-- Every engine wheel is built on a machine of its own, native rather than
-  emulated, and each is smoke-tested on the architecture it targets. The
-  release no longer builds aarch64 under QEMU, which also takes a privileged
-  container image out of the release path.
-- A request's inference options are written in the types the contract
-  gives them before it is sent: `use_prediction_time` spelled `'no'` is sent
-  as `false`, a NumPy boolean or integer is sent as the value it holds, and a
-  value that cannot be read as its type, such as a `run_mode` that is not
-  text, is refused with `INVALID_REQUEST` before sending, where a NIM
-  answered `422 VALIDATION_FAILED`.
-- A `kumo-relational` explanation is no longer refused above the 1,000-row
-  context budget. That limit belonged to an earlier deployment; the Kumo
-  Relational SDM NIM explains under either budget.
-- An explanation covers every scored row, on both models. A `kumo-tabular`
-  explanation over more than one row and a `kumo-relational` one over more
-  than one entity are no longer refused before sending. This needs a NIM newer
-  than the shipping releases (Relational 1.1.0, Tabular 1.0.0), which refuse
-  `explanation`. The first release that serves it will be named here when it
-  is cut.
-
-### Deprecated
-
-- `result.explanation` and `PredictionResult(explanation=...)` are deprecated
-  in favour of `result.explanations` and `explanations=`, warn with
-  `DeprecationWarning`. To upgrade, read a row's
-  explanation as `result.explanations.gradients[key]`, under the key naming that row in
-  `result.to_pandas()`. `result.explanation` returns the first record's raw
-  explanation only; the `{'by_forecast_step': ...}` it held for a forecast is
-  gone.
+- **Large populations in one call.**
+  `materialize()` gathers any number of entities, and `predict()` splits them into calls of 10,000 rows and returns one result in order.
+  If a call fails, the answers already received are kept on the error, so you only ask again for the rest.
+- **No client-side limits.**
+  The client no longer applies its own copies of the endpoint's limits, such as 10,000 context rows or a 30 MiB request, so a deployment that allows more is not held back.
+  The defaults stay the same.
+- **Faster cached Tabular predictions.**
+  Predicting with a fitted Tabular session no longer re-encodes the cached context; a one-row prediction went from about 470 ms to 50 ms in our benchmark.
+- **Context uploaded once.**
+  A prediction split over several calls sends its shared context once, through a temporary session.
+- **Fresh schema on every run.**
+  Each `materialize()` re-reads the table definitions, so a column dropped or changed since you built the schema is noticed.
+- **Newer libraries.** DuckDB 2 and pandas 3.1 are supported.
+- **More reliable requests.** An HTTP 408 timeout is retried, like 429, 502, 503 and 504.
+- **More complete and exact data,** which can change predictions slightly:
+  - a related table sends its own primary key instead of a generated `__node_id`;
+  - a foreign key reached by several paths is filled from all of them, not just the first;
+  - integer keys stay exact even next to missing values (1.0 rounded keys past 2^53);
+  - a column whose name contains a dot is sent instead of dropped.
+- **Same results on every platform,** which can also change predictions slightly:
+  - rows with equal timestamps, and sampled Tabular context, keep a stable order;
+  - `SUM` and `AVG` labels are computed the same way whatever pandas version is installed.
 
 ### Fixed
 
-- `Graph.from_snowflake_semantic_view` reads a semantic view whose base table
-  is a quoted identifier. The view reports such a name with its quotes, which
-  were quoted a second time, so the table was reported as not found.
-- A predictive query longer than 1,024 characters is answered. A relational
-  request carries the query in `metadata.source_query` for logging, which the
-  contract caps at 1,024 characters, so a NIM refused a longer one with
-  `VALIDATION_FAILED`. The logged copy is now cut to fit.
-- DuckDB 2.0 no longer warns on every read. The relational engine and
-  `read_table` read a DuckDB result through a relation rather than the DB-API
-  cursor, which 2.0 warns makes an extra copy of the rows.
-- A relational prediction over a graph without a time column works on pandas
-  3.1. Its anchor is the earliest timestamp pandas holds, and 3.1 refused to
-  take even an empty date offset from it.
-- A request's description leaves out a wire table carrying an integer past
-  the float range on every pandas release. pandas 3.1 had started to build
-  a frame around one, where earlier releases refused it.
+- **Filtered queries got too few context examples.**
+  The client sampled 10,000 entities for 1,000 examples and applied the `WHERE` afterwards, so a filter that keeps 1 entity in 60 left only about 170.
+  The conditions now run in the database while sampling, so the model gets all 1,000 examples, which should improve predictions, and the database sends only the rows that qualify.
+  This includes windowed conditions such as `COUNT(orders.*, -30, 0, days) > 1`.
+- **Text columns made Kumo Relational refuse the request.**
+  A `text` column is now left out of the request with a warning, since the model does not read text.
+- **Queries longer than 1,024 characters** were refused by the NIM; they are now answered.
+- **Databricks timestamps** depended on the client machine's time zone; they are now read in UTC.
+- **Databricks decimals** lost precision (`997.6700000000001` instead of `997.67`); they are now sent exactly.
+- **Large PostgreSQL `NUMERIC` keys** above `2**63 - 1` raised `OverflowError`; they are now kept exactly.
+- **pandas 3.1:** a relational prediction over tables without a time column failed; it now works.
+- **DuckDB 2:** `read_table` made an extra copy and printed a warning; it no longer does.
+- **Link predictions without candidates** were sent and then refused by the endpoint; the client now refuses them right away with a clear error.
+  Use `RANK TOP k` with `candidates=` instead.
+
+### Removed
+
+- The `structured-data-models-pql` and `structured-data-models-relational-engine` packages.
+- `sdm_connectors.Source`, `DatabricksSource`, `SnowflakeSource`, `PostgresSource`, `DuckDBSource`, `SQLiteSource` and `SemanticModel`; use the classes in `sdm_client`.
+- `Source(connection)` and `Source.backend`.
+- The old engine's Snowflake SPCS serving, telemetry, progress logging, and the `snowflake-serving`, `explain` and `relbench` extras.
+- The `[relational]` extra now installs nothing; it is kept so existing install commands still work.
 
 ## 1.0.0 - 2026-10-15
 

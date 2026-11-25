@@ -5,9 +5,7 @@
 
 """Record the public surface of every public package.
 
-``docs/reference/stability.md`` names them. ``predictive_query`` is installed
-but not public, and ``sdm_relational_engine`` is reached through
-``sdm_client``, so neither is recorded.
+``docs/reference/stability.md`` defines the public compatibility surface.
 
 Exported names, their signatures, the values of constants, and enum members.
 Compared on every run; ``--write`` re-records after an intended change.
@@ -22,7 +20,9 @@ import inspect
 import json
 import pathlib
 import sys
-from typing import Any
+import types
+import typing
+from typing import Any, ForwardRef
 
 SNAPSHOT = (
     pathlib.Path(__file__).resolve().parent.parent
@@ -34,9 +34,27 @@ SNAPSHOT = (
 PACKAGES = (
     'sdm_api',
     'sdm_client',
+    'sdm_client.provider',
     'sdm_connectors',
     'sdm_connectors.databricks',
 )
+
+
+class _ForwardAnnotation:
+    """Keep an unevaluated annotation's spelling stable across interpreters."""
+
+    def __init__(self, annotation: ForwardRef):
+        self.text = repr(annotation)
+        # Python 3.10 stores the module but omits it from ForwardRef.__repr__.
+        # Preserve that identity without discarding newer interpreters' fields.
+        module = annotation.__forward_module__
+        if module is not None and self.text == (
+            f'ForwardRef({annotation.__forward_arg__!r})'
+        ):
+            self.text = self.text[:-1] + f', module={module!r})'
+
+    def __repr__(self) -> str:
+        return self.text
 
 
 def _signature(obj: object) -> str | None:
@@ -47,7 +65,25 @@ def _signature(obj: object) -> str | None:
     must record the same surface wherever the suite runs.
     """
     try:
-        written = str(inspect.signature(obj))  # type: ignore[arg-type]
+        signature = inspect.signature(obj)  # type: ignore[arg-type]
+        # Python 3.14 renders ForwardRef annotations as resolved-looking names.
+        # Preserve their actual unevaluated identity, without rewriting defaults.
+        signature = signature.replace(
+            parameters=[
+                parameter.replace(
+                    annotation=_ForwardAnnotation(parameter.annotation)
+                )
+                if isinstance(parameter.annotation, ForwardRef)
+                else parameter
+                for parameter in signature.parameters.values()
+            ],
+            return_annotation=(
+                _ForwardAnnotation(signature.return_annotation)
+                if isinstance(signature.return_annotation, ForwardRef)
+                else signature.return_annotation
+            ),
+        )
+        written = str(signature)
     except (TypeError, ValueError):
         return None
     return written.replace('typing_extensions.', '')
@@ -58,8 +94,6 @@ FIRST_PARTY_ROOTS = frozenset(
         'sdm_api',
         'sdm_client',
         'sdm_connectors',
-        'predictive_query',
-        'sdm_relational_engine',
     }
 )
 
@@ -84,8 +118,17 @@ def _first_party_attributes(owner: type) -> dict[str, Any]:
 RECORDED_BY_VALUE = (str, int, float, bool, bytes, type(None))
 
 
+def _kind(obj: object) -> str:
+    """The kind of a value, the same on every supported Python: a union
+    (``A | B`` or ``Union[A, B]``) is a ``Union`` whatever type the
+    interpreter gives it (3.14 makes ``A | B`` a ``typing.Union``)."""
+    if typing.get_origin(obj) in (typing.Union, types.UnionType):
+        return 'Union'
+    return type(obj).__name__
+
+
 def _describe(obj: object) -> dict[str, object]:
-    described: dict[str, object] = {'kind': type(obj).__name__}
+    described: dict[str, object] = {'kind': _kind(obj)}
     if isinstance(obj, RECORDED_BY_VALUE):
         described['value'] = obj if not isinstance(obj, bytes) else obj.hex()
         return described

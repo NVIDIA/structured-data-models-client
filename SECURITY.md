@@ -64,9 +64,9 @@ of the projects on PyPI.
 
 ## Supported versions
 
-The client is distributed as five packages: `structured-data-models-client`, `structured-data-models-api`,
-`structured-data-models-pql`, `structured-data-models-connectors` and `structured-data-models-relational-engine`. They are released
-together.
+The maintained Python distributions are `structured-data-models-client`, `structured-data-models-api` and `structured-data-models-connectors`.
+The client includes its native Rust core; Java is distributed as a JAR.
+Historical standalone Python PQL and relational-engine releases are not rebuilt by this source tree.
 Only the latest released version of each receives security fixes; there are no
 long-term-support branches. Fixes ship in a new release rather than as patches
 to older ones.

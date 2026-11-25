@@ -28,9 +28,9 @@ import numpy as np
 import pandas as pd
 import pytest
 from sdm_api.generated.tfm_api import PredictionItem
+from test_adapter_and_result import envelope as _prediction_envelope
 
 from sdm_client import KumoRelational, PredictiveQuery, Schema
-from sdm_client.adapters.tabular import TabularAdapter
 from sdm_client.errors import StructuredDataError
 from sdm_client.wire.answers import as_declared_target
 from sdm_client.wire.dtypes import as_declared
@@ -39,9 +39,7 @@ D = decimal.Decimal
 
 
 def wire_column(request, name: str) -> dict:
-    envelope = next(
-        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-    )
+    envelope = _prediction_envelope(request)
     return envelope['schema']['instance_table']['columns'][name]
 
 
@@ -158,9 +156,7 @@ def test_the_wire_never_declares_a_column_that_contradicts_itself():
     )
     from sdm_client.schema import supports_dtype
 
-    envelope = next(
-        iter(TabularAdapter().prediction_plan(request, ('prediction',)))
-    )
+    envelope = _prediction_envelope(request)
     for name, column in envelope['schema']['instance_table']['columns'].items():
         if 'stype' in column:
             assert supports_dtype(column['stype'], column['dtype']), name
@@ -203,7 +199,6 @@ def test_the_relational_path_takes_a_decimal_frame():
     """It refused with `dtype '<class 'decimal.Decimal'>' not understood`,
     naming no table, no column and no remedy, on the same frame the tabular
     path had already answered."""
-    pytest.importorskip('sdm_relational_engine')
 
     schema = warehouse_schema()
     request = PredictiveQuery(
@@ -217,7 +212,6 @@ def test_the_engine_is_told_the_type_the_schema_computed():
     """The two halves disagreed: the client read the values and called a whole
     Decimal column `int64`, the engine mapped decimal content to float
     unconditionally. An exact identifier in a float is the part that bites."""
-    pytest.importorskip('sdm_relational_engine')
 
     schema = warehouse_schema()
     assert schema['users']['USERID'].dtype == 'int64'
@@ -235,7 +229,6 @@ def test_the_engine_is_told_the_type_the_schema_computed():
 def test_a_composite_key_over_decimals_materializes():
     """The engine refuses a key part it has typed float, so this was blocked
     outright on warehouse data."""
-    pytest.importorskip('sdm_relational_engine')
 
     schema = warehouse_schema(
         primary_keys={'users': 'USERID', 'ratings': ['USERID', 'RID']}
@@ -248,43 +241,25 @@ def test_a_composite_key_over_decimals_materializes():
 
 
 def test_a_fractional_decimal_stays_a_float():
-    from sdm_client.materializers.relational import _to_declared
-
-    values = pd.Series([D('1.5'), D('2.25')])
-    assert _to_declared(values, 'float64', 't.v').tolist() == [1.5, 2.25]
+    assert declared_values(pd.Series([D('1.5'), D('2.25')]), 'float64') == [
+        1.5,
+        2.25,
+    ]
 
 
 def test_a_decimal_column_with_a_gap_does_not_become_a_float():
-    """Widening to float to carry the gap would round an identifier."""
-    from sdm_client.materializers.relational import _to_declared
-
-    converted = _to_declared(pd.Series([D(1), None, D(3)]), 'int64', 't.v')
-
-    assert str(converted.dtype) == 'Int64'
-    assert converted.tolist() == [1, pd.NA, 3]
+    assert declared_values(pd.Series([D(1), None, D(3)]), 'int64') == [
+        1,
+        None,
+        3,
+    ]
 
 
 def test_a_wide_decimal_key_stays_exact():
-    """Past 2**53 a float loses the low bits, and these are identifiers."""
-    from sdm_client.materializers.relational import _to_declared
-
-    wide = D(9007199254740993)
-    converted = _to_declared(pd.Series([wide, D(1)]), 'int64', 't.v')
-
-    assert converted.iloc[0] == 9007199254740993
-
-
-def test_a_column_that_is_not_decimal_is_untouched():
-    from sdm_client.materializers.relational import _as_typed
-    from sdm_client.schema import Table
-
-    frame = pd.DataFrame({'a': [1, 2], 'b': ['x', 'y']})
-    with warnings.catch_warnings():
-        warnings.simplefilter('ignore')
-        schema = Schema.from_data({'t': frame})
-    table: Table = schema['t']
-
-    assert _as_typed(table) is table.data
+    assert declared_values(pd.Series([D(9007199254740993), D(1)]), 'int64') == [
+        '9007199254740993',
+        1,
+    ]
 
 
 def test_an_untyped_column_does_not_contradict_anything():
@@ -337,48 +312,24 @@ def test_a_column_that_was_typed_still_refuses_a_contradiction():
 
 
 def test_a_whole_decimal_too_wide_for_an_int_keeps_every_digit():
-    """The schema types these `string` precisely so the digits survive.
-    Reading "not an int" as "a float" put 9223372036854775808 back as
-    9.223372036854776e+18, the corruption this exists to prevent,
-    reintroduced one branch over."""
-    from sdm_client.materializers.relational import _to_declared
-    from sdm_client.wire.dtypes import infer_tfm_dtype
-
-    values = pd.Series([D('9223372036854775808'), D(1)])
-    assert infer_tfm_dtype(values) == 'string'
-
-    converted = _to_declared(values, 'string', 't.k')
-
-    assert converted.tolist() == ['9223372036854775808', '1']
+    assert declared_values(
+        pd.Series([D('9223372036854775808'), D(1)]), 'string'
+    ) == ['9223372036854775808', '1']
 
 
-def test_a_fractional_value_in_a_column_declared_int_is_refused():
-    """Truncating 1.9 to 1 before the engine sees it is a wrong answer with
-    nothing to say so. A schema the caller edited can ask for this."""
-    from sdm_client.materializers.relational import _to_declared
-
-    with pytest.raises(StructuredDataError) as raised:
-        _to_declared(pd.Series([D('1.9'), D('2.1')]), 'int64', 'sales.qty')
-    message = str(raised.value)
-    assert 'sales.qty' in message
-    assert 'whole number' in message
+def test_a_fractional_value_is_not_truncated_by_an_integer_schema_hint():
+    # Public Tabular admission widens numeric columns instead of truncating.
+    assert declared_values(
+        pd.Series([D('1.9'), D('2.1')]), 'int64', wire_dtype='float64'
+    ) == [1.9, 2.1]
 
 
 def test_a_null_is_a_null_whichever_way_the_column_was_read():
-    """An Arrow-backed decimal column's gaps are `pd.NA`, not `None`, and
-    `int(pd.NA)` raises."""
-    from sdm_client.materializers.relational import _holds_decimal, _to_declared
-
     pa = pytest.importorskip('pyarrow')
     values = pd.Series(
         pd.array([D(1), None, D(3)], dtype=pd.ArrowDtype(pa.decimal128(10, 0)))
     )
-    assert _holds_decimal(values)
-
-    converted = _to_declared(values, 'int64', 't.v')
-
-    assert str(converted.dtype) == 'Int64'
-    assert converted.tolist() == [1, pd.NA, 3]
+    assert declared_values(values, 'int64') == [1, None, 3]
 
 
 def test_a_request_built_by_hand_is_checked_too():
@@ -517,28 +468,6 @@ def test_a_copied_column_keeps_what_was_recorded_about_it():
 
     assert copied.untyped
     assert copied.stype_declared
-
-
-def test_the_fallback_leaves_a_declared_meaning_alone():
-    """Tested on the function rather than through `materialize`, because a
-    declared meaning that contradicts its values is refused before a request
-    gets this far. The guard is what keeps the rewrite safe to have at all: it
-    may correct a placeholder and must never overrule a caller."""
-    from sdm_client.adapters.tabular import _coherent_stype
-    from sdm_client.schema import Column
-
-    column = Column(name='c', dtype='string', stype='categorical')
-    object.__setattr__(column, 'untyped', True)
-
-    assert _coherent_stype('categorical', 'timestamp[us]', column) == (
-        'timestamp'
-    )
-
-    object.__setattr__(column, 'stype_declared', True)
-
-    assert _coherent_stype('categorical', 'timestamp[us]', column) == (
-        'categorical'
-    )
 
 
 def test_a_zero_row_batch_still_has_to_mean_what_it_says():
@@ -740,3 +669,55 @@ def test_a_column_typed_string_for_its_width_serializes():
         '18446744073709551615',
         '18446744073709551614',
     ]
+
+
+def declared_values(values, dtype, *, wire_dtype=None):
+    from sdm_client import Request
+
+    frame = pd.DataFrame(
+        {'id': range(len(values)), 'qty': values, 'target': range(len(values))}
+    )
+    schema = Schema.from_data(
+        {'sales': frame}, primary_keys={'sales': 'id'}, relationships=[]
+    )
+    schema['sales']['qty'].dtype = dtype
+    request = Request(
+        context=frame,
+        predict=frame.iloc[[0]].drop(columns=['target']),
+        target='target',
+        task='regression',
+        schema=schema,
+        entity_table='sales',
+    )
+    payload = _prediction_envelope(request)
+    assert payload['schema']['instance_table']['columns']['qty']['dtype'] == (
+        wire_dtype or dtype
+    )
+    table = payload['context']['instance_table']
+    at = table['columns'].index('qty')
+    return [row[at] for row in table['rows']]
+
+
+def test_relational_fractional_values_survive_an_integer_schema_hint():
+    quantities = [D('1.9'), D('2.1'), D('3.3'), D('4.4'), D('5.5')]
+    frame = pd.DataFrame(
+        {'id': range(5), 'qty': quantities, 'target': range(5)}
+    )
+    schema = Schema.from_data(
+        {'sales': frame}, primary_keys={'sales': 'id'}, relationships=[]
+    )
+    schema['sales']['qty'].dtype = 'int64'
+    request = PredictiveQuery(
+        'PREDICT sales.target FOR EACH sales.id', schema
+    ).materialize(indices=[4], model=KumoRelational())
+    payload = request.payloads[0]
+    assert payload['schema']['related_tables']['sales']['columns']['qty'] == {
+        'dtype': 'float64',
+        'stype': 'numerical',
+    }
+    for half, expected_ids in [('context', {0, 1, 2, 3}), ('predict', {4})]:
+        table = payload[half]['related_tables']['sales']
+        key_at = table['columns'].index('id')
+        value_at = table['columns'].index('qty')
+        actual = {row[key_at]: row[value_at] for row in table['rows']}
+        assert actual == {key: float(quantities[key]) for key in expected_ids}

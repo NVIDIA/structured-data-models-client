@@ -1,0 +1,2123 @@
+// SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+// All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
+//! Data requests, provider capabilities and the data-layer port.
+//!
+//! The core asks for data through a small, fixed vocabulary of typed
+//! requests. Every provider answers `describe` and `scan`; the optional
+//! requests make common steps faster, and a provider declares which it
+//! supports. A key set never travels as JSON: it is an Arrow attachment the
+//! request names by id.
+//!
+//! Every provider is handed the typed request itself, with the Arrow schema
+//! its answer must have ([`FetchPlan`]), and answers a `describe` in the
+//! contract's own catalog shape ([`catalog_columns`]), read by
+//! [`crate::catalog_read`]. A built-in source writes its SQL in its own SQL
+//! kit (`sdm-sql`), never in the core. The port: a [`DataLayer`] reads the
+//! semantic models a source is read through, by the database it declares.
+//! The core holds one data layer, in its composition root, and names no
+//! dialect; `sdm-sql` implements it.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use arrow_array::RecordBatch;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::catalog::CatalogAnswer;
+use crate::error::{CoreError, Detail, ErrorKind, Sentence};
+use crate::scalar::Scalar;
+use crate::types::{ColumnType, Field, Unit};
+use crate::view::{ViewTextAnswer, ViewTextAsk};
+
+/// The column of a seed key set that holds each seed's key.
+pub const SEED_KEY: &str = "key";
+/// The field metadata key (and its value, [`BIG_INTEGER_MARKED`]) the host
+/// layer sets on a big-integer column it read from an opaque extension type
+/// (a HUGEINT, UHUGEINT or VARINT, B-43), so the core holds the
+/// column to one tier and keeps its declared type.
+pub const BIG_INTEGER_MARKER: &str = "sdm:big_integer";
+pub const BIG_INTEGER_MARKED: &str = "true";
+/// The field metadata key (and its value, [`EXACT_NUMBER_MARKED`]) a host
+/// provider sets on a column of numbers it hands over as their exact
+/// decimal text because their declaration fixes no Arrow decimal (a
+/// Postgres `numeric` without a precision): the core reads such a column
+/// by its role in the schema, a key (the one column of a declared primary,
+/// unique or foreign key, or a key or link of the schema as it stands) as
+/// that text and any other as a double (`DescribedColumn::exact_number`),
+/// and holds every later fetch of it to the type described.
+pub const EXACT_NUMBER_MARKER: &str = "sdm:exact_number";
+pub const EXACT_NUMBER_MARKED: &str = "true";
+/// The field metadata key a host provider sets on a column of numbers it
+/// hands over as their exact decimal text because their declaration is
+/// past the digits an Arrow decimal holds (a Postgres `numeric` declared
+/// with more than 76): its value is the declared scale, in decimal digits.
+/// A built-in source's SQL kit reads such a column by its declaration, as
+/// the reference reads it, and the core never sees the mark.
+pub const DECLARED_SCALE_MARKER: &str = "sdm:declared_scale";
+
+/// The magnitude past which an exponent is read as this bound: far past
+/// every decimal's 38 places and every float's range, and far within
+/// `i64`, so no arithmetic on a scale overflows ( fix round 1).
+const EXPONENT_BOUND: i64 = 1 << 40;
+
+/// A decimal number as written: its sign, its significant digits (no
+/// leading or trailing zeros; empty for zero) and the scale they stand at.
+pub struct WrittenNumber {
+    pub negative: bool,
+    pub digits: String,
+    pub scale: i64,
+}
+
+/// Text written as a decimal number: an optional sign, ASCII digits with
+/// an optional point and fraction (at least one digit in all), and an
+/// optional exponent (`e` or `E`, an optional sign, digits); `None` for
+/// any other text.
+pub fn written_number(text: &str) -> Option<WrittenNumber> {
+    let (mantissa, exponent) = match text.find(['e', 'E']) {
+        Some(at) => (&text[..at], Some(&text[at + 1..])),
+        None => (text, None),
+    };
+    let (negative, unsigned) = match mantissa.as_bytes().first() {
+        Some(b'-') => (true, &mantissa[1..]),
+        Some(b'+') => (false, &mantissa[1..]),
+        _ => (false, mantissa),
+    };
+    let (whole, fraction) = match unsigned.split_once('.') {
+        Some((whole, fraction)) => (whole, fraction),
+        None => (unsigned, ""),
+    };
+    let ascii = |part: &str| part.bytes().all(|b| b.is_ascii_digit());
+    if whole.len() + fraction.len() == 0 || !ascii(whole) || !ascii(fraction) {
+        return None;
+    }
+    let exponent: i64 = match exponent {
+        None => 0,
+        Some(written) => {
+            let (sign, digits) = match written.as_bytes().first() {
+                Some(b'-') => (-1, &written[1..]),
+                Some(b'+') => (1, &written[1..]),
+                _ => (1, written),
+            };
+            if digits.is_empty() || !ascii(digits) {
+                return None;
+            }
+            // An exponent past any decimal's or float's reach still reads:
+            // it decides only whether the value is out of range or inexact.
+            let magnitude = digits.trim_start_matches('0');
+            let magnitude = if magnitude.len() > 13 {
+                EXPONENT_BOUND
+            } else {
+                magnitude.parse::<i64>().unwrap_or(0).min(EXPONENT_BOUND)
+            };
+            sign * magnitude
+        }
+    };
+    // The digits as one run, leading zeros dropped, then trailing zeros,
+    // which carry no value, each moving the scale by one. Lengths are of
+    // text, far within i64.
+    let all = format!("{whole}{fraction}");
+    let significant = all.trim_start_matches('0');
+    let digits = significant.trim_end_matches('0');
+    let length = |part: &str| i64::try_from(part.len()).unwrap_or(EXPONENT_BOUND);
+    let dropped = length(significant) - length(digits);
+    Some(WrittenNumber {
+        negative,
+        digits: digits.to_owned(),
+        scale: length(fraction) - dropped - exponent,
+    })
+}
+
+/// The one text of the number `text` writes, the same for every spelling
+/// of it (`1.0`, `1.00`, `1E0`): `0`, or its sign, its significant digits
+/// and the power of ten they stand at (`1e0`, `-125e-2`); text that writes
+/// no number (a `NaN`, an `Infinity`) is itself. A column marked
+/// [`EXACT_NUMBER_MARKER`] holds two keys the same exactly when their
+/// texts are, as the source compares them, with nothing passed through a
+/// float.
+pub fn exact_number_text(text: &str) -> String {
+    match written_number(text) {
+        None => text.to_owned(),
+        Some(written) if written.digits.is_empty() => "0".to_owned(),
+        Some(written) => format!(
+            "{}{}e{}",
+            if written.negative { "-" } else { "" },
+            written.digits,
+            -written.scale
+        ),
+    }
+}
+/// The metadata key, on a seed key set's [`SEED_KEY`] column, naming the
+/// joined table's key column's declared type as the source spells it (its
+/// catalog's `type`, kept as `DescribedColumn::declared_type`), set by the
+/// core for floating and `decimal128(38, 0)` seed keys.
+/// Only the data layer interprets it: a SQL layer preserves the destination's
+/// floating coercion and exact integer/decimal comparisons (B-43).
+/// A host provider may ignore it.
+pub const SEED_KEY_TYPE: &str = "sdm:key_declared_type";
+/// The column of a seed key set that holds each seed's batch position, and
+/// of a `neighbors` or `lookup` result, under [`BATCH_COLUMN`], that names
+/// the seed a row answers.
+pub const SEED_BATCH: &str = "batch";
+/// The column of a `neighbors` or `lookup` result naming the seed each row
+/// answers, by its batch position: the reference's own name.
+pub const BATCH_COLUMN: &str = "__kumo_batch__";
+/// The column of a `lookup` result counting the rows that hold the seed's
+/// key: the reference's own name. A dialect may leave it out of an answer
+/// whose seeds say the count is not read ([`SEED_COUNT_UNREAD`]) or that
+/// the source enforces the key unique ([`SEED_KEY_UNIQUE`]), each key then
+/// held by one row.
+pub const MATCHES_COLUMN: &str = "__kumo_matches__";
+/// The metadata key, on a `lookup`'s seed [`SEED_KEY`] column, saying the
+/// source enforces the looked-up key unique (the described column's
+/// `unique`), with the value [`MARKED`]: set by the core so a SQL layer
+/// whose reference reads such a key by a plain join, counting nothing,
+/// renders that join (SQLite's `_by_pkey`); a host provider may ignore it.
+pub const SEED_KEY_UNIQUE: &str = "sdm:key_unique";
+/// The metadata key, on a `lookup`'s [`SEED_BATCH`] column, saying the
+/// core does not read how many rows hold each seed's key, with the value
+/// [`MARKED`]: set by the core on the lookups of the walk, which the
+/// reference counts on none of its SQL sources but DuckDB; a provider may
+/// still count.
+pub const SEED_COUNT_UNREAD: &str = "sdm:count_unread";
+/// The metadata key, on a window bound's seed column, holding one value
+/// of the window's column as the source stores it, as text, which the
+/// core read before the table's first windowed read (a `scan` of one
+/// non-null value): set only for a provider whose data layer says its
+/// source compares a bound with that stored text
+/// (`ProviderCapabilities::compares_stored_times`, SQLite's, which has no
+/// time type), so the source spells each bound as that value is spelled.
+pub const SEED_STORED_TIME: &str = "sdm:stored_time";
+/// The value of a metadata flag the core sets ([`SEED_KEY_UNIQUE`],
+/// [`SEED_COUNT_UNREAD`]).
+pub const MARKED: &str = "true";
+
+/// A sample's seed as an integer, when the scalar it travels as is one:
+/// the narrowest exact scalar `materialize` writes, a `u64` or a decimal
+/// of scale 0, or any other integer scalar; `None` for any other scalar.
+/// The one reading of a seed the core's checks and every dialect's
+/// rendering share (carried row U12).
+pub fn seed_integer(seed: &Scalar) -> Option<i128> {
+    Some(match seed {
+        Scalar::Int32(v) => i128::from(*v),
+        Scalar::Int64(v) => i128::from(*v),
+        Scalar::UInt32(v) => i128::from(*v),
+        Scalar::UInt64(v) => i128::from(*v),
+        Scalar::Decimal128 {
+            scale: 0, value, ..
+        } => *value,
+        _ => return None,
+    })
+}
+
+/// Names an attachment that travels beside a control message: Arrow data
+/// (a fetch's result, a key set, a predict result) or bytes (a model
+/// request or response body).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(transparent)]
+pub struct AttachmentId(pub u32);
+
+/// A set of keys: an Arrow attachment, and the columns it holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct KeySet {
+    pub attachment: AttachmentId,
+    pub columns: Vec<Field>,
+}
+
+/// What a request reads: a relation of the source, by its name's parts,
+/// each quoted alone and never split on a dot, so `["a.b"]` is one table
+/// named `a.b` and `["main", "t"]` the table `t` of `main` (design choice
+/// 12). Plain data, a list of strings, as easily built by a host in any
+/// language as a name is. How many parts a source takes is its dialect's:
+/// `sdm-sql` renders every dialect's `FROM` from a relation through one
+/// function and refuses one of no part, or of more parts than its dialect
+/// accepts, by name (rule `relation`); a host provider refuses one it
+/// cannot read the same way. Two schema tables over one source are two
+/// equal relations.
+///
+/// A relation may be derived:
+/// `columns`, where given, are the relation's columns, each a name with
+/// the source column it reads or an SQL text expression over the source's
+/// columns, and `filter` an SQL text condition every row read holds, as a
+/// view's definition gives them. Both are text of the source's own SQL,
+/// opaque to the core, which never reads or writes them: only a provider
+/// declaring [`ProviderCapabilities::derived_relations`] is asked for a
+/// derived relation, and the core refuses one for any other by name (rule
+/// [`DERIVED_RULE`]).
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct Relation {
+    pub source: Vec<String>,
+    /// The relation's columns, in order, where it is derived; empty, the
+    /// source's own columns under their own names; or, where `found`, the
+    /// columns the source's catalog found.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub columns: Vec<RelationColumn>,
+    /// The condition, in the source's SQL, every row of the relation holds;
+    /// left out, every row of the source is the relation's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filter: Option<String>,
+    /// The columns are the ones the source's catalog found, each read by
+    /// its own name, with no filter (round 2): a provider may read
+    /// the table through them, so that one since dropped or renamed fails
+    /// the read rather than reading anything else by its name (the
+    /// reference's Databricks reads, `_quoted_source_name`), or read the
+    /// table whole where no column needs it. Left out, `false`: the
+    /// columns, if any, are the relation's own.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub found: bool,
+}
+
+/// One column of a derived relation: the name the relation gives it, and
+/// what it reads, exactly one of a column of the source (`column`) or an
+/// expression in the source's SQL over its columns (`expression`).
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(deny_unknown_fields)]
+pub struct RelationColumn {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expression: Option<String>,
+}
+
+impl Relation {
+    /// The relation of one part, `name`, as a host that names a table by a
+    /// string gives it.
+    pub fn named(name: impl Into<String>) -> Self {
+        Relation::of(vec![name.into()])
+    }
+
+    /// The relation of the name parts `source`, read whole.
+    pub fn of(source: Vec<String>) -> Self {
+        Relation {
+            source,
+            columns: Vec::new(),
+            filter: None,
+            found: false,
+        }
+    }
+
+    /// Whether the relation is derived: it names its columns or a filter.
+    pub fn is_derived(&self) -> bool {
+        !self.columns.is_empty() || self.filter.is_some()
+    }
+
+    /// The relation's name as the source's catalog writes a table's name,
+    /// its parts joined by dots, as the reference names a table it reads
+    /// (`source_name`), and a declared foreign key names the table it
+    /// refers to.
+    pub fn dotted(&self) -> String {
+        self.source.join(".")
+    }
+
+    /// The one part of a relation of one part; `None` for any other.
+    pub fn single(&self) -> Option<&str> {
+        match self.source.as_slice() {
+            [name] => Some(name),
+            _ => None,
+        }
+    }
+}
+
+impl From<&str> for Relation {
+    fn from(name: &str) -> Self {
+        Relation::named(name)
+    }
+}
+
+impl From<String> for Relation {
+    fn from(name: String) -> Self {
+        Relation::named(name)
+    }
+}
+
+/// The rule a refusal of a derived relation names: asked of a provider
+/// that does not declare [`ProviderCapabilities::derived_relations`], or
+/// one whose columns do not each read exactly one source column or
+/// expression, or name a column twice.
+pub const DERIVED_RULE: &str = "derived_relation";
+
+/// The refusal of a derived `relation`, of `field` of `request`, by a
+/// reader that renders derived relations where `renders` says so: one asked
+/// of a reader that does not, `UNSUPPORTED_REQUEST`; one whose columns are
+/// not each a name with exactly one of a source column or an expression,
+/// or name one column twice, `INVALID_REQUEST`; `None` for a relation read
+/// whole,
+/// and for a derived one the reader renders. Each names the rule
+/// ([`DERIVED_RULE`]), never a part's or an expression's text.
+pub fn refuse_derived(
+    request: &DataRequest,
+    field: &str,
+    relation: &Relation,
+    renders: bool,
+) -> Option<CoreError> {
+    if !relation.is_derived() {
+        return None;
+    }
+    let refusal = |sentence, message| {
+        Some(
+            CoreError::new(sentence, message)
+                .with_field("request", Detail::text(request.name()))
+                .with_field("field", Detail::text(field)),
+        )
+    };
+    if !renders {
+        return refusal(
+            Sentence::DerivedRelationUnread,
+            "a derived relation is asked of a provider that does not read one",
+        );
+    }
+    // The columns a catalog found are its columns, each by its own name,
+    // with no filter: a relation marked so that renames, computes or filters
+    // contradicts itself, and is refused rather than read as the table.
+    if relation.found
+        && (relation.filter.is_some()
+            || relation
+                .columns
+                .iter()
+                .any(|c| c.expression.is_some() || c.column.as_ref() != Some(&c.name)))
+    {
+        return refusal(
+            Sentence::DerivedRelationMalformed,
+            "a relation of the columns its catalog found renames, computes or filters them",
+        );
+    }
+    let mut names = BTreeSet::new();
+    for column in &relation.columns {
+        let reads = usize::from(column.column.is_some()) + usize::from(column.expression.is_some());
+        if reads != 1 || column.name.is_empty() || !names.insert(column.name.as_str()) {
+            return refusal(
+                Sentence::DerivedRelationMalformed,
+                "a derived relation's column reads no one source column or expression, or is named twice",
+            );
+        }
+    }
+    None
+}
+
+/// The refusal of `relation`, of `field` of `request`, by a reader that
+/// takes from one to `most` parts (rule `relation`): `INVALID_REQUEST`
+/// for a relation of no part, which no source reads, and
+/// `UNSUPPORTED_REQUEST` for more parts than the reader takes; `None` for
+/// a relation it reads. Each names the parts given and the most it takes,
+/// never a part's text.
+pub fn refuse_relation(
+    request: &DataRequest,
+    field: &str,
+    relation: &Relation,
+    most: usize,
+) -> Option<CoreError> {
+    let parts = relation.source.len();
+    let (sentence, message) = match parts {
+        0 => (Sentence::RelationNoPart, "a relation names no part"),
+        n if n > most => (
+            Sentence::RelationTooManyParts,
+            "a relation has more name parts than its source reads",
+        ),
+        _ => return None,
+    };
+    Some(
+        CoreError::new(sentence, message)
+            .with_field("request", Detail::text(request.name()))
+            .with_field("field", Detail::text(field))
+            .with_field("parts", Detail::Scalar(Scalar::UInt64(parts as u64)))
+            .with_field("most", Detail::Scalar(Scalar::UInt64(most as u64))),
+    )
+}
+
+/// The columns of a seed key set holding each seed's key, in the order of
+/// the key's columns ([`SEED_KEY`] for a key of one column, `key_1` to
+/// `key_<n>` for a key of `n` columns), beside [`SEED_BATCH`] (design
+/// choice 1: multi-column keys in `neighbors` and `lookup`).
+///
+/// Groundwork (carried row P2-MID2-5): contract v26's vocabulary of
+/// sampling by a key of several columns (this naming, and a `key` of
+/// several columns in `sample_entities`, `neighbors` and `lookup`) is kept
+/// for the composite keys a later contract takes. The core refuses a
+/// schema keyed by several columns at materialize before it samples, as
+/// the reference does (`sdm-core`'s `refuse_composite_keys`; register
+/// P2E-5), so no sampler request names a key of more than
+/// one column yet.
+pub fn seed_key_columns(columns: usize) -> Vec<String> {
+    match columns {
+        1 => vec![SEED_KEY.to_owned()],
+        n => (1..=n).map(|i| format!("{SEED_KEY}_{i}")).collect(),
+    }
+}
+
+/// One bound of a time range.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Bound {
+    pub value: Scalar,
+    pub inclusive: bool,
+}
+
+/// A condition on the rows a request reads; a request's filters are a
+/// conjunction.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "filter", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Filter {
+    /// The row's `columns` equal one of the key set's rows.
+    KeyIn {
+        columns: Vec<String>,
+        keys: KeySet,
+    },
+    TimeRange {
+        column: String,
+        lower: Option<Bound>,
+        upper: Option<Bound>,
+    },
+    NotNull {
+        column: String,
+    },
+    /// The row's `column` compared with `value` by `op`. A null meets no
+    /// comparison. A value filter ([`FilterKind`]).
+    Compare {
+        column: String,
+        op: CompareOp,
+        value: Scalar,
+    },
+    /// The row's `column` equals one of `values`; a null equals none. A
+    /// value filter.
+    In {
+        column: String,
+        values: Vec<Scalar>,
+    },
+    /// The row's `column` is null. A value filter.
+    IsNull {
+        column: String,
+    },
+    /// At least one of `filters` holds. A value filter.
+    AnyOf {
+        filters: Vec<Filter>,
+    },
+    /// Every one of `filters` holds, for a conjunction inside
+    /// [`Filter::AnyOf`]. A value filter.
+    AllOf {
+        filters: Vec<Filter>,
+    },
+    /// The row's `column` is referred to by at least `at_least` rows of
+    /// `table` through its column `key` that meet `filters`: a time range,
+    /// not-null and value filters on `table`'s rows. A value filter.
+    HasRows {
+        column: String,
+        table: Relation,
+        key: String,
+        filters: Vec<Filter>,
+        at_least: u64,
+    },
+}
+
+/// How a [`Filter::Compare`] compares a column with its value.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum CompareOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl CompareOp {
+    /// The operator as SQL writes it.
+    pub fn sql(self) -> &'static str {
+        match self {
+            CompareOp::Eq => "=",
+            CompareOp::Ne => "<>",
+            CompareOp::Lt => "<",
+            CompareOp::Le => "<=",
+            CompareOp::Gt => ">",
+            CompareOp::Ge => ">=",
+        }
+    }
+}
+
+/// A kind of value filter a provider may declare
+/// ([`ProviderCapabilities::filters`]). The core sends a provider only the
+/// kinds it declares, and only to choose which rows a sample or scan may
+/// return.
+///
+/// Value filters narrow a read; they never decide a result. A provider may
+/// return rows a value filter does not hold for, but never leave out one it
+/// holds for: the core checks every row it keeps by the query's own rules,
+/// so a source whose null, type or collation rules differ costs rows read,
+/// never a wrong answer.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum FilterKind {
+    Compare,
+    In,
+    IsNull,
+    AnyOf,
+    AllOf,
+    HasRows,
+}
+
+impl FilterKind {
+    /// Every kind, as a source that renders them all declares them.
+    pub const ALL: [FilterKind; 6] = [
+        FilterKind::Compare,
+        FilterKind::In,
+        FilterKind::IsNull,
+        FilterKind::AnyOf,
+        FilterKind::AllOf,
+        FilterKind::HasRows,
+    ];
+}
+
+impl Filter {
+    /// The value filter kind of this filter, none for a key, time or
+    /// not-null filter, which every provider takes.
+    pub fn kind(&self) -> Option<FilterKind> {
+        match self {
+            Filter::KeyIn { .. } | Filter::TimeRange { .. } | Filter::NotNull { .. } => None,
+            Filter::Compare { .. } => Some(FilterKind::Compare),
+            Filter::In { .. } => Some(FilterKind::In),
+            Filter::IsNull { .. } => Some(FilterKind::IsNull),
+            Filter::AnyOf { .. } => Some(FilterKind::AnyOf),
+            Filter::AllOf { .. } => Some(FilterKind::AllOf),
+            Filter::HasRows { .. } => Some(FilterKind::HasRows),
+        }
+    }
+
+    /// Whether a provider declaring `kinds` takes this filter, nested
+    /// filters included.
+    pub fn taken_by(&self, kinds: &BTreeSet<FilterKind>) -> bool {
+        self.kind().is_none_or(|kind| kinds.contains(&kind))
+            && match self {
+                Filter::AnyOf { filters }
+                | Filter::AllOf { filters }
+                | Filter::HasRows { filters, .. } => filters.iter().all(|f| f.taken_by(kinds)),
+                _ => true,
+            }
+    }
+
+    /// The key sets the filter binds, nested filters included, in order.
+    fn key_sets(&self, into: &mut Vec<AttachmentId>) {
+        match self {
+            Filter::KeyIn { keys, .. } => into.push(keys.attachment),
+            Filter::AnyOf { filters }
+            | Filter::AllOf { filters }
+            | Filter::HasRows { filters, .. } => {
+                for filter in filters {
+                    filter.key_sets(into);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// [`Filter::key_sets`], each changed by `rename`.
+    fn rename_key_sets(&mut self, rename: &impl Fn(&mut KeySet)) {
+        match self {
+            Filter::KeyIn { keys, .. } => rename(keys),
+            Filter::AnyOf { filters }
+            | Filter::AllOf { filters }
+            | Filter::HasRows { filters, .. } => {
+                for filter in filters {
+                    filter.rename_key_sets(rename);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The tables the filter reads rows of (`has_rows`), nested filters
+    /// included, in order, each named `filters`.
+    fn read_relations<'a>(&'a self, into: &mut Vec<(&'static str, &'a Relation)>) {
+        match self {
+            Filter::HasRows { table, filters, .. } => {
+                into.push(("filters", table));
+                for filter in filters {
+                    filter.read_relations(into);
+                }
+            }
+            Filter::AnyOf { filters } | Filter::AllOf { filters } => {
+                for filter in filters {
+                    filter.read_relations(into);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// [`Filter::read_relations`], to change in place.
+    fn read_relations_mut<'a>(&'a mut self, into: &mut Vec<&'a mut Relation>) {
+        match self {
+            Filter::HasRows { table, filters, .. } => {
+                into.push(table);
+                for filter in filters {
+                    filter.read_relations_mut(into);
+                }
+            }
+            Filter::AnyOf { filters } | Filter::AllOf { filters } => {
+                for filter in filters {
+                    filter.read_relations_mut(into);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The columns the filter reads, nested filters included, in order.
+    pub fn columns(&self) -> Vec<&str> {
+        match self {
+            Filter::KeyIn { columns, .. } => columns.iter().map(String::as_str).collect(),
+            Filter::TimeRange { column, .. }
+            | Filter::NotNull { column }
+            | Filter::Compare { column, .. }
+            | Filter::In { column, .. }
+            | Filter::IsNull { column }
+            // The rows referring to it are another table's.
+            | Filter::HasRows { column, .. } => vec![column.as_str()],
+            Filter::AnyOf { filters } | Filter::AllOf { filters } => {
+                filters.iter().flat_map(Filter::columns).collect()
+            }
+        }
+    }
+}
+
+/// Which part of the catalog a `describe` reads.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum DescribePart {
+    /// The source's table names: one row per table. With tables named,
+    /// the relations, tables or views, the source would read under any of
+    /// those names written unqualified, by its own resolution of such a
+    /// name (on DuckDB, through its search path): none when it would read
+    /// none, which is how the core learns a name the caller gave is not
+    /// the source's, never by matching names itself (decision
+    /// E59).
+    Tables,
+    /// Each table's columns, with their declared types, nullability and
+    /// primary-key flags.
+    Columns,
+    /// Each table's declared primary and unique keys.
+    Keys,
+    /// Each table's declared foreign keys.
+    ForeignKeys,
+    /// The tables' indexes, which feed the reference's "Missing N indices"
+    /// warning: the source's whole, or one table's where the provider's
+    /// index advice reads them so ([`IndexAdvice::LeadingColumn`]).
+    Indexes,
+    /// The columns of one index, named by a relation as a table is (an
+    /// index is its schema's object): one row per column, in the index's
+    /// order, its name, null for an expression. Asked for an index whose
+    /// columns the catalog's list of keys or indexes does not give
+    /// (SQLite's `index_info`, as the reference reads it). A host provider
+    /// is never asked it: its `keys` and `indexes` answers give each key's
+    /// and index's columns ([`catalog_columns`]), so no key or index it
+    /// lists is read by its name.
+    IndexColumns,
+    /// The namespace a relation of one part is read in, as the source names
+    /// a table it holds: one row per part, outermost first, its name
+    /// (contract v28): a Postgres source's current schema, under
+    /// which the reference names a table it cannot find; no row for a
+    /// source whose tables are named alone (DuckDB's, SQLite's). Asked only
+    /// to name a table the source lacks.
+    Namespace,
+    /// The exact names of the tables in the named table's namespace whose
+    /// declared primary keys the source enforces. Asked lazily once
+    /// per namespace, only before counting a key containing that declared
+    /// primary key, when `key_enforcement` is declared. A failed or unreadable
+    /// listing establishes no enforcement. It does not change lookup checks.
+    KeyEnforcement,
+    /// The definition of the one semantic model named (contract v28):
+    /// a Databricks metric view's `DESCRIBE TABLE EXTENDED`, a Snowflake
+    /// semantic view's `SYSTEM$READ_YAML_FROM_SEMANTIC_VIEW`, read into
+    /// [`CatalogAnswer::ViewDefinition`]. Only a source read through a
+    /// semantic model of a database whose dialect reads views is asked it;
+    /// every other dialect refuses it by name ([`Sentence::ViewsUnread`]).
+    ViewDefinition,
+}
+
+/// A column of a table.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TableColumn {
+    pub table: Relation,
+    pub column: String,
+}
+
+/// Columns of a table that together make a key.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TableKey {
+    pub table: Relation,
+    pub columns: Vec<String>,
+    /// The number a `key_counts` row for this key is labelled with, where
+    /// not its position among the keys asked: the reference labels each by
+    /// its table's place among the tables with a key, a key it does not
+    /// count included.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<u64>,
+    /// The source keeps the key unique (a declared primary or unique key
+    /// that may still hold a null): its distinct values are the rows
+    /// holding all of it, which a rendering may count as the rows less
+    /// those missing part of it, as the reference counts such a key
+    /// (`_key_count_sql`; contract v28, carried row P2--3). The count
+    /// is the same either way.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unique: bool,
+}
+
+/// Serde's test for leaving out a flag that is not set.
+#[allow(clippy::trivially_copy_pass_by_ref, reason = "serde's signature")]
+pub(crate) fn is_false(flag: &bool) -> bool {
+    !*flag
+}
+
+impl TableKey {
+    /// The label of the key at `position` among the keys asked.
+    pub fn label_at(&self, position: usize) -> u64 {
+        self.label.unwrap_or(position as u64)
+    }
+}
+
+/// One bound of a `neighbors` window: a seed time column, compared with the
+/// window column in the source's own `CAST(column AS TIMESTAMP)` wall clock.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SeedBound {
+    /// A zone-less `timestamp[ns]` column of the seed key set.
+    pub seed_column: String,
+    pub inclusive: bool,
+}
+
+/// The rows of a `neighbors` request in time: the window column between
+/// the bounds a seed gives. A row whose window column is NULL is not
+/// returned when a window is set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Window {
+    pub column: String,
+    /// The current catalog declaration of the window column, when known.
+    /// Only the dialect interprets it: zoned timestamp instants compare
+    /// with UTC seed bounds; NTZ and DATE retain their wall clock. Absent
+    /// for older callers, preserving their existing rendering.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_type: Option<String>,
+    pub lower: Option<SeedBound>,
+    pub upper: Option<SeedBound>,
+}
+
+/// One term of a [`TieBreak`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TieTerm {
+    /// A keyless tie column whose engine dtype is string-like. Dialects
+    /// may need a comparable representation (PostgreSQL json/xml domains).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub string_like: bool,
+    pub column: String,
+    /// Order by `CAST(column AS TIMESTAMP)`, the source's wall clock,
+    /// rather than the column's own values.
+    pub as_timestamp: bool,
+    pub descending: bool,
+    /// Nulls after every value; the core writes the order the provider
+    /// declares (`ProviderCapabilities::null_order`).
+    pub nulls_last: bool,
+}
+
+/// The total order a `neighbors` request keeps per seed, built by the core
+/// from the reference's rule (design, "Data access").
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct TieBreak(pub Vec<TieTerm>);
+
+/// A strictly negative, nonzero JSON numeric token, held losslessly.
+/// The private representation can be constructed only through validation;
+/// it is encoded as numeric text because tagged serde envelopes buffer
+/// actual fractional JSON numbers through doubles before reading fields.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(transparent)]
+pub struct NegativeNeighborBound(String);
+
+impl NegativeNeighborBound {
+    pub fn new(token: String) -> Option<Self> {
+        serde_json::from_str::<serde::de::IgnoredAny>(&token).ok()?;
+        let number = written_number(&token)?;
+        (number.negative && !number.digits.is_empty()).then_some(Self(token))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for NegativeNeighborBound {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let token = String::deserialize(deserializer)?;
+        Self::new(token).ok_or_else(|| {
+            serde::de::Error::custom("a negative bound is not a negative JSON number")
+        })
+    }
+}
+
+impl JsonSchema for NegativeNeighborBound {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "NegativeNeighborBound".into()
+    }
+
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": r"^-(?:[1-9][0-9]*(?:\.[0-9]+)?|0\.0*[1-9][0-9]*)(?:[eE][+-]?[0-9]+)?$",
+        })
+    }
+}
+
+/// The caller's per-seed neighbor bound, interpreted by its provider.
+/// Positive counts retain their original unsigned JSON representation.
+/// SQL expressions are caller-authored query code under the same trust
+/// boundary as derived relation expressions, never identifiers or values.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged, deny_unknown_fields)]
+pub enum NeighborLimit {
+    Unsigned(u64),
+    /// A negative JSON number's exact text, including fractional bounds.
+    Negative {
+        #[serde(rename = "negative")]
+        value: NegativeNeighborBound,
+    },
+    Expression {
+        #[serde(rename = "sql_expression")]
+        text: String,
+    },
+}
+
+impl From<u64> for NeighborLimit {
+    fn from(value: u64) -> Self {
+        Self::Unsigned(value)
+    }
+}
+
+/// A typed request for data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "request", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DataRequest {
+    /// One part of the catalog for the tables named (all when empty): what
+    /// the provider returns is in the shape its plan expects, which the
+    /// data layer reads into a [`CatalogAnswer`].
+    Describe {
+        tables: Vec<Relation>,
+        part: DescribePart,
+    },
+    /// Every matching row of `table`, `columns` in order, paged through to
+    /// the end; `limit` asks for any `limit` rows instead.
+    Scan {
+        table: Relation,
+        columns: Vec<String>,
+        filters: Vec<Filter>,
+        limit: Option<u64>,
+    },
+    /// The first rows of `table`, for inference.
+    Preview {
+        table: Relation,
+        columns: Vec<String>,
+        limit: u64,
+    },
+    CountRows {
+        table: Relation,
+        filters: Vec<Filter>,
+    },
+    /// For each key, in order, one row: its label (its position, where it
+    /// gives none), the table's rows, the key's distinct values among rows
+    /// holding all of it, and the rows missing any part of it, as the
+    /// reference's single `UNION ALL` reads them.
+    KeyCounts { keys: Vec<TableKey> },
+    /// For each time column, in order, one row: its position and the
+    /// smallest and largest `CAST(column AS TIMESTAMP)`, as the reference's
+    /// single `UNION ALL` reads them.
+    TimeBounds { columns: Vec<TableColumn> },
+    /// One row: the rows of `table`, then, for each of `columns` in order,
+    /// its smallest and largest value, each of the column's own type and
+    /// null when no row holds one, and the rows holding a value, read over
+    /// every row in one statement, as the reference's time column choice
+    /// reads a table its preview may not hold whole (`_full_range`).
+    ColumnRanges {
+        table: Relation,
+        columns: Vec<String>,
+    },
+    /// At most one row: a value of `key` that more than one row of `table`
+    /// holds, among the rows holding every part of it, as the reference
+    /// reads one to show a repeated key (`_repeated_key_sql`).
+    RepeatedKey { table: Relation, key: Vec<String> },
+    /// A seeded sample of `n` entities of `table` by `key`: `columns` in
+    /// order, from the rows meeting every filter. `key_dtype`, where given,
+    /// is the data type of a key of one column the draw orders by: the type
+    /// the source declares it where its catalog fixes one, else the
+    /// schema's; a dialect that hashes only some types (SQLite's, which
+    /// hashes an integer key and the `rowid` otherwise) chooses by it once
+    /// for the column. Left out, the dialect decides by itself.
+    SampleEntities {
+        table: Relation,
+        key: Vec<String>,
+        n: u64,
+        seed: Scalar,
+        columns: Vec<String>,
+        filters: Vec<Filter>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        key_dtype: Option<crate::ops::Dtype>,
+        /// The rows `table` holds, where the provider sizes its draw by
+        /// them ([`ProviderCapabilities::sample_rows`]): the core counts
+        /// them (`count_rows`) before it samples and names the count here,
+        /// as the reference's warehouse samplers read each table's rows
+        /// first (contract v28). Left out for any other provider.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rows: Option<u64>,
+    },
+    /// The rows of `table` whose `key` equals a seed's key, `columns` in
+    /// order after the seed's batch position. `key` names the
+    /// table's key columns in order, one or several (design choice 1; a key
+    /// of several is groundwork, [`seed_key_columns`]);
+    /// `seeds` holds the key's columns ([`seed_key_columns`]), `batch` and
+    /// the seed time columns `window` names. With `per_seed`, at most that many rows per seed, first in
+    /// `order`, and the result is ordered by `(batch, order)`; without it,
+    /// there is no `order` and the result is unordered.
+    Neighbors {
+        table: Relation,
+        key: Vec<String>,
+        columns: Vec<String>,
+        seeds: KeySet,
+        window: Option<Window>,
+        per_seed: Option<NeighborLimit>,
+        order: Option<TieBreak>,
+    },
+    /// One row per seed whose key `table` holds, `columns` in order after
+    /// the seed's batch position and the count of rows holding its key;
+    /// which row of a key several rows hold is not defined. `key` and
+    /// `seeds` as `neighbors`'.
+    Lookup {
+        table: Relation,
+        key: Vec<String>,
+        columns: Vec<String>,
+        seeds: KeySet,
+    },
+}
+
+impl DataRequest {
+    /// Each relation the request reads, with the field naming it: the
+    /// tables its filters read (`has_rows`) after its own, named `filters`.
+    pub fn relations(&self) -> Vec<(&'static str, &Relation)> {
+        let mut relations = self.own_relations();
+        for filter in self.filters() {
+            filter.read_relations(&mut relations);
+        }
+        relations
+    }
+
+    /// The key sets the request binds, by attachment, in order, each once:
+    /// its seeds, then each `key_in` filter's keys, nested ones included.
+    pub fn key_sets(&self) -> Vec<AttachmentId> {
+        let mut found = Vec::new();
+        if let DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } = self {
+            found.push(seeds.attachment);
+        }
+        for filter in self.filters() {
+            filter.key_sets(&mut found);
+        }
+        let mut seen = BTreeSet::new();
+        found.retain(|id| seen.insert(*id));
+        found
+    }
+
+    /// Each key set the request binds named by its new attachment in `to`,
+    /// where `to` names one.
+    pub fn rename_attachments(&mut self, to: &BTreeMap<AttachmentId, AttachmentId>) {
+        let rename = |keys: &mut KeySet| {
+            if let Some(renamed) = to.get(&keys.attachment) {
+                keys.attachment = *renamed;
+            }
+        };
+        match self {
+            DataRequest::Neighbors { seeds, .. } | DataRequest::Lookup { seeds, .. } => {
+                rename(seeds);
+            }
+            DataRequest::Scan { filters, .. }
+            | DataRequest::CountRows { filters, .. }
+            | DataRequest::SampleEntities { filters, .. } => {
+                for filter in filters {
+                    filter.rename_key_sets(&rename);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The filters the request carries, none for a request taking none.
+    fn filters(&self) -> &[Filter] {
+        match self {
+            DataRequest::Scan { filters, .. }
+            | DataRequest::CountRows { filters, .. }
+            | DataRequest::SampleEntities { filters, .. } => filters,
+            _ => &[],
+        }
+    }
+
+    fn own_relations(&self) -> Vec<(&'static str, &Relation)> {
+        match self {
+            DataRequest::Describe { tables, .. } => tables.iter().map(|t| ("tables", t)).collect(),
+            DataRequest::KeyCounts { keys } => keys.iter().map(|k| ("keys", &k.table)).collect(),
+            DataRequest::TimeBounds { columns } => {
+                columns.iter().map(|c| ("columns", &c.table)).collect()
+            }
+            DataRequest::Scan { table, .. }
+            | DataRequest::Preview { table, .. }
+            | DataRequest::CountRows { table, .. }
+            | DataRequest::ColumnRanges { table, .. }
+            | DataRequest::RepeatedKey { table, .. }
+            | DataRequest::SampleEntities { table, .. }
+            | DataRequest::Neighbors { table, .. }
+            | DataRequest::Lookup { table, .. } => vec![("table", table)],
+        }
+    }
+
+    /// Each relation the request reads, to change in place: the tables its
+    /// filters read (`has_rows`) after its own, so a relation read where
+    /// the run reads it is read there inside a filter too.
+    pub fn relations_mut(&mut self) -> Vec<&mut Relation> {
+        let (mut relations, filters) = match self {
+            DataRequest::Scan { table, filters, .. }
+            | DataRequest::CountRows { table, filters, .. }
+            | DataRequest::SampleEntities { table, filters, .. } => (vec![table], filters),
+            other => return other.own_relations_mut(),
+        };
+        for filter in filters.iter_mut() {
+            filter.read_relations_mut(&mut relations);
+        }
+        relations
+    }
+
+    fn own_relations_mut(&mut self) -> Vec<&mut Relation> {
+        match self {
+            DataRequest::Describe { tables, .. } => tables.iter_mut().collect(),
+            DataRequest::KeyCounts { keys } => keys.iter_mut().map(|k| &mut k.table).collect(),
+            DataRequest::TimeBounds { columns } => {
+                columns.iter_mut().map(|c| &mut c.table).collect()
+            }
+            DataRequest::Scan { table, .. }
+            | DataRequest::Preview { table, .. }
+            | DataRequest::CountRows { table, .. }
+            | DataRequest::ColumnRanges { table, .. }
+            | DataRequest::RepeatedKey { table, .. }
+            | DataRequest::SampleEntities { table, .. }
+            | DataRequest::Neighbors { table, .. }
+            | DataRequest::Lookup { table, .. } => vec![table],
+        }
+    }
+
+    /// The request's name, as the contract spells it.
+    pub fn name(&self) -> &'static str {
+        match self {
+            DataRequest::Describe { .. } => "describe",
+            DataRequest::Scan { .. } => "scan",
+            DataRequest::Preview { .. } => "preview",
+            DataRequest::CountRows { .. } => "count_rows",
+            DataRequest::KeyCounts { .. } => "key_counts",
+            DataRequest::TimeBounds { .. } => "time_bounds",
+            DataRequest::ColumnRanges { .. } => "column_ranges",
+            DataRequest::RepeatedKey { .. } => "repeated_key",
+            DataRequest::SampleEntities { .. } => "sample_entities",
+            DataRequest::Neighbors { .. } => "neighbors",
+            DataRequest::Lookup { .. } => "lookup",
+        }
+    }
+
+    /// The optional request this is, if it is one; `describe` and `scan`
+    /// are what every provider answers.
+    pub fn optional(&self) -> Option<OptionalRequest> {
+        match self {
+            DataRequest::Describe { .. } | DataRequest::Scan { .. } => None,
+            DataRequest::Preview { .. } => Some(OptionalRequest::Preview),
+            DataRequest::CountRows { .. } => Some(OptionalRequest::CountRows),
+            DataRequest::KeyCounts { .. } => Some(OptionalRequest::KeyCounts),
+            DataRequest::TimeBounds { .. } => Some(OptionalRequest::TimeBounds),
+            DataRequest::ColumnRanges { .. } => Some(OptionalRequest::ColumnRanges),
+            DataRequest::RepeatedKey { .. } => Some(OptionalRequest::RepeatedKey),
+            DataRequest::SampleEntities { .. } => Some(OptionalRequest::SampleEntities),
+            DataRequest::Neighbors { .. } => Some(OptionalRequest::Neighbors),
+            DataRequest::Lookup { .. } => Some(OptionalRequest::Lookup),
+        }
+    }
+
+    /// Refuses a request whose fields contradict each other, so every
+    /// field is honored or the request refused, never ignored: a
+    /// `neighbors` with `order` and no `per_seed` or the reverse, an empty
+    /// tie-break, seeds without the `key` and `batch` columns, or a window
+    /// bound naming no zone-less `timestamp[ns]` seed column; a request
+    /// asking for no columns or no keys where it must name some.
+    pub fn check(&self) -> Result<(), CoreError> {
+        match self {
+            DataRequest::KeyCounts { keys } => {
+                if keys.is_empty() || keys.iter().any(|k| k.columns.is_empty()) {
+                    return Err(refused(self, "keys", "a key names no columns"));
+                }
+            }
+            DataRequest::TimeBounds { columns } if columns.is_empty() => {
+                return Err(refused(self, "columns", "no time column is named"));
+            }
+            DataRequest::ColumnRanges { columns, .. } if columns.is_empty() => {
+                return Err(refused(self, "columns", "no column is named"));
+            }
+            DataRequest::RepeatedKey { key, .. } if key.is_empty() => {
+                return Err(refused(self, "key", "a key names no columns"));
+            }
+            DataRequest::Neighbors {
+                key,
+                seeds,
+                window,
+                per_seed,
+                order,
+                ..
+            } => {
+                check_seeds(self, key, seeds)?;
+                match (per_seed, order) {
+                    (Some(_), None) => {
+                        return Err(refused(
+                            self,
+                            "order",
+                            "a row limit per seed needs an order",
+                        ));
+                    }
+                    (None, Some(_)) => {
+                        return Err(refused(
+                            self,
+                            "order",
+                            "an order without a row limit per seed is not kept",
+                        ));
+                    }
+                    (Some(_), Some(TieBreak(terms))) if terms.is_empty() => {
+                        return Err(refused(self, "order", "the order has no terms"));
+                    }
+                    _ => {}
+                }
+                if let Some(window) = window {
+                    if window.lower.is_none() && window.upper.is_none() {
+                        return Err(refused(self, "window", "the window has no bound"));
+                    }
+                    for bound in window.lower.iter().chain(&window.upper) {
+                        let seed_time = seeds.columns.iter().any(|f| {
+                            f.name == bound.seed_column
+                                && f.column_type
+                                    == ColumnType::Timestamp {
+                                        unit: Unit::Ns,
+                                        zone: None,
+                                    }
+                        });
+                        if !seed_time {
+                            return Err(refused(
+                                self,
+                                "window",
+                                "a bound names no zone-less timestamp[ns] seed column",
+                            ));
+                        }
+                    }
+                }
+            }
+            DataRequest::Lookup { key, seeds, .. } => check_seeds(self, key, seeds)?,
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+/// A key names some columns, and seeds hold the role-named columns of each
+/// of its columns ([`seed_key_columns`]) and `batch`.
+fn check_seeds(request: &DataRequest, key: &[String], seeds: &KeySet) -> Result<(), CoreError> {
+    if key.is_empty() {
+        return Err(refused(request, "key", "a key names no columns"));
+    }
+    for role in seed_key_columns(key.len())
+        .iter()
+        .map(String::as_str)
+        .chain([SEED_BATCH])
+    {
+        if !seeds.columns.iter().any(|f| f.name == role) {
+            return Err(refused(
+                request,
+                "seeds",
+                "the seeds lack a key or a batch column",
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The refusal of a request whose fields contradict each other, naming the
+/// request and the field, never a value.
+pub fn refused(request: &DataRequest, field: &str, message: &str) -> CoreError {
+    CoreError::new(Sentence::DataRequestRefused, message)
+        .with_field("request", Detail::text(request.name()))
+        .with_field("field", Detail::text(field))
+}
+
+/// The optional requests a provider may declare.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum OptionalRequest {
+    Preview,
+    CountRows,
+    KeyCounts,
+    TimeBounds,
+    ColumnRanges,
+    RepeatedKey,
+    SampleEntities,
+    Neighbors,
+    Lookup,
+}
+
+impl OptionalRequest {
+    /// The request's name, as the contract spells it.
+    pub fn name(self) -> &'static str {
+        match self {
+            OptionalRequest::Preview => "preview",
+            OptionalRequest::CountRows => "count_rows",
+            OptionalRequest::KeyCounts => "key_counts",
+            OptionalRequest::TimeBounds => "time_bounds",
+            OptionalRequest::ColumnRanges => "column_ranges",
+            OptionalRequest::RepeatedKey => "repeated_key",
+            OptionalRequest::SampleEntities => "sample_entities",
+            OptionalRequest::Neighbors => "neighbors",
+            OptionalRequest::Lookup => "lookup",
+        }
+    }
+}
+
+/// Whether a provider's seeded sampling repeats.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum Determinism {
+    /// The same seed gives the same rows on this provider.
+    SeededStable,
+    Unseeded,
+}
+
+/// How a provider's source reads a time it stores as text: which of the
+/// reference's two readings the core applies to the text it fetches from
+/// the provider (register DT-7). The provider declares it; the core picks
+/// its reader by it, never by a dialect.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TextTimes {
+    /// Each value on its own, as the reference's engine reads a SQL
+    /// source's text time column (`to_datetime(values, unit='ns')`).
+    ValueByValue,
+    /// The column uses the core's approved text formats (date-rules.md,
+    /// ) and normalizes mixed offsets to UTC, like frame conversion.
+    ClientRules,
+}
+
+/// Text equality and ordering compatible with the core's in-memory fallback.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FallbackTextOrder {
+    /// Exact UTF-8 bytes: no locale, case folding or Unicode normalization.
+    BinaryUtf8,
+}
+
+/// Where a provider's source puts a null among the values it orders, in
+/// either direction: the order the reference's neighbor reads get from the
+/// source, which writes no null order of its own (`_neighbor_order_by`).
+/// The provider declares it; the core writes it into the tie-break it asks
+/// for ([`TieTerm::nulls_last`]), never by a dialect. A source whose order
+/// depends on the direction is not declarable yet: the dialect that needs
+/// one adds it under a new contract version.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum NullOrder {
+    /// Nulls first, ascending or descending.
+    First,
+    /// Nulls last, ascending or descending.
+    Last,
+}
+
+/// Which of the source's indexes the reference's sampler counts as serving
+/// a read on a key or foreign key, for its warning of the indexes it would
+/// use and finds missing. The provider declares it; the core reads the
+/// source's indexes, and warns, only when it is declared.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexAdvice {
+    /// An index over exactly that one column, its coverage resolved; one
+    /// over several columns, or one the reader cannot resolve, serves none.
+    SingleColumn,
+    /// The reference's SQLite sampler's: each table's indexes read one
+    /// table at a time, each index's columns by its name; a read wants an
+    /// index on the key, and on each foreign key with its table's time
+    /// column, and any index whose first column is the read's first serves
+    /// it.
+    LeadingColumn,
+}
+
+/// What a provider answers, as it declares it: a built-in source declares
+/// what its SQL kit answers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderCapabilities {
+    pub optional: BTreeSet<OptionalRequest>,
+    /// The value filters the provider applies to a `sample_entities` or
+    /// `scan` ([`FilterKind`]). Left out, none: the core sends it no value
+    /// filter and checks every row itself.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub filters: BTreeSet<FilterKind>,
+    /// The most keys one request may carry; `None` is no limit.
+    pub max_keys_per_request: Option<u64>,
+    pub sampling: Determinism,
+    /// The largest seed the provider samples with (register entry RS-7),
+    /// which every provider declares: there is no "any seed" default
+    ///. The core refuses a sample with a larger seed,
+    /// `INVALID_REQUEST` naming the seed, before the sample is planned;
+    /// which seeds a provider takes is the provider's to declare, never a
+    /// name the core matches.
+    pub max_seed: u64,
+    /// How the source reads a time it stores as text (register DT-7);
+    /// `None` declares no reading, and the core refuses to read text times
+    /// from it (`UNSUPPORTED_REQUEST`, rule `text_times`).
+    pub text_times: Option<TextTimes>,
+    /// Where the source puts a null when it orders (`NullOrder`); `None`
+    /// declares none, and the core refuses to ask it for rows in an order
+    /// (`UNSUPPORTED_REQUEST`, rule `null_order`).
+    pub null_order: Option<NullOrder>,
+    /// Which indexes serve the sampler's reads (`IndexAdvice`); `None`
+    /// declares no meaningful index advice: the core neither reads the
+    /// source's indexes nor warns of missing ones.
+    pub index_advice: Option<IndexAdvice>,
+    /// The limits within which the core answers an optional request the
+    /// provider does not declare itself, in memory, from the rows a `scan`
+    /// reads; left out,
+    /// the provider declares none, and such a request is refused,
+    /// `UNSUPPORTED_REQUEST`, as before. A declared request that fails is
+    /// the provider's error either way, never answered by the fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<FallbackLimits>,
+    /// Declares compatible text equality/ordering for fallback comparisons.
+    /// Absent, scans and numeric fallbacks still work; a fallback comparing
+    /// text refuses by name instead of assuming the source's collation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_text_order: Option<FallbackTextOrder>,
+    /// The provider reads derived relations ([`Relation::columns`],
+    /// [`Relation::filter`]; contract v28). Left out, `false`: the core
+    /// refuses a derived relation for the provider by name (rule
+    /// [`DERIVED_RULE`]).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub derived_relations: bool,
+    /// The provider sizes an entity sample by the table's rows, as the
+    /// reference's warehouse samplers do (a sampled percentage of the
+    /// rows): the core counts each sampled table's rows first and names
+    /// the count on the sample ([`DataRequest::SampleEntities`]'s `rows`;
+    /// contract v28). Left out, `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub sample_rows: bool,
+    /// The provider's neighbor reads by a foreign key over a table with a
+    /// time column look back no further than the reference's warehouse
+    /// samplers do (`_by_fkey`): from each seed's anchor back by five
+    /// times the rows asked over the table's rate of rows per referenced
+    /// row and second, at most five years, the seconds rounded up. The
+    /// core counts the table's and the referenced table's rows, reads the
+    /// table's time bounds, and bounds each such read from below by that
+    /// look-back, exclusive (contract v28). Left out, `false`: no lower
+    /// bound.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub neighbor_lookback: bool,
+    /// The provider's catalog may fail to read a table's declared keys and
+    /// foreign keys where it reads its columns (Unity Catalog's
+    /// `table_constraints` on an older runtime or without the privilege):
+    /// the core then reads a table's columns and its keys apart, and reads
+    /// a failed key or foreign-key read as no declared keys, as the
+    /// reference's Databricks reader carries on without them
+    /// (`DatabricksTable`'s key reads; contract v28). Left out, `false`: a
+    /// failed key read fails the description.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub keys_optional: bool,
+    /// The catalog can answer `key_enforcement` for a table's namespace.
+    /// This optional fact can skip counting an enforced declared primary
+    /// key; it never certifies uniqueness of values exposed by a lookup.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub key_enforcement: bool,
+    /// The vendor whose opaque Arrow extension types (`arrow.opaque`, its
+    /// metadata's `vendor_name`) the provider hands over: the host layer
+    /// reads an opaque column by that vendor's layout only when the column
+    /// names this vendor (B-43). Left out, none, and no opaque
+    /// column is read as anything but its storage (contract v28, carried
+    /// row P2-MID2-2: before it, a flag of the data layer's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opaque_vendor: Option<String>,
+    /// The provider compares a window's bounds with the stored text of the
+    /// window's column, as a source with no time type does (SQLite's
+    /// reference spells each bound as one stored value is spelled,
+    /// `_time_spelling`): the core then reads one non-null value of a
+    /// table's time column (a `scan` of one row) before that table's first
+    /// windowed read in a run, and names it on each bound's seed column
+    /// ([`SEED_STORED_TIME`]). Left out, `false` (P2-MID2-2).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub compares_stored_times: bool,
+    /// The provider orders a seeded sample by the key's data type, as
+    /// SQLite's does (it hashes an integer key and the `rowid` otherwise):
+    /// the core then names the schema's type of a key of one column on each
+    /// `sample_entities` (`key_dtype`). Left out, `false` (P2-MID2-2).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub samples_by_key_dtype: bool,
+    /// The reference reads the provider's rows into a frame of NumPy-backed
+    /// floats, where a NaN is missing and `-0.0` is `0.0` (Postgres's rows,
+    /// read as Python objects); otherwise as Arrow-backed pandas does, where
+    /// a NaN is a value and the two zeros are two values. Left out,
+    /// `false` (P2-MID2-2).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reads_nan_as_missing: bool,
+    /// The database the source is, by the name the wording table names one
+    /// by (`DATABASE_NAMES`), where its messages name it (contract v76):
+    /// a built-in source's dialect; none for a caller's source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub database: Option<String>,
+    /// Whether the source's declared column types are only affinities, so
+    /// a column's type is read from its values (SQLite's) (contract v76).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub column_affinities: bool,
+    /// Whether the source's tables are read as they stand at every run,
+    /// rather than as a schema the run was given holds them (contract v76).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reads_tables_as_they_stand: bool,
+    /// The namespace parts a relation of one part is read under, outermost
+    /// first, as the source settled them: what messages and pins name a
+    /// table by (contract v76); none where the source names its tables
+    /// alone.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub namespace: Vec<String>,
+    /// Whether a name the catalog does not find as given is tried again
+    /// upper-cased, as Snowflake folds an unquoted name (contract v76).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub tries_upper_case_names: bool,
+    /// Whether the source must be asked its namespace (`describe` of the
+    /// `namespace` part) before a table of one part is read, since it leaves
+    /// a part to its connection (contract v76); its answer is the namespace
+    /// in full, which the core then reads every such table under.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub namespace_first: bool,
+    /// The semantic model the source is read through, where it is one
+    /// (contract v76): a built-in source's Databricks metric view or
+    /// Snowflake semantic view, whose definition and text the core's own
+    /// data layer reads by the source's database.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<ViewChoice>,
+}
+
+/// The in-memory fallback's limits, as a provider declares them
+/// ([`ProviderCapabilities::fallback`]): past either, the fallback fails
+/// by name rather than read on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FallbackLimits {
+    /// The most rows the fallback reads to answer one request.
+    pub max_rows: u64,
+    /// The most logical Arrow bytes of returned rows and the answer.
+    /// Shared parent capacity and unreferenced dictionary values are excluded.
+    pub max_bytes: u64,
+}
+
+/// The provider a run reads through: what it declared it answers
+/// ([`ProviderCapabilities`]). The core sends it typed requests and reads
+/// its answers by what it declared; a built-in source declares what its
+/// SQL kit answers (`sdm-sql`'s `SqlKit`), and answers through the kit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(from = "ProviderWire", into = "ProviderWire")]
+#[schemars(with = "ProviderWire")]
+pub struct ProviderChoice {
+    pub capabilities: ProviderCapabilities,
+}
+
+/// [`ProviderChoice`] as JSON writes it, tagged `"provider": "host"`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "provider", rename_all = "snake_case", deny_unknown_fields)]
+enum ProviderWire {
+    Host { capabilities: ProviderCapabilities },
+}
+
+impl From<ProviderWire> for ProviderChoice {
+    fn from(wire: ProviderWire) -> Self {
+        let ProviderWire::Host { capabilities } = wire;
+        ProviderChoice { capabilities }
+    }
+}
+
+impl From<ProviderChoice> for ProviderWire {
+    fn from(choice: ProviderChoice) -> Self {
+        ProviderWire::Host {
+            capabilities: choice.capabilities,
+        }
+    }
+}
+
+impl ProviderCapabilities {
+    /// `relation` as the source reads it: one of one part under the
+    /// namespace the source settled ([`ProviderCapabilities::namespace`]).
+    pub fn read_as(&self, relation: &Relation) -> Relation {
+        if relation.source.len() != 1 {
+            return relation.clone();
+        }
+        Relation::of(
+            self.namespace
+                .iter()
+                .chain(&relation.source)
+                .cloned()
+                .collect(),
+        )
+    }
+
+    /// The name forms a catalog read of `relation` tries, in order: as
+    /// given, then upper-cased where the source folds names so
+    /// ([`ProviderCapabilities::tries_upper_case_names`]).
+    pub fn spellings(&self, relation: &Relation) -> Vec<Relation> {
+        let upper: Vec<String> = relation.source.iter().map(|p| p.to_uppercase()).collect();
+        if !self.tries_upper_case_names || upper == relation.source {
+            return vec![relation.clone()];
+        }
+        vec![relation.clone(), Relation::of(upper)]
+    }
+}
+
+impl ProviderChoice {
+    /// The provider declaring `capabilities`.
+    pub fn new(capabilities: ProviderCapabilities) -> Self {
+        ProviderChoice { capabilities }
+    }
+
+    /// The semantic model the provider's source is read through, if any.
+    pub fn view(&self) -> Option<&ViewChoice> {
+        self.capabilities.view.as_ref()
+    }
+
+    /// The provider with its namespace the parts the source answered for
+    /// it, in full: a source asked its namespace first is asked it once
+    /// ([`ProviderCapabilities::namespace_first`]).
+    pub fn settled(&self, parts: Vec<String>) -> Self {
+        ProviderChoice {
+            capabilities: ProviderCapabilities {
+                namespace: parts,
+                namespace_first: false,
+                ..self.capabilities.clone()
+            },
+        }
+    }
+}
+
+/// The semantic model a source is read through
+/// ([`ProviderCapabilities::view`]): its name as the caller gave it, and
+/// whether the caller trusts whoever authored it to run its expressions
+/// (`semantic_model(name, trust_expressions=...)`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ViewChoice {
+    pub name: String,
+    pub trust_expressions: bool,
+}
+
+/// How the provider answers one request: the typed request itself, which
+/// the provider answers with the Arrow schema `expect` names, in one
+/// attachment holding every row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(from = "PlanWire", into = "PlanWire")]
+#[schemars(with = "PlanWire")]
+pub struct FetchPlan {
+    pub expect: ExpectedSchema,
+    /// The key sets the request asks with, by attachment, in order:
+    /// the seeds of a `neighbors` or a `lookup`, then each `key_in`
+    /// filter's keys. The host takes them from the run without reading the
+    /// request for them.
+    pub key_sets: Vec<AttachmentId>,
+}
+
+/// [`FetchPlan`] as JSON writes it, tagged `"plan": "host"`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "plan", rename_all = "snake_case", deny_unknown_fields)]
+enum PlanWire {
+    Host {
+        expect: ExpectedSchema,
+        /// The key sets the request asks with, by attachment, in order:
+        /// the seeds of a `neighbors` or a `lookup`, then each `key_in`
+        /// filter's keys. The host takes them from the run without reading
+        /// the request for them.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        key_sets: Vec<AttachmentId>,
+    },
+}
+
+impl From<PlanWire> for FetchPlan {
+    fn from(wire: PlanWire) -> Self {
+        let PlanWire::Host { expect, key_sets } = wire;
+        FetchPlan { expect, key_sets }
+    }
+}
+
+impl From<FetchPlan> for PlanWire {
+    fn from(plan: FetchPlan) -> Self {
+        PlanWire::Host {
+            expect: plan.expect,
+            key_sets: plan.key_sets,
+        }
+    }
+}
+
+impl FetchPlan {
+    /// The plan for `request`, its answer of `expect`'s schema and its key
+    /// sets the request's.
+    pub fn of(expect: ExpectedSchema, request: &DataRequest) -> Self {
+        FetchPlan {
+            expect,
+            key_sets: request.key_sets(),
+        }
+    }
+
+    /// Each key set the plan names that `to` names, named by what `to`
+    /// maps it to: how the core names a bound fetch's batches by the run's
+    /// ids.
+    pub fn rename_attachments(&mut self, to: &BTreeMap<AttachmentId, AttachmentId>) {
+        for named in &mut self.key_sets {
+            if let Some(renamed) = to.get(named) {
+                *named = *renamed;
+            }
+        }
+    }
+}
+
+/// The data-layer port: what the core reads of a source by the database it
+/// declares ([`ProviderCapabilities::database`]): the semantic models a
+/// source is read through. Every source answers every request in the
+/// contract's own shapes ([`DataRequest::expected`]), a built-in database's
+/// too; everything else the core reads of a provider is what the provider
+/// declared. `sdm_host::default_root` plugs in the built-in databases'.
+pub trait DataLayer: Send + Sync {
+    /// The kind of semantic model the provider reads, known before its
+    /// definition is fetched. None by default: no semantic model is read.
+    fn view_kind(&self, capabilities: &ProviderCapabilities) -> Option<crate::view::ViewKind> {
+        let _ = capabilities;
+        None
+    }
+
+    /// The answer to one question about a semantic model's text (contract
+    /// v28): a name, a condition, an expression checked against its
+    /// table's columns, a derived relation rendered, each in the
+    /// provider's database's dialect. Refused by name by default: no
+    /// semantic model is read.
+    fn view_text(
+        &self,
+        capabilities: &ProviderCapabilities,
+        ask: ViewTextAsk,
+    ) -> Result<ViewTextAnswer, CoreError> {
+        let _ = (capabilities, ask);
+        Err(views_unread())
+    }
+
+    /// The provider's answer to a `describe` of the
+    /// [`DescribePart::ViewDefinition`] part, read in its database's own
+    /// shape. Refused by name by default: no semantic model is read.
+    fn read_view(
+        &self,
+        capabilities: &ProviderCapabilities,
+        request: &DataRequest,
+        batches: &[RecordBatch],
+    ) -> Result<CatalogAnswer, CoreError> {
+        let _ = (capabilities, request, batches);
+        Err(views_unread())
+    }
+}
+
+/// The refusal of a semantic model by a provider that reads none
+/// (`UNSUPPORTED_REQUEST`, rule `view`): the default of
+/// [`DataLayer::view_text`], and each dialect's answer to a
+/// [`DescribePart::ViewDefinition`] it does not read.
+pub fn views_unread() -> CoreError {
+    CoreError::new(
+        Sentence::ViewsUnread,
+        "the data source reads no semantic model",
+    )
+}
+
+/// What a provider's failure says ([`ProviderError::facts`]): independent
+/// facts, each read by the step that asked what it fits.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct FailureFacts {
+    /// The relation asked for does not exist under the name asked (Snowflake
+    /// errno 2003): a spelling retry tries the next form.
+    pub not_found: bool,
+    /// The source refused an expression it was asked to read, for what it
+    /// says or reads (Databricks SQLSTATE class `22` or `42`): an expression
+    /// sample leaves that column out.
+    pub refuses_expression: bool,
+    /// Why a table that failed to be read cannot be used, if the failure
+    /// says (Databricks `42P01`, `42501` or a permission error class): a
+    /// join over it is dropped with that reason.
+    pub unusable: Option<Unusable>,
+    /// The source denied the caller access to what was asked (SQLSTATE
+    /// `42501`, or the engine's permission error) (contract v76).
+    pub denied: bool,
+    /// What went wrong, where the engine's failure says (contract v76):
+    /// what an expression's or a join key count's failure is reported as.
+    pub reason: Option<FailureReason>,
+}
+
+impl FailureFacts {
+    /// What a failure whose source says nothing of its meaning tells by the
+    /// SQL standard's own codes alone: SQLSTATE `42501` denies access.
+    pub fn standard(error: &ProviderError) -> Self {
+        FailureFacts {
+            denied: error.sqlstate.as_deref() == Some("42501"),
+            ..FailureFacts::default()
+        }
+    }
+}
+
+/// What went wrong in a source's failure ([`FailureFacts::reason`]), as the
+/// old client names the classes of a warehouse's errors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FailureReason {
+    ValueNotConverted,
+    DivisionByZero,
+    OutOfRange,
+    ColumnUnresolved,
+    TableUnresolved,
+    PermissionDenied,
+    SyntaxRejected,
+    TypesIncompatible,
+}
+
+/// Why a table cannot be used ([`FailureFacts::unusable`]), as the old
+/// client's Databricks reader says it (`unusable_table_reason`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Unusable {
+    /// It does not exist, or the caller may not see it: Unity Catalog
+    /// answers both alike.
+    Missing,
+    /// The caller may not read it.
+    Forbidden,
+}
+
+/// A key set's Arrow data, as the core made it or as a dialect binds it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyData {
+    pub schema: arrow_schema::SchemaRef,
+    pub batches: Vec<RecordBatch>,
+}
+
+/// A request bound for its provider (the design's `Bound`, a name the
+/// window bound already has): the fetches sent in one hop, whose answers,
+/// in order, are the request's; any one failing fails the request. Its
+/// plans are the core's [`FetchPlan`]s, or a SQL kit's own.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoundRequest<P = FetchPlan> {
+    pub fetches: Vec<BoundFetch<P>>,
+}
+
+/// One fetch of a [`BoundRequest`]: its plan, and the batches it binds, by
+/// the local reference each is named by.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BoundFetch<P = FetchPlan> {
+    pub plan: P,
+    pub batches: BTreeMap<AttachmentId, KeyData>,
+    /// The request this fetch asks: the request bound, or one part of it,
+    /// a host provider's fetch of some of a request's seeds, its seeds one
+    /// of `batches` (`max_keys_per_request`).
+    pub request: DataRequest,
+}
+
+impl<P> BoundRequest<P> {
+    /// `request` asked whole, as `plan` reads it, in one fetch binding no
+    /// batch of its own.
+    pub fn whole(plan: P, request: &DataRequest) -> Self {
+        BoundRequest {
+            fetches: vec![BoundFetch {
+                plan,
+                batches: BTreeMap::new(),
+                request: request.clone(),
+            }],
+        }
+    }
+}
+
+/// The columns of the answers whose shape the contract fixes (decision
+/// E36): every provider answers these requests with exactly these columns,
+/// in this order, of these types, and check (b) holds it to them (decision
+/// H16). The counts and bounds are aggregates every rendering names by
+/// alias, the reference's own aliases, as the result helper columns of
+/// `neighbors` and `lookup` are, so each answer is the result of the
+/// reference statement it stands for.
+///
+/// A `describe` answer is a catalog's, in the dialect-neutral shape of
+/// [`catalog_columns`] (decision E54), but for a semantic model's
+/// definition, which its database's data layer reads
+/// ([`DataLayer::read_view`]).
+pub mod results {
+    /// `key_counts`: one row per key, its position in the request, the
+    /// table's rows, the key's distinct values among rows holding all of
+    /// it, and the rows missing part of it.
+    pub const KEY_POSITION: &str = "k";
+    pub const KEY_ROWS: &str = "n";
+    pub const KEY_DISTINCT: &str = "d";
+    pub const KEY_MISSING: &str = "z";
+    /// `time_bounds`: one row per column, its position in the request (an
+    /// integer of either width) and its smallest and largest value, each
+    /// of the column's own time type (a timestamp of any unit or zone, a
+    /// date, or text as a source with no time type stores it), NULL when
+    /// no row holds a value.
+    pub const BOUNDS_POSITION: &str = "table_index";
+    pub const BOUNDS_MIN: &str = "min_date";
+    pub const BOUNDS_MAX: &str = "max_date";
+}
+
+/// The columns a provider answers a `describe` with:
+/// the catalog's answer in no dialect's shape, which
+/// [`crate::catalog_read::standard`] reads into a [`CatalogAnswer`] as it
+/// is.
+pub mod catalog_columns {
+    /// `tables`: one row per table, its name. `indexes`: each index's
+    /// table.
+    pub const TABLE: &str = "table";
+    /// `columns`, for one table: one row per column, in the table's order:
+    /// its name, its declared type as the source spells it, whether it is
+    /// declared `NOT NULL` and whether it is part of the primary key.
+    /// `index_columns`, for one index: one row per column, in the index's
+    /// order, its name, null for an expression.
+    pub const NAME: &str = "name";
+    pub const TYPE: &str = "type";
+    pub const NOT_NULL: &str = "not_null";
+    pub const PRIMARY_KEY: &str = "primary_key";
+    /// `columns`, optional (contract v76): whether a primary key column may
+    /// still hold a null (SQLite's), whether the source keeps the column
+    /// unique beside any key it declares (a SQLite rowid alias), and the
+    /// data type its declaration fixes, by [`crate::ops::Dtype`]'s name,
+    /// where the source types a column by its declaration (SQLite's).
+    pub const KEY_NULLABLE: &str = "key_nullable";
+    pub const UNIQUE: &str = "unique";
+    pub const DTYPE: &str = "dtype";
+    /// `keys` and `indexes`, optional (contract v76): the index a key or an
+    /// index is, where its columns are read by that name (`index_columns`),
+    /// as SQLite's catalog lists one. `keys`, optional: whether the source
+    /// holds its rows to the key (a Databricks key is informational).
+    /// `indexes`, optional: whether its columns are resolved (an expression
+    /// list the reader cannot split is not).
+    pub const INDEX: &str = "index";
+    pub const ENFORCED: &str = "enforced";
+    pub const RESOLVED: &str = "resolved";
+    /// `keys`, for one table: one row per key it declares, its kind
+    /// ([`KIND_PRIMARY`], [`KIND_UNIQUE`], [`KIND_FOREIGN`] or another the
+    /// reader leaves alone) and its columns. `foreign_keys` and `indexes`: the columns of
+    /// each.
+    pub const KIND: &str = "kind";
+    pub const COLUMNS: &str = "columns";
+    pub const KIND_PRIMARY: &str = "primary";
+    pub const KIND_UNIQUE: &str = "unique";
+    pub const KIND_FOREIGN: &str = "foreign";
+    /// A unique index over only the rows its condition covers (contract
+    /// v76): [`crate::catalog::KeyKind::PartialUnique`].
+    pub const KIND_PARTIAL_UNIQUE: &str = "partial_unique";
+    /// `foreign_keys`, for one table: one row per column pair of each
+    /// foreign key it declares, the key's number naming it, the table it
+    /// refers to, and the columns on both sides.
+    pub const KEY: &str = "key";
+    pub const REFERENCED_TABLE: &str = "referenced_table";
+    pub const REFERENCED_COLUMNS: &str = "referenced_columns";
+    /// The name of a list's item field in these answers.
+    pub const LIST_ITEM: &str = "item";
+}
+
+impl DataRequest {
+    /// The schema a provider's answer to this request must have:
+    /// fixed for the requests whose answer the contract shapes ([`results`],
+    /// and [`catalog_columns`] for a `describe`), a discovery marker for
+    /// those whose columns are the source's own (a preview, a scan, a
+    /// sample, neighbors, a lookup, the column ranges and the time bounds,
+    /// whose smallest and largest values are of each column's own type,
+    /// which the core checks the shape of itself, and a repeated key, of
+    /// the key's types) and for a count no provider renders yet. Every
+    /// source answers in these shapes; none answers in an engine's own.
+    pub fn expected(&self) -> ExpectedSchema {
+        use ColumnType::{Bool, Int32, Int64, Utf8};
+        use catalog_columns as c;
+        let names = || ColumnType::List {
+            item: Box::new(field(c::LIST_ITEM, Utf8, true)),
+        };
+        let fields = match self {
+            DataRequest::Describe { part, .. } => match part {
+                DescribePart::Tables | DescribePart::KeyEnforcement => {
+                    vec![field(c::TABLE, Utf8, false)]
+                }
+                DescribePart::Columns => {
+                    return ExpectedSchema::Schema {
+                        fields: vec![
+                            field(c::NAME, Utf8, false),
+                            field(c::TYPE, Utf8, false),
+                            field(c::NOT_NULL, Bool, false),
+                            field(c::PRIMARY_KEY, Bool, false),
+                        ],
+                        optional: vec![
+                            field(c::KEY_NULLABLE, Bool, false),
+                            field(c::UNIQUE, Bool, false),
+                            field(c::DTYPE, Utf8, true),
+                        ],
+                    };
+                }
+                DescribePart::Keys => {
+                    return ExpectedSchema::Schema {
+                        fields: vec![
+                            field(c::KIND, Utf8, false),
+                            field(c::COLUMNS, names(), false),
+                        ],
+                        optional: vec![
+                            field(c::INDEX, Utf8, true),
+                            field(c::ENFORCED, Bool, false),
+                        ],
+                    };
+                }
+                DescribePart::ForeignKeys => vec![
+                    field(c::KEY, Int64, false),
+                    field(c::REFERENCED_TABLE, Utf8, false),
+                    field(c::COLUMNS, names(), false),
+                    field(c::REFERENCED_COLUMNS, names(), false),
+                ],
+                DescribePart::Indexes => {
+                    return ExpectedSchema::Schema {
+                        fields: vec![
+                            field(c::TABLE, Utf8, false),
+                            field(c::COLUMNS, names(), false),
+                        ],
+                        optional: vec![
+                            field(c::INDEX, Utf8, true),
+                            field(c::RESOLVED, Bool, false),
+                        ],
+                    };
+                }
+                DescribePart::IndexColumns => vec![field(c::NAME, Utf8, true)],
+                DescribePart::Namespace => vec![field(c::NAME, Utf8, false)],
+                // The database's own shape, which its data layer reads
+                // (`DataLayer::read_view`).
+                DescribePart::ViewDefinition => return ExpectedSchema::Discover {},
+            },
+            DataRequest::KeyCounts { .. } => vec![
+                field(results::KEY_POSITION, Int32, false),
+                field(results::KEY_ROWS, Int64, false),
+                field(results::KEY_DISTINCT, Int64, false),
+                field(results::KEY_MISSING, Int64, false),
+            ],
+            DataRequest::Scan { .. }
+            | DataRequest::Preview { .. }
+            | DataRequest::CountRows { .. }
+            | DataRequest::TimeBounds { .. }
+            | DataRequest::ColumnRanges { .. }
+            | DataRequest::RepeatedKey { .. }
+            | DataRequest::SampleEntities { .. }
+            | DataRequest::Neighbors { .. }
+            | DataRequest::Lookup { .. } => return ExpectedSchema::Discover {},
+        };
+        ExpectedSchema::Schema {
+            fields,
+            optional: Vec::new(),
+        }
+    }
+}
+
+/// A `time_bounds` answer with each bound a zone-less microsecond
+/// timestamp: one of the shapes the core reads bounds in (it reads a
+/// bound of any time type, a date or text alike), and the one the
+/// in-memory fallback answers in.
+pub fn microsecond_time_bounds() -> Vec<Field> {
+    let timestamp = || ColumnType::Timestamp {
+        unit: Unit::Us,
+        zone: None,
+    };
+    vec![
+        field(results::BOUNDS_POSITION, ColumnType::Int32, false),
+        field(results::BOUNDS_MIN, timestamp(), true),
+        field(results::BOUNDS_MAX, timestamp(), true),
+    ]
+}
+
+/// A field of `name`, of `column_type`, with no metadata.
+pub fn field(name: &str, column_type: ColumnType, nullable: bool) -> Field {
+    Field {
+        name: name.to_owned(),
+        column_type,
+        nullable,
+        metadata: Default::default(),
+    }
+}
+
+/// The Arrow schema a request expects back, or that the answer discovers
+/// it (a preview, a scan).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "expect", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ExpectedSchema {
+    Discover {},
+    /// `fields`, in order, then any of `optional`, in their order: the
+    /// further facts a source may report beside those every source reports
+    /// (contract v76), each left out where it reports none.
+    Schema {
+        fields: Vec<Field>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        optional: Vec<Field>,
+    },
+}
+
+/// A provider's failure: its kind, whether trying again may succeed, and
+/// the driver's own SQLSTATE, vendor code and error class, and its message
+/// as a diagnostic for the data layer alone. What the failure means is the
+/// source's to say ([`ProviderError::facts`]), from these facts; the
+/// message is never echoed into an error the core gives, since drivers
+/// quote values there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderError {
+    pub kind: ErrorKind,
+    pub retryable: bool,
+    pub sqlstate: Option<String>,
+    pub vendor_code: Option<String>,
+    /// The driver's error class, a name of its closed list such as
+    /// Databricks's `INSUFFICIENT_PERMISSIONS` (contract v28), read
+    /// as the old client reads it (`error_class`: the driver's own answer,
+    /// else the bracketed name its message opens with). Left out, none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_class: Option<String>,
+    /// The driver's message, passed through by the host unread (contract
+    /// v28): an internal diagnostic only a SQL kit's failure reading reads,
+    /// where the old client reads a failure by its text (Snowflake's
+    /// "does not exist", `SNOW/table.py:34-45`), and never echoed into a
+    /// public error. Left out, none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub driver_message: Option<String>,
+    /// What the failure means, where the source says so itself (contract
+    /// v76): a built-in source's SQL kit reads its engine's failure into
+    /// these, so the core reads every source's failure one way. Left out,
+    /// the core reads none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facts: Option<FailureFacts>,
+}
