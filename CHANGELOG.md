@@ -7,6 +7,10 @@ these packages. The three Python distributions share one version.
 
 ## Unreleased
 
+### Fixed
+
+- Resolve quoted Snowflake semantic-view base-table identifiers.
+
 ## 2.0.0 - 2026-11-25
 
 2.0 moves the client's core logic into one shared Rust engine and adds Java support.

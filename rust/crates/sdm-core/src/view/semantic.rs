@@ -42,6 +42,18 @@ fn text(spec: &ViewSpec, node: NodeId) -> Result<String, CoreError> {
     view_words::value_text(&spec.document, node).map_err(too_large)
 }
 
+/// Snowflake's YAML preserves SQL identifier quoting in base-table parts.
+fn base_table_part(spec: &ViewSpec, node: NodeId) -> Result<String, CoreError> {
+    let name = text(spec, node)?;
+    if let Some(inner) = name
+        .strip_prefix('"')
+        .and_then(|rest| rest.strip_suffix('"'))
+    {
+        return Ok(inner.replace("\"\"", "\""));
+    }
+    Ok(name)
+}
+
 /// The base table's catalog, read once, its name tried in each spelling the
 /// data layer gives until one resolves (Snowflake's as written,
 /// then upper-cased), that spelling kept for the run.
@@ -232,9 +244,9 @@ pub(super) async fn convert(
             return Err(internal("a semantic view's table has no base table"));
         };
         let written = Relation::of(vec![
-            text(&spec, database)?,
-            text(&spec, schema)?,
-            text(&spec, table)?,
+            base_table_part(&spec, database)?,
+            base_table_part(&spec, schema)?,
+            base_table_part(&spec, table)?,
         ]);
         let primary_key = match declared.primary_key {
             PrimaryKey::None => None,

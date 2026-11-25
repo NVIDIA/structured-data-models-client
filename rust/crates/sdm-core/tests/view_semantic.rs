@@ -359,6 +359,14 @@ fn each_table_is_finished_before_the_next_is_read() {
 }
 
 #[test]
+fn a_semantic_view_unquotes_its_base_table_name() {
+    let definition = VIEW.replace("SHOP, table: USERS}", r#"SHOP, table: '"USERS"'}"#);
+    let (description, read) = describe_view(&definition, source_spec());
+    assert!(read.iter().any(|(table, _)| table == "USERS"), "{read:?}");
+    assert_eq!(description.links.len(), 1);
+}
+
+#[test]
 fn a_semantic_table_with_no_columns_or_key_does_not_read_or_break_other_tables() {
     let definition = VIEW.replace("tables:\n", "tables:\n  - name: UNUSED\n    base_table: {database: DB, schema: SHOP, table: NEVER_READ}\n");
     let (description, read) = describe_view(
