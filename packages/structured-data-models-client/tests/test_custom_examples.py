@@ -29,14 +29,20 @@ def frame(data):
     return result
 
 
-def schema_for(case):
+def tables_for(case):
     timeless = case.get('schema_variant') == 'timeless'
-    tables = {
+    return {
         name: frame(data)
         for name, data in FIXTURE[
             'timeless_tables' if timeless else 'tables'
         ].items()
     }
+
+
+def schema_for(case, tables=None):
+    timeless = case.get('schema_variant') == 'timeless'
+    if tables is None:
+        tables = tables_for(case)
     schema = Schema.from_data(tables)
     for name in tables:
         schema[name].primary_key = 'id'
@@ -84,6 +90,28 @@ def test_shared_examples_labels_order_ownership_and_persistence(case):
     assert json.dumps(request.payloads, sort_keys=True) == before
     restored = pickle.loads(pickle.dumps(request))
     assert restored.payloads == request.payloads
+
+
+def test_supplied_examples_leave_a_text_column_out():
+    case = FIXTURE['cases'][0]
+    tables = tables_for(case)
+    tables['accounts']['note'] = [
+        f'free text {index}' for index in range(len(tables['accounts']))
+    ]
+    schema = schema_for(case, tables)
+    schema['accounts']['note'].stype = 'text'
+
+    with pytest.warns(UserWarning, match='accounts.note is typed text'):
+        request = schema.materialize_examples(
+            RelationalTask(**case['task']),
+            frame(case['context']),
+            frame(case['predict']),
+            num_neighbors=[10, 10],
+        )
+
+    sent = request.payloads[0]['schema']['related_tables']['accounts']
+    assert 'note' not in sent['columns']
+    assert 'feature' in sent['columns']
 
 
 @pytest.mark.parametrize('bad', [float('nan'), float('inf')])

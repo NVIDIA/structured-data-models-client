@@ -99,6 +99,17 @@ def test_a_column_the_caller_excluded_does_not_reach_the_model():
     assert 'amt' in columns
 
 
+def test_a_text_column_does_not_reach_the_model():
+    schema = graph()
+    schema['users']['seg'].stype = 'text'
+    with pytest.warns(UserWarning, match='users.seg is typed text'):
+        request = gather(schema)
+
+    assert 'seg' not in wire_columns(request, 'users')
+    assert 'retained' in wire_columns(request, 'users')
+    assert 'amt' in wire_columns(request)
+
+
 def test_a_column_nobody_excluded_still_reaches_the_model():
 
     assert 'secret' in wire_columns(gather(graph()))
