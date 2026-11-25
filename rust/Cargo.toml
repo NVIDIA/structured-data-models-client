@@ -49,7 +49,7 @@ jni = "0.22.4"
 # The facade tracing's `log` feature writes to; sdm-jni bridges it to SLF4J.
 log = "0.4"
 proptest = { version = "1", default-features = false, features = ["std"] }
-pyo3 = { version = "0.28", features = ["abi3-py310"] }
+pyo3 = { version = "0.29", features = ["abi3-py310"] }
 # Bridges the `log` records tracing emits to Python's logging, in sdm-py
 # alone.
 pyo3-log = "0.13"
