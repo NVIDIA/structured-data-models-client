@@ -120,9 +120,8 @@ This release has breaking changes, so read [Upgrading from 1.0.0](#upgrading-fro
 ### Fixed
 
 - **Filtered queries got too few context examples.**
-  The client sampled 10 times as many entities as it needed (10,000 for 1,000 examples) and applied the `WHERE` afterwards.
-  With a filter that keeps 1 entity in 60, only about 170 of the 10,000 qualified, so a request for 1,000 examples got about 170.
-  The query's conditions are now applied in the database while sampling, so it gets all 1,000.
+  The client sampled 10,000 entities for 1,000 examples and applied the `WHERE` afterwards, so a filter that keeps 1 entity in 60 left only about 170.
+  The conditions now run in the database while sampling, so the model gets all 1,000 examples, which should improve predictions, and the database sends only the rows that qualify.
   This includes windowed conditions such as `COUNT(orders.*, -30, 0, days) > 1`.
 - **Text columns made Kumo Relational refuse the request.**
   A `text` column is now left out of the request with a warning, since the model does not read text.
