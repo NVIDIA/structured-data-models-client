@@ -24,6 +24,7 @@ be loaded without the skill it belongs to:
 | [`tabular/references/pql.md`](tabular/references/pql.md) | The same language on one table, and what it refuses |
 | [`relational/references/warehouses.md`](relational/references/warehouses.md) | Tables that stay in a warehouse, and metric views |
 | [`relational/references/beyond-one-answer.md`](relational/references/beyond-one-answer.md) | Rankings, forecasts and explanations |
+| [`relational/references/data-problems.md`](relational/references/data-problems.md) | What the client refuses, warns about or lets through when the data is wrong |
 
 ## What these models are
 
