@@ -11394,12 +11394,12 @@
   ],
   "contract_changes": [
     {
-      "base_commit": "4edabbf9c877507e3935e488aeb7173bc025cbfb",
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
       "record": "api_inventory/java",
       "reason": "Main at this audited merge base has no Java API; Phase9 retains the reviewed Rust migration Java surface and adds column-analysis equivalents with explicit tests. This is an introduction relative to main, not a claim of binary compatibility with the pre-2.0 rust-core accessor."
     },
     {
-      "base_commit": "4edabbf9c877507e3935e488aeb7173bc025cbfb",
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
       "record": "api_inventory/python/sdm_client.PredictionResult.explanations",
       "reason": "The class property is represented by the public instance Explanations container initialized by PredictionResult. Gradients and columns remain available; this is snapshot representation, not removal of the instance API.",
       "retained_test": "packages/structured-data-models-client/tests/test_column_analysis_core.py::test_public_merge_retains_equal_analysis_and_refuses_different_analysis"
@@ -11714,6 +11714,171 @@
       "base_commit": "0048967c50a55d32a33d3590d12a2ff05f7eafda",
       "record": "live_api_tests",
       "reason": "Adds the brief live Snowflake checks, Python test_snowflake_live.py and Java SnowflakeTest#liveSchemaFromSource..., which describe a fresh schema through the built-in SnowflakeSource and check keys through it; the Live warehouse workflow runs both on pushes to main, v2-candidate and epic/* with the parity-live secrets."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DatabricksSource",
+      "reason": "Moved in 2.0 to sdm_client.DatabricksSource; sdm_connectors no longer holds any source."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DatabricksSource.backend",
+      "reason": "Removed in 2.0: a source's traits, including its engine, are declared by sdm_client.DatabricksSource.capabilities()."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DatabricksSource.connection",
+      "reason": "Moved in 2.0 with the class to sdm_client.DatabricksSource.connection."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DatabricksSource.namespace",
+      "reason": "Moved in 2.0 with the class to sdm_client.DatabricksSource.namespace."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DatabricksSource.semantic_model",
+      "reason": "Moved in 2.0 with the class to sdm_client.DatabricksSource.semantic_model."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DuckDBSource",
+      "reason": "Moved in 2.0 to sdm_client.DuckDBSource; sdm_connectors no longer holds any source."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DuckDBSource.backend",
+      "reason": "Removed in 2.0: a source's traits, including its engine, are declared by sdm_client.DuckDBSource.capabilities()."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DuckDBSource.connection",
+      "reason": "Moved in 2.0 with the class to sdm_client.DuckDBSource.connection."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.DuckDBSource.namespace",
+      "reason": "Moved in 2.0 with the class to sdm_client.DuckDBSource.namespace."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.PostgresSource",
+      "reason": "Moved in 2.0 to sdm_client.PostgresSource; sdm_connectors no longer holds any source."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.PostgresSource.backend",
+      "reason": "Removed in 2.0: a source's traits, including its engine, are declared by sdm_client.PostgresSource.capabilities()."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.PostgresSource.connection",
+      "reason": "Moved in 2.0 with the class to sdm_client.PostgresSource.connection."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.PostgresSource.namespace",
+      "reason": "Moved in 2.0 with the class to sdm_client.PostgresSource.namespace."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SQLiteSource",
+      "reason": "Moved in 2.0 to sdm_client.SQLiteSource; sdm_connectors no longer holds any source."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SQLiteSource.backend",
+      "reason": "Removed in 2.0: a source's traits, including its engine, are declared by sdm_client.SQLiteSource.capabilities()."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SQLiteSource.connection",
+      "reason": "Moved in 2.0 with the class to sdm_client.SQLiteSource.connection."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SQLiteSource.namespace",
+      "reason": "Moved in 2.0 with the class to sdm_client.SQLiteSource.namespace."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SemanticModel",
+      "reason": "Removed in 2.0: a semantic model is the source class itself, returned by DatabricksSource.semantic_model() or SnowflakeSource.semantic_model() in sdm_client."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SemanticModel.backend",
+      "reason": "Removed in 2.0: a semantic model is the source class itself, returned by DatabricksSource.semantic_model() or SnowflakeSource.semantic_model() in sdm_client."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SemanticModel.connection",
+      "reason": "Removed in 2.0: a semantic model is the source class itself, returned by DatabricksSource.semantic_model() or SnowflakeSource.semantic_model() in sdm_client."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SemanticModel.name",
+      "reason": "Removed in 2.0: a semantic model is the source class itself, returned by DatabricksSource.semantic_model() or SnowflakeSource.semantic_model() in sdm_client."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SemanticModel.namespace",
+      "reason": "Removed in 2.0: a semantic model is the source class itself, returned by DatabricksSource.semantic_model() or SnowflakeSource.semantic_model() in sdm_client."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SemanticModel.source",
+      "reason": "Removed in 2.0: a semantic model is the source class itself, returned by DatabricksSource.semantic_model() or SnowflakeSource.semantic_model() in sdm_client."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SemanticModel.trust_expressions",
+      "reason": "Removed in 2.0: a semantic model is the source class itself, returned by DatabricksSource.semantic_model() or SnowflakeSource.semantic_model() in sdm_client."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SnowflakeSource",
+      "reason": "Moved in 2.0 to sdm_client.SnowflakeSource; sdm_connectors no longer holds any source."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SnowflakeSource.backend",
+      "reason": "Removed in 2.0: a source's traits, including its engine, are declared by sdm_client.SnowflakeSource.capabilities()."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SnowflakeSource.connection",
+      "reason": "Moved in 2.0 with the class to sdm_client.SnowflakeSource.connection."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SnowflakeSource.namespace",
+      "reason": "Moved in 2.0 with the class to sdm_client.SnowflakeSource.namespace."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.SnowflakeSource.semantic_model",
+      "reason": "Moved in 2.0 with the class to sdm_client.SnowflakeSource.semantic_model."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.Source",
+      "reason": "Replaced in 2.0 by sdm_client.Source, the one interface every source implements (capabilities, answer, failure)."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.Source.backend",
+      "reason": "Removed with sdm_connectors.Source in 2.0: sdm_client.Source declares a source's traits through capabilities(); connection and namespace are on the built-in classes."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.Source.connection",
+      "reason": "Removed with sdm_connectors.Source in 2.0: sdm_client.Source declares a source's traits through capabilities(); connection and namespace are on the built-in classes."
+    },
+    {
+      "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
+      "record": "api_inventory/python/sdm_connectors.Source.namespace",
+      "reason": "Removed with sdm_connectors.Source in 2.0: sdm_client.Source declares a source's traits through capabilities(); connection and namespace are on the built-in classes."
     }
   ],
   "capabilities": [
