@@ -360,7 +360,7 @@ fn each_table_is_finished_before_the_next_is_read() {
 
 #[test]
 fn a_semantic_view_unquotes_its_base_table_name() {
-    let definition = VIEW.replace("table: USERS", r#"table: '"USERS"'"#);
+    let definition = VIEW.replace("SHOP, table: USERS}", r#"SHOP, table: '"USERS"'}"#);
     let (description, read) = describe_view(&definition, source_spec());
     assert!(read.iter().any(|(table, _)| table == "USERS"), "{read:?}");
     assert_eq!(description.links.len(), 1);
