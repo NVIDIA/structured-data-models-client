@@ -1,0 +1,141 @@
+{
+  "format": "sdm-case/1",
+  "id": "decimal.key-wide",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "client.predict/regression/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb",
+    "query.materialize/indices-binary/duckdb",
+    "query.materialize/indices-multiclass/duckdb",
+    "query.materialize/indices-regression/duckdb",
+    "query.materialize/indices-link-prediction/duckdb",
+    "query.materialize/indices-ranking/duckdb",
+    "query.materialize/indices-forecast/duckdb",
+    "client.predict/binary/duckdb",
+    "client.predict/multiclass/duckdb",
+    "client.predict/regression/duckdb",
+    "client.predict/link-prediction/duckdb",
+    "client.predict/ranking/duckdb",
+    "client.predict/forecast/duckdb"
+  ],
+  "seam": "keys",
+  "cells": [
+    "decimal128/primary-key",
+    "decimal128/foreign-key"
+  ],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "ALTER TABLE users ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 10000000000000000000000000",
+      "ALTER TABLE orders ALTER user_id TYPE DECIMAL(38, 0) USING user_id + 10000000000000000000000000"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        "10000000000000000000000000",
+        "10000000000000000000000001",
+        "10000000000000000000000002",
+        "10000000000000000000000003",
+        "10000000000000000000000004",
+        "10000000000000000000000005",
+        "10000000000000000000000006",
+        "10000000000000000000000007"
+      ],
+      "indices_as": "decimal",
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    },
+    "materialize": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "indices": [
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000000"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000001"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000002"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000003"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000004"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000005"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000006"
+        },
+        {
+          "t": "d128",
+          "p": 26,
+          "s": 0,
+          "v": "10000000000000000000000007"
+        }
+      ],
+      "anchor_time": {
+        "t": "ts",
+        "v": "1709251200000000000",
+        "unit": "ns",
+        "zone": null
+      },
+      "seed": null
+    },
+    "predict": {
+      "model": "kumo-relational"
+    }
+  },
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "A DECIMAL(38, 0) key past int64 (10000000000000000000000000 to ...007), predicted for each id: neighbours a float64 reading merges",
+  "source": "Correctness case decimal.key-wide using the shop fixture."
+}

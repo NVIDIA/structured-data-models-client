@@ -35,9 +35,7 @@ def connect(
     DuckDB opens a missing path in create-if-missing mode, so a mistyped path
     is reported as ``NOT_FOUND`` before the driver can write an empty database
     into the caller's working tree. This matches the contract the sibling
-    ``sqlite`` connector enforces for the same mistake and the one
-    ``sdm_relational_engine.rfm.backend.duckdb.connect`` enforces for the
-    separate ``adbc_driver_duckdb`` entry point the sampler needs.
+    ``sqlite`` connector enforces for the same mistake.
     """
     if uri is not None and database is not None:
         raise ConnectorError(

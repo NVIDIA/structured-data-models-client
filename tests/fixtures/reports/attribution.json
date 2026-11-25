@@ -1,0 +1,506 @@
+[
+  {
+    "name": "signed-repeated",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "b": {
+                      "score": 4,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                },
+                "1": {
+                  "cells": {
+                    "a": {
+                      "score": -2,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                },
+                "2": {
+                  "cells": {
+                    "b": {
+                      "score": 2,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": true,
+    "rows": [
+      [
+        "t",
+        "a",
+        -0.25
+      ],
+      [
+        "t",
+        "b",
+        0.75
+      ]
+    ]
+  },
+  {
+    "name": "signed-raw",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "b": {
+                      "score": 4,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                },
+                "1": {
+                  "cells": {
+                    "a": {
+                      "score": -2,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                },
+                "2": {
+                  "cells": {
+                    "b": {
+                      "score": 2,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "rows": [
+      [
+        "t",
+        "a",
+        -2
+      ],
+      [
+        "t",
+        "b",
+        6
+      ]
+    ]
+  },
+  {
+    "name": "zero",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "a": {
+                      "score": 1,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                },
+                "1": {
+                  "cells": {
+                    "a": {
+                      "score": -1,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                },
+                "2": {
+                  "cells": {
+                    "b": {
+                      "score": -0.0,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": true,
+    "rows": [
+      [
+        "t",
+        "a",
+        0
+      ],
+      [
+        "t",
+        "b",
+        0
+      ]
+    ]
+  },
+  {
+    "name": "missing-null",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "a": {
+                      "score": null,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "rows": []
+  },
+  {
+    "name": "huge-int",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "a": {
+                      "score": 123456789012345678901234567890,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "rows": [
+      [
+        "t",
+        "a",
+        1.2345678901234568e+29
+      ]
+    ]
+  },
+  {
+    "name": "large-normalization",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "a": {
+                      "score": 1e+308,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                },
+                "1": {
+                  "cells": {
+                    "b": {
+                      "score": 1e+308,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": true,
+    "rows": [
+      [
+        "t",
+        "a",
+        0.5
+      ],
+      [
+        "t",
+        "b",
+        0.5
+      ]
+    ]
+  },
+  {
+    "name": "boolean",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "a": {
+                      "score": true,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs[0].tables.t.0.cells.a.score"
+  },
+  {
+    "name": "string",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "a": {
+                      "score": "2",
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs[0].tables.t.0.cells.a.score"
+  },
+  {
+    "name": "object",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "a": {
+                      "score": {},
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs[0].tables.t.0.cells.a.score"
+  },
+  {
+    "name": "overflow",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "0": {
+                  "cells": {
+                    "a": {
+                      "score": 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000,
+                      "value": {
+                        "private": "unused"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs[0].tables.t.0.cells.a.score"
+  },
+  {
+    "name": "graphs-object",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": {}
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs"
+  },
+  {
+    "name": "entry-null",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          null
+        ]
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs[0]"
+  },
+  {
+    "name": "missing-tables",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {}
+        ]
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs[0].tables"
+  },
+  {
+    "name": "bad-nodes",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": []
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs[0].tables.t"
+  },
+  {
+    "name": "missing-cells",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": [
+          {
+            "tables": {
+              "t": {
+                "n": {}
+              }
+            }
+          }
+        ]
+      }
+    },
+    "normalize": false,
+    "error": "$.details.subgraphs[0].tables.t.n.cells"
+  },
+  {
+    "name": "empty",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {
+        "subgraphs": []
+      }
+    },
+    "normalize": false,
+    "rows": []
+  },
+  {
+    "name": "absent",
+    "payload": {
+      "format": "kumo_rfm_v2_1",
+      "details": {}
+    },
+    "normalize": false,
+    "rows": null
+  },
+  {
+    "name": "unsupported",
+    "payload": {
+      "format": "next",
+      "details": {
+        "subgraphs": []
+      }
+    },
+    "normalize": false,
+    "rows": null
+  }
+]

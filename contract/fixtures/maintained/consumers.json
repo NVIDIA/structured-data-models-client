@@ -1,0 +1,55 @@
+{
+  "contract/cases/s1/multicall.entities-per-call.10001.json": {
+    "consumers": [
+      "contract/runners/run_python.py",
+      "contract/tests/test_prediction_batching.py",
+      "rust/crates/sdm-testkit/src/case.rs"
+    ],
+    "max_bytes": 12000,
+    "reason": "Small scenario inputs; named factories generate repeated entity keys. Runtime tests assert batching or ranking refusal independently."
+  },
+  "contract/cases/s1/rank.batched.json": {
+    "consumers": [
+      "contract/runners/run_python.py",
+      "contract/tests/test_ranking.py",
+      "rust/crates/sdm-testkit/src/case.rs"
+    ],
+    "max_bytes": 12000,
+    "reason": "Small scenario inputs; named factories generate repeated entity keys. Runtime tests assert batching or ranking refusal independently."
+  },
+  "contract/fixtures/maintained/decimal-key-inputs.json": {
+    "consumers": [
+      "contract/tests/test_decimal_key_joins.py"
+    ],
+    "max_bytes": 10000,
+    "reason": "Retained exact facts consumed by named tests; extracted independently from the archived recordings."
+  },
+  "contract/fixtures/maintained/snowflake.json": {
+    "consumers": [
+      "packages/structured-data-models-client/tests/test_snowflake_from_source.py"
+    ],
+    "max_bytes": 42000,
+    "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
+  },
+  "rust/crates/sdm-engine/tests/data/scalar_kernel_controls.json": {
+    "consumers": [
+      "rust/crates/sdm-engine/tests/index_sort_controls.rs"
+    ],
+    "max_bytes": 450000,
+    "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
+  },
+  "rust/crates/sdm-engine/tests/data/simd_kernel_controls.json": {
+    "consumers": [
+      "rust/crates/sdm-engine/tests/index_sort_controls.rs"
+    ],
+    "max_bytes": 580000,
+    "reason": "Retained inputs and independent observations used by the named current tests; larger growth requires review."
+  },
+  "rust/testdata/native-admission-vectors.json": {
+    "consumers": [
+      "rust/crates/sdm-host/tests/native_admission_vectors.rs"
+    ],
+    "max_bytes": 65000,
+    "reason": "229 independently acquired timezone observations:18zones,both directions,seasonal/historical/post2038/future controls and all13gap/fold refusals. Source/version and extraction provenance retained."
+  }
+}

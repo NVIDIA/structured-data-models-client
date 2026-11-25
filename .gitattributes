@@ -1,0 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Preserve upstream renderer bytes (including whitespace) on every platform.
+packages/structured-data-models-client/src/sdm_client/assets/mermaid.min.js -text -whitespace linguist-vendored

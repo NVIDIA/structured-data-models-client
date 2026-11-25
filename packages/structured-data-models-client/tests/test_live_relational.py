@@ -5,8 +5,7 @@
 """End-to-end against a running ``kumo-relational`` NIM.
 
 Excluded by default. Point ``SDM_RELATIONAL_URL`` at the endpoint and run with
-``-m live_nim``. Needs the ``[relational]`` extra, because the gathering step
-runs in the engine.
+``-m live_nim``.
 
     SDM_RELATIONAL_URL=http://localhost:8001 pytest -m live_nim
 
@@ -37,10 +36,6 @@ RELATIONAL_URL = os.environ.get('SDM_RELATIONAL_URL')
 
 requires_relational = pytest.mark.skipif(
     not RELATIONAL_URL, reason='set SDM_RELATIONAL_URL to a kumo-relational NIM'
-)
-
-pytest.importorskip(
-    'sdm_relational_engine', reason='needs the [relational] extra'
 )
 
 
@@ -185,33 +180,6 @@ def test_an_aggregation_wider_than_the_history_is_refused_locally(client):
 
 
 @requires_relational
-def test_the_endpoint_scores_what_this_client_says_it_does(client, query):
-    """The per-call cap is the endpoint's, and batching is sized from it, so a
-    drift sends batches it refuses. Asked at the boundary: one row past the
-    cap is refused, and the refusal names the cap this client holds to.
-
-    One past, and not the cap itself, because the rows here are repeated to
-    reach that size and a payload of 10,000 repeated keys is refused for the
-    repetition instead. That the cap is answered was measured separately,
-    against a graph with that many distinct entities in it.
-    """
-    import copy
-
-    from sdm_client.models import RELATIONAL_LIMITS
-
-    cap = RELATIONAL_LIMITS['predict_rows_max']
-    payload = copy.deepcopy(query.materialize(indices=[0, 1]).payloads[0])
-    rows = payload['predict']['instance_table']['rows']
-
-    payload['predict']['instance_table']['rows'] = [
-        list(rows[i % len(rows)]) for i in range(cap + 1)
-    ]
-    with pytest.raises(StructuredDataError) as refused:
-        client._backend.transport.predict(payload)
-    assert str(cap) in str(refused.value)
-
-
-@requires_relational
 def test_more_entities_than_one_call_scores_come_back_as_one_answer(
     client, query
 ):
@@ -353,15 +321,16 @@ def test_run_mode_is_refused_as_an_option(query):
 
 EXPLAIN = ['prediction', 'probabilities', 'explanation']
 BINARY_QUERY = 'PREDICT COUNT(orders.*, 0, 30, days) > 2 FOR EACH users.user_id'
-#: The table whose related blocks carry ``keys``, and its key. The engine
-#: sends a related table's primary key only when a relationship joins on it:
-#: ``user_id`` is the join column, so only ``users`` is keyed.
-KEYS = {'users': 'user_id'}
+#: The tables whose related blocks carry ``keys``, and their keys: a related
+#: table sends its own primary key, which comes back as the row's key.
+KEYS = {'users': 'user_id', 'orders': 'order_id'}
+#: A column of each keyed table whose sent value the returned row is checked
+#: against.
+CHECKED = {'users': 'segment', 'orders': 'price'}
 #: The tables whose related blocks carry ``rows`` and no ``keys``, each with a
-#: column whose sent values the returned rows are checked against: ``orders``,
-#: whose ``order_id`` no relationship joins on, and ``events``, which has no
-#: primary key.
-KEYLESS = {'orders': 'price', 'events': 'value'}
+#: column whose sent values the returned rows are checked against: ``events``,
+#: which has no primary key.
+KEYLESS = {'events': 'value'}
 
 
 @pytest.fixture(scope='module')
@@ -376,9 +345,9 @@ def assert_explained_as_sent(result, asked):
     among the related ones. Each block's ``keys`` are the primary keys of its
     ``rows``, whose values are the caller's for that key and belong to that
     entity, and its gradients are ``[output][row][column]``, aligned with
-    ``rows``. Keys come back only for a join column, so only ``users`` has
-    them; every other block has ``rows`` and no ``keys``, each row the
-    caller's columns of one of that entity's rows. In ``to_pandas()`` the
+    ``rows``. Keys come back for a table's primary key, so ``users`` and
+    ``orders`` have them; ``events`` has ``rows`` and no ``keys``, each row
+    the caller's columns of one of that entity's rows. In ``to_pandas()`` the
     entity's own table is at hop 0, the others at 1 or more, and an unkeyed
     table's lines have no ``key``.
     """
@@ -425,7 +394,7 @@ def assert_explained_as_sent(result, asked):
                 assert int(row[KEYS[name]]) == int(row_key)
                 assert int(row['user_id']) == entity
                 sent = graph[name].loc[int(row_key)]
-                assert row['segment'] == sent['segment']
+                assert row[CHECKED[name]] == sent[CHECKED[name]]
         assert [int(one) for one in related['users']['keys']] == [entity]
 
     flat = result.explanations.gradients.to_pandas()
@@ -463,10 +432,9 @@ def test_every_entity_is_explained_with_its_own_related_rows(
     Assumptions:
     - The NIM explains every predict row, both probabilities of a binary
       target.
-    - Keys come back only for a join column: ``users`` (joined on
-      ``user_id``) carries ``keys``; ``orders`` (``order_id`` joins nothing)
-      and ``events`` (no primary key) carry ``rows`` and no ``keys``, so
-      both kinds of related block are read back.
+    - Keys come back for a table's primary key: ``users`` and ``orders``
+      carry ``keys``; ``events`` (no primary key) carries ``rows`` and no
+      ``keys``, so both kinds of related block are read back.
     """
     asked = [0, 1, 2, 3]
     request = binary_query.materialize(indices=asked)
@@ -486,9 +454,9 @@ def test_a_request_sent_in_several_calls_explains_every_entity(
     related rows, keyed only where the key is a join column.
 
     Assumptions:
-    - Keys come back only for a join column, so only ``users`` has them;
-      ``orders`` and ``events`` rows are checked by entity and value rather
-      than by key.
+    - Keys come back for a table's primary key, so ``users`` and ``orders``
+      have them; ``events`` rows are checked by entity and value rather than
+      by key.
     - ``rows_per_call=2`` stands in for the cap, as in the batching test
       above, and splits eight entities into four calls.
     """

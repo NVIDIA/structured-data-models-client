@@ -1,0 +1,2674 @@
+{
+  "meta": {
+    "format": "sdm-t06-vectors/1",
+    "source": "Independent pandas, zoneinfo and chrono admission observations; producer and timezone versions are recorded below.",
+    "reference": {
+      "pandas": "3.0.6",
+      "numpy": "2.5.3",
+      "python": "3.12.13",
+      "dateutil": "2.9.0.post0",
+      "tz_impl": "zoneinfo"
+    },
+    "reference_tzdata": "2026c",
+    "reference_tzdata_note": "the expectations were taken over this version; tzdata-2026c/ holds its files for the corpus zones, copied from macOS 26.7.1 /usr/share/zoneinfo, the database the reference read",
+    "bundled_tzdata_checked": "2026e",
+    "probe_sources": {
+      "note": "SHA-256 hashes of the independent fixture-producing probe sources.",
+      "src/main.rs": "51138d3689f40ad8ee82eff5966f635a816ff85e81c83e63dd59919b8e1623ed",
+      "examples/last_dst.rs": "a24043536dda2e4de8e3351c46133f5471e3ab3a4067bb0e31f9c03d2711afc3",
+      "gen_ref.py": "e120ea01132131ef601d27bf943bc25fc91b5f3cbbb9783200b0d2a35439defe",
+      "compare.py": "ac97d256038bc85d12f459c8f000239d679afe23dd7a08f67094299ee43d2cc3",
+      "p2_columns.py": "47093a28f86c8d7e5039fe7f23c244e23e92fb96a0399801340d1be48b3993b3",
+      "Cargo.toml": "1b148479caeefbf03d55c812ba340ea81c8241bffc36da674672715043a9354c",
+      "Cargo.lock": "f9687610b80cb8f664eb664d37277614dcb44c3e81853794a674cc1e9e0dbd35"
+    },
+    "chrono": {
+      "chrono": "0.4.45",
+      "chrono_tz_tzdb": "2025b",
+      "today_year": 2026
+    },
+    "kinds": {
+      "zone_from_utc": "local wall time and UTC offset of a UTC instant (tz_convert); gating",
+      "zone_to_utc": "the UTC instant of a wall time, or a refusal for a gap or fold (tz_localize defaults); gating",
+      "offset": "base plus, minus and three times a DateOffset; gating",
+      "unit": "nanoseconds to seconds, wire text and back; compared with the chrono answer",
+      "unit_ms": "milliseconds to a timestamp; compared with the chrono answer",
+      "parse_value": "one value of an accepted shape read as a UTC instant; compared with the chrono answer",
+      "pql_literal": "a PQL date literal under rules D1 to D9 without D8; compared with the chrono answer"
+    },
+    "selection": {
+      "original_sha256": "a82cd560ad9bab1d1ac359bc1929664a55395ed7b45088a64041ad4dd80a12a2",
+      "rule": "Both UTC directions, every zone: Jan15/Jul1 at12:00 in1970/2038/2200; all recorded gap/fold refusals. Expected values copied unchanged from independently produced original.",
+      "retained_tasks": 229
+    }
+  },
+  "tasks": [
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/New_York/1970-01-15 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T07:00:00",
+        "offset": -18000
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/New_York/1970-01-15 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T17:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/New_York/1970-07-01 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T08:00:00",
+        "offset": -14400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/New_York/1970-07-01 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T16:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/New_York/2038-01-15 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T07:00:00",
+        "offset": -18000
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/New_York/2038-01-15 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T17:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/New_York/2038-07-01 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T08:00:00",
+        "offset": -14400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/New_York/2038-07-01 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T16:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/New_York/2200-01-15 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T07:00:00",
+        "offset": -18000
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/New_York/2200-01-15 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T17:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/New_York/2200-07-01 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T08:00:00",
+        "offset": -14400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/New_York/2200-07-01 12:00",
+      "input": {
+        "zone": "America/New_York",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T16:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Berlin/1970-01-15 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Berlin/1970-01-15 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Berlin/1970-07-01 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Berlin/1970-07-01 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Berlin/2038-01-15 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Berlin/2038-01-15 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Berlin/2038-07-01 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T14:00:00",
+        "offset": 7200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Berlin/2038-07-01 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T10:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Berlin/2200-01-15 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Berlin/2200-01-15 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Berlin/2200-07-01 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T14:00:00",
+        "offset": 7200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Berlin/2200-07-01 12:00",
+      "input": {
+        "zone": "Europe/Berlin",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T10:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/London/1970-01-15 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/1970-01-15 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/London/1970-07-01 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/1970-07-01 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2036-03-30 01:30",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2036-03-30T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2036-10-26 01:30",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2036-10-26T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/London/2038-01-15 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2038-01-15 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/London/2038-07-01 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2038-07-01 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2087-03-30 01:30",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2087-03-30T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2087-10-26 01:30",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2087-10-26T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/London/2200-01-15 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2200-01-15 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/London/2200-07-01 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2200-07-01 12:00",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2200-03-30 01:30",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2200-03-30T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/London/2200-10-26 01:30",
+      "input": {
+        "zone": "Europe/London",
+        "wall": "2200-10-26T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Kolkata/1970-01-15 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T17:30:00",
+        "offset": 19800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Kolkata/1970-01-15 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T06:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Kolkata/1970-07-01 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T17:30:00",
+        "offset": 19800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Kolkata/1970-07-01 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T06:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Kolkata/2038-01-15 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T17:30:00",
+        "offset": 19800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Kolkata/2038-01-15 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T06:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Kolkata/2038-07-01 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T17:30:00",
+        "offset": 19800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Kolkata/2038-07-01 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T06:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Kolkata/2200-01-15 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T17:30:00",
+        "offset": 19800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Kolkata/2200-01-15 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T06:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Kolkata/2200-07-01 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T17:30:00",
+        "offset": 19800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Kolkata/2200-07-01 12:00",
+      "input": {
+        "zone": "Asia/Kolkata",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T06:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Australia/Lord_Howe/1970-01-15 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T22:00:00",
+        "offset": 36000
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Australia/Lord_Howe/1970-01-15 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T02:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Australia/Lord_Howe/1970-07-01 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T22:00:00",
+        "offset": 36000
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Australia/Lord_Howe/1970-07-01 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T02:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Australia/Lord_Howe/2038-01-15 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T23:00:00",
+        "offset": 39600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Australia/Lord_Howe/2038-01-15 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T01:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Australia/Lord_Howe/2038-07-01 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T22:30:00",
+        "offset": 37800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Australia/Lord_Howe/2038-07-01 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T01:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Australia/Lord_Howe/2200-01-15 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T23:00:00",
+        "offset": 39600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Australia/Lord_Howe/2200-01-15 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T01:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Australia/Lord_Howe/2200-07-01 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T22:30:00",
+        "offset": 37800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Australia/Lord_Howe/2200-07-01 12:00",
+      "input": {
+        "zone": "Australia/Lord_Howe",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T01:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Sao_Paulo/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Sao_Paulo/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Sao_Paulo/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Sao_Paulo/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Sao_Paulo/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Sao_Paulo/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Sao_Paulo/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Sao_Paulo/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Sao_Paulo/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Sao_Paulo/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Sao_Paulo/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Sao_Paulo/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Sao_Paulo",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Africa/Casablanca/1970-01-15 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Africa/Casablanca/1970-01-15 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Africa/Casablanca/1970-07-01 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Africa/Casablanca/1970-07-01 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Africa/Casablanca/2038-01-15 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Africa/Casablanca/2038-01-15 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Africa/Casablanca/2038-07-01 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Africa/Casablanca/2038-07-01 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Africa/Casablanca/2200-01-15 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Africa/Casablanca/2200-01-15 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Africa/Casablanca/2200-07-01 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Africa/Casablanca/2200-07-01 12:00",
+      "input": {
+        "zone": "Africa/Casablanca",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tehran/1970-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T15:30:00",
+        "offset": 12600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tehran/1970-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T08:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tehran/1970-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T15:30:00",
+        "offset": 12600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tehran/1970-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T08:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tehran/2038-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T15:30:00",
+        "offset": 12600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tehran/2038-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T08:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tehran/2038-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T15:30:00",
+        "offset": 12600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tehran/2038-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T08:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tehran/2200-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T15:30:00",
+        "offset": 12600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tehran/2200-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T08:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tehran/2200-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T15:30:00",
+        "offset": 12600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tehran/2200-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tehran",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T08:30:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Chatham/1970-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-16T00:45:00",
+        "offset": 45900
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Chatham/1970-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-14T23:15:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Chatham/1970-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-02T00:45:00",
+        "offset": 45900
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Chatham/1970-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-06-30T23:15:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Chatham/2038-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-16T01:45:00",
+        "offset": 49500
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Chatham/2038-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-14T22:15:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Chatham/2038-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-02T00:45:00",
+        "offset": 45900
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Chatham/2038-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-06-30T23:15:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Chatham/2200-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-16T01:45:00",
+        "offset": 49500
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Chatham/2200-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-14T22:15:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Chatham/2200-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-02T00:45:00",
+        "offset": 45900
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Chatham/2200-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Chatham",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-06-30T23:15:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Apia/1970-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T01:00:00",
+        "offset": -39600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Apia/1970-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T23:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Apia/1970-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T01:00:00",
+        "offset": -39600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Apia/1970-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T23:00:00"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Apia/2011-12-30 10:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "wall": "2011-12-30T10:00:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Apia/2038-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-16T01:00:00",
+        "offset": 46800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Apia/2038-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-14T23:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Apia/2038-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-02T01:00:00",
+        "offset": 46800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Apia/2038-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-06-30T23:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Apia/2200-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-16T01:00:00",
+        "offset": 46800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Apia/2200-01-15 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-14T23:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Pacific/Apia/2200-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-02T01:00:00",
+        "offset": 46800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Pacific/Apia/2200-07-01 12:00",
+      "input": {
+        "zone": "Pacific/Apia",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-06-30T23:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Santiago/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Santiago/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Santiago/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T08:00:00",
+        "offset": -14400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Santiago/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T16:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Santiago/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Santiago/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Santiago/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T08:00:00",
+        "offset": -14400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Santiago/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T16:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Santiago/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T09:00:00",
+        "offset": -10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Santiago/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T15:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Santiago/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T08:00:00",
+        "offset": -14400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Santiago/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Santiago",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T16:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Dublin/1970-01-15 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/1970-01-15 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Dublin/1970-07-01 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/1970-07-01 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2036-03-30 01:30",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2036-03-30T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2036-10-26 01:30",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2036-10-26T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Dublin/2038-01-15 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2038-01-15 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Dublin/2038-07-01 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2038-07-01 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2087-03-30 01:30",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2087-03-30T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2087-10-26 01:30",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2087-10-26T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Dublin/2200-01-15 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2200-01-15 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Dublin/2200-07-01 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T13:00:00",
+        "offset": 3600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2200-07-01 12:00",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T11:00:00"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2200-03-30 01:30",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2200-03-30T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Dublin/2200-10-26 01:30",
+      "input": {
+        "zone": "Europe/Dublin",
+        "wall": "2200-10-26T01:30:00"
+      },
+      "ref": {
+        "error": "ValueError"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/UTC/1970-01-15 12:00",
+      "input": {
+        "zone": "UTC",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/UTC/1970-01-15 12:00",
+      "input": {
+        "zone": "UTC",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/UTC/1970-07-01 12:00",
+      "input": {
+        "zone": "UTC",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/UTC/1970-07-01 12:00",
+      "input": {
+        "zone": "UTC",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/UTC/2038-01-15 12:00",
+      "input": {
+        "zone": "UTC",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/UTC/2038-01-15 12:00",
+      "input": {
+        "zone": "UTC",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/UTC/2038-07-01 12:00",
+      "input": {
+        "zone": "UTC",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/UTC/2038-07-01 12:00",
+      "input": {
+        "zone": "UTC",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/UTC/2200-01-15 12:00",
+      "input": {
+        "zone": "UTC",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/UTC/2200-01-15 12:00",
+      "input": {
+        "zone": "UTC",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/UTC/2200-07-01 12:00",
+      "input": {
+        "zone": "UTC",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T12:00:00",
+        "offset": 0
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/UTC/2200-07-01 12:00",
+      "input": {
+        "zone": "UTC",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T12:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Los_Angeles/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T04:00:00",
+        "offset": -28800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Los_Angeles/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T20:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Los_Angeles/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T05:00:00",
+        "offset": -25200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Los_Angeles/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T19:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Los_Angeles/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T04:00:00",
+        "offset": -28800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Los_Angeles/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T20:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Los_Angeles/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T05:00:00",
+        "offset": -25200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Los_Angeles/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T19:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Los_Angeles/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T04:00:00",
+        "offset": -28800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Los_Angeles/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T20:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Los_Angeles/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T05:00:00",
+        "offset": -25200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Los_Angeles/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Los_Angeles",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T19:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tokyo/1970-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T21:00:00",
+        "offset": 32400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tokyo/1970-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T03:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tokyo/1970-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T21:00:00",
+        "offset": 32400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tokyo/1970-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T03:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tokyo/2038-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T21:00:00",
+        "offset": 32400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tokyo/2038-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T03:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tokyo/2038-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T21:00:00",
+        "offset": 32400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tokyo/2038-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T03:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tokyo/2200-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T21:00:00",
+        "offset": 32400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tokyo/2200-01-15 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T03:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Asia/Tokyo/2200-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T21:00:00",
+        "offset": 32400
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Asia/Tokyo/2200-07-01 12:00",
+      "input": {
+        "zone": "Asia/Tokyo",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T03:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Mexico_City/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Mexico_City/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Mexico_City/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Mexico_City/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Mexico_City/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Mexico_City/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Mexico_City/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Mexico_City/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Mexico_City/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Mexico_City/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Mexico_City/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Mexico_City/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Mexico_City",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Kyiv/1970-01-15 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T15:00:00",
+        "offset": 10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Kyiv/1970-01-15 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T09:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Kyiv/1970-07-01 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T15:00:00",
+        "offset": 10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Kyiv/1970-07-01 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T09:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Kyiv/2038-01-15 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T14:00:00",
+        "offset": 7200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Kyiv/2038-01-15 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T10:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Kyiv/2038-07-01 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T15:00:00",
+        "offset": 10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Kyiv/2038-07-01 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T09:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Kyiv/2200-01-15 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T14:00:00",
+        "offset": 7200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Kyiv/2200-01-15 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T10:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/Europe/Kyiv/2200-07-01 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T15:00:00",
+        "offset": 10800
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/Europe/Kyiv/2200-07-01 12:00",
+      "input": {
+        "zone": "Europe/Kyiv",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T09:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Ciudad_Juarez/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "utc": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "1970-01-15T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Ciudad_Juarez/1970-01-15 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "wall": "1970-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-01-15T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Ciudad_Juarez/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "utc": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "1970-07-01T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Ciudad_Juarez/1970-07-01 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "wall": "1970-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "1970-07-01T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Ciudad_Juarez/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "utc": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2038-01-15T05:00:00",
+        "offset": -25200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Ciudad_Juarez/2038-01-15 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "wall": "2038-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-01-15T19:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Ciudad_Juarez/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "utc": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2038-07-01T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Ciudad_Juarez/2038-07-01 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "wall": "2038-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2038-07-01T18:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Ciudad_Juarez/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "utc": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "local": "2200-01-15T05:00:00",
+        "offset": -25200
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Ciudad_Juarez/2200-01-15 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "wall": "2200-01-15T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-01-15T19:00:00"
+      }
+    },
+    {
+      "kind": "zone_from_utc",
+      "id": "z2l/America/Ciudad_Juarez/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "utc": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "local": "2200-07-01T06:00:00",
+        "offset": -21600
+      }
+    },
+    {
+      "kind": "zone_to_utc",
+      "id": "l2z/America/Ciudad_Juarez/2200-07-01 12:00",
+      "input": {
+        "zone": "America/Ciudad_Juarez",
+        "wall": "2200-07-01T12:00:00"
+      },
+      "ref": {
+        "utc": "2200-07-01T18:00:00"
+      }
+    }
+  ]
+}

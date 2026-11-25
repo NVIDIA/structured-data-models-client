@@ -1,0 +1,2431 @@
+{
+  "format": "sdm-type-set-vectors/1",
+  "about": "Arrow type admission, reachability and schema-inference expectations.",
+  "arrow_schema": "58.4.1",
+  "variants": [
+    "Null",
+    "Boolean",
+    "Int8",
+    "Int16",
+    "Int32",
+    "Int64",
+    "UInt8",
+    "UInt16",
+    "UInt32",
+    "UInt64",
+    "Float16",
+    "Float32",
+    "Float64",
+    "Timestamp",
+    "Date32",
+    "Date64",
+    "Time32",
+    "Time64",
+    "Duration",
+    "Interval",
+    "Binary",
+    "FixedSizeBinary",
+    "LargeBinary",
+    "BinaryView",
+    "Utf8",
+    "LargeUtf8",
+    "Utf8View",
+    "List",
+    "ListView",
+    "FixedSizeList",
+    "LargeList",
+    "LargeListView",
+    "Struct",
+    "Union",
+    "Dictionary",
+    "Decimal32",
+    "Decimal64",
+    "Decimal128",
+    "Decimal256",
+    "Map",
+    "RunEndEncoded"
+  ],
+  "vectors": [
+    {
+      "id": "null",
+      "type": "Null",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "boolean",
+      "type": "Boolean",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "bool"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id % 2 = 0 AS f FROM users"
+      ]
+    },
+    {
+      "id": "int8",
+      "type": "Int8",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::TINYINT AS f FROM users"
+      ]
+    },
+    {
+      "id": "int16",
+      "type": "Int16",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::SMALLINT AS f FROM users"
+      ]
+    },
+    {
+      "id": "int32",
+      "type": "Int32",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::INTEGER AS f FROM users"
+      ]
+    },
+    {
+      "id": "int64",
+      "type": "Int64",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id + 1 AS f FROM users"
+      ]
+    },
+    {
+      "id": "uint8",
+      "type": "UInt8",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UTINYINT AS f FROM users"
+      ]
+    },
+    {
+      "id": "uint16",
+      "type": "UInt16",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::USMALLINT AS f FROM users"
+      ]
+    },
+    {
+      "id": "uint32",
+      "type": "UInt32",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UINTEGER AS f FROM users"
+      ]
+    },
+    {
+      "id": "uint64",
+      "type": "UInt64",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UBIGINT AS f FROM users"
+      ]
+    },
+    {
+      "id": "float16",
+      "type": "Float16",
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Float32",
+      "inference": {
+        "dtype": "float"
+      }
+    },
+    {
+      "id": "float32",
+      "type": "Float32",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "float"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, (user_id + 0.5)::FLOAT AS f FROM users"
+      ]
+    },
+    {
+      "id": "float64",
+      "type": "Float64",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "float"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, (user_id + 0.5)::DOUBLE AS f FROM users"
+      ]
+    },
+    {
+      "id": "timestamp.s.naive",
+      "type": {
+        "Timestamp": [
+          "s",
+          null
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Timestamp": [
+          "us",
+          null
+        ]
+      },
+      "inference": {
+        "dtype": "date"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, (TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER))::TIMESTAMP_S AS f FROM users"
+      ]
+    },
+    {
+      "id": "timestamp.s.utc",
+      "type": {
+        "Timestamp": [
+          "s",
+          "UTC"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Timestamp": [
+          "us",
+          "UTC"
+        ]
+      },
+      "inference": {
+        "dtype": "date"
+      }
+    },
+    {
+      "id": "timestamp.ms.naive",
+      "type": {
+        "Timestamp": [
+          "ms",
+          null
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Timestamp": [
+          "us",
+          null
+        ]
+      },
+      "inference": {
+        "dtype": "date"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, (TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER))::TIMESTAMP_MS AS f FROM users"
+      ]
+    },
+    {
+      "id": "timestamp.ms.utc",
+      "type": {
+        "Timestamp": [
+          "ms",
+          "UTC"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Timestamp": [
+          "us",
+          "UTC"
+        ]
+      },
+      "inference": {
+        "dtype": "date"
+      }
+    },
+    {
+      "id": "timestamp.us.naive",
+      "type": {
+        "Timestamp": [
+          "us",
+          null
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "date"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER) AS f FROM users"
+      ]
+    },
+    {
+      "id": "timestamp.us.utc",
+      "type": {
+        "Timestamp": [
+          "us",
+          "UTC"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "date"
+      },
+      "witness": [
+        "SET GLOBAL TimeZone = 'UTC'",
+        "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMPTZ '2024-01-01 00:00:00+00' AS f FROM users"
+      ]
+    },
+    {
+      "id": "timestamp.ns.naive",
+      "type": {
+        "Timestamp": [
+          "ns",
+          null
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "date"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, (TIMESTAMP '2024-01-01' + to_days(user_id::INTEGER))::TIMESTAMP_NS AS f FROM users"
+      ]
+    },
+    {
+      "id": "timestamp.ns.utc",
+      "type": {
+        "Timestamp": [
+          "ns",
+          "UTC"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "date"
+      }
+    },
+    {
+      "id": "timestamp.us.named-zone",
+      "type": {
+        "Timestamp": [
+          "us",
+          "America/Los_Angeles"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "date"
+      },
+      "witness": [
+        "SET GLOBAL TimeZone = 'America/Los_Angeles'",
+        "CREATE OR REPLACE TABLE users AS SELECT *, TIMESTAMPTZ '2024-01-01 00:00:00+00' + to_days(user_id::INTEGER) AS f FROM users"
+      ]
+    },
+    {
+      "id": "timestamp.us.offset-zone",
+      "type": {
+        "Timestamp": [
+          "us",
+          "+05:30"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "date"
+      }
+    },
+    {
+      "id": "timestamp.us.empty-zone",
+      "type": {
+        "Timestamp": [
+          "us",
+          ""
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "date"
+      }
+    },
+    {
+      "id": "timestamp.ms.named-zone",
+      "type": {
+        "Timestamp": [
+          "ms",
+          "America/Los_Angeles"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Timestamp": [
+          "us",
+          "America/Los_Angeles"
+        ]
+      },
+      "inference": {
+        "dtype": "date"
+      }
+    },
+    {
+      "id": "date32",
+      "type": "Date32",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "date"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, DATE '2024-01-01' + user_id::INTEGER AS f FROM users"
+      ]
+    },
+    {
+      "id": "date64",
+      "type": "Date64",
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Timestamp": [
+          "us",
+          null
+        ]
+      },
+      "inference": {
+        "dtype": "date"
+      }
+    },
+    {
+      "id": "time32.s",
+      "type": {
+        "Time32": "s"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Time64": "us"
+      },
+      "inference": {
+        "dtype": "time"
+      }
+    },
+    {
+      "id": "time32.ms",
+      "type": {
+        "Time32": "ms"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Time64": "us"
+      },
+      "inference": {
+        "dtype": "time"
+      }
+    },
+    {
+      "id": "time32.us",
+      "type": {
+        "Time32": "us"
+      },
+      "buildable": false,
+      "class": "admitted",
+      "admitted_as": {
+        "Time64": "us"
+      },
+      "inference": null
+    },
+    {
+      "id": "time32.ns",
+      "type": {
+        "Time32": "ns"
+      },
+      "buildable": false,
+      "class": "admitted",
+      "admitted_as": {
+        "Time64": "us"
+      },
+      "inference": null
+    },
+    {
+      "id": "time64.s",
+      "type": {
+        "Time64": "s"
+      },
+      "buildable": false,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Time64": "s"
+          }
+        }
+      }
+    },
+    {
+      "id": "time64.ms",
+      "type": {
+        "Time64": "ms"
+      },
+      "buildable": false,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Time64": "ms"
+          }
+        }
+      }
+    },
+    {
+      "id": "time64.us",
+      "type": {
+        "Time64": "us"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "time"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, TIME '12:00:00' AS f FROM users"
+      ]
+    },
+    {
+      "id": "time64.ns",
+      "type": {
+        "Time64": "ns"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "time"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, '12:00:00'::TIME_NS AS f FROM users"
+      ]
+    },
+    {
+      "id": "duration.s",
+      "type": {
+        "Duration": "s"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Duration": "us"
+      },
+      "inference": {
+        "left_out": "timedelta"
+      }
+    },
+    {
+      "id": "duration.ms",
+      "type": {
+        "Duration": "ms"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Duration": "us"
+      },
+      "inference": {
+        "left_out": "timedelta"
+      }
+    },
+    {
+      "id": "duration.us",
+      "type": {
+        "Duration": "us"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "left_out": "timedelta"
+      }
+    },
+    {
+      "id": "duration.ns",
+      "type": {
+        "Duration": "ns"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "left_out": "timedelta"
+      }
+    },
+    {
+      "id": "interval.year-month",
+      "type": {
+        "Interval": "YearMonth"
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Interval": "YearMonth"
+          }
+        }
+      }
+    },
+    {
+      "id": "interval.day-time",
+      "type": {
+        "Interval": "DayTime"
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Interval": "DayTime"
+          }
+        }
+      }
+    },
+    {
+      "id": "interval.month-day-nano",
+      "type": {
+        "Interval": "MonthDayNano"
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Interval": "MonthDayNano"
+          }
+        }
+      }
+    },
+    {
+      "id": "binary",
+      "type": "Binary",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "left_out": "binary"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, '\\xAA'::BLOB AS f FROM users"
+      ]
+    },
+    {
+      "id": "fixed-size-binary.16",
+      "type": {
+        "FixedSizeBinary": 16
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Binary",
+      "inference": {
+        "left_out": "binary"
+      }
+    },
+    {
+      "id": "large-binary",
+      "type": "LargeBinary",
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Binary",
+      "inference": {
+        "left_out": "binary"
+      },
+      "witness": [
+        "SET arrow_large_buffer_size = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, '\\xAA'::BLOB AS f FROM users"
+      ]
+    },
+    {
+      "id": "binary-view",
+      "type": "BinaryView",
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Binary",
+      "inference": {
+        "left_out": "binary"
+      },
+      "witness": [
+        "SET arrow_output_version = '1.4'",
+        "SET produce_arrow_string_view = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, '\\xAA'::BLOB AS f FROM users"
+      ]
+    },
+    {
+      "id": "utf8",
+      "type": "Utf8",
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "string"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, 'w' || user_id::VARCHAR AS f FROM users"
+      ]
+    },
+    {
+      "id": "large-utf8",
+      "type": "LargeUtf8",
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Utf8",
+      "inference": {
+        "dtype": "string"
+      },
+      "witness": [
+        "SET arrow_large_buffer_size = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, 'w' || user_id::VARCHAR AS f FROM users"
+      ]
+    },
+    {
+      "id": "utf8-view",
+      "type": "Utf8View",
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Utf8",
+      "inference": {
+        "dtype": "string"
+      },
+      "witness": [
+        "SET arrow_output_version = '1.4'",
+        "SET produce_arrow_string_view = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, 'w' || user_id::VARCHAR AS f FROM users"
+      ]
+    },
+    {
+      "id": "list.int32",
+      "type": {
+        "List": "Int32"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "left_out": "intlist"
+      }
+    },
+    {
+      "id": "list.float64",
+      "type": {
+        "List": "Float64"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "left_out": "floatlist"
+      }
+    },
+    {
+      "id": "list.utf8",
+      "type": {
+        "List": "Utf8"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "left_out": "stringlist"
+      }
+    },
+    {
+      "id": "list.binary",
+      "type": {
+        "List": "Binary"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "left_out": "stringlist"
+      }
+    },
+    {
+      "id": "list.decimal128-38-0",
+      "type": {
+        "List": {
+          "Decimal128": [
+            38,
+            0
+          ]
+        }
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "left_out": "intlist"
+      }
+    },
+    {
+      "id": "list.boolean",
+      "type": {
+        "List": "Boolean"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "list.date32",
+      "type": {
+        "List": "Date32"
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "list.list-int32",
+      "type": {
+        "List": {
+          "List": "Int32"
+        }
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "list.struct",
+      "type": {
+        "List": {
+          "Struct": [
+            [
+              "a",
+              "Int32"
+            ]
+          ]
+        }
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "list.interval",
+      "type": {
+        "List": {
+          "Interval": "MonthDayNano"
+        }
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f.item",
+          "arrow_type": {
+            "Interval": "MonthDayNano"
+          }
+        }
+      }
+    },
+    {
+      "id": "list.large-utf8",
+      "type": {
+        "List": "LargeUtf8"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "List": "Utf8"
+      },
+      "inference": {
+        "left_out": "stringlist"
+      }
+    },
+    {
+      "id": "large-list.int32",
+      "type": {
+        "LargeList": "Int32"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "List": "Int32"
+      },
+      "inference": {
+        "left_out": "intlist"
+      }
+    },
+    {
+      "id": "large-list.large-utf8",
+      "type": {
+        "LargeList": "LargeUtf8"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "List": "Utf8"
+      },
+      "inference": {
+        "left_out": "stringlist"
+      }
+    },
+    {
+      "id": "list-view.int32",
+      "type": {
+        "ListView": "Int32"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "List": "Int32"
+      },
+      "inference": {
+        "left_out": "intlist"
+      }
+    },
+    {
+      "id": "large-list-view.int32",
+      "type": {
+        "LargeListView": "Int32"
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "List": "Int32"
+      },
+      "inference": {
+        "left_out": "intlist"
+      },
+      "witness": [
+        "SET arrow_output_version = '1.4'",
+        "SET arrow_output_list_view = true",
+        "SET arrow_large_buffer_size = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, [user_id, 1]::INTEGER[] AS f FROM users"
+      ]
+    },
+    {
+      "id": "fixed-size-list.int32-3",
+      "type": {
+        "FixedSizeList": [
+          "Int32",
+          3
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "List": "Int32"
+      },
+      "inference": {
+        "left_out": "intlist"
+      }
+    },
+    {
+      "id": "fixed-size-list.boolean-2",
+      "type": {
+        "FixedSizeList": [
+          "Boolean",
+          2
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "List": "Boolean"
+      },
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "struct.int32",
+      "type": {
+        "Struct": [
+          [
+            "a",
+            "Int32"
+          ]
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "struct.int32-utf8",
+      "type": {
+        "Struct": [
+          [
+            "a",
+            "Int32"
+          ],
+          [
+            "b",
+            "Utf8"
+          ]
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "struct.large-utf8",
+      "type": {
+        "Struct": [
+          [
+            "a",
+            "LargeUtf8"
+          ]
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Struct": [
+          [
+            "a",
+            "Utf8"
+          ]
+        ]
+      },
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      },
+      "witness": [
+        "SET arrow_large_buffer_size = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 'value' || user_id} AS f FROM users"
+      ]
+    },
+    {
+      "id": "struct.interval",
+      "type": {
+        "Struct": [
+          [
+            "a",
+            {
+              "Interval": "MonthDayNano"
+            }
+          ]
+        ]
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f.a",
+          "arrow_type": {
+            "Interval": "MonthDayNano"
+          }
+        }
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, {'a': INTERVAL 1 DAY} AS f FROM users"
+      ]
+    },
+    {
+      "id": "struct.empty",
+      "type": {
+        "Struct": []
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "map.utf8-int32",
+      "type": {
+        "Map": [
+          "Utf8",
+          "Int32"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "map.int32-utf8",
+      "type": {
+        "Map": [
+          "Int32",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "map.large-utf8-int64",
+      "type": {
+        "Map": [
+          "LargeUtf8",
+          "Int64"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Map": [
+          "Utf8",
+          "Int64"
+        ]
+      },
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      },
+      "witness": [
+        "SET arrow_large_buffer_size = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, map(['a'], [user_id::BIGINT]) AS f FROM users"
+      ]
+    },
+    {
+      "id": "union.sparse",
+      "type": {
+        "Union": [
+          "Sparse",
+          [
+            [
+              0,
+              "n",
+              "Int32"
+            ],
+            [
+              1,
+              "s",
+              "Utf8"
+            ]
+          ]
+        ]
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Union": [
+              "Sparse",
+              [
+                [
+                  0,
+                  "n",
+                  "Int32"
+                ],
+                [
+                  1,
+                  "s",
+                  "Utf8"
+                ]
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "union.dense",
+      "type": {
+        "Union": [
+          "Dense",
+          [
+            [
+              0,
+              "n",
+              "Int32"
+            ],
+            [
+              1,
+              "s",
+              "Utf8"
+            ]
+          ]
+        ]
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Union": [
+              "Dense",
+              [
+                [
+                  0,
+                  "n",
+                  "Int32"
+                ],
+                [
+                  1,
+                  "s",
+                  "Utf8"
+                ]
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "dictionary.int8-utf8",
+      "type": {
+        "Dictionary": [
+          "Int8",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "dictionary.int16-utf8",
+      "type": {
+        "Dictionary": [
+          "Int16",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "dictionary.int32-utf8",
+      "type": {
+        "Dictionary": [
+          "Int32",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "dictionary.int64-utf8",
+      "type": {
+        "Dictionary": [
+          "Int64",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "dictionary.uint8-utf8",
+      "type": {
+        "Dictionary": [
+          "UInt8",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      },
+      "witness": [
+        "CREATE TYPE mood AS ENUM ('a', 'b', 'c')",
+        "CREATE OR REPLACE TABLE users AS SELECT *, (['a', 'b', 'c'])[user_id % 3 + 1]::mood AS f FROM users"
+      ]
+    },
+    {
+      "id": "dictionary.uint16-utf8",
+      "type": {
+        "Dictionary": [
+          "UInt16",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      },
+      "witness": [
+        "CREATE TYPE probe_enum AS ENUM (SELECT 'v' || range FROM range(300))",
+        "CREATE OR REPLACE TABLE users AS SELECT *, 'v1'::probe_enum AS f FROM users"
+      ]
+    },
+    {
+      "id": "dictionary.uint32-utf8",
+      "type": {
+        "Dictionary": [
+          "UInt32",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      },
+      "witness": [
+        "CREATE TYPE probe_enum AS ENUM (SELECT 'v' || range FROM range(70000))",
+        "CREATE OR REPLACE TABLE users AS SELECT *, 'v1'::probe_enum AS f FROM users"
+      ]
+    },
+    {
+      "id": "dictionary.uint64-utf8",
+      "type": {
+        "Dictionary": [
+          "UInt64",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "dictionary.int32-large-utf8",
+      "type": {
+        "Dictionary": [
+          "Int32",
+          "LargeUtf8"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Dictionary": [
+          "Int32",
+          "Utf8"
+        ]
+      },
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "dictionary.int32-utf8-view",
+      "type": {
+        "Dictionary": [
+          "Int32",
+          "Utf8View"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Dictionary": [
+          "Int32",
+          "Utf8"
+        ]
+      },
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "dictionary.int32-int64",
+      "type": {
+        "Dictionary": [
+          "Int32",
+          "Int64"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Int64",
+      "inference": {
+        "dtype": "int"
+      }
+    },
+    {
+      "id": "dictionary.int8-float16",
+      "type": {
+        "Dictionary": [
+          "Int8",
+          "Float16"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Float32",
+      "inference": {
+        "dtype": "float"
+      }
+    },
+    {
+      "id": "dictionary.int32-binary",
+      "type": {
+        "Dictionary": [
+          "Int32",
+          "Binary"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Binary",
+      "inference": {
+        "left_out": "binary"
+      }
+    },
+    {
+      "id": "dictionary.int16-date32",
+      "type": {
+        "Dictionary": [
+          "Int16",
+          "Date32"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Date32",
+      "inference": {
+        "dtype": "date"
+      }
+    },
+    {
+      "id": "dictionary.int32-interval",
+      "type": {
+        "Dictionary": [
+          "Int32",
+          {
+            "Interval": "MonthDayNano"
+          }
+        ]
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Interval": "MonthDayNano"
+          }
+        }
+      }
+    },
+    {
+      "id": "dictionary.float32-utf8",
+      "type": {
+        "Dictionary": [
+          "Float32",
+          "Utf8"
+        ]
+      },
+      "buildable": false,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Dictionary": [
+              "Float32",
+              "Utf8"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal32.9-2",
+      "type": {
+        "Decimal32": [
+          9,
+          2
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Decimal128": [
+          9,
+          2
+        ]
+      },
+      "inference": {
+        "dtype": "float"
+      },
+      "witness": [
+        "SET arrow_output_version = '1.5'",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(9,2) AS f FROM users"
+      ]
+    },
+    {
+      "id": "decimal64.18-2",
+      "type": {
+        "Decimal64": [
+          18,
+          2
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Decimal128": [
+          18,
+          2
+        ]
+      },
+      "inference": {
+        "dtype": "float"
+      },
+      "witness": [
+        "SET arrow_output_version = '1.5'",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(18,2) AS f FROM users"
+      ]
+    },
+    {
+      "id": "decimal64.18-0",
+      "type": {
+        "Decimal64": [
+          18,
+          0
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Decimal128": [
+          18,
+          0
+        ]
+      },
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "SET arrow_output_version = '1.5'",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(18,0) AS f FROM users"
+      ]
+    },
+    {
+      "id": "decimal128.38-10",
+      "type": {
+        "Decimal128": [
+          38,
+          10
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "float"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(38,10) AS f FROM users"
+      ]
+    },
+    {
+      "id": "decimal128.38-0",
+      "type": {
+        "Decimal128": [
+          38,
+          0
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT AS f FROM users"
+      ]
+    },
+    {
+      "id": "decimal128.18-2",
+      "type": {
+        "Decimal128": [
+          18,
+          2
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "float"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(18,2) AS f FROM users"
+      ]
+    },
+    {
+      "id": "decimal128.18-0",
+      "type": {
+        "Decimal128": [
+          18,
+          0
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "int"
+      },
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(18,0) AS f FROM users"
+      ]
+    },
+    {
+      "id": "decimal128.38-negative-scale",
+      "type": {
+        "Decimal128": [
+          38,
+          -2
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "dtype": "float"
+      }
+    },
+    {
+      "id": "decimal128.39-0",
+      "type": {
+        "Decimal128": [
+          39,
+          0
+        ]
+      },
+      "buildable": false,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Decimal128": [
+              39,
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal128.0-0",
+      "type": {
+        "Decimal128": [
+          0,
+          0
+        ]
+      },
+      "buildable": false,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Decimal128": [
+              0,
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal256.76-0",
+      "type": {
+        "Decimal256": [
+          76,
+          0
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "decimal256.76-10",
+      "type": {
+        "Decimal256": [
+          76,
+          10
+        ]
+      },
+      "buildable": true,
+      "class": "accepted",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "decimal256.77-0",
+      "type": {
+        "Decimal256": [
+          77,
+          0
+        ]
+      },
+      "buildable": false,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Decimal256": [
+              77,
+              0
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "run-end.int16-int32",
+      "type": {
+        "RunEndEncoded": [
+          "Int16",
+          "Int32"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Int32",
+      "inference": {
+        "dtype": "int"
+      }
+    },
+    {
+      "id": "run-end.int32-utf8",
+      "type": {
+        "RunEndEncoded": [
+          "Int32",
+          "Utf8"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Utf8",
+      "inference": {
+        "dtype": "string"
+      }
+    },
+    {
+      "id": "run-end.int64-float64",
+      "type": {
+        "RunEndEncoded": [
+          "Int64",
+          "Float64"
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": "Float64",
+      "inference": {
+        "dtype": "float"
+      }
+    },
+    {
+      "id": "run-end.int32-dictionary-utf8",
+      "type": {
+        "RunEndEncoded": [
+          "Int32",
+          {
+            "Dictionary": [
+              "Int8",
+              "Utf8"
+            ]
+          }
+        ]
+      },
+      "buildable": true,
+      "class": "admitted",
+      "admitted_as": {
+        "Dictionary": [
+          "Int8",
+          "Utf8"
+        ]
+      },
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "run-end.int32-interval",
+      "type": {
+        "RunEndEncoded": [
+          "Int32",
+          {
+            "Interval": "MonthDayNano"
+          }
+        ]
+      },
+      "buildable": true,
+      "class": "refused",
+      "admitted_as": null,
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Interval": "MonthDayNano"
+          }
+        }
+      }
+    }
+  ],
+  "reached": [
+    {
+      "id": "lossless.integer",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::INTEGER AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      }
+    },
+    {
+      "id": "lossless.boolean",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id % 2 = 0 AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "bool"
+      },
+      "cells": "cast"
+    },
+    {
+      "id": "lossless.list-boolean",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, [user_id % 2 = 0, NULL]::BOOLEAN[] AS f FROM users"
+      ],
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "lossless.struct-boolean",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, {'a': user_id % 2 = 0} AS f FROM users"
+      ],
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "lossless.hugeint",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT * 1000 AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "int64"
+      }
+    },
+    {
+      "id": "lossless.uhugeint",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UHUGEINT + 5 AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "int64"
+      }
+    },
+    {
+      "id": "lossless.bit",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, '101'::BIT AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "string"
+      },
+      "cells": "cast"
+    },
+    {
+      "id": "lossless.json",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, ('{\"a\": ' || user_id || '}')::JSON AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "string"
+      },
+      "cells": "cast"
+    },
+    {
+      "id": "lossless.timetz",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, '12:00:00+01'::TIMETZ AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "time"
+      },
+      "cells": "null"
+    },
+    {
+      "id": "varint",
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, (user_id * 7)::VARINT AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "int64"
+      }
+    },
+    {
+      "id": "varint.large",
+      "witness": [
+        "SET arrow_large_buffer_size = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, (user_id * 7)::VARINT AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "int64"
+      }
+    },
+    {
+      "id": "varint.view",
+      "witness": [
+        "SET arrow_output_version = '1.5'",
+        "CREATE OR REPLACE TABLE users AS SELECT *, (user_id * 7)::VARINT AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "int64"
+      }
+    },
+    {
+      "id": "view.list-utf8",
+      "witness": [
+        "SET arrow_output_version = '1.4'",
+        "SET produce_arrow_string_view = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, ['w' || user_id::VARCHAR] AS f FROM users"
+      ],
+      "inference": {
+        "left_out": "stringlist"
+      }
+    },
+    {
+      "id": "list-view.utf8",
+      "witness": [
+        "SET arrow_output_version = '1.4'",
+        "SET arrow_output_list_view = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, ['w' || user_id::VARCHAR] AS f FROM users"
+      ],
+      "inference": {
+        "left_out": "stringlist"
+      }
+    },
+    {
+      "id": "view.struct",
+      "witness": [
+        "SET arrow_output_version = '1.4'",
+        "SET produce_arrow_string_view = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, {'a': 'w' || user_id::VARCHAR} AS f FROM users"
+      ],
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "view.map",
+      "witness": [
+        "SET arrow_output_version = '1.4'",
+        "SET produce_arrow_string_view = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, map(['a'], [user_id::BIGINT]) AS f FROM users"
+      ],
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "large.union",
+      "witness": [
+        "SET arrow_large_buffer_size = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users"
+      ],
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Union": [
+              "Sparse",
+              [
+                [
+                  0,
+                  "n",
+                  "Int32"
+                ],
+                [
+                  1,
+                  "s",
+                  "LargeUtf8"
+                ]
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "view.union",
+      "witness": [
+        "SET arrow_output_version = '1.4'",
+        "SET produce_arrow_string_view = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users"
+      ],
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_TYPE",
+          "column": "f",
+          "arrow_type": {
+            "Union": [
+              "Sparse",
+              [
+                [
+                  0,
+                  "n",
+                  "Int32"
+                ],
+                [
+                  1,
+                  "s",
+                  "Utf8View"
+                ]
+              ]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "decimal128.9-2",
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::DECIMAL(9,2) AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "float"
+      }
+    },
+    {
+      "id": "map.utf8-int64",
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, map(['a'], [user_id::BIGINT]) AS f FROM users"
+      ],
+      "inference": {
+        "refusal": {
+          "code": "UNSUPPORTED_REQUEST",
+          "rule": "column_type"
+        }
+      }
+    },
+    {
+      "id": "lossless.uuid",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, ('A0EEBC99-9C0B-4EF8-BB6D-6BB9BD38' || lpad(user_id::VARCHAR, 4, '0'))::UUID AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "string"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "utf8"
+      }
+    },
+    {
+      "id": "lossless.hugeint-wide",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::HUGEINT * 1000000000000000000000000000000 AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "decimal128",
+        "precision": 38,
+        "scale": 0
+      }
+    },
+    {
+      "id": "lossless.hugeint-past-38-digits",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 170141183460469231731687303715884105727::HUGEINT ELSE user_id::HUGEINT END AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "string"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "utf8"
+      }
+    },
+    {
+      "id": "lossless.uhugeint-wide",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, user_id::UHUGEINT * 1000000000000000000000000000000 AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "decimal128",
+        "precision": 38,
+        "scale": 0
+      }
+    },
+    {
+      "id": "lossless.uhugeint-past-38-digits",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, CASE WHEN user_id = 3 THEN 340282366920938463463374607431768211455::UHUGEINT ELSE user_id::UHUGEINT END AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "string"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "utf8"
+      }
+    },
+    {
+      "id": "varint-wide",
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, (user_id::VARCHAR || repeat('0', 30))::VARINT AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "decimal128",
+        "precision": 38,
+        "scale": 0
+      }
+    },
+    {
+      "id": "varint-past-38-digits",
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT *, (CASE WHEN user_id = 3 THEN '1' || repeat('0', 40) ELSE user_id::VARCHAR END)::VARINT AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "string"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "utf8"
+      }
+    },
+    {
+      "id": "lossless.varint",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT *, (user_id * 7)::VARINT AS f FROM users"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "int64"
+      }
+    },
+    {
+      "id": "lossless.hugeint-wide-after-preview",
+      "witness": [
+        "SET arrow_lossless_conversion = true",
+        "CREATE OR REPLACE TABLE users AS SELECT user_id, (20 + user_id)::INTEGER AS age, ['US', 'DE', 'IN'][1 + user_id % 3] AS country, CASE WHEN user_id < 2 THEN (user_id + 1)::HUGEINT * 1000000000000000000000000000000 ELSE user_id::HUGEINT END AS f FROM (SELECT i::BIGINT AS user_id FROM range(1200) t(i) ORDER BY i DESC)"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "decimal128",
+        "precision": 38,
+        "scale": 0
+      }
+    },
+    {
+      "id": "varint-wide-after-preview",
+      "witness": [
+        "CREATE OR REPLACE TABLE users AS SELECT user_id, (20 + user_id)::INTEGER AS age, ['US', 'DE', 'IN'][1 + user_id % 3] AS country, (CASE WHEN user_id < 2 THEN (user_id + 1)::VARCHAR || repeat('0', 30) ELSE user_id::VARCHAR END)::VARINT AS f FROM (SELECT i::BIGINT AS user_id FROM range(1200) t(i) ORDER BY i DESC)"
+      ],
+      "inference": {
+        "dtype": "int"
+      },
+      "cells": "cast",
+      "received": {
+        "type": "decimal128",
+        "precision": 38,
+        "scale": 0
+      }
+    }
+  ]
+}

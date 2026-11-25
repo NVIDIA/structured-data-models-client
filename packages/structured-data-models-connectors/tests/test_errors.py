@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sqlite3
+import sys
 
 import pandas as pd
 import pytest
@@ -73,31 +74,19 @@ def test_local_malformed_parquet_maps_to_read_failed(tmp_path):
     assert excinfo.value.details['path'] == str(path)
 
 
-def _driver_installed(module: str) -> bool:
-    try:
-        return importlib.util.find_spec(module) is not None
-    except ModuleNotFoundError:
-        return False
-
-
-@pytest.mark.skipif(
-    _driver_installed('snowflake.connector'),
-    reason='snowflake driver installed',
+@pytest.mark.parametrize(
+    ('backend', 'module'),
+    [('snowflake', 'snowflake.connector'), ('databricks', 'databricks.sql')],
 )
-def test_missing_snowflake_driver_raises_missing_backend():
+def test_missing_driver_raises_missing_backend(monkeypatch, backend, module):
+    # Simulate a missing optional driver even when the test environment has it.
+    monkeypatch.setitem(sys.modules, module, None)
+    monkeypatch.delitem(
+        sys.modules, f'sdm_connectors.backends.{backend}', raising=False
+    )
     with pytest.raises(MissingBackendError) as excinfo:
-        importlib.import_module('sdm_connectors.backends.snowflake')
-    assert excinfo.value.backend == 'snowflake'
-
-
-@pytest.mark.skipif(
-    _driver_installed('databricks.sql'),
-    reason='databricks driver installed',
-)
-def test_missing_databricks_driver_raises_missing_backend():
-    with pytest.raises(MissingBackendError) as excinfo:
-        importlib.import_module('sdm_connectors.backends.databricks')
-    assert excinfo.value.backend == 'databricks'
+        importlib.import_module(f'sdm_connectors.backends.{backend}')
+    assert excinfo.value.backend == backend
 
 
 def test_require_driver_returns_module():

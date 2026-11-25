@@ -1,0 +1,26 @@
+{
+  "revisions": {
+    "fixture/repo": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "datasets": {
+    "rel-fixture": {
+      "repository": "fixture/repo",
+      "tables": {
+        "customers": {
+          "sha256": "7b391c6dcefb4a7146a82279be997b6de2ee558180649e12c4755b2912951bfa",
+          "primary_key": "id",
+          "time_column": null,
+          "foreign_keys": {}
+        },
+        "orders": {
+          "sha256": "895e9283dd100357f570972052663c76b862f39c3095c30f9ed7c26d7fd71ca9",
+          "primary_key": null,
+          "time_column": "time",
+          "foreign_keys": {
+            "customer_id": "customers"
+          }
+        }
+      }
+    }
+  }
+}

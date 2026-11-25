@@ -210,7 +210,6 @@ def test_a_tabular_question_runs_from_predictive_query_text(client):
     Both halves come from different places on purpose. A query resolves against
     a schema and so can only name rows that are already there; these are not.
     """
-    pytest.importorskip('predictive_query')
     from sdm_client import PredictiveQuery
 
     request = PredictiveQuery(

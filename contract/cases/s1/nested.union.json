@@ -1,0 +1,54 @@
+{
+  "format": "sdm-case/1",
+  "id": "nested.union",
+  "status": "acceptance",
+  "slice": "S1",
+  "paths": [
+    "schema.from-source/all-tables/duckdb"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/duckdb",
+    "schema.from-source/catalog-keys/duckdb"
+  ],
+  "seam": "refusal",
+  "cells": [],
+  "input": {
+    "base": "shop",
+    "setup": [
+      "CREATE OR REPLACE TABLE users AS SELECT *, union_value(n := user_id::INTEGER)::UNION(n INTEGER, s VARCHAR) AS f FROM users"
+    ],
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    }
+  },
+  "until": "predict",
+  "core": {
+    "describe_source": {
+      "provider": {
+        "provider": "sql",
+        "dialect": "duckdb"
+      },
+      "source": {
+        "tables": [],
+        "primary_keys": {},
+        "time_columns": {}
+      },
+      "check_keys": true
+    }
+  },
+  "expect": {
+    "outcome": "refusal",
+    "stage": "from_source",
+    "error": "RuntimeError",
+    "code": null,
+    "message": "Could not determine semantic type for column 'f' with data type 'int'"
+  },
+  "register": "A type outside the plan's set must be refused by name; today's refusal is unnamed and names the wrong type",
+  "why": "The one DuckDB type here with no place in the type set at all",
+  "source": "plan (type set, \"refused with a named error, never silently turned into nulls\")"
+}

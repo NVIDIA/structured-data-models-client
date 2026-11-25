@@ -7,21 +7,21 @@
 # Kitmaker owns NVIDIA's PyPI organization, and this project's open source
 # review record commits to releasing through it. Kitmaker does not accept an
 # upload; it fetches an artifact from a URL and publishes it itself, to pypi.org
-# and pypi.nvidia.com together. This workflow's job is to produce those URLs:
-# build every distribution and attach it to the GitHub Release. Asking Kitmaker
-# to publish from them is a separate step that a person runs, because Kitmaker's
-# Portal is on NVIDIA's internal network and a GitHub-hosted runner cannot
-# resolve it, let alone reach it. RELEASING.md says who runs that step and
-# what it has to do; the procedure itself is not kept in a public tree.
+# and pypi.nvidia.com together. So the release here is two steps, each behind
+# its own approval: `release` attaches every distribution to the GitHub
+# Release, and `kitmaker` asks Kitmaker's Portal to publish from those asset
+# URLs. Portal is on NVIDIA's network, which a GitHub-hosted runner reaches only
+# through Charon; see the `kitmaker` job.
 #
 # Two consequences worth stating rather than discovering.
 #
-# Nothing here can publish to an index. There is no stored publishing
-# credential and no environment secret; the most this workflow can do is attach
-# files to a Release. The approval on `pypi` still gates the job, because
-# attaching the distributions is what makes them public and Kitmaker refuses
-# private assets, so that approval is the last point before the artifacts are
-# visible to anyone.
+# There is a stored credential. Portal authenticates with a long-lived bearer
+# token, so `KITMAKER_API_TOKEN` is a secret on the `kitmaker` environment
+# rather than a repository secret: an environment secret reaches only the refs
+# that environment admits, `main` and `v*` tags, and only after a required
+# reviewer approves the job, where a repository secret would be readable from
+# a workflow on any branch. It can publish only to the three Portal projects it
+# owns.
 #
 # This workflow does not sign what it ships. PEP 740 attestations are issued
 # to whoever uploads, and that is Kitmaker, so nothing here produces one
@@ -32,15 +32,22 @@
 # `build` has `contents: read` to check the tree out and `actions: read` to ask
 # whether CI passed, and nothing more, so a compromised build dependency cannot
 # publish anything itself. It can still decide what gets published, because it
-# is what produces the distributions, and `engine-wheels` and `assemble` can
-# too, for the same reason; both hold `contents: read` alone. `release` holds
-# `contents: write` to create the Release and attach to it, and is the only job
-# behind the protected environment.
+# is what produces the distributions, and `assemble` can
+# too, for the same reason; it holds `contents: read` alone. `release` holds
+# `contents: write` to create the Release and attach to it, behind the `pypi`
+# environment. `kitmaker` holds the Portal token and `id-token: write` for
+# Charon, and nothing that can change the repository, behind the `kitmaker`
+# environment.
 name: publish
 
 on:
   push:
-    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      # PEP 440 pre-releases: v2.0.0a1, v2.0.0b1, v2.0.0rc1.
+      - 'v[0-9]+.[0-9]+.[0-9]+a[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+b[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+rc[0-9]+'
   workflow_dispatch:
 
 # Least privilege at the top: a job that needs more says so itself.
@@ -77,6 +84,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Require hosted acceptance for the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for acceptance_workflow in parity-live.yml; do
+          conclusion=$(gh run list --workflow "$acceptance_workflow" --commit "$GITHUB_SHA" \
+            --branch main --status completed --limit 100 \
+            --json conclusion,event --jq '[.[] | select(.event == "workflow_run" or .event == "workflow_dispatch")] | first | .conclusion // "missing"')
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::$acceptance_workflow for this release commit is '$conclusion'. Run Live parity on main at this commit before releasing."
+            exit 1
+          fi
+          done
+
       # A tag can be put on any commit, including one that never reached a
       # pull request. The gates run on `main` and on pull requests, so a tag
       # off `main` is a tag nothing has tested. Checked before the build,
@@ -90,6 +112,7 @@ jobs:
       # gate the upload itself. This step makes the common mistake
       # impossible; those settings make the deliberate one hard.
       - name: The tag is on main, and main has passed CI
+        id: candidate-ci
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -109,115 +132,89 @@ jobs:
             exit 1
           fi
           echo "$GITHUB_SHA is on main and its CI passed"
+          run_id=$(gh run list --workflow CI --commit "$GITHUB_SHA" \
+            --branch main --event push --status success \
+            --json databaseId --jq 'first | .databaseId')
+          test -n "$run_id" && test "$run_id" != null
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
-      - name: Build the four pure-Python distributions
+      - name: Build the API and connector distributions
         run: |
           python -m pip install --upgrade pip build
-          for package in structured-data-models-api structured-data-models-pql structured-data-models-client structured-data-models-connectors; do
+          for package in structured-data-models-api structured-data-models-connectors; do
             ( cd "packages/$package" && python -m build --outdir "$GITHUB_WORKSPACE/dist" . )
           done
 
-      # The engine's wheels cannot be built here: each is native to the
-      # machine that builds it, and this job is one Linux machine.
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: pure-distributions
-          path: dist/
-
-  # The same matrix CI runs, so a tag uploads the set a pull request proved.
-  # Native on every row, which retires the QEMU step that built aarch64 here
-  # and the privileged container image it pulled into the release path.
-  #
-  # The engine is not optional. `structured-data-models-client[relational]` pins it by exact
-  # version, so publishing the other four without it makes that extra
-  # uninstallable for the release it names.
-  engine-wheels:
-    needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: linux-x86_64
-            runner: ubuntu-24.04
-            archs: CIBW_ARCHS_LINUX=x86_64
-          - name: linux-aarch64
-            runner: ubuntu-24.04-arm
-            archs: CIBW_ARCHS_LINUX=aarch64
-          - name: macos-arm64
-            runner: macos-15
-            archs: CIBW_ARCHS_MACOS=arm64
-          # macos-13 was retired in December 2025. x86_64 macOS ends with the
-          # macOS 15 image in autumn 2027, and this row ends with it.
-          - name: macos-x86_64
-            runner: macos-15-intel
-            archs: CIBW_ARCHS_MACOS=x86_64
-          - name: windows-amd64
-            runner: windows-2022
-            archs: CIBW_ARCHS_WINDOWS=AMD64
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      # The engine pins its siblings by exact version, and at this point in a
-      # release those versions exist only as the artifact `build` uploaded.
-      # The engine's `before-test` installs them by file before the engine, so
-      # the smoke test tests these and not a published release.
+      # Publish the production wheels from the successful CI run of this commit.
+      # Test-only artifacts are deliberately not selected.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: pure-distributions
-          path: _sibling_wheels
-
-      - name: Build only this row's architecture
-        shell: bash
-        run: echo "${{ matrix.archs }}" >> "$GITHUB_ENV"
-
-      - uses: pypa/cibuildwheel@b9e566a2b284570af229f6c2a33673410d0389a3 # v4.3.4
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel
+          path: native-x86_64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          package-dir: packages/structured-data-models-relational-engine
-          output-dir: wheelhouse
-
-      # A wheel built by the wrong compiler passes every other check here, so
-      # the evidence has to come from the wheel. MinGW's runtime travelling
-      # inside one means CMake found GCC where MSVC was intended. Every wheel
-      # is read, and an empty wheelhouse fails rather than reporting nothing
-      # found.
-      - name: No MinGW runtime rode along in a Windows wheel
-        if: runner.os == 'Windows'
-        shell: bash
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel-aarch64
+          path: native-aarch64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel-macos-aarch64
+          path: native-macos-aarch64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel-macos-x86_64
+          path: native-macos-x86_64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.candidate-ci.outputs.run_id }}
+          name: native-wheel-windows-x86_64
+          path: native-windows-x86_64
+      - name: Verify and assemble the production client wheels
         run: |
-          set -euo pipefail
-          shopt -s nullglob
-          wheels=(wheelhouse/*.whl)
-          if [ ${#wheels[@]} -eq 0 ]; then
-            echo "::error::the Windows row produced no wheel to check"
-            exit 1
-          fi
-          for wheel in "${wheels[@]}"; do
-            names=$(unzip -Z1 "$wheel")
-            if printf '%s\n' "$names" \
-              | grep -qiE "lib(gcc_s_seh-1|stdc\+\+-6|winpthread-1)[^/]*\.dll"; then
-              echo "::error::$(basename "$wheel") was built with MinGW, not MSVC"
-              printf '%s\n' "$names" | grep -iE "\.dll$"
-              exit 1
-            fi
-          done
-          echo "${#wheels[@]} Windows wheels, no MinGW runtime in any of them"
+          python scripts/rust_core/native_wheel.py --check-set native-x86_64 native-aarch64
+          python - <<'PY'
+          import hashlib, json, os, pathlib
+          platforms = {
+              'native-x86_64': 'manylinux_2_17_x86_64.manylinux2014_x86_64',
+              'native-aarch64': 'manylinux_2_17_aarch64.manylinux2014_aarch64',
+              'native-macos-aarch64': 'macosx_*_arm64',
+              'native-macos-x86_64': 'macosx_*_x86_64',
+              'native-windows-x86_64': 'win_amd64',
+          }
+          import fnmatch
+          for folder, platform in platforms.items():
+              wheels = list(pathlib.Path(folder).glob('*.whl'))
+              assert len(wheels) == 1, (folder, wheels)
+              wheel = wheels[0]
+              assert fnmatch.fnmatch(wheel.name, f'structured_data_models_client-*-cp310-abi3-{platform}.whl')
+              record = json.loads(wheel.with_name(wheel.name + '.json').read_text())
+              assert record['wheel'] == wheel.name
+              assert record['commit'] == os.environ['GITHUB_SHA']
+              assert record['tree_clean'] is True
+              assert record['features'] == [], 'test-only wheel cannot be released'
+              assert record['sha256'] == hashlib.sha256(wheel.read_bytes()).hexdigest()
+          PY
+          cp native-*/*.whl dist/
+          cp native-*/*.whl.json dist/
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: engine-wheels-${{ matrix.name }}
-          path: wheelhouse/
+          name: built-distributions
+          path: dist/
 
-  # Every distribution in one directory, checked as a set. Split out of `build`
-  # only because the engine's wheels now come from five machines; the steps
-  # below are the ones that used to run there, unchanged.
   assemble:
-    needs: [build, engine-wheels]
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -229,16 +226,7 @@ jobs:
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: pure-distributions
-          path: dist
-
-      # Every engine row merged into the same directory. A pattern rather than
-      # one step per platform, so adding a row to the matrix above does not
-      # need a matching step here to be published.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: engine-wheels-*
-          merge-multiple: true
+          name: built-distributions
           path: dist
 
       # The tag is the release. If it does not name the version the packages
@@ -251,75 +239,25 @@ jobs:
           ref = os.environ['GITHUB_REF_NAME']
           # `lstrip` would also have accepted `vv1.0.0`, and a dispatch can be
           # aimed at a tag called `1.0.0`.
-          if not re.fullmatch(r'v\d+\.\d+\.\d+', ref):
-              sys.exit(f'{ref} is not a release tag of the form v1.2.3')
+          if not re.fullmatch(r'v\d+\.\d+\.\d+((a|b|rc)\d+)?', ref):
+              sys.exit(f'{ref} is not a release tag of the form v1.2.3 or v1.2.3rc1')
           tag = ref.removeprefix('v')
           wheels = sorted(p.name for p in pathlib.Path('dist').glob('*.whl'))
           sdists = sorted(p.name for p in pathlib.Path('dist').glob('*.tar.gz'))
           built = wheels + sdists
           print('\n'.join(built))
 
-          # All five, every time. The four pure-Python distributions and the
-          # engine are pinned to each other by exact version, so a release
-          # missing one is a release whose extras cannot resolve. Read off the
-          # tree rather than listed here, so adding or renaming one cannot
-          # leave this behind.
+          # Every maintained distribution is required.
           expected = {
               path.parent.name.replace('-', '_')
               for path in pathlib.Path('packages').glob('*/pyproject.toml')
           }
-          if len(expected) != 5:
-              sys.exit(f'expected 5 distributions, found {sorted(expected)}')
+          if len(expected) != 3:
+              sys.exit(f'expected 3 distributions, found {sorted(expected)}')
           present = {name.split('-')[0] for name in wheels}
           missing = expected - present
           if missing:
               sys.exit(f'refusing to publish without {sorted(missing)}')
-
-          # Naming the engine is not the same as building it everywhere. One
-          # wheel satisfies the check above, so a row of `engine-wheels` that
-          # produced a subset would publish an engine installable on fewer
-          # platforms than the release claims, and nothing downstream would
-          # notice. The interpreters are read from the engine's own
-          # `[tool.cibuildwheel] build`; the platforms are the matrix that
-          # built them.
-          import tomllib
-
-          engine = pathlib.Path(
-              'packages/structured-data-models-relational-engine/pyproject.toml'
-          )
-          selector = tomllib.loads(engine.read_text())['tool']['cibuildwheel']
-          interpreters = {
-              part.split('-')[0] for part in selector['build'].split()
-          }
-          platforms = {
-              'manylinux.*_x86_64',
-              'manylinux.*_aarch64',
-              'macosx_.*_arm64',
-              'macosx_.*_x86_64',
-              'win_amd64',
-          }
-          engine_wheels = [
-              name
-              for name in wheels
-              if name.startswith('structured_data_models_relational_engine-')
-          ]
-          absent = sorted(
-              f'{interpreter} {platform}'
-              for interpreter in interpreters
-              for platform in platforms
-              if not any(
-                  re.fullmatch(
-                      rf'.*-{interpreter}-{interpreter}-{platform}\.whl', name
-                  )
-                  for name in engine_wheels
-              )
-          )
-          if absent:
-              sys.exit(f'the engine wheel matrix is incomplete: {absent}')
-          print(
-              f'{len(engine_wheels)} engine wheels, '
-              f'{len(interpreters)} interpreters on {len(platforms)} platforms'
-          )
 
           # Every file, not only the wheels: an sdist carrying a different
           # version passes a wheels-only check and is published anyway.
@@ -334,13 +272,13 @@ jobs:
           built_version = versions.pop()
           if built_version != tag:
               sys.exit(f'tag v{tag} does not match the built version {built_version}')
-          print(f'all five distributions built at {built_version}, matching the tag')
+          print(f'all three distributions built at {built_version}, matching the tag')
           EOF
 
       - name: Nothing malformed reaches the index
         run: |
           python -m pip install --upgrade twine
-          twine check dist/*
+          twine check dist/*.whl dist/*.tar.gz
 
       # The dependency inventory a consumer needs before accepting this into
       # their own supply chain. Attached to the release, not regenerated later
@@ -348,19 +286,14 @@ jobs:
       - name: Software bill of materials
         run: |
           python -m pip install --upgrade cyclonedx-bom
-          # Every distribution from dist/, never by name and version alone:
-          # after a partial upload, PyPI's release of this version resolves as
-          # readily as the wheels being released, and this would describe it.
-          # The engine has a wheel per platform, so pip picks this runner's
-          # from dist/ and nowhere else.
+          # Install these exact wheels before resolving optional driver dependencies.
+          python -m pip install --no-deps "$GITHUB_WORKSPACE"/dist/*-py3-none-any.whl "$GITHUB_WORKSPACE"/dist/*manylinux*x86_64.whl
           version="${GITHUB_REF_NAME#v}"
-          python -m pip install --no-index --no-deps --find-links dist \
-            "structured-data-models-relational-engine==$version"
-          python -m pip install \
-            "dist/structured_data_models_client-$version-py3-none-any.whl[relational,sqlite,duckdb,postgres,databricks,snowflake,s3]" \
-            dist/structured_data_models_{api,pql,connectors}-$version-py3-none-any.whl
+          python -m pip install --find-links dist \
+            "structured-data-models-client[sqlite,duckdb,postgres,databricks,snowflake,s3]==$version"
+          python scripts/check_wheel_provenance.py --installed "$GITHUB_WORKSPACE"/dist/*-py3-none-any.whl "$GITHUB_WORKSPACE"/dist/*manylinux*x86_64.whl
           cyclonedx-py environment --of JSON --validate -o dist/sbom.cyclonedx.json
-          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-pql','structured-data-models-connectors','structured-data-models-relational-engine'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
+          python -c "import json,sys; d=json.load(open('dist/sbom.cyclonedx.json')); names={c['name'] for c in d.get('components', [])}; missing={'structured-data-models-client','structured-data-models-api','structured-data-models-connectors'} - names; print(f'{len(names)} components'); sys.exit(f'SBOM missing {sorted(missing)}' if missing else 0)"
 
       - name: Take the release notes from the changelog
         run: |
@@ -420,11 +353,16 @@ jobs:
             # the Kitmaker publish has worked. This only withholds the
             # promotion: with no earlier release to stay Latest, GitHub still
             # reports the newest non-draft release as the latest one.
+            prerelease=()
+            if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
+              prerelease=(--prerelease)
+            fi
             gh release create "$GITHUB_REF_NAME" \
               --repo "$GITHUB_REPOSITORY" \
               --title "$GITHUB_REF_NAME" \
               --verify-tag \
               --latest=false \
+              ${prerelease[@]+"${prerelease[@]}"} \
               --notes-file dist/notes.md
           fi
           # The SBOM is a release asset and was never meant for the index; the
@@ -453,20 +391,113 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" "$path" --repo "$GITHUB_REPOSITORY"
           done
 
-      # The release is built and attached, and the person who approved this is
-      # the one who has to finish it. What the index holds is deliberately not
-      # asserted here: this job never asks, and a dispatch against a tag that
-      # was already published would make any claim about it wrong.
+      # The release is built and attached. Publishing it is the `kitmaker` job,
+      # which waits for its own approval, so declining that leaves a release
+      # on GitHub and nothing on the index.
       - name: Say what is left to do
         run: |
           {
             echo "### Attached, not published"
             echo
             echo "\`$GITHUB_REF_NAME\` is on the Releases page with every"
-            echo "distribution and the SBOM attached. This workflow publishes"
-            echo "nothing to PyPI; that is a separate step, run from inside"
-            echo "NVIDIA's network. RELEASING.md says who runs it and what it"
-            echo "has to do."
-            echo
-            echo "Mark this release Latest once the index has all five."
+            echo "distribution and the SBOM attached. Approve the \`kitmaker\`"
+            echo "job to publish it to PyPI."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Kitmaker's Portal is on NVIDIA's network. A hosted runner reaches it through
+  # Charon, a gateway that opens a Teleport tunnel on the runner and admits this
+  # repository, from `main` and `v*` tags, to the three projects' routes alone.
+  # Charon reads which repository and ref is asking from a GitHub OIDC token
+  # sent with every request, hence `id-token: write`.
+  #
+  # From a tag, after `release` has attached the distributions, this publishes
+  # them: every project is dry-run before any is uploaded, and the job fails
+  # unless the index holds what was built. Dispatched from
+  # `main`, it only asks Portal for each project and publishes nothing, which
+  # is how a change to this route is proved before a release depends on it.
+  kitmaker:
+    needs: release
+    if: >-
+      ${{ !cancelled() && (needs.release.result == 'success'
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) }}
+    runs-on: ubuntu-latest
+    environment: kitmaker      # required reviewers; admits `main` and `v*` tags
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      KITMAKER_API_TOKEN: ${{ secrets.KITMAKER_API_TOKEN }}
+      PIC: ${{ vars.KITMAKER_PIC }}
+    steps:
+      # Before the download, because checkout cleans the working directory.
+      # `kitmaker_release.py` ships in the repository, not in the artifact.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: github.ref_type == 'tag'
+        with:
+          name: distributions
+          path: dist/
+
+      - uses: teleport-actions/setup@b638ff596557cc3959eb6b5287d5e58e0c8ac6a6 # v1.1.1
+        with:
+          version: auto
+          proxy: ext-nv-prd-apps.teleport.sh:443
+
+      - name: Open the Charon tunnel
+        uses: teleport-actions/application-tunnel@bb7a8fbfb67b85d26013554f10d71dd032c1c764 # v1.0.1
+        with:
+          proxy: ext-nv-prd-apps.teleport.sh:443
+          token: charon-gha-runners
+          app: charon
+          listen: tcp://127.0.0.1:8888
+
+      - name: Ask Portal for each project, publishing nothing
+        if: github.ref_type != 'tag'
+        run: python3 .github/workflows/kitmaker_release.py check
+
+      - name: Publish each distribution through Kitmaker
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # `browser_download_url`, not `url`: in the REST response `url` is
+          # the API metadata endpoint, and fetching it without an
+          # `Accept: application/octet-stream` header returns JSON about the
+          # asset rather than the asset. Kitmaker is given only the URL. The
+          # digest is only in the REST response, which is why this uses it.
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME" \
+            --jq '.assets[] | "\(.name)\t\(.browser_download_url)\t\(.digest // "")"' \
+            > assets.tsv
+          test -s assets.tsv
+          python3 .github/workflows/kitmaker_release.py
+
+      # Latest is marked by hand. Which release should hold it depends on every
+      # other release's publish, and runs for different tags can overlap with
+      # nothing in Actions to order them, so a run that marked itself could
+      # take Latest from a newer release or hand it to a half-published one.
+      - name: Say what is left to do
+        if: success() && github.ref_type == 'tag'
+        run: |
+          {
+            echo "### Published"
+            echo
+            echo "Every distribution of \`$GITHUB_REF_NAME\` is on PyPI with the"
+            echo "bytes that were built."
+            echo
+            if [[ "$GITHUB_REF_NAME" =~ (a|b|rc)[0-9]+$ ]]; then
+              echo "This is a pre-release: leave it unmarked."
+            else
+              echo "If no higher final release is on PyPI, mark this release Latest."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Into the job log, so a failed release says where it got to without
+      # anyone opening an artifact. The GitHub Release body is the changelog
+      # entry and is not touched.
+      - name: Print what each project ended up with
+        if: always() && github.ref_type == 'tag'
+        run: cat kitmaker-summary.txt 2>/dev/null || true

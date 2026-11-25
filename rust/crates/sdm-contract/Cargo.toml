@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[package]
+name = "sdm-contract"
+description = "The contract between the core and its hosts: versioned types only"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Operations only tests reach (`test_ops`); a shipped build leaves it off.
+# Their tests check JSON against the schema, so it brings `schema-check`.
+test-ops = ["schema-check"]
+# The check of a JSON value against a definition of the contract's schema
+# (`schema_check`), for a producer's tests: no operation, so a crate's tests
+# can take it without the test-only operations, which a crate matching on
+# every operation would then have to match (M2).
+schema-check = []
+
+[dependencies]
+arrow-array.workspace = true
+arrow-buffer.workspace = true
+arrow-schema.workspace = true
+base64.workspace = true
+schemars.workspace = true
+serde.workspace = true
+# unbounded_depth lets the validated-query reader go past serde_json's
+# recursion limit, on serde_stacker's growing stack.
+serde_json = { workspace = true, features = ["unbounded_depth"] }
+serde_stacker.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

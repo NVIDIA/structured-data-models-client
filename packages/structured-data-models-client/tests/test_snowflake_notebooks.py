@@ -11,9 +11,8 @@ import re
 from pathlib import Path
 
 import pytest
-from sdm_connectors import DuckDBSource
 
-from sdm_client import Relationship, Schema, SourceTable
+from sdm_client import DuckDBSource, Relationship, Schema, SourceTable
 
 NOTEBOOK = (
     Path(__file__).parents[3]
@@ -23,7 +22,6 @@ NOTEBOOK = (
 
 def test_uploaded_tables_join_and_build_source_schema():
     duckdb = pytest.importorskip('duckdb')
-    pytest.importorskip('sdm_relational_engine')
     cells = json.loads(NOTEBOOK.read_text())['cells']
     sources = [''.join(cell['source']) for cell in cells]
     setup = next(

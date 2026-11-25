@@ -1,0 +1,63 @@
+{
+  "format": "sdm-case/1",
+  "id": "lakebase.name.shadowed-by-temporary",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "lakebase"
+  ],
+  "paths": [
+    "schema.from-source/tables/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "client.predict/regression/lakebase"
+  ],
+  "routes": [
+    "schema.from-source/tables/lakebase",
+    "schema.from-source/catalog-keys/lakebase",
+    "query.materialize/indices-binary/lakebase",
+    "query.materialize/indices-multiclass/lakebase",
+    "query.materialize/indices-regression/lakebase",
+    "query.materialize/indices-link-prediction/lakebase",
+    "query.materialize/indices-ranking/lakebase",
+    "query.materialize/indices-forecast/lakebase",
+    "client.predict/binary/lakebase",
+    "client.predict/multiclass/lakebase",
+    "client.predict/regression/lakebase",
+    "client.predict/link-prediction/lakebase",
+    "client.predict/ranking/lakebase",
+    "client.predict/forecast/lakebase"
+  ],
+  "cells": [
+    "int64/primary-key",
+    "int64/foreign-key",
+    "timestamp-us/time-column",
+    "float64/target"
+  ],
+  "input": {
+    "base": "shop",
+    "from_source": {
+      "tables": {
+        "users": "users",
+        "orders": "orders"
+      }
+    },
+    "pql": "PREDICT SUM(orders.price, 0, 30, days) FOR EACH users.user_id",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2024-03-01"
+    },
+    "warehouse_setup": [
+      "CREATE TEMPORARY TABLE users (user_id BIGINT, note TEXT)"
+    ]
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "A temporary table shadows a persistent table of the same one-part name within the connection session.",
+  "source": "Correctness case lakebase.name.shadowed-by-temporary using the shop fixture."
+}

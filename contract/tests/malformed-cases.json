@@ -1,0 +1,2036 @@
+{
+  "about": "Mutations of a valid AdventureWorks case that exercise shared Python and Rust loader acceptance, refusal and strict field validation.",
+  "case": "contract/cases/s1/base.adventureworks.json",
+  "refused": [
+    {
+      "why": "an edit that is not an object",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": 7
+    },
+    {
+      "why": "an edit with an op the format does not have",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "rename_column",
+        "table": "products"
+      }
+    },
+    {
+      "why": "an edit without its op",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "table": "products"
+      }
+    },
+    {
+      "why": "an edit that is a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": [
+        "clear_time_column",
+        "products"
+      ]
+    },
+    {
+      "why": "a delete_column edit without its column",
+      "path": [
+        "input",
+        "edits",
+        1
+      ],
+      "value": {
+        "op": "delete_column",
+        "table": "customers"
+      }
+    },
+    {
+      "why": "a clear_time_column edit with a key it does not take",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "clear_time_column",
+        "table": "products",
+        "column": "SellStartDate"
+      }
+    },
+    {
+      "why": "an edit naming an empty table",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "clear_time_column",
+        "table": ""
+      }
+    },
+    {
+      "why": "an edit's table that is not text",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "clear_time_column",
+        "table": 7
+      }
+    },
+    {
+      "why": "no edits",
+      "path": [
+        "input",
+        "edits"
+      ],
+      "value": []
+    },
+    {
+      "why": "edits that are not a list",
+      "path": [
+        "input",
+        "edits"
+      ],
+      "value": {
+        "op": "clear_time_column",
+        "table": "products"
+      }
+    },
+    {
+      "why": "a relationship with only an unknown key",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "unexpected": "value"
+      }
+    },
+    {
+      "why": "a relationship with a key beside its four",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "source_table": "sales_order_headers",
+        "source_column": "CustomerID",
+        "target_table": "customers",
+        "target_column": "CustomerID",
+        "kind": "many_to_one"
+      }
+    },
+    {
+      "why": "a relationship without its target column",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "source_table": "sales_order_headers",
+        "source_column": "CustomerID",
+        "target_table": "customers"
+      }
+    },
+    {
+      "why": "a relationship with an empty column",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "source_table": "sales_order_headers",
+        "source_column": "",
+        "target_table": "customers",
+        "target_column": "CustomerID"
+      }
+    },
+    {
+      "why": "a relationship whose table is not text",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": {
+        "source_table": 7,
+        "source_column": "CustomerID",
+        "target_table": "customers",
+        "target_column": "CustomerID"
+      }
+    },
+    {
+      "why": "a relationship that is a list",
+      "path": [
+        "input",
+        "from_source",
+        "relationships",
+        0
+      ],
+      "value": [
+        "sales_order_headers",
+        "CustomerID",
+        "customers",
+        "CustomerID"
+      ]
+    },
+    {
+      "why": "relationships that are not a list",
+      "path": [
+        "input",
+        "from_source",
+        "relationships"
+      ],
+      "value": {
+        "source_table": "sales_order_headers",
+        "source_column": "CustomerID",
+        "target_table": "customers",
+        "target_column": "CustomerID"
+      }
+    },
+    {
+      "why": "an empty inference_config",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ],
+      "value": {}
+    },
+    {
+      "why": "an inference_config that is a list",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ],
+      "value": [
+        [
+          "num_estimators",
+          4
+        ]
+      ]
+    },
+    {
+      "why": "seam null, which the schema does not let it be",
+      "path": [
+        "seam"
+      ],
+      "value": null
+    },
+    {
+      "why": "core null, which the schema does not let it be",
+      "path": [
+        "core"
+      ],
+      "value": null
+    },
+    {
+      "why": "register null, which the schema does not let it be",
+      "path": [
+        "register"
+      ],
+      "value": null
+    },
+    {
+      "why": "setup null, which the schema does not let it be",
+      "path": [
+        "input",
+        "setup"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source.tables null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source",
+        "tables"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source.primary_keys null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source",
+        "primary_keys"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source.time_columns null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source",
+        "time_columns"
+      ],
+      "value": null
+    },
+    {
+      "why": "from_source.relationships null, which the schema does not let it be",
+      "path": [
+        "input",
+        "from_source",
+        "relationships"
+      ],
+      "value": null
+    },
+    {
+      "why": "edits null, which the schema does not let it be",
+      "path": [
+        "input",
+        "edits"
+      ],
+      "value": null
+    },
+    {
+      "why": "materialize.indices_as null, which the schema does not let it be",
+      "path": [
+        "input",
+        "materialize",
+        "indices_as"
+      ],
+      "value": null
+    },
+    {
+      "why": "materialize.anchor_time null, which the schema does not let it be",
+      "path": [
+        "input",
+        "materialize",
+        "anchor_time"
+      ],
+      "value": null
+    },
+    {
+      "why": "materialize.inference_config null, which the schema does not let it be",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ],
+      "value": null
+    },
+    {
+      "why": "core.validate_query null, which the schema does not let it be",
+      "path": [
+        "core",
+        "validate_query"
+      ],
+      "value": null
+    },
+    {
+      "why": "core.describe_source null, which the schema does not let it be",
+      "path": [
+        "core",
+        "describe_source"
+      ],
+      "value": null
+    },
+    {
+      "why": "core.materialize null, which the schema does not let it be",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": null
+    },
+    {
+      "why": "core.predict null, which the schema does not let it be",
+      "path": [
+        "core",
+        "predict"
+      ],
+      "value": null
+    },
+    {
+      "why": "expect.error null, which the schema does not let it be",
+      "path": [
+        "expect",
+        "error"
+      ],
+      "value": null
+    },
+    {
+      "why": "expect.message null, which the schema does not let it be",
+      "path": [
+        "expect",
+        "message"
+      ],
+      "value": null
+    },
+    {
+      "why": "expect.today null, which the schema does not let it be",
+      "path": [
+        "expect",
+        "today"
+      ],
+      "value": null
+    },
+    {
+      "why": "core naming no operation (minProperties)",
+      "path": [
+        "core"
+      ],
+      "value": {}
+    },
+    {
+      "why": "from_source naming no argument (minProperties)",
+      "path": [
+        "input",
+        "from_source"
+      ],
+      "value": {}
+    },
+    {
+      "why": "no setup statements (minItems)",
+      "path": [
+        "input",
+        "setup"
+      ],
+      "value": []
+    },
+    {
+      "why": "an empty setup statement (minLength)",
+      "path": [
+        "input",
+        "setup"
+      ],
+      "value": [
+        ""
+      ]
+    },
+    {
+      "why": "core.materialize without its seed, which is required and may be null",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "indices": [
+          {}
+        ],
+        "anchor_time": null
+      }
+    },
+    {
+      "why": "core.materialize naming the schema it samples, which each host builds from its own description and the case's edits (the rust-host journey guard)",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "schema": {
+          "tables": [],
+          "links": []
+        },
+        "indices": [
+          {}
+        ],
+        "anchor_time": null,
+        "seed": null
+      }
+    },
+    {
+      "why": "an empty query (minLength)",
+      "path": [
+        "input",
+        "pql"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty why (minLength)",
+      "path": [
+        "why"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty source (minLength)",
+      "path": [
+        "source"
+      ],
+      "value": ""
+    },
+    {
+      "why": "an empty register entry (minLength)",
+      "path": [
+        "register"
+      ],
+      "value": ""
+    },
+    {
+      "why": "a success naming an error",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "error": "RuntimeError"
+      }
+    },
+    {
+      "why": "a success naming a code, null",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "code": null
+      }
+    },
+    {
+      "why": "a success naming a message",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "message": "m"
+      }
+    },
+    {
+      "why": "a refusal without its code",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "error": "RuntimeError"
+      }
+    },
+    {
+      "why": "a refusal without its error",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "code": "INVALID_REQUEST"
+      }
+    },
+    {
+      "why": "a set_primary_key edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers"
+      }
+    },
+    {
+      "why": "a set_primary_key edit naming an empty column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": ""
+      }
+    },
+    {
+      "why": "a set_primary_key edit naming its key as a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": [
+          "CustomerID"
+        ]
+      }
+    },
+    {
+      "why": "a set_primary_key edit with a key it does not take",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": "CustomerID",
+        "stype": "ID"
+      }
+    },
+    {
+      "why": "a set_time_column edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products"
+      }
+    },
+    {
+      "why": "a set_time_column edit naming a null column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products",
+        "column": null
+      }
+    },
+    {
+      "why": "a set_stype edit without its stype",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color"
+      }
+    },
+    {
+      "why": "a set_stype edit with an empty stype",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": ""
+      }
+    },
+    {
+      "why": "a set_stype edit with a stype that is not text",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": 7
+      }
+    },
+    {
+      "why": "a set_stype edit without its column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "stype": "categorical"
+      }
+    },
+    {
+      "why": "a set_relationships edit without its relationships",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships"
+      }
+    },
+    {
+      "why": "a set_relationships edit whose relationships are not a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": {
+          "source_table": "sales_order_headers",
+          "source_column": "CustomerID",
+          "target_table": "customers",
+          "target_column": "CustomerID"
+        }
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship missing a key",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship with a key beside its four",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID",
+            "kind": "many_to_one"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship that is a list",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          [
+            "sales_order_headers",
+            "CustomerID",
+            "customers",
+            "CustomerID"
+          ]
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a relationship naming an empty column",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with a table key",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "table": "customers",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
+    },
+    {
+      "why": "candidates that are not a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": 7
+    },
+    {
+      "why": "candidates as one text, not a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": "7"
+    },
+    {
+      "why": "a candidate written with a fraction",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        1,
+        1.0
+      ]
+    },
+    {
+      "why": "a candidate that is a boolean",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        true
+      ]
+    },
+    {
+      "why": "a candidate that is null",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        null
+      ]
+    },
+    {
+      "why": "a candidate that is a list",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "why": "top_k as text",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": "3"
+    },
+    {
+      "why": "top_k written with a fraction",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 3.0
+    },
+    {
+      "why": "top_k as a boolean",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": true
+    },
+    {
+      "why": "top_k null",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": null
+    },
+    {
+      "why": "rows_per_call null",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": null
+    },
+    {
+      "why": "rows_per_call a list",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": [
+        3
+      ]
+    },
+    {
+      "why": "rows_per_call an object",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": {
+        "n": 3
+      }
+    },
+    {
+      "why": "fail_call as text",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": "2"
+    },
+    {
+      "why": "fail_call written with a fraction",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": 2.0
+    },
+    {
+      "why": "fail_call as a boolean",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": true
+    },
+    {
+      "why": "fail_call below zero",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": -1
+    },
+    {
+      "why": "fail_call null",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": null
+    },
+    {
+      "why": "fail_call past what a u64 holds",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "probabilities as text",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "probabilities as a number",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": 1
+    },
+    {
+      "why": "probabilities null",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": null
+    },
+    {
+      "why": "quantiles as text",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "quantiles as a number",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": 1
+    },
+    {
+      "why": "quantiles null",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": null
+    },
+    {
+      "why": "explanation as text",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "explanation as a number",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": 1
+    },
+    {
+      "why": "explanation null",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": null
+    },
+    {
+      "why": "item_metadata as text",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "item_metadata as a number",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": 0
+    },
+    {
+      "why": "item_metadata null",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": null
+    },
+    {
+      "why": "outputs a single text, not a list",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": "quantiles"
+    },
+    {
+      "why": "outputs naming a number",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": [
+        1
+      ]
+    },
+    {
+      "why": "outputs null",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": null
+    },
+    {
+      "why": "lag_timesteps null",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": null
+    },
+    {
+      "why": "lag_timesteps a list",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": [
+        2
+      ]
+    },
+    {
+      "why": "lag_timesteps an object",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": {
+        "n": 2
+      }
+    },
+    {
+      "why": "embeddings as text",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "embeddings as a number",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": 1
+    },
+    {
+      "why": "embeddings null",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": null
+    },
+    {
+      "why": "context_anchor_time null",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": null
+    },
+    {
+      "why": "context_anchor_time a number",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": 20240101
+    },
+    {
+      "why": "context_anchor_time a list",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": [
+        "2024-01-01"
+      ]
+    }
+  ],
+  "accepted": [
+    {
+      "why": "inference_config is free-form, nested values included",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ],
+      "value": {
+        "num_estimators": 4,
+        "nested": {
+          "list": [
+            1,
+            {
+              "x": null
+            }
+          ],
+          "text": "t"
+        }
+      }
+    },
+    {
+      "why": "no relationships passed",
+      "path": [
+        "input",
+        "from_source",
+        "relationships"
+      ],
+      "value": []
+    },
+    {
+      "why": "core.materialize with its seed null, the default",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "indices": [
+          {}
+        ],
+        "anchor_time": null,
+        "seed": null
+      }
+    },
+    {
+      "why": "a refusal naming its error and a null code",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "refusal",
+        "stage": "predict",
+        "error": "RuntimeError",
+        "code": null
+      }
+    },
+    {
+      "why": "a success with only what it is today",
+      "path": [
+        "expect"
+      ],
+      "value": {
+        "outcome": "success",
+        "stage": "predict",
+        "today": "t"
+      }
+    },
+    {
+      "why": "a set_primary_key edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_primary_key",
+        "table": "customers",
+        "column": "CustomerID"
+      }
+    },
+    {
+      "why": "a set_time_column edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_time_column",
+        "table": "products",
+        "column": "SellStartDate"
+      }
+    },
+    {
+      "why": "a set_stype edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": "categorical"
+      }
+    },
+    {
+      "why": "a set_stype edit with a stype the reference refuses, which the call refuses",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_stype",
+        "table": "products",
+        "column": "Color",
+        "stype": "banana"
+      }
+    },
+    {
+      "why": "a set_relationships edit",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": [
+          {
+            "source_table": "sales_order_headers",
+            "source_column": "CustomerID",
+            "target_table": "customers",
+            "target_column": "CustomerID"
+          }
+        ]
+      }
+    },
+    {
+      "why": "a set_relationships edit with no relationships",
+      "path": [
+        "input",
+        "edits",
+        0
+      ],
+      "value": {
+        "op": "set_relationships",
+        "relationships": []
+      }
+    },
+    {
+      "why": "core.materialize with no entities, a call the core refuses as the reference does (empty.indices)",
+      "path": [
+        "core",
+        "materialize"
+      ],
+      "value": {
+        "provider": {
+          "provider": "sql",
+          "dialect": "duckdb"
+        },
+        "indices": [],
+        "anchor_time": null,
+        "seed": null
+      }
+    },
+    {
+      "why": "candidates of integers, one past 2**64 read without loss",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        1,
+        2,
+        123456789012345678901234567890
+      ]
+    },
+    {
+      "why": "candidates of text keys",
+      "path": [
+        "input",
+        "materialize",
+        "candidates"
+      ],
+      "value": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "why": "top_k of 3",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 3
+    },
+    {
+      "why": "top_k of 0, an input the reference refuses, carried as a case",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 0
+    },
+    {
+      "why": "top_k past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 9223372036854775808
+    },
+    {
+      "why": "top_k past 2**64",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "top_k negative, an input the reference refuses, carried as a case",
+      "path": [
+        "input",
+        "materialize",
+        "top_k"
+      ],
+      "value": -1
+    },
+    {
+      "why": "rows_per_call of 3",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": 3
+    },
+    {
+      "why": "rows_per_call of 0, an input the reference refuses, carried as a case",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": 0
+    },
+    {
+      "why": "rows_per_call written with a fraction, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": 2.5
+    },
+    {
+      "why": "rows_per_call as a boolean, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": true
+    },
+    {
+      "why": "rows_per_call as text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": "3"
+    },
+    {
+      "why": "rows_per_call past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "fail_call of 0, the first call",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": 0
+    },
+    {
+      "why": "fail_call of 2",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "value": 2
+    },
+    {
+      "why": "the scripted endpoint told to answer probabilities",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer probabilities",
+      "path": [
+        "input",
+        "probabilities"
+      ],
+      "value": false
+    },
+    {
+      "why": "the scripted endpoint told to answer quantiles",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer quantiles",
+      "path": [
+        "input",
+        "quantiles"
+      ],
+      "value": false
+    },
+    {
+      "why": "the scripted endpoint told to answer explanations",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer explanations",
+      "path": [
+        "input",
+        "explanation"
+      ],
+      "value": false
+    },
+    {
+      "why": "the scripted endpoint told to answer item metadata",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": true
+    },
+    {
+      "why": "the scripted endpoint told not to answer item metadata",
+      "path": [
+        "input",
+        "item_metadata"
+      ],
+      "value": false
+    },
+    {
+      "why": "predict's outputs naming quantiles",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": [
+        "quantiles"
+      ]
+    },
+    {
+      "why": "predict's outputs naming two fields",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": [
+        "prediction",
+        "quantiles"
+      ]
+    },
+    {
+      "why": "predict's outputs naming none, an input the reference refuses",
+      "path": [
+        "input",
+        "outputs"
+      ],
+      "value": []
+    },
+    {
+      "why": "lag_timesteps of 2",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": 2
+    },
+    {
+      "why": "lag_timesteps of -1, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": -1
+    },
+    {
+      "why": "lag_timesteps written with a fraction, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": 1.5
+    },
+    {
+      "why": "lag_timesteps as a boolean, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": true
+    },
+    {
+      "why": "lag_timesteps as text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": "2"
+    },
+    {
+      "why": "lag_timesteps past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "lag_timesteps"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "embeddings true",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": true
+    },
+    {
+      "why": "embeddings false",
+      "path": [
+        "input",
+        "embeddings"
+      ],
+      "value": false
+    },
+    {
+      "why": "anchor_time the literal entity",
+      "path": [
+        "input",
+        "materialize",
+        "anchor_time"
+      ],
+      "value": "entity"
+    },
+    {
+      "why": "context_anchor_time an ISO timestamp",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": "2024-01-01"
+    },
+    {
+      "why": "context_anchor_time the literal entity",
+      "path": [
+        "input",
+        "materialize",
+        "context_anchor_time"
+      ],
+      "value": "entity"
+    },
+    {
+      "why": "random_seed of 7",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": 7
+    },
+    {
+      "why": "random_seed null, an unseeded sample",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": null
+    },
+    {
+      "why": "random_seed of -1, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": -1
+    },
+    {
+      "why": "random_seed with a fraction, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": 1.5
+    },
+    {
+      "why": "random_seed past int64, a JSON integer all the same",
+      "path": [
+        "input",
+        "materialize",
+        "random_seed"
+      ],
+      "value": 18446744073709551616
+    },
+    {
+      "why": "num_hops of 1",
+      "path": [
+        "input",
+        "materialize",
+        "num_hops"
+      ],
+      "value": 1
+    },
+    {
+      "why": "num_hops as a boolean, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "num_hops"
+      ],
+      "value": true
+    },
+    {
+      "why": "num_hops as text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "num_hops"
+      ],
+      "value": "2"
+    },
+    {
+      "why": "num_hops null",
+      "path": [
+        "input",
+        "materialize",
+        "num_hops"
+      ],
+      "value": null
+    },
+    {
+      "why": "num_neighbors a list of hop sizes",
+      "path": [
+        "input",
+        "materialize",
+        "num_neighbors"
+      ],
+      "value": [
+        4,
+        4
+      ]
+    },
+    {
+      "why": "num_neighbors an empty list, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "num_neighbors"
+      ],
+      "value": []
+    },
+    {
+      "why": "num_neighbors a number, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "num_neighbors"
+      ],
+      "value": 5
+    },
+    {
+      "why": "num_neighbors null",
+      "path": [
+        "input",
+        "materialize",
+        "num_neighbors"
+      ],
+      "value": null
+    },
+    {
+      "why": "max_pq_iterations of 3",
+      "path": [
+        "input",
+        "materialize",
+        "max_pq_iterations"
+      ],
+      "value": 3
+    },
+    {
+      "why": "max_pq_iterations of 0, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "max_pq_iterations"
+      ],
+      "value": 0
+    },
+    {
+      "why": "max_pq_iterations as text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "max_pq_iterations"
+      ],
+      "value": "x"
+    },
+    {
+      "why": "use_prediction_time true",
+      "path": [
+        "input",
+        "materialize",
+        "use_prediction_time"
+      ],
+      "value": true
+    },
+    {
+      "why": "use_prediction_time false",
+      "path": [
+        "input",
+        "materialize",
+        "use_prediction_time"
+      ],
+      "value": false
+    },
+    {
+      "why": "use_prediction_time as text",
+      "path": [
+        "input",
+        "materialize",
+        "use_prediction_time"
+      ],
+      "value": "yes"
+    },
+    {
+      "why": "return_embeddings true",
+      "path": [
+        "input",
+        "materialize",
+        "return_embeddings"
+      ],
+      "value": true
+    },
+    {
+      "why": "return_embeddings false",
+      "path": [
+        "input",
+        "materialize",
+        "return_embeddings"
+      ],
+      "value": false
+    },
+    {
+      "why": "exclude_cols_dict a table to its columns",
+      "path": [
+        "input",
+        "materialize",
+        "exclude_cols_dict"
+      ],
+      "value": {
+        "users": [
+          "age"
+        ]
+      }
+    },
+    {
+      "why": "exclude_cols_dict a table to text, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "exclude_cols_dict"
+      ],
+      "value": {
+        "users": "age"
+      }
+    },
+    {
+      "why": "exclude_cols_dict a list, an input the reference refuses",
+      "path": [
+        "input",
+        "materialize",
+        "exclude_cols_dict"
+      ],
+      "value": [
+        "age"
+      ]
+    },
+    {
+      "why": "exclude_cols_dict null",
+      "path": [
+        "input",
+        "materialize",
+        "exclude_cols_dict"
+      ],
+      "value": null
+    }
+  ],
+  "omitted": [
+    {
+      "why": "no relationships passed",
+      "path": [
+        "input",
+        "from_source",
+        "relationships"
+      ]
+    },
+    {
+      "why": "no edits",
+      "path": [
+        "input",
+        "edits"
+      ]
+    },
+    {
+      "why": "no inference_config",
+      "path": [
+        "input",
+        "materialize",
+        "inference_config"
+      ]
+    },
+    {
+      "why": "no keys given",
+      "path": [
+        "input",
+        "from_source",
+        "primary_keys"
+      ]
+    },
+    {
+      "why": "no seam",
+      "path": [
+        "seam"
+      ]
+    },
+    {
+      "why": "no tables named",
+      "path": [
+        "input",
+        "from_source",
+        "tables"
+      ]
+    },
+    {
+      "why": "no time columns given",
+      "path": [
+        "input",
+        "from_source",
+        "time_columns"
+      ]
+    }
+  ],
+  "refused_texts": [
+    {
+      "why": "fail_call written as -0",
+      "path": [
+        "input",
+        "fail_call"
+      ],
+      "text": "-0"
+    },
+    {
+      "why": "rows_per_call NaN, not JSON",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "text": "NaN"
+    },
+    {
+      "why": "rows_per_call Infinity, not JSON",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "text": "Infinity"
+    },
+    {
+      "why": "rows_per_call -Infinity, not JSON",
+      "path": [
+        "input",
+        "materialize",
+        "rows_per_call"
+      ],
+      "text": "-Infinity"
+    }
+  ]
+}

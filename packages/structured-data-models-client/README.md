@@ -32,10 +32,10 @@ with SDMClient(url='http://localhost:8000') as client:
 ```
 
 The model is an argument, not a method name. For several related tables, ask in
-the Predictive Query Language and pass `KumoRelational()` instead; that needs
-`pip install 'structured-data-models-client[relational]'`.
+the Predictive Query Language and pass `KumoRelational()` instead; the same
+install covers it.
 
-Documentation, the other four packages and the examples are in the repository:
+Documentation, the API and connector packages and the examples are in the repository:
 <https://github.com/NVIDIA/structured-data-models-client>
 
 Apache-2.0. Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES.

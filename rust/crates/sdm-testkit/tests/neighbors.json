@@ -1,0 +1,266 @@
+{
+  "description": "Authored source tables, zones and fourteen neighbor seed/window inputs. Expected rows are derived independently from source data in neighbors.rs.",
+  "setup": [
+    "CREATE TABLE users (uid BIGINT PRIMARY KEY)",
+    "INSERT INTO users SELECT i FROM range(1, 6) t(i)",
+    "CREATE TABLE ev (eid BIGINT, uid BIGINT, ts TIMESTAMP, val DOUBLE)",
+    "INSERT INTO ev VALUES (1, 1, '2024-01-01 00:00:00', 1.0), (2, 1, '2023-12-31 23:59:59.999999', 2.0), (3, 1, '2024-01-01 00:00:00.000001', 3.0), (7, 1, '2023-12-30 00:00:00', 4.0), (5, 1, '2023-12-30 00:00:00', 5.0), (6, 1, NULL, 6.0), (8, 1, '1960-06-15 12:00:00', 7.0), (9, 1, '2024-01-02 00:00:00', 8.0), (10, 1, '2024-01-02 00:00:00.000001', 9.0)",
+    "INSERT INTO ev SELECT 100 + i, 2, TIMESTAMP '2023-06-01' + to_hours((i // 2)::BIGINT), i::DOUBLE FROM range(9) t(i)",
+    "INSERT INTO ev VALUES (200, 4, '1969-12-31 23:59:59.5', 10.0), (201, 4, '1900-01-01 00:00:00', 11.0)",
+    "CREATE TABLE evtz (eid BIGINT, uid BIGINT, ts TIMESTAMPTZ, val DOUBLE)",
+    "INSERT INTO evtz VALUES (1, 1, '2024-01-01 03:00:00+00', 1.0), (2, 1, '2024-01-01 01:00:00+00', 2.0), (3, 1, '2024-01-01 02:00:00+00', 3.0), (4, 2, '2024-07-01 12:00:00+02', 4.0)"
+  ],
+  "zones": [
+    "SET GLOBAL TimeZone='UTC'",
+    "SET TimeZone='America/New_York'"
+  ],
+  "columns": [
+    "eid",
+    "uid",
+    "ts",
+    "val"
+  ],
+  "cases": [
+    {
+      "id": "fkey/anchor-equality",
+      "form": "fkey",
+      "table": "ev",
+      "per_seed": 32,
+      "seeds": [
+        [
+          1,
+          1704067200000000000
+        ]
+      ],
+      "ordered": true
+    },
+    {
+      "id": "fkey/sub-second",
+      "form": "fkey",
+      "table": "ev",
+      "per_seed": 32,
+      "seeds": [
+        [
+          1,
+          1704067199999999000
+        ]
+      ],
+      "ordered": true
+    },
+    {
+      "id": "fkey/ties-at-the-cut",
+      "form": "fkey",
+      "table": "ev",
+      "per_seed": 1,
+      "seeds": [
+        [
+          1,
+          1703980800000000000
+        ]
+      ],
+      "ordered": true
+    },
+    {
+      "id": "fkey/ties-kept-by-key",
+      "form": "fkey",
+      "table": "ev",
+      "per_seed": 3,
+      "seeds": [
+        [
+          2,
+          1704067200000000000
+        ]
+      ],
+      "ordered": true
+    },
+    {
+      "id": "fkey/negative",
+      "form": "fkey",
+      "table": "ev",
+      "per_seed": 32,
+      "seeds": [
+        [
+          1,
+          -283996800000000000
+        ],
+        [
+          4,
+          0
+        ]
+      ],
+      "ordered": true
+    },
+    {
+      "id": "fkey/several-seeds-one-neighbor",
+      "form": "fkey",
+      "table": "ev",
+      "per_seed": 2,
+      "seeds": [
+        [
+          1,
+          1704240000000000000
+        ],
+        [
+          1,
+          1704067200000001000
+        ],
+        [
+          2,
+          1685584800000000000
+        ],
+        [
+          1,
+          1704240000000000000
+        ]
+      ],
+      "ordered": true
+    },
+    {
+      "id": "fkey/no-row",
+      "form": "fkey",
+      "table": "ev",
+      "per_seed": 32,
+      "seeds": [
+        [
+          3,
+          1704067200000000000
+        ],
+        [
+          5,
+          1704067200000000000
+        ]
+      ],
+      "ordered": true
+    },
+    {
+      "id": "fkey/timestamptz",
+      "form": "fkey",
+      "table": "evtz",
+      "per_seed": 32,
+      "seeds": [
+        [
+          1,
+          1704074400000000000
+        ],
+        [
+          2,
+          1719828000000000000
+        ]
+      ],
+      "ordered": true
+    },
+    {
+      "id": "time/window-ends",
+      "form": "time",
+      "table": "ev",
+      "seeds": [
+        [
+          1,
+          1704067200000000000,
+          1704153600000000000
+        ],
+        [
+          1,
+          1703980800000000000,
+          1704067200000000000
+        ]
+      ],
+      "ordered": false
+    },
+    {
+      "id": "time/sub-second",
+      "form": "time",
+      "table": "ev",
+      "seeds": [
+        [
+          1,
+          1704067199999999000,
+          1704153599999999000
+        ]
+      ],
+      "ordered": false
+    },
+    {
+      "id": "time/no-start",
+      "form": "time",
+      "table": "ev",
+      "seeds": [
+        [
+          1,
+          null,
+          1704067200000000000
+        ],
+        [
+          4,
+          null,
+          946684800000000000
+        ]
+      ],
+      "ordered": false
+    },
+    {
+      "id": "time/negative",
+      "form": "time",
+      "table": "ev",
+      "seeds": [
+        [
+          4,
+          -172800000000000,
+          0
+        ],
+        [
+          1,
+          -301363200000000000,
+          -301190400000000000
+        ]
+      ],
+      "ordered": false
+    },
+    {
+      "id": "time/several-seeds-one-neighbor",
+      "form": "time",
+      "table": "ev",
+      "seeds": [
+        [
+          1,
+          1703808000000000000,
+          1704153600000000000
+        ],
+        [
+          1,
+          1703851200000000000,
+          1704196800000000000
+        ],
+        [
+          2,
+          1685404800000000000,
+          1685750400000000000
+        ],
+        [
+          1,
+          1703808000000000000,
+          1704153600000000000
+        ]
+      ],
+      "ordered": false
+    },
+    {
+      "id": "time/timestamptz",
+      "form": "time",
+      "table": "evtz",
+      "seeds": [
+        [
+          1,
+          1703988000000000000,
+          1704074400000000000
+        ],
+        [
+          2,
+          1719792000000000000,
+          1719878400000000000
+        ]
+      ],
+      "ordered": false
+    }
+  ]
+}

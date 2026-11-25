@@ -10,13 +10,19 @@ that nothing is downloaded and no GPU is needed.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import pytest
 
 from sdm_client import Request
+
+# Installed-wheel tests run outside the checkout, including in isolated Python.
+# Make repository fixture decoders available without adding package source roots.
+sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 
 @pytest.fixture(scope='module')
@@ -34,7 +40,6 @@ def tabular(sdm):
 
 @pytest.fixture(scope='module')
 def relational(sdm):
-    pytest.importorskip('sdm_relational_engine', reason='needs [relational]')
     import torch
 
     torch.manual_seed(0)
@@ -177,13 +182,32 @@ def hand_built_result() -> Callable[..., Any]:
 
 
 @pytest.fixture
-def failing_analysis(monkeypatch) -> str:
-    """Make every column analysis the client starts raise; returns the error
-    text it raises with."""
-    error = 'analysis broke'
+def source_reads(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Each fetch a core run asks of its source's provider, in order.
 
-    def broken(*args: Any, **kwargs: Any) -> Any:
-        raise RuntimeError(error)
+    Counted where the run loop hands a fetch to the provider, so every route
+    over a source is seen, and a run over frames, which has no provider,
+    records none.
+    """
+    from sdm_client._rust import run as run_module
 
-    monkeypatch.setattr('sdm_client.client.ColumnExplanations', broken)
-    return error
+    reads: list[dict[str, Any]] = []
+    steps = run_module._steps
+
+    class Counted:
+        def __init__(self, provider: Any) -> None:
+            self._provider = provider
+
+        def __call__(self, request: dict[str, Any], keys: Any) -> Any:
+            reads.append(request)
+            return self._provider(request, keys)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._provider, name)
+
+    def counted(core: Any, handle: Any, provider: Any, *rest: Any) -> Any:
+        wrapped = None if provider is None else Counted(provider)
+        return steps(core, handle, wrapped, *rest)
+
+    monkeypatch.setattr(run_module, '_steps', counted)
+    return reads

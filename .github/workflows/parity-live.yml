@@ -1,0 +1,188 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+name: Live parity
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ci_run_id:
+        description: Successful full CI run for this exact selected branch commit.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
+concurrency:
+  group: parity-shared-resources
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  PARITY_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  preflight:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ci_run_id: ${{ steps.plan.outputs.ci_run_id }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.PARITY_COMMIT }}
+          persist-credentials: false
+      - id: plan
+        env:
+          REQUESTED_RUN: ${{ inputs.ci_run_id || github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, 'tests/compatibility')
+          from ci_artifacts import select_run
+          from hosted_profile import profile
+          import json
+          run = select_run(os.environ['GITHUB_REPOSITORY'], os.environ['PARITY_COMMIT'], os.environ.get('REQUESTED_RUN', ''))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print(f'ci_run_id={run}', file=output)
+              print('matrix=' + json.dumps({'include': profile()['required']}), file=output)
+          PY
+
+  shards:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Environment branch policies allow only main and explicitly approved branches.
+    environment: parity-live
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+    services:
+      postgres:
+        image: ghcr.io/nvidia/structured-data-models-client/postgres:17@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sdm_test
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      SDM_POSTGRES_TEST_DSN: postgresql://postgres:postgres@localhost:5432/sdm_test
+      DATABRICKS_HOST: ${{ matrix.service == 'real-warehouse' && secrets.DATABRICKS_HOST || '' }}
+      DATABRICKS_TOKEN: ${{ matrix.service == 'real-warehouse' && secrets.DATABRICKS_TOKEN || '' }}
+      DATABRICKS_SERVERLESS_COMPUTE_ID: auto
+      SNOWFLAKE_URL: ${{ matrix.service == 'real-warehouse' && secrets.SNOWFLAKE_URL || '' }}
+      SNOWFLAKE_USERNAME: ${{ matrix.service == 'real-warehouse' && secrets.SNOWFLAKE_USERNAME || '' }}
+      SNOWFLAKE_ACCESS_TOKEN: ${{ matrix.service == 'real-warehouse' && secrets.SNOWFLAKE_ACCESS_TOKEN || '' }}
+      PARITY_DATABRICKS_CATALOG: ${{ vars.PARITY_DATABRICKS_CATALOG }}
+      PARITY_DATABRICKS_WAREHOUSE_ID: ${{ vars.PARITY_DATABRICKS_WAREHOUSE_ID }}
+      PARITY_SNOWFLAKE_DATABASE: ${{ vars.PARITY_SNOWFLAKE_DATABASE }}
+      PARITY_SNOWFLAKE_WAREHOUSE: ${{ vars.PARITY_SNOWFLAKE_WAREHOUSE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.PARITY_COMMIT }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/parity-artifacts
+        with:
+          ci-run-id: ${{ needs.preflight.outputs.ci_run_id }}
+          commit: ${{ env.PARITY_COMMIT }}
+      - name: Resolve Spark Connect runtime only for Spark
+        if: matrix.connector == 'databricks-spark'
+        run: |
+          mvn -B -f java/parity-connect-pom.xml dependency:build-classpath \
+            -Dmdep.outputFile="$PARITY_DIR/connect-classpath.txt" > "$PARITY_DIR/private/connect.log" 2>&1
+      - name: Read and materialize through both public clients
+        env:
+          CONNECTOR: ${{ matrix.connector }}
+        run: |
+          "$PARITY_DIR/candidate/bin/python" tests/compatibility/hosted_runner.py \
+            --connector "$CONNECTOR" --root "$PARITY_DIR" --commit "$PARITY_COMMIT" \
+            > "$PARITY_DIR/private/provision.log" 2>&1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: live-shard-${{ matrix.connector }}
+          path: ${{ runner.temp }}/parity/evidence/
+          if-no-files-found: error
+
+  models:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.PARITY_COMMIT }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/parity-artifacts
+        with:
+          ci-run-id: ${{ needs.preflight.outputs.ci_run_id }}
+          commit: ${{ env.PARITY_COMMIT }}
+          models: 'true'
+      - name: Small pretrained CPU model and session smoke suite
+        run: |
+          "$PARITY_DIR/candidate/bin/python" tests/compatibility/hosted_model_smoke.py --root "$PARITY_DIR" \
+            > "$PARITY_DIR/private/model-smoke.log" 2>&1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: cpu-model-smoke
+          path: ${{ runner.temp }}/parity/evidence/
+          if-no-files-found: error
+
+  aggregate:
+    needs: [preflight, shards, models]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.PARITY_COMMIT }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: live-shard-*
+          path: ${{ runner.temp }}/shards
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: cpu-model-smoke
+          path: ${{ runner.temp }}/models
+      - name: Require all declared cells and successful jobs
+        env:
+          CI_RUN_ID: ${{ needs.preflight.outputs.ci_run_id }}
+          SHARDS_RESULT: ${{ needs.shards.result }}
+          MODELS_RESULT: ${{ needs.models.result }}
+        run: |
+          set -euo pipefail
+          python -m pip install 'jsonschema>=4.18'
+          mkdir -p "$RUNNER_TEMP/parity/evidence"
+          python tests/compatibility/hosted_aggregate.py --root "$RUNNER_TEMP/shards" \
+            --commit "$PARITY_COMMIT" --run-id "$CI_RUN_ID" --models "$RUNNER_TEMP/models" --out "$RUNNER_TEMP/parity/evidence/report.json"
+          test "$SHARDS_RESULT" = success
+          test "$MODELS_RESULT" = success
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: hosted-parity-${{ env.PARITY_COMMIT }}
+          path: ${{ runner.temp }}/parity/evidence/
+          if-no-files-found: error

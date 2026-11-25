@@ -459,6 +459,28 @@ def test_a_stalled_prediction_is_reported_as_a_timeout_too():
     assert 'timed out after 0.5 seconds' in str(raised.value)
 
 
+def test_a_stalled_one_shot_predict_keeps_the_transport_s_account():
+    import pandas as pd
+
+    from sdm_client import KumoTabular, Request, SDMClient
+
+    request = Request(
+        pd.DataFrame({'x': [1.0, 2.0, 3.0, 4.0], 'y': [0, 1, 0, 1]}),
+        pd.DataFrame({'x': [5.0]}),
+        target='y',
+        task='classification',
+    )
+    with _serve(_Reply(delay=5.0)) as (_, url):
+        with SDMClient(url, timeout=0.5, max_retries=0) as client:
+            with pytest.raises(StructuredDataError) as raised:
+                client.predict(request, model=KumoTabular())
+
+    assert raised.value.code == 'TRANSPORT_ERROR'
+    assert 'timed out after 0.5 seconds' in str(raised.value)
+    assert raised.value.details['timeout'] == 0.5
+    assert raised.value.details['url'].startswith('http://127.0.0.1:')
+
+
 @pytest.mark.parametrize('session_id', ['..', '.', ''])
 def test_a_session_id_that_is_not_a_segment_is_refused(session_id):
     """`..` turned a scoring call against a pinned context into a one-shot

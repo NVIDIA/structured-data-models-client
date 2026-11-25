@@ -13,6 +13,7 @@ back is read.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import math
@@ -97,11 +98,32 @@ class Endpoints:
         return type('Endpoint', (), {'state': state})()
 
 
+class ApiClient:
+    """The SDK's raw request interface used by Rust-authored envelopes."""
+
+    def __init__(self, workspace: Workspace) -> None:
+        self.workspace = workspace
+
+    def do(
+        self, method: str, path: str, *, headers: Any, data: Any, raw: bool
+    ) -> Any:
+        assert method == 'POST'
+        assert path == f'/serving-endpoints/{ENDPOINT}/invocations'
+        assert headers == {'Content-Type': 'application/json'}
+        assert raw is True
+        body = json.loads(data.read())
+        answer = self.workspace.serving_endpoints.query(name=ENDPOINT, **body)
+        if hasattr(answer, 'as_dict'):
+            answer = answer.as_dict()
+        return {'contents': io.BytesIO(json.dumps(answer).encode())}
+
+
 class Workspace:
     """Fails loudly on anything the transport should not reach for."""
 
     def __init__(self, **kwargs: Any) -> None:
         self.serving_endpoints = Endpoints(**kwargs)
+        self.api_client = ApiClient(self)
 
     def __getattr__(self, name: str) -> Any:
         raise AssertionError(f'transport reached for WorkspaceClient.{name}')
@@ -117,7 +139,7 @@ def opened(**kwargs: Any) -> tuple[SDMClient, Endpoints]:
 
 def test_a_serving_client_holds_what_an_http_client_holds():
     """A serving client is built without ``__init__``, so state added only
-    there was missing from it until a call reached for it: ``close()`` raised
+    there was missing from it until a call reached for it: ``close`` raised
     ``AttributeError`` on the set of pinned contexts. Both now set their
     state in one place, and this holds them to the same attributes.
     """
@@ -194,7 +216,6 @@ def test_a_reply_that_is_not_one_row_is_a_transport_error():
 def test_a_question_asked_in_parts_is_one_call_per_part():
     """A forecast has no task on the endpoint and is asked once per step;
     each step is its own serving call."""
-    pytest.importorskip('sdm_relational_engine')
     request = forecast_request()
     assert request.parts is not None
 
@@ -443,6 +464,45 @@ def test_an_oversized_request_is_refused_before_it_is_sent():
     # without assuming a predictive-query sampling parameter.
     assert 'context rows' in str(error.value)
     assert 'rows to score' in str(error.value)
+
+
+def test_default_gateway_limit_accepts_exact_bytes_then_refuses_one_more():
+    """Check the client guard, not a hosted gateway or model's acceptance."""
+    limit = 16_000_000
+
+    def encoded_size(payload):
+        records = [{'request_json': json.dumps(payload, separators=(',', ':'))}]
+        return len(
+            json.dumps(
+                {'dataframe_records': records}, separators=(',', ':')
+            ).encode('utf-8')
+        )
+
+    payload = {'text': ''}
+    payload['text'] = 'x' * (limit - encoded_size(payload))
+    assert encoded_size(payload) == limit
+    workspace = Workspace(answer={'predictions': []})
+    transport = DatabricksServingTransport(ENDPOINT, workspace)
+    try:
+        assert transport.predict(payload) == {'predictions': []}
+        assert len(workspace.serving_endpoints.calls) == 1
+        records = workspace.serving_endpoints.calls[0]['dataframe_records']
+        assert (
+            len(
+                json.dumps(
+                    {'dataframe_records': records}, separators=(',', ':')
+                ).encode('utf-8')
+            )
+            == limit
+        )
+        payload['text'] += 'x'
+        with pytest.raises(StructuredDataError) as error:
+            transport.predict(payload)
+        assert error.value.code == 'INVALID_REQUEST'
+        assert error.value.details == {'bytes': limit + 1, 'limit': limit}
+        assert len(workspace.serving_endpoints.calls) == 1
+    finally:
+        transport.close()
 
 
 def test_the_size_counted_is_the_wrapped_envelope_not_the_payload():
@@ -855,3 +915,35 @@ def test_an_unusable_timeout_is_refused_at_construction(bad):
     with pytest.raises(StructuredDataError) as error:
         SDMClient.for_databricks_serving(ENDPOINT, timeout=bad)
     assert error.value.code == 'INVALID_CONFIGURATION'
+
+
+def test_an_answer_too_deep_to_read_is_said_so_and_not_json_is_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # fix round 3: an answer nested past what this interpreter's
+    # reader reads (Python before 3.12 raises RecursionError) is the same
+    # TRANSPORT_ERROR as any answer that is not JSON, flagged so the core
+    # route reports it as too deep; a malformed answer is not flagged.
+    from sdm_client.core import databricks_serving
+
+    real = databricks_serving.json.loads
+
+    def loads(text: Any, *args: Any, **kwargs: Any) -> Any:
+        if str(text).count('[') > 900:
+            raise RecursionError('maximum recursion depth exceeded')
+        return real(text, *args, **kwargs)
+
+    monkeypatch.setattr(databricks_serving.json, 'loads', loads)
+    client = SDMClient.for_databricks_serving(
+        ENDPOINT, workspace_client=Workspace()
+    )
+    transport = client._transport
+    with pytest.raises(StructuredDataError) as deep:
+        transport._decoded('[' * 5000 + ']' * 5000)
+    assert deep.value.code == 'TRANSPORT_ERROR'
+    assert deep.value._response_too_deep
+    assert deep.value.__cause__ is None
+    with pytest.raises(StructuredDataError) as malformed:
+        transport._decoded('{"a": ')
+    assert malformed.value.code == 'TRANSPORT_ERROR'
+    assert not malformed.value._response_too_deep

@@ -1,0 +1,12 @@
+{
+  "rel-fixture": {
+    "customers": {
+      "exclude": [
+        "excluded"
+      ],
+      "stypes": {
+        "name": "text"
+      }
+    }
+  }
+}

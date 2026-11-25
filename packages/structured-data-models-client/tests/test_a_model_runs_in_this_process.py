@@ -163,12 +163,12 @@ def test_what_a_holdout_leaves_is_refused_when_it_cannot_be_learned_from(
             (
                 PredictiveQuery(COUNT, tables).materialize(indices=[0, 1]),
                 list(range(40)),
-                'VALIDATION_FAILED',
+                'UNSUPPORTED_REQUEST',
             ),
             (
                 PredictiveQuery(BINARY, tables).materialize(indices=[1, 3]),
                 list(range(0, 40, 2)),
-                'TASK_SCHEMA_MISMATCH',
+                'UNSUPPORTED_REQUEST',
             ),
         ):
             error = refused(
@@ -177,6 +177,10 @@ def test_what_a_holdout_leaves_is_refused_when_it_cannot_be_learned_from(
                 )
             )
             assert error.code == code
+            if len(holdout) == 40:
+                assert error.details['context_rows'] == 0
+            else:
+                assert error.details['classes_in_context'] == 1
 
 
 @pytest.mark.parametrize(
@@ -332,7 +336,7 @@ def test_without_the_extra_the_extra_is_named():
     says which Python it needs."""
     script = (
         'import sys\n'
-        "for name in ('sdm', 'torch', 'pyarrow'):\n"
+        "for name in ('sdm', 'torch'):\n"
         '    sys.modules[name] = None\n'
         'from sdm_client import SDMClient, StructuredDataError\n'
         'try:\n'
@@ -462,6 +466,36 @@ def test_an_explanation_is_answered_in_this_process(request, model):
     assert len(result.explanations.gradients) == len(result) > 0
 
 
+def test_an_inference_option_the_model_refuses_is_refused_before_it_loads(
+    sdm, monkeypatch
+):
+    """An inference option this process does not act on is refused before
+    the model's weights are loaded, as an output it does not produce is.
+
+    Assumptions:
+    - The client was opened with no model, so it loads one on first use.
+    - Constructing ``sdm.models.KumoTabular`` is replaced by a stub that
+      records the call; any call means the weights were loaded.
+    - Kumo Tabular takes ``use_prediction_time`` only as ``False``.
+    """
+    loads = []
+    monkeypatch.setattr(
+        sdm.models, 'KumoTabular', lambda **kwargs: loads.append(kwargs)
+    )
+    frame = people()[['person_id', 'age', 'visits', 'churn']]
+    request = Request(
+        context=frame.iloc[:45],
+        predict=frame.iloc[45:].drop(columns=['churn']),
+        target='churn',
+        task='classification',
+        inference={'use_prediction_time': True},
+    )
+    with SDMClient.in_process() as client:
+        error = refused(lambda: client.predict(request, model=KumoTabular()))
+    assert error.code == 'INVALID_REQUEST'
+    assert loads == []
+
+
 def test_an_output_the_model_does_not_produce_is_refused_before_it_loads(
     sdm, monkeypatch
 ):
@@ -526,7 +560,7 @@ def test_releasing_a_session_does_not_wait_for_a_model_to_finish(
 
     monkeypatch.setattr(type(tabular), 'fit', watched)
     client = SDMClient.in_process(tabular)
-    backend = client._backend
+    backend = client._transport
     try:
         call = threading.Thread(
             target=lambda: client.predict(request, model=KumoTabular())
@@ -625,7 +659,7 @@ def test_closing_beats_a_call_that_was_already_running(relational, monkeypatch):
         indices=[0, 1], model=KumoRelational()
     )
     client = SDMClient.in_process(relational)
-    backend = client._backend
+    backend = client._transport
     failed: list[BaseException] = []
 
     def pin() -> None:

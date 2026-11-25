@@ -149,14 +149,3 @@ def test_malformed_invalid_params_render_as_nothing(params: object) -> None:
 def test_partial_entries_still_render() -> None:
     assert format_invalid_params([{'name': 'a'}]) == ' a'
     assert format_invalid_params([{'reason': 'b'}]) == ' b'
-
-
-def test_rendered_shape_matches_the_relational_engine_path() -> None:
-    r"""The two renderers cannot share code across the package boundary, so
-    the shape is pinned on both sides instead.
-    """
-    engine_rfm = pytest.importorskip('sdm_relational_engine.rfm.rfm')
-    params = [{'name': 'x', 'reason': 'y'}, {'name': 'p', 'reason': 'q'}]
-    assert format_invalid_params(params) == engine_rfm._invalid_params_summary(
-        {'invalid_params': params}
-    )

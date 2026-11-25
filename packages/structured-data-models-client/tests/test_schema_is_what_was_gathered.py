@@ -198,7 +198,6 @@ def test_a_snapshot_keeps_what_was_recorded_about_a_column():
 def test_a_relational_request_names_the_entity_the_query_named(order):
     """It was read from dict insertion order, so it answered correctly or
     incorrectly depending on how the caller built their dict."""
-    pytest.importorskip('sdm_relational_engine')
 
     schema = graph(order)
     request = PredictiveQuery(
@@ -266,7 +265,6 @@ def test_a_predict_frame_without_the_key_column_removes_nothing():
 def test_editing_the_schema_does_not_change_a_relational_request_either():
     """Both materializers hand the request a schema, and both had to stop
     handing over the caller's live one."""
-    pytest.importorskip('sdm_relational_engine')
 
     schema = graph()
     request = PredictiveQuery(
@@ -292,39 +290,6 @@ def test_a_predict_frame_request_keeps_its_schema_too():
 
 
 # --- the values are read once ----------------------------------------------
-
-
-def test_a_column_is_typed_from_one_reading_of_its_values():
-    """`infer_tfm_dtype` walks every cell of an object column, and it was
-    asked three times per column, for the dtype, again inside the stype, and
-    again to record that there was no type. On a million rows of warehouse
-    `Decimal` that was five seconds before anything was sent."""
-    import sdm_client.schema as schema_module
-
-    reads: list[str] = []
-    real = schema_module.infer_tfm_dtype
-
-    def counting(series):
-        reads.append(getattr(series, 'name', '?'))
-        return real(series)
-
-    frame = pd.DataFrame(
-        {
-            'rid': range(50),
-            'amount': [float(i) for i in range(50)],
-            'label': ['a', 'b'] * 25,
-            'when': pd.to_datetime(['2024-01-01'] * 50),
-        }
-    )
-    schema_module.infer_tfm_dtype = counting
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
-            Schema.from_data({'t': frame}, primary_keys={'t': 'rid'})
-    finally:
-        schema_module.infer_tfm_dtype = real
-
-    assert sorted(reads) == sorted(frame.columns)
 
 
 def test_a_list_cell_is_still_refused_before_the_column_is_typed():
@@ -538,7 +503,6 @@ def test_materialized_without_an_entity_table_reads_the_query_not_the_dict():
     `events` is given first so that insertion order and the query disagree,
     which is the only arrangement that can tell them apart.
     """
-    pytest.importorskip('sdm_relational_engine')
 
     rng = np.random.default_rng(0)
     users = pd.DataFrame({'uid': range(60), 'seg': rng.choice([*'xy'], 60)})

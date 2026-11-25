@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 import warnings
 from pathlib import Path
@@ -18,27 +19,22 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip('sdm_relational_engine.relationallib')
 duckdb = pytest.importorskip('duckdb')
 dbapi = pytest.importorskip('adbc_driver_sqlite.dbapi')
 
-from sdm_connectors import (  # noqa: E402
-    DuckDBSource,
-    PostgresSource,
-    SQLiteSource,
-)
-
 from sdm_client import (  # noqa: E402
+    DuckDBSource,
     KumoTabular,
+    PostgresSource,
     PredictiveQuery,
     Relationship,
     Schema,
     SourceTable,
+    SQLiteSource,
     StructuredDataError,
     Table,
 )
 from sdm_client.core.warnings import SDMWarning  # noqa: E402
-from sdm_client.materializers import RelationalMaterializer  # noqa: E402
 
 QUERY = 'PREDICT SUM(orders.amount, 0, 30, days) FOR EACH users.user_id'
 TABLES = {'users': 'app_users', 'orders': 'app_orders'}
@@ -187,7 +183,6 @@ def _by_hand(described: Schema, source: Any, **source_names: str) -> Schema:
 
 
 def test_the_tables_are_described_without_being_read(source: Any) -> None:
-    from sdm_relational_engine.rfm.base import DataBackend
 
     schema = _schema(source)
 
@@ -203,9 +198,6 @@ def test_the_tables_are_described_without_being_read(source: Any) -> None:
     assert schema.relationships == [
         Relationship('orders', 'user_id', 'users', 'user_id')
     ]
-    assert RelationalMaterializer(schema)._build_graph().backend == (
-        DataBackend(source.backend)
-    )
 
 
 @pytest.mark.parametrize('seed', [7, 11, 23])
@@ -259,7 +251,7 @@ def test_a_schema_built_by_hand_asks_what_from_source_asks(
     described = _schema(source)
     by_hand, read = (_payload(_by_hand(described, source)), _payload(described))
 
-    if source.backend == 'sqlite':
+    if type(source).__name__ == 'SQLiteSource':
         # SQLite cannot seed the context's draw, so only its shape compares.
         for payload in (by_hand, read):
             context = payload['context']
@@ -368,7 +360,11 @@ def test_a_foreign_key_to_a_unique_column_keys_a_keyless_table(
     assert schema.relationships == [
         Relationship('sale', 'region_code', 'region', 'code')
     ]
-    messages = [str(warning.message) for warning in caught]
+    # The words after the core route's leading `[CODE] ` (E41(i), E59(d)).
+    messages = [
+        re.sub(r'^\[[A-Z][A-Z0-9_]*\] ', '', str(warning.message))
+        for warning in caught
+    ]
     assert (
         "sale.store_ref refers to store.ref, but the primary key of 'store' "
         "is 'store_id'. A relationship joins to a primary key, so none was "
@@ -473,7 +469,7 @@ def test_a_one_table_source_schema_is_gathered_for_the_relational_model(
     [
         (
             lambda source: Schema.from_source(source.connection, TABLES),
-            'needs an sdm_connectors',
+            'needs a Source',
         ),
         (lambda source: Schema.from_source(source, {}), 'leave tables out'),
         (
@@ -573,10 +569,10 @@ def test_left_out_tables_mean_every_table_in_the_source(source: Any) -> None:
     assert schema['app_orders'].time_column == 'ts'
 
 
-def test_a_question_repeats_none_of_the_reads_that_described_the_tables(
+def test_materialization_refreshes_source_metadata(
     postgres_source: Any,
 ) -> None:
-    r"""The time range is still read per question, so new rows are seen."""
+    """Each materialization reads current source metadata."""
     import psycopg
 
     statements: list[str] = []
@@ -595,7 +591,7 @@ def test_a_question_repeats_none_of_the_reads_that_described_the_tables(
 
     assert any('information_schema' in sql for sql in described)
     assert asked
-    assert not set(described) & set(asked)
+    assert set(described) & set(asked)
 
 
 def test_a_question_cannot_change_what_the_next_one_is_given(
@@ -609,7 +605,8 @@ def test_a_question_cannot_change_what_the_next_one_is_given(
     changed['users']['country'].stype = 'text'
 
     _payload(changed)
-    graph = RelationalMaterializer(schema)._build_graph()
+    _payload(schema)
+    graph = schema
 
     assert str(graph['users']['age'].stype) == 'numerical'
     assert str(graph['users']['country'].stype) == 'categorical'
@@ -618,12 +615,12 @@ def test_a_question_cannot_change_what_the_next_one_is_given(
 def _add_members(source: Any, request: pytest.FixtureRequest) -> None:
     r"""``app_users`` again, every member joining after the last order."""
     joined = pd.Timestamp('2025-06-01')
-    if source.backend == 'duckdb':
+    if type(source).__name__ == 'DuckDBSource':
         source.connection.execute(
             'CREATE TABLE app_members AS SELECT *, '
             f"TIMESTAMP '{joined}' AS joined FROM app_users"
         )
-    elif source.backend == 'sqlite':
+    elif type(source).__name__ == 'SQLiteSource':
         with source.connection.cursor() as cursor:
             cursor.adbc_ingest(
                 'app_members', USERS.assign(joined=joined), mode='create'

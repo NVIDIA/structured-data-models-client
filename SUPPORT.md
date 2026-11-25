@@ -4,7 +4,7 @@
 
 **Maintained.** The client is developed and released by NVIDIA alongside the
 structured data foundation model NIMs it calls. Issues and pull requests are
-reviewed, and fixes ship in the next release of all five packages.
+reviewed, and fixes ship in the next release of the maintained packages.
 
 It is not a supported NVIDIA product under a commercial agreement. There is no
 response-time commitment, and nothing here changes the warranty terms of the
@@ -21,20 +21,21 @@ Apache-2.0 licence the code is released under.
 | A problem with the NIM itself rather than the client | Your NVIDIA support channel for that NIM |
 
 A bug report is most useful with the package versions (`pip show structured-data-models-client
-structured-data-models-api structured-data-models-pql structured-data-models-connectors structured-data-models-relational-engine`), the Python version and
+structured-data-models-api structured-data-models-connectors`), the Python version and
 platform, the smallest script that reproduces the problem, and the full
 traceback. `StructuredDataError` and its subclasses carry a stable `code`
 field; include it.
 
 ## Which package
 
-Five packages are released together and share a version:
+The three maintained Python packages share a version:
 
 - `structured-data-models-client`: the client, the schema, and the model handles
 - `structured-data-models-api`: the generated wire types for the Universal TFM API, and nothing else
-- `structured-data-models-pql`: the Predictive Query Language, with parser, AST and schema types
 - `structured-data-models-connectors`: reading source tables from warehouses and object stores
-- `structured-data-models-relational-engine`: the relational driver, graph building and sampling
+
+The client wheel includes the Rust core.
+For Java reports, include the client JAR version and JDK version.
 
 If you are unsure which is at fault, file against the repository; triage is our
 job, not yours.

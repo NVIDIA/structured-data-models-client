@@ -1,0 +1,291 @@
+{
+  "provenance": {
+    "revision": "43e55f4f58924384c3cb52f67c8ed2e73ba45fa1",
+    "sources": [
+      "packages/structured-data-models-pql/src/predictive_query/schema/typing.py",
+      "packages/structured-data-models-client/src/sdm_client/schema.py",
+      "packages/structured-data-models-pql/src/predictive_query/profiles.py"
+    ]
+  },
+  "meanings": [
+    [
+      "ID",
+      "binary"
+    ],
+    [
+      "ID",
+      "byte"
+    ],
+    [
+      "ID",
+      "float"
+    ],
+    [
+      "ID",
+      "float32"
+    ],
+    [
+      "ID",
+      "float64"
+    ],
+    [
+      "ID",
+      "int"
+    ],
+    [
+      "ID",
+      "int16"
+    ],
+    [
+      "ID",
+      "int32"
+    ],
+    [
+      "ID",
+      "int64"
+    ],
+    [
+      "ID",
+      "string"
+    ],
+    [
+      "categorical",
+      "binary"
+    ],
+    [
+      "categorical",
+      "bool"
+    ],
+    [
+      "categorical",
+      "byte"
+    ],
+    [
+      "categorical",
+      "float"
+    ],
+    [
+      "categorical",
+      "float32"
+    ],
+    [
+      "categorical",
+      "float64"
+    ],
+    [
+      "categorical",
+      "int"
+    ],
+    [
+      "categorical",
+      "int16"
+    ],
+    [
+      "categorical",
+      "int32"
+    ],
+    [
+      "categorical",
+      "int64"
+    ],
+    [
+      "categorical",
+      "string"
+    ],
+    [
+      "categorical",
+      "timedelta"
+    ],
+    [
+      "image",
+      "string"
+    ],
+    [
+      "multicategorical",
+      "binary"
+    ],
+    [
+      "multicategorical",
+      "floatlist"
+    ],
+    [
+      "multicategorical",
+      "intlist"
+    ],
+    [
+      "multicategorical",
+      "string"
+    ],
+    [
+      "multicategorical",
+      "stringlist"
+    ],
+    [
+      "numerical",
+      "byte"
+    ],
+    [
+      "numerical",
+      "float"
+    ],
+    [
+      "numerical",
+      "float32"
+    ],
+    [
+      "numerical",
+      "float64"
+    ],
+    [
+      "numerical",
+      "int"
+    ],
+    [
+      "numerical",
+      "int16"
+    ],
+    [
+      "numerical",
+      "int32"
+    ],
+    [
+      "numerical",
+      "int64"
+    ],
+    [
+      "numerical",
+      "timedelta"
+    ],
+    [
+      "sequence",
+      "floatlist"
+    ],
+    [
+      "sequence",
+      "intlist"
+    ],
+    [
+      "sequence",
+      "string"
+    ],
+    [
+      "text",
+      "string"
+    ],
+    [
+      "timestamp",
+      "date"
+    ],
+    [
+      "timestamp",
+      "string"
+    ],
+    [
+      "timestamp",
+      "time"
+    ],
+    [
+      "unsupported",
+      "binary"
+    ],
+    [
+      "unsupported",
+      "bool"
+    ],
+    [
+      "unsupported",
+      "byte"
+    ],
+    [
+      "unsupported",
+      "date"
+    ],
+    [
+      "unsupported",
+      "float"
+    ],
+    [
+      "unsupported",
+      "float32"
+    ],
+    [
+      "unsupported",
+      "float64"
+    ],
+    [
+      "unsupported",
+      "floatlist"
+    ],
+    [
+      "unsupported",
+      "int"
+    ],
+    [
+      "unsupported",
+      "int16"
+    ],
+    [
+      "unsupported",
+      "int32"
+    ],
+    [
+      "unsupported",
+      "int64"
+    ],
+    [
+      "unsupported",
+      "intlist"
+    ],
+    [
+      "unsupported",
+      "string"
+    ],
+    [
+      "unsupported",
+      "stringlist"
+    ],
+    [
+      "unsupported",
+      "time"
+    ],
+    [
+      "unsupported",
+      "timedelta"
+    ],
+    [
+      "unsupported",
+      "unsupported"
+    ]
+  ],
+  "dtype_names": {
+    "bool": "bool",
+    "int": "int",
+    "byte": "byte",
+    "int16": "int16",
+    "int32": "int",
+    "int64": "int",
+    "float": "float",
+    "float32": "float",
+    "float64": "float",
+    "string": "string",
+    "binary": "binary",
+    "date": "date",
+    "time": "time",
+    "timedelta": "timedelta",
+    "floatlist": "floatlist",
+    "intlist": "intlist",
+    "stringlist": "stringlist",
+    "unsupported": "unsupported",
+    "timestamp[us]": "time",
+    "timestamp[ns]": "time",
+    "timestamp[ms]": "time",
+    "timestamp[s]": "time"
+  },
+  "profile_models": {
+    "FINE_TUNING": "fine-tuning",
+    "RELATIONAL": "a relational model",
+    "TABULAR": "a tabular model",
+    "TIMESERIES": "a time-series model",
+    "ANOMALY": "an anomaly-detection model"
+  }
+}

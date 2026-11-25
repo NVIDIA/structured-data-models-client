@@ -1,0 +1,736 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION & AFFILIATES.
+# All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+"""The Python host's Postgres provider, through the core.
+
+Written by independent test author before the implementation, from
+the design's row ("dialect, psycopg provider (Arrow without pandas)", "key
+sets bound as the dialect binds them", "L4 goldens executed", choice 12's
+relation forms) and ``test_the_duckdb_provider.py``, whose vectors this
+reads: each fetch is asked by the core of the Postgres source, answered
+through its SQL kit (``{'provider': 'sql', 'dialect': 'postgres'}``, under
+the database's ``public`` schema) by the provider over a ``psycopg`` connection to a real Postgres, admitted by the core and
+echoed back by the test-only fetch. The data is the DuckDB-built tables the
+vectors name, loaded into a database of their own by the contract loader
+(``contract/runners/databases.py``), as the cases' are.
+
+- Every non-catalog request kind runs on all three authored bases.
+  Expected rows and schemas come from raw source tables, independently of
+  SDM planning or admission; PostgreSQL keeps its own lookup column layout
+  and seeded sampling is checked for count, distinctness and membership.
+- Key sets bound as the dialect binds them (``P1 d:131``): keys that
+  collide as float64 (an unsigned key past int64, 38-digit and scale-18
+  decimals, stored as Postgres ``numeric``) each find their own row, which
+  the same keys forced to float64 do not; a key set past the control cap
+  travels as an attachment.
+- Results are complete: a fetch of 5,000 rows is all of them, and an empty
+  one keeps its schema.
+- Choice 12's relation forms Postgres takes, executed: one part (a dotted
+  name is one table, never split on its dot; a double quote in a name
+  doubled) and two (schema and table) each read the table their parts
+  name and no other.
+
+The provider is ``sdm_client._rust.providers.postgres.PostgresProvider``,
+built over a ``psycopg`` connection and called as the DuckDB provider is
+(``provider(fetch, binds)``): the one name this test assumes of the
+implementation (data:`PROVIDER`).
+
+Where ``SDM_POSTGRES_TEST_DSN`` names no server and ``SDM_REQUIRE_POSTGRES``
+is not set, the tests that need one have nothing to hold and return without
+asserting, as Postgres tests do; with it set, a missing server
+fails. Expected to fail
+until implementation lands: no Postgres provider module, and the
+core reports no Postgres dialect.
+"""
+
+from __future__ import annotations
+
+import importlib
+import importlib.util
+import json
+import os
+import uuid
+from collections.abc import Iterator
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+import duckdb
+import kit_host
+import pyarrow as pa
+import pytest
+from request_kind_assertions import assert_source_answer, source_answer
+
+from sdm_client._rust import codec
+from sdm_client._rust.run import run
+
+ROOT = Path(__file__).resolve().parents[3]
+VECTORS = json.loads(
+    (ROOT / 'contract/provider-vectors.json').read_text(encoding='utf-8')
+)
+KINDS = json.loads(
+    (ROOT / 'contract/request-kinds.json').read_text(encoding='utf-8')
+)
+#: The provider under test, module and class.
+PROVIDER = ('sdm_client._rust.providers.postgres', 'PostgresProvider')
+#: Under the schema each test's database holds its tables in, ``public``,
+#: as every Postgres read names one: the source's, or its session's
+#: current one, read once per run.
+POSTGRES = {'provider': 'sql', 'dialect': 'postgres', 'namespace': ['public']}
+
+
+def _loader() -> Any:
+    spec = importlib.util.spec_from_file_location(
+        'test_the_postgres_provider_databases',
+        ROOT / 'contract/runners/databases.py',
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _provider(connection: Any) -> Any:
+    module, name = PROVIDER
+    return getattr(importlib.import_module(module), name)(connection)
+
+
+class Server:
+    r"""A Postgres server's databases, each made for a test and dropped
+    after it."""
+
+    def __init__(self, dsn: str) -> None:
+        self.dsn = dsn
+        self.made: list[str] = []
+
+    def database(self, statements: list[str]) -> Any:
+        r"""A connection to a new database holding the tables DuckDB builds
+        from ``statements``, loaded by the contract loader."""
+        import psycopg
+        from psycopg.conninfo import make_conninfo
+
+        name = f'sdm_t23_{uuid.uuid4().hex[:16]}'
+        with psycopg.connect(self.dsn, autocommit=True) as admin:
+            admin.execute(f'CREATE DATABASE {name}')
+        self.made.append(name)
+        scoped = make_conninfo(self.dsn, dbname=name)
+        duck = duckdb.connect()
+        try:
+            for statement in statements:
+                duck.execute(statement)
+            _loader().load(duck, 'postgres', scoped)
+        finally:
+            duck.close()
+        return psycopg.connect(scoped, autocommit=True)
+
+    def drop(self) -> None:
+        import psycopg
+
+        with psycopg.connect(self.dsn, autocommit=True) as admin:
+            for name in self.made:
+                admin.execute(f'DROP DATABASE IF EXISTS {name} WITH (FORCE)')
+
+
+@pytest.fixture(scope='module')
+def server() -> Iterator[Server | None]:
+    dsn = os.environ.get('SDM_POSTGRES_TEST_DSN')
+    if not dsn:
+        assert not os.environ.get('SDM_REQUIRE_POSTGRES'), (
+            'SDM_REQUIRE_POSTGRES is set but SDM_POSTGRES_TEST_DSN is not'
+        )
+        yield None
+        return
+    made = Server(dsn)
+    try:
+        yield made
+    finally:
+        made.drop()
+
+
+@pytest.fixture(scope='module')
+def vectors_db(server: Server | None) -> Any:
+    r"""``contract/provider-vectors.json``'s tables on Postgres; None
+    where no server is named."""
+    if server is None:
+        return None
+    return server.database(VECTORS['setup'])
+
+
+def _fetch(request: dict[str, Any], choice: Any) -> dict[str, Any]:
+    return {'request': request, 'provider': choice, 'echo': True}
+
+
+def test_public_window_sums_keep_postgres_chronological_order(
+    server: Server | None,
+) -> None:
+    import pandas as pd
+
+    from sdm_client import PostgresSource, PredictiveQuery, Relationship, Schema
+
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            "CREATE TABLE e AS SELECT 'e' || i AS id FROM range(200) t(i)",
+            'CREATE TABLE a AS SELECT i::BIGINT AS aid, '
+            "'e' || (i % 40) AS e_ref, ((i % 17) * 0.1)::FLOAT AS f, "
+            "TIMESTAMP '2023-11-20' + "
+            'to_seconds(((i // 2) * 25200)::BIGINT) AS ts '
+            'FROM range(400) t(i)',
+        ]
+    )
+    try:
+        # An unordered hash join reverses these windows on PostgreSQL 17.
+        # The public result must not depend on the chosen join strategy.
+        connection.execute('SET enable_nestloop = off')
+        connection.execute('SET enable_mergejoin = off')
+        schema = Schema.from_source(
+            PostgresSource(connection, schema='public'),
+            primary_keys={'e': 'id', 'a': 'aid'},
+            time_columns={'a': 'ts'},
+            relationships=[
+                Relationship(
+                    source_table='a',
+                    source_column='e_ref',
+                    target_table='e',
+                    target_column='id',
+                )
+            ],
+        )
+        with pytest.warns(UserWarning):
+            request = PredictiveQuery(
+                'PREDICT SUM(a.f, 0, 2, months) FOR EACH e.id', schema
+            ).materialize(
+                indices=['e0', 'e1'],
+                anchor_time=pd.Timestamp('2024-01-31'),
+                num_context_samples=1500,
+                prediction_statistic='median',
+            )
+        context = request._payloads[0]['context']['instance_table']
+        key = context['columns'].index('__kumo_entity_ref_0')
+        target = context['columns'].index('TARGET')
+        values = {row[key]: row[target] for row in context['rows']}
+        assert len(context['rows']) == len(values) == 200
+        # Exact targets recorded from the frozen Python reference's
+        # chronological float32 Kahan sums, without a numeric tolerance.
+        assert {name: values[name] for name in ('e13', 'e18', 'e1', 'e15')} == {
+            'e13': 7.899999618530273,
+            'e18': 6.799999713897705,
+            'e1': 6.799999713897705,
+            'e15': 6.099999904632568,
+        }
+    finally:
+        connection.close()
+
+
+def _table(finished: Any) -> pa.Table:
+    stream = finished.take(finished.result['data'])
+    return pa.RecordBatchReader._import_from_c_capsule(
+        stream.__arrow_c_stream__()
+    ).read_all()
+
+
+def _admitted(connection: Any, request: dict[str, Any]) -> pa.Table:
+    r"""What the core admitted of ``request``'s answer on Postgres."""
+    choice, provider = kit_host.chosen(POSTGRES, _provider(connection))
+    finished = run(
+        {'op': 'test', 'test': 'fetch', 'fetch': 1},
+        {1: codec.attachment(_fetch(request, choice))},
+        provider=provider,
+    )
+    return _table(finished)
+
+
+def _tables(keys: Any) -> dict[int, pa.Table]:
+    r"""Each key set handed over, read whole, by attachment."""
+    return {
+        attachment: pa.RecordBatchReader._import_from_c_capsule(
+            stream.__arrow_c_stream__()
+        ).read_all()
+        for attachment, stream in (keys or {}).items()
+    }
+
+
+def _keyed(
+    connection: Any,
+    request: dict[str, Any],
+    seeds: pa.Table,
+    *,
+    key_source_type: str | None = None,
+) -> tuple[pa.Table, dict[str, Any]]:
+    r"""A keyed fetch with ``seeds``, through the core: the core attaches
+    them to the step as its own key set, the source's kit has the provider
+    bind them and answer. Also the step's control size, the key set handed
+    over, and the key sets the kit bound for the provider, one per fetch it
+    handed it."""
+    from sdm_client._rust.codec import CONTROL_CAP
+
+    seen: dict[str, Any] = {'bound': []}
+
+    def bound(fetch: dict[str, Any], binds: Any) -> None:
+        seen['bound'].append(_tables(binds))
+
+    choice, provider = kit_host.chosen(
+        POSTGRES, kit_host.Driven(_provider(connection), bound)
+    )
+
+    def answer(step: dict[str, Any], keys: Any) -> Any:
+        seen['keys'] = _tables(keys)
+        seen['control'] = len(json.dumps(step).encode())
+        assert seen['control'] < CONTROL_CAP
+        return provider(step, dict(seen['keys']))
+
+    kinds = {
+        'float': {'type': 'float32'},
+        'double': {'type': 'float64'},
+        'uint64': {'type': 'uint64'},
+        'int64': {'type': 'int64'},
+    }
+    request = dict(request)
+    request['seeds'] = {
+        'attachment': 0,
+        'columns': [
+            {
+                'name': field.name,
+                **(
+                    {'metadata': {'sdm:key_declared_type': key_source_type}}
+                    if field.name == 'key' and key_source_type is not None
+                    else {}
+                ),
+                'type': kinds.get(str(field.type))
+                or {
+                    'type': 'decimal128',
+                    'precision': field.type.precision,
+                    'scale': field.type.scale,
+                },
+                'nullable': field.nullable,
+            }
+            for field in seeds.schema
+        ],
+    }
+    finished = run(
+        {'op': 'test', 'test': 'keyed', 'fetch': 1, 'keys': 2},
+        {1: codec.attachment(_fetch(request, choice)), 2: seeds},
+        provider=answer,
+    )
+    return _table(finished), seen
+
+
+@pytest.mark.parametrize('sql_type', ['SMALLINT', 'INTEGER', 'BIGINT'])
+@pytest.mark.parametrize('arrow_type', [pa.float32(), pa.float64()])
+def test_integral_float_seeds_find_integer_keys_without_truncating_fractions(
+    server: Server | None, sql_type: str, arrow_type: Any
+) -> None:
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            f'CREATE TABLE users(user_id {sql_type} PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (1, 'one'), (2, 'two')",
+        ]
+    )
+    try:
+        seeds = pa.table(
+            {
+                'key': pa.array([1.0, 1.5, 2.0], type=arrow_type),
+                'batch': pa.array([0, 1, 2], type=pa.int64()),
+            }
+        )
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            seeds,
+            key_source_type=sql_type.lower(),
+        )
+        assert result.column('age').to_pylist() == ['one', 'two']
+        assert result.column('__kumo_batch__').to_pylist() == [0, 2]
+    finally:
+        connection.close()
+
+
+def test_float_binding_never_rounds_integer_columns_into_a_match(
+    server: Server | None,
+) -> None:
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            'CREATE TABLE users(user_id BIGINT PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (9007199254740992, 'exact53'), "
+            "(9007199254740993, 'rounded53'), "
+            "(1000000000000000128, 'exact60'), "
+            "(1000000000000000100, 'shortest60')",
+        ]
+    )
+    try:
+        seeds = pa.table(
+            {
+                'key': pa.array([9007199254740992.0, 1000000000000000128.0]),
+                'batch': pa.array([0, 1], type=pa.int64()),
+            }
+        )
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            seeds,
+            key_source_type='bigint',
+        )
+        assert result.column('age').to_pylist() == ['exact53', 'exact60']
+        assert result.column('__kumo_batch__').to_pylist() == [0, 1]
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize('sql_type', ['REAL', 'DOUBLE PRECISION'])
+@pytest.mark.parametrize('arrow_type', [pa.float32(), pa.float64()])
+@pytest.mark.parametrize('carry_declaration', [False, True])
+def test_floating_keys_match_their_own_declared_column_type(
+    server: Server | None, sql_type, arrow_type, carry_declaration
+) -> None:
+    if server is None:
+        pytest.fail('needs the local Postgres test service')
+    connection = server.database(
+        [
+            f'CREATE TABLE users(user_id {sql_type} PRIMARY KEY, age VARCHAR)',
+            "INSERT INTO users VALUES (0.1, 'fraction'), (1.5, 'one-half')",
+        ]
+    )
+    try:
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'age'],
+                'key': ['user_id'],
+            },
+            pa.table(
+                {
+                    'key': pa.array([0.1, 1.5], type=arrow_type),
+                    'batch': pa.array([0, 1], type=pa.int64()),
+                }
+            ),
+            key_source_type=sql_type.lower() if carry_declaration else None,
+        )
+        # A float32 0.1 promoted to double is a different DOUBLE PRECISION
+        # key, but REAL must round either seed width to its own value.
+        expected = (
+            ['one-half']
+            if sql_type == 'DOUBLE PRECISION' and arrow_type == pa.float32()
+            else ['fraction', 'one-half']
+        )
+        assert result.column('age').to_pylist() == expected
+    finally:
+        connection.close()
+
+
+def _seeds(kind: dict[str, Any], values: list[str]) -> pa.Table:
+    if kind['type'] == 'decimal128':
+        arrow = pa.decimal128(kind['precision'], kind['scale'])
+        keys = pa.array([Decimal(v) for v in values], type=arrow)
+    else:
+        keys = pa.array(
+            [int(v) for v in values], type=pa.type_for_alias(kind['type'])
+        )
+    return pa.table(
+        {'key': keys, 'batch': pa.array(range(len(values)), pa.int64())}
+    )
+
+
+def test_the_core_reports_a_postgres_provider() -> None:
+    # The staging rule's marker: the core legs run on Postgres
+    # exactly when the core reports it.
+    from sdm_client import _native
+
+    assert 'postgres' in _native.PROVIDERS
+
+
+def test_a_fetch_is_all_its_rows_and_an_empty_one_keeps_its_schema(
+    vectors_db: Any,
+) -> None:
+    if vectors_db is None:
+        return
+    several = VECTORS['several']
+    data = _admitted(vectors_db, several['request'])
+    assert data.num_rows == several['rows']
+    rows = data.to_pydict()
+    assert sorted(rows['n']) == list(range(several['rows']))
+    assert all(
+        name == f'r{n}' for n, name in zip(rows['n'], rows['name'], strict=True)
+    )
+    empty = VECTORS['empty']
+    data = _admitted(vectors_db, empty['request'])
+    assert data.num_rows == 0
+    names = {'int64': pa.int64(), 'utf8': pa.string()}
+    assert data.schema == pa.schema(
+        [(name, names[kind]) for name, kind in empty['fields']]
+    )
+
+
+def _each_seed_finds_its_own_row(data: pa.Table, labels: list[str]) -> bool:
+    found: dict[int, str] = {}
+    for row in data.to_pylist():
+        if row['__kumo_matches__'] != 1 or row['__kumo_batch__'] in found:
+            return False
+        found[row['__kumo_batch__']] = row['label']
+    return [found.get(i) for i in range(len(labels))] == labels
+
+
+def test_keys_that_collide_as_float64_bind_join_and_answer_exactly(
+    vectors_db: Any,
+) -> None:
+    if vectors_db is None:
+        return
+    cases = VECTORS['keys']['cases']
+    assert len(cases) == 3
+    for case in cases:
+        exact = _seeds(case['type'], case['values'])
+        data, seen = _keyed(vectors_db, case['request'], exact)
+        # The source is handed the keys exactly as sent, and its kit binds
+        # them as the dialect's JSON text: one cell, each key as the old
+        # client writes it, its value exact.
+        [sent] = seen['keys'].values()
+        assert sent.equals(exact), case['column']
+        [[handed]] = [each.values() for each in seen['bound'] if each]
+        assert (handed.num_rows, handed.num_columns) == (1, 1), case['column']
+        rows = json.loads(handed.column(0)[0].as_py(), parse_float=Decimal)
+        assert [Decimal(str(key)) for key in rows] == [
+            Decimal(value) for value in case['values']
+        ], case['column']
+        assert _each_seed_finds_its_own_row(data, case['labels']), case[
+            'column'
+        ]
+        # The values collide as float64, and keys forced to it fail.
+        forced = exact.set_column(
+            0, 'key', exact.column('key').cast(pa.float64(), safe=False)
+        )
+        assert len(set(forced.column('key').to_pylist())) < len(case['values'])
+        data, _ = _keyed(vectors_db, case['request'], forced)
+        assert not _each_seed_finds_its_own_row(data, case['labels']), case[
+            'column'
+        ]
+
+
+def test_a_key_set_past_the_control_cap_travels_as_an_attachment(
+    vectors_db: Any,
+) -> None:
+    if vectors_db is None:
+        return
+    from sdm_client._rust.codec import CONTROL_CAP
+
+    large = VECTORS['large']
+    values = [str(i % large['modulo']) for i in range(large['rows'])]
+    seeds = _seeds({'type': 'int64'}, values)
+    assert seeds.nbytes > CONTROL_CAP
+    data, seen = _keyed(vectors_db, large['request'], seeds)
+    assert seen['control'] < CONTROL_CAP
+    assert data.num_rows == large['rows']
+    for row in data.to_pylist():
+        assert row['name'] == f'r{row["__kumo_batch__"] % large["modulo"]}'
+
+
+def _cell(value: Any) -> Any:
+    r"""A lossless scalar representation for comparing admitted and source rows."""
+    if value is None or isinstance(value, (bool, str)):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return value.hex()
+    if isinstance(value, list):
+        return [_cell(item) for item in value]
+    raise AssertionError(f'a cell of {type(value).__name__}')
+
+
+def _canonical(table: pa.Table) -> list[list[Any]]:
+    columns = []
+    for field, column in zip(table.schema, table.columns, strict=True):
+        if pa.types.is_timestamp(field.type):
+            column = column.cast(pa.int64())
+        elif pa.types.is_date32(field.type):
+            column = column.cast(pa.int32())
+        columns.append([_cell(value) for value in column.to_pylist()])
+    rows = [list(row) for row in zip(*columns, strict=True)]
+    return sorted(
+        rows,
+        key=lambda row: json.dumps(
+            row, separators=(',', ':'), ensure_ascii=False
+        ),
+    )
+
+
+# Lookup helper layout: batch before user fields, row and match count after.
+REFERENCE_LOOKUP = (['__kumo_batch__'], ['__kumo_row__', '__kumo_matches__'])
+
+
+def test_lookup_preserves_seed_batches_and_reports_duplicate_matches(
+    server: Server | None,
+) -> None:
+    if server is None:
+        pytest.skip('needs the local Postgres test service')
+    connection = server.database(
+        [
+            'CREATE TABLE users(user_id BIGINT, label VARCHAR)',
+            "INSERT INTO users VALUES (7, 'duplicate'), (7, 'duplicate'), (9, 'single')",
+        ]
+    )
+    try:
+        result, _ = _keyed(
+            connection,
+            {
+                'request': 'lookup',
+                'table': {'source': ['public', 'users']},
+                'columns': ['user_id', 'label'],
+                'key': ['user_id'],
+            },
+            pa.table(
+                {
+                    'key': pa.array([7, 99, 7, 9], pa.int64()),
+                    'batch': pa.array([0, 1, 2, 3], pa.int64()),
+                }
+            ),
+        )
+        assert result.schema == pa.schema(
+            [
+                ('__kumo_batch__', pa.int64()),
+                ('user_id', pa.int64()),
+                ('label', pa.string()),
+                ('__kumo_row__', pa.int64()),
+                ('__kumo_matches__', pa.int64()),
+            ]
+        )
+        rows = sorted(result.to_pylist(), key=lambda row: row['__kumo_batch__'])
+        assert [tuple(row.values()) for row in rows] == [
+            (0, 7, 'duplicate', 1, 2),
+            (2, 7, 'duplicate', 1, 2),
+            (3, 9, 'single', 1, 1),
+        ]
+    finally:
+        connection.close()
+
+
+def _base(name: str) -> list[str]:
+    r"""The statements of base ``name`` of ``contract/bases.yaml``: the
+    plain list items under its name, comments between them skipped."""
+    lines = (
+        (ROOT / 'contract/bases.yaml').read_text(encoding='utf-8').splitlines()
+    )
+    out = []
+    for line in lines[lines.index(f'  {name}:') + 1 :]:
+        if line.startswith('  #'):
+            continue
+        if not line.startswith('  - '):
+            break
+        out.append(line[len('  - ') :])
+    return out
+
+
+def test_every_request_kind_returns_source_data_on_postgres(
+    server: Server | None,
+) -> None:
+    if server is None:
+        return
+    # Independent raw DuckDB source rows describe the same input loaded
+    # into Postgres. Neither expected schema nor rows use SDM admission.
+    fetches = [
+        f for f in KINDS['fetches'] if f['request']['request'] != 'describe'
+    ]
+    kinds = {fetch['request']['request'] for fetch in fetches}
+    assert kinds == {
+        'scan',
+        'preview',
+        'count_rows',
+        'key_counts',
+        'time_bounds',
+        'sample_entities',
+        'neighbors',
+        'lookup',
+    }
+    assert {(f['request']['request'], f['base']) for f in fetches} == {
+        (kind, base)
+        for kind in kinds
+        for base in ('shop', 'declared', 'adventureworks')
+    }
+    connections: dict[str, Any] = {}
+    sources = {}
+    for fetch in fetches:
+        base = fetch['base']
+        if base not in connections:
+            statements = _base(base)
+            connections[base] = server.database(statements)
+            sources[base] = duckdb.connect()
+            for statement in statements:
+                sources[base].execute(statement)
+        connection = connections[base]
+        if 'keys' in fetch:
+            seeds = pa.table(
+                {
+                    'key': pa.array(fetch['keys'], pa.int64()),
+                    'batch': pa.array(range(len(fetch['keys'])), pa.int64()),
+                }
+            )
+            data, _ = _keyed(connection, fetch['request'], seeds)
+        else:
+            data = _admitted(connection, fetch['request'])
+        expected = source_answer(sources[base], fetch, postgres=True)
+        assert_source_answer(
+            data, expected, fetch['request'], _canonical, postgres=True
+        )
+    assert len(fetches) == 30
+    for connection in [*connections.values(), *sources.values()]:
+        connection.close()
+
+
+def test_each_relation_form_postgres_takes_reads_the_table_it_names(
+    server: Server | None,
+) -> None:
+    if server is None:
+        return
+    connection = server.database([])
+    for statement in (
+        'CREATE TABLE t (v integer PRIMARY KEY)',
+        'INSERT INTO t VALUES (1)',
+        'CREATE TABLE "a.b" (v integer)',
+        'INSERT INTO "a.b" VALUES (2)',
+        'CREATE SCHEMA a',
+        'CREATE TABLE a.b (v integer)',
+        'INSERT INTO a.b VALUES (3)',
+        'CREATE SCHEMA s',
+        'CREATE TABLE s.t (v integer)',
+        'INSERT INTO s.t VALUES (4)',
+        'CREATE TABLE "say ""hi""" (v integer)',
+        'INSERT INTO "say ""hi""" VALUES (5)',
+    ):
+        connection.execute(statement)
+    for parts, value in [
+        (['t'], 1),
+        # A dotted name is one table, never split on its dot.
+        (['a.b'], 2),
+        (['public', 't'], 1),
+        (['a', 'b'], 3),
+        (['s', 't'], 4),
+        # A part holding a double quote, the quote doubled.
+        (['say "hi"'], 5),
+        (['public', 'say "hi"'], 5),
+    ]:
+        data = _admitted(
+            connection,
+            {
+                'request': 'scan',
+                'table': {'source': parts},
+                'columns': ['v'],
+                'filters': [],
+                'limit': None,
+            },
+        )
+        assert data.column('v').to_pylist() == [value], parts

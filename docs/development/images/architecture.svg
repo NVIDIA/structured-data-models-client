@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="760" viewBox="0 0 900 760" role="img" aria-labelledby="title" font-family="Arial, sans-serif">
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026, NVIDIA CORPORATION &amp; AFFILIATES. SPDX-License-Identifier: Apache-2.0 -->
+<title id="title">Prediction flow: engine decisions, host I/O</title>
+<rect width="900" height="760" fill="white"/>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#555"/></marker></defs>
+<text x="450" y="38" text-anchor="middle" font-size="24" font-weight="bold" fill="#222">Prediction flow: engine decisions, host I/O</text>
+<rect x="160" y="75" width="580" height="105" rx="10" fill="#eaf2fc" stroke="#3d72b8" stroke-width="2"/>
+<text x="450.0" y="104" text-anchor="middle" font-size="17" font-weight="bold" fill="#222">Python / Java public API</text>
+<text x="450.0" y="129" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Schema, query or direct input; materialize / fit / predict</text>
+<text x="450.0" y="154" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Connections and conversion to typed inputs stay here</text>
+<rect x="70" y="245" width="440" height="180" rx="10" fill="#fdf3e6" stroke="#c9781c" stroke-width="2"/>
+<text x="290.0" y="274" text-anchor="middle" font-size="17" font-weight="bold" fill="#222">Rust engine</text>
+<text x="290.0" y="299" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Validate schema and PQL; select eligible context</text>
+<text x="290.0" y="324" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Sample, label and construct model requests</text>
+<text x="290.0" y="349" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Interpret results and explanation values</text>
+<text x="290.0" y="374" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Return typed steps and results</text>
+<rect x="585" y="265" width="260" height="125" rx="10" fill="#eaf2fc" stroke="#3d72b8" stroke-width="2"/>
+<text x="715.0" y="294" text-anchor="middle" font-size="17" font-weight="bold" fill="#222">Host I/O loop</text>
+<text x="715.0" y="319" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Run SQL / read provider data</text>
+<text x="715.0" y="344" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Send model requests</text>
+<text x="715.0" y="369" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Return Arrow / response bytes</text>
+<rect x="585" y="460" width="260" height="105" rx="10" fill="#f7f7f7" stroke="#666" stroke-width="2"/>
+<text x="715.0" y="489" text-anchor="middle" font-size="17" font-weight="bold" fill="#222">External systems</text>
+<text x="715.0" y="514" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Database / files</text>
+<text x="715.0" y="539" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Model endpoint</text>
+<rect x="70" y="510" width="440" height="105" rx="10" fill="#eaf2fc" stroke="#3d72b8" stroke-width="2"/>
+<text x="290.0" y="539" text-anchor="middle" font-size="17" font-weight="bold" fill="#222">Python / Java result</text>
+<text x="290.0" y="564" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Native errors, pandas / Arrow views</text>
+<text x="290.0" y="589" text-anchor="middle" font-size="17" font-weight="normal" fill="#222">Display and export</text>
+<path d="M290,180 L290,245" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="390" y="215" text-anchor="middle" font-size="15" fill="#444">typed operation + data</text>
+<path d="M510,290 L585,290" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="548" y="277" text-anchor="middle" font-size="15" fill="#444">steps</text>
+<path d="M585,370 L510,370" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="548" y="357" text-anchor="middle" font-size="15" fill="#444">replies</text>
+<path d="M715,390 L715,460" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+<path d="M290,425 L290,510" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="355" y="474" text-anchor="middle" font-size="15" fill="#444">typed result</text>
+<text x="450" y="670" text-anchor="middle" font-size="16" fill="#444">The Rust core opens no database connection or network socket.</text>
+<text x="450" y="698" text-anchor="middle" font-size="16" fill="#444">In-memory inputs use the existing native graph/data path; no warehouse is required.</text>
+<text x="450" y="726" text-anchor="middle" font-size="16" fill="#444">Rust owns engine meaning, not every helper shared by Python and Java.</text>
+</svg>

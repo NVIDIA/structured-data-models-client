@@ -25,7 +25,6 @@ import pandas as pd
 import pytest
 
 from sdm_client import Schema
-from sdm_client.schema import _warn_stype_was_decided_by_the_rows_read
 
 
 def said_about(frame: pd.DataFrame) -> str:
@@ -86,7 +85,7 @@ def test_declaring_the_stype_settles_it():
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        _warn_stype_was_decided_by_the_rows_read(schema.tables)
+        schema.check_consistent()
 
     assert not [w for w in caught if 'rows ran out' in str(w.message)]
 

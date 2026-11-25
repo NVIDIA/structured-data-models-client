@@ -1,0 +1,9 @@
+{
+  "source": "contract/bases.yaml shop + contract/cases/s1/rank.top-k.json input.setup at a8726c3e5",
+  "statements": [
+    "CREATE TABLE users AS SELECT i::BIGINT AS user_id, (20 + i)::INTEGER AS age, ['US', 'DE', 'IN'][1 + i % 3] AS country FROM range(8) t(i)",
+    "CREATE TABLE orders AS SELECT i::BIGINT AS order_id, (i % 8)::BIGINT AS user_id, (10 + i * 1.5)::DOUBLE AS price, TIMESTAMP '2023-01-01' + to_days((i * 7)::INTEGER) AS ts FROM range(80) t(i)",
+    "CREATE TABLE items AS SELECT i::BIGINT AS item_id, ['a', 'b', 'c', 'd'][1 + i] AS kind FROM range(4) t(i)",
+    "CREATE TABLE buys AS SELECT i::BIGINT AS buy_id, (i % 8)::BIGINT AS user_id, ((i * 3) % 4)::BIGINT AS item_id, TIMESTAMP '2023-01-01' + to_days((i * 5)::INTEGER) AS ts FROM range(120) t(i)"
+  ]
+}

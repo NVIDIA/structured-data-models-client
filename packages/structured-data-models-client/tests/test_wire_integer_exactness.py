@@ -405,8 +405,9 @@ def test_a_null_does_not_send_an_integer_key_through_a_float():
     """
     import warnings
 
+    from test_adapter_and_result import envelope as public_envelope
+
     from sdm_client import PredictiveQuery, Schema
-    from sdm_client.adapters.tabular import TabularAdapter
 
     frame = pd.DataFrame(
         {
@@ -425,9 +426,7 @@ def test_a_null_does_not_send_an_integer_key_through_a_float():
         ).materialize(
             predict=pd.DataFrame({'user_id': [None, 902], 'tenure': [3.0, 4.0]})
         )
-    payload = list(TabularAdapter().prediction_plan(request, ('prediction',)))[
-        0
-    ]
+    payload = public_envelope(request)
     columns = payload['schema']['instance_table']['columns']
 
     assert columns['user_id']['dtype'] == 'int64'
@@ -439,8 +438,9 @@ def test_a_column_that_is_genuinely_float_stays_float():
     numbers is still a float, because nothing declared it otherwise."""
     import warnings
 
+    from test_adapter_and_result import envelope as public_envelope
+
     from sdm_client import PredictiveQuery, Schema
-    from sdm_client.adapters.tabular import TabularAdapter
 
     frame = pd.DataFrame(
         {
@@ -459,9 +459,7 @@ def test_a_column_that_is_genuinely_float_stays_float():
         ).materialize(
             predict=pd.DataFrame({'user_id': [901, 902], 'tenure': [None, 4.0]})
         )
-    payload = list(TabularAdapter().prediction_plan(request, ('prediction',)))[
-        0
-    ]
+    payload = public_envelope(request)
 
     assert (
         payload['schema']['instance_table']['columns']['tenure']['dtype']

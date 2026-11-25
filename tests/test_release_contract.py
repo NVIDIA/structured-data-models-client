@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import ast
 import builtins
+import copy
+import functools
 import importlib
 import importlib.util
 import inspect
@@ -125,18 +127,6 @@ HANDED_OUT_THOUGH_NOT_EXPORTED = frozenset(
         # sampling has one interface to run through. The connector's typing
         # check pins that type, so changing it is a change to sources.
         'sdm_connectors.backends.spark.SparkConnection',
-        # What each `Source` overload says its connection must look like. They
-        # are protocols, matched by shape: a caller passes a live connection
-        # and never names, imports or builds one of these. Exporting seven
-        # names to describe an argument nobody writes would be a larger
-        # promise than the one it closes.
-        'sdm_connectors._types.DatabricksLike',
-        'sdm_connectors._types.DuckDBLike',
-        'sdm_connectors._types.PostgresLike',
-        'sdm_connectors._types.SQLiteLike',
-        'sdm_connectors._types.SnowflakeLike',
-        'sdm_connectors._types.SnowparkLike',
-        'sdm_connectors._types.SparkLike',
     }
 )
 
@@ -237,7 +227,7 @@ def _dotted(node: ast.expr) -> str | None:
     return '.'.join(reversed(parts))
 
 
-#: What `type X = ...` builds, which stands for its value rather than being a
+#: What `type X =...` builds, which stands for its value rather than being a
 #: type of its own. Absent before Python 3.12.
 _ALIAS = getattr(typing, 'TypeAliasType', None)
 
@@ -597,6 +587,48 @@ class _InternalTypes:
 class TestPublicSurface:
     """What a caller can name, and what the endpoint receives."""
 
+    def test_a_union_is_one_kind_on_every_python(self):
+        spec = importlib.util.spec_from_file_location(
+            'snapshot_kinds', REPO / 'scripts/snapshot_public_api.py'
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module._kind(int | str) == 'Union'
+        # The older spellings, which are unions too.
+        assert module._kind(typing.Union[int, str]) == 'Union'  # noqa: UP007
+        assert module._kind(typing.Optional[int]) == 'Union'  # noqa: UP045
+        assert module._kind(3) == 'int'
+
+    def test_forward_annotations_remain_distinct_from_defaults_and_types(self):
+        spec = importlib.util.spec_from_file_location(
+            'snapshot_signatures', REPO / 'scripts/snapshot_public_api.py'
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        def function(value="ForwardRef('Result')"):
+            pass
+
+        function.__annotations__ = {
+            'value': typing.ForwardRef('Input'),
+            'return': typing.ForwardRef('Result'),
+        }
+        assert module._signature(function) == (
+            "(value: ForwardRef('Input') = \"ForwardRef('Result')\")"
+            " -> ForwardRef('Result')"
+        )
+        function.__annotations__['value'] = int
+        assert module._signature(function).startswith('(value: int = ')
+        function.__annotations__['value'] = typing.ForwardRef(
+            'Input', module='a'
+        )
+        first = module._signature(function)
+        function.__annotations__['value'] = typing.ForwardRef(
+            'Input', module='b'
+        )
+        assert module._signature(function) != first
+        assert "module='a'" in first
+
     def test_the_exported_api_matches_the_recorded_snapshot(self):
         result = _run('snapshot_public_api.py')
         assert result.returncode == 0, (
@@ -648,6 +680,23 @@ class TestPublicSurface:
         values and name nothing. Removing every quoted run read the first as
         naming nothing at all.
         """
+        # A synthetic retired package tests leak detection without installing it.
+        retired = tmp_path / 'predictive_query'
+        retired.mkdir()
+        (retired / '__init__.py').write_text(
+            'from .profiles import Profile\nfrom .api import validate\n'
+        )
+        (retired / 'profiles.py').write_text('class Profile: pass\n')
+        (retired / 'api.py').write_text('def validate(): pass\n')
+        monkeypatch.syspath_prepend(str(tmp_path))
+        for retired_name in (
+            'predictive_query',
+            'predictive_query.profiles',
+            'predictive_query.api',
+        ):
+            monkeypatch.setitem(sys.modules, retired_name, None)
+            del sys.modules[retired_name]
+
         probe = tmp_path / '_leak_probe.py'
         probe.write_text(
             'from __future__ import annotations\n'
@@ -705,12 +754,10 @@ class TestPublicSurface:
         assert not missed, f'not reported: {missed}\nreported:\n{found}'
         assert '_leak_probe.fine' not in found, found
 
-    def test_the_wire_payloads_match_the_recorded_snapshot(self):
-        result = _run('snapshot_wire_payloads.py')
+    def test_canonical_wire_journeys_preserve_behavior(self):
+        result = _run('check_wire_behavior.py')
         assert result.returncode == 0, (
-            'A canonical request now serializes differently. If that was '
-            'intended, re-record with `python scripts/snapshot_wire_payloads.py '
-            f'--write`.\n{result.stdout}{result.stderr}'
+            f'A canonical wire behavior failed.\n{result.stdout}{result.stderr}'
         )
 
 
@@ -759,8 +806,77 @@ def _loaded(script: str):
     return module
 
 
+@functools.lru_cache(maxsize=1)
+def _captured_wire_payloads():
+    return _loaded('check_wire_behavior').collect()
+
+
+def _current_wire_payloads():
+    # Mutation tests must never contaminate subsequent cases.
+    return copy.deepcopy(_captured_wire_payloads())
+
+
+@pytest.mark.parametrize(
+    'damage',
+    [
+        'task',
+        'probabilities',
+        'context_exclusion',
+        'feature_value',
+        'typed_id',
+        'label',
+        'context_order',
+        'history',
+        'relationship',
+        'schema_type',
+        'client_key',
+        'tabular_inference',
+        'metadata_key',
+        'output_statistic',
+    ],
+)
+def test_wire_assertions_reject_behavior_changes(damage):
+    cases = _current_wire_payloads()
+    direct = cases['tabular/direct-classification'][0]
+    relational = cases['relational/pql-count-aggregation'][0]
+    if damage == 'task':
+        direct['task']['kind'] = 'regression'
+    elif damage == 'probabilities':
+        cases['tabular/direct-classification#default-outputs'][0]['output'][
+            'fields'
+        ] = ['prediction']
+    elif damage == 'context_exclusion':
+        cases['tabular/pql-predict-frame'][0]['context'] = direct['context']
+    elif damage == 'feature_value':
+        direct['predict']['instance_table']['rows'][0][1] += 1
+    elif damage == 'typed_id':
+        direct['predict']['instance_table']['rows'][0][0] = False
+    elif damage == 'label':
+        relational['context']['instance_table']['rows'][0][-1] += 1
+    elif damage == 'context_order':
+        relational['context']['instance_table']['rows'].reverse()
+    elif damage == 'history':
+        relational['predict']['related_tables']['orders']['rows'].pop()
+    elif damage == 'relationship':
+        relational['schema']['relationships'].pop()
+    elif damage == 'schema_type':
+        relational['schema']['related_tables']['orders']['columns']['price'][
+            'dtype'
+        ] = 'int64'
+    elif damage == 'client_key':
+        relational['client_generated_keys'] = {'orders': '__node_id'}
+    elif damage == 'tabular_inference':
+        direct['inference'] = {'run_mode': 'fast'}
+    elif damage == 'metadata_key':
+        relational['metadata']['client_rows'] = 3
+    elif damage == 'output_statistic':
+        direct['output']['prediction_statistic'] = 'median'
+    with pytest.raises(AssertionError):
+        _loaded('check_wire_behavior').assert_behavior(cases)
+
+
 def _doctored(tmp_path: pathlib.Path, mutate) -> pathlib.Path:
-    recorded = json.loads((GOLDEN / 'wire_payloads.json').read_text())
+    recorded = _current_wire_payloads()
     entry = recorded['relational/pql-count-aggregation']
     mutate(entry[0] if isinstance(entry, list) else entry)
     written = tmp_path / 'wire_payloads.json'
@@ -835,7 +951,7 @@ class TestTheRequestBodiesAreContractual:
         """
         schema_for = _loaded('check_wire_payloads').schema_for
 
-        recorded = json.loads((GOLDEN / 'wire_payloads.json').read_text())
+        recorded = _current_wire_payloads()
         entry = recorded['relational/pql-count-aggregation']
         whole = entry[0] if isinstance(entry, list) else entry
         body = {key: whole[key] for key in sections if key in whole}
@@ -937,110 +1053,45 @@ class TestTheRequestBodiesAreContractual:
         assert result.returncode == 0
 
 
-_ENGINE_LICENSE = 'packages/structured-data-models-relational-engine/LICENSE'
-_COMPONENTS = (
-    PACKAGES
-    / 'structured-data-models-relational-engine'
-    / 'src'
-    / 'sdm_relational_engine'
-    / 'rfm'
-    / 'assets'
-    / 'MERMAID_COMPONENTS.json'
-)
-#: Mirrors scripts/mermaid_notices.py, where the reason for each is written.
-_WITHOUT_A_NOTICE = frozenset(
-    {
-        'chevrotain',
-        '@chevrotain/types',
-        '@chevrotain/regexp-to-ast',
-        '@chevrotain/gast',
-        '@chevrotain/utils',
-        '@chevrotain/cst-dts-gen',
-        'robust-predicates',
-    }
-)
-
-
 class TestTheNoticesAreComplete:
-    """What an open-source release has to say about what it ships.
-
-    The licenses of the bundled components ask for their copyright lines to be
-    reproduced where they have one. Naming a component and its license is not
-    that.
-    """
+    """Release artifacts carry the attribution generated for native dependencies."""
 
     def test_the_license_files_carry_what_was_recorded(self):
-        """The attribution is generated, so it cannot drift from its source.
+        result = _run('rust_core/rust_notices.py', '--check')
+        assert result.returncode == 0, result.stdout + result.stderr
 
-        Hand-enumeration of the bundle did not converge: three rounds of it
-        each missed more components, and the ones missed last were reached
-        through other bundles rather than declared.
-        """
-        result = _run('mermaid_notices.py', '--check')
+    def test_the_root_license_points_to_native_attribution(self):
+        path = 'packages/structured-data-models-client/THIRD-PARTY-NOTICES-RUST.txt'
+        assert path in (REPO / 'LICENSE').read_text()
+        assert (REPO / path).is_file()
 
-        assert result.returncode == 0, (
-            'The license files no longer carry the attribution rendered from '
-            'MERMAID_COMPONENTS.json. Run `python scripts/mermaid_notices.py '
-            f'--write`.\n{result.stdout}{result.stderr}'
-        )
-
-    def test_every_recorded_component_has_a_notice_or_a_reason(self):
-        """A license name is not a notice, and silence is not either."""
-        recorded = json.loads(_COMPONENTS.read_text())['components']
-        without = {
-            component['name']
-            for component in recorded.values()
-            if not component['notices']
-        }
-
-        assert without <= _WITHOUT_A_NOTICE, (
-            f'{sorted(without - _WITHOUT_A_NOTICE)} are attributed but carry '
-            f'no copyright notice and are not recorded as having none'
-        )
-        assert len(recorded) > 50, (
-            f'only {len(recorded)} components recorded, which is fewer than '
-            f"mermaid's closure reaches; the refresh may have been truncated"
-        )
+    @pytest.mark.parametrize('name', ['NOTICE', 'LICENSE'])
+    def test_the_client_wheel_points_to_what_it_bundles(self, name):
+        client = PACKAGES / 'structured-data-models-client'
+        text = (client / name).read_text()
+        for path in (
+            'THIRD-PARTY-NOTICES-RUST.txt',
+            'sdm_client/assets/THIRD-PARTY-NOTICES-MERMAID.txt',
+        ):
+            assert path in text
+        assert (client / 'THIRD-PARTY-NOTICES-RUST.txt').is_file()
+        assert (
+            client / 'src/sdm_client/assets/THIRD-PARTY-NOTICES-MERMAID.txt'
+        ).is_file()
 
     def test_the_readme_links_every_package_license(self):
         """A reader looking for the terms of one package should not have to
         guess that each directory holds its own copy.
         """
         readme = (REPO / 'README.md').read_text()
-        packages = sorted(p.name for p in PACKAGES.iterdir() if p.is_dir())
+        packages = sorted(
+            p.parent.name for p in PACKAGES.glob('*/pyproject.toml')
+        )
 
         for package in packages:
             link = f'packages/{package}/LICENSE'
             assert link in readme, f'the README does not link {link}'
             assert (REPO / link).is_file(), f'{link} is linked but missing'
-
-    def test_the_engine_license_says_what_the_root_one_says(self):
-        """The engine ships the bundle, so its own copy carries the same
-        notices. They differ only in the path each gives for the bundle.
-        """
-
-        def attribution(path):
-            text = (REPO / path).read_text()
-            text = text[text.index('THIRD-PARTY SOFTWARE BUNDLED') :]
-            # Every line, not the ones that look like notices: a URL or an
-            # "All rights reserved." is part of a notice too, and comparing
-            # only the lines carrying the word let those drift apart.
-            lines = text.splitlines()
-            return [line for line in lines if not line.endswith('.min.js')]
-
-        root = attribution('LICENSE')
-        engine = attribution(_ENGINE_LICENSE)
-        differing = [
-            (a, b) for a, b in zip(root, engine, strict=False) if a != b
-        ]
-
-        assert len(root) == len(engine), (
-            f'the two license files carry {len(root)} and {len(engine)} '
-            f'lines of attribution; they should carry the same'
-        )
-        assert not [pair for pair in differing if not set(pair[0]) <= {'-'}], (
-            f'the two license files disagree: {differing[:3]}'
-        )
 
 
 class TestErrorContract:
@@ -1149,6 +1200,104 @@ class TestDistributionCoherence:
             'than the one being released:\n' + '\n'.join(wrong)
         )
 
+    def test_the_native_module_is_versioned_with_the_five(self):
+        """maturin stamps the client wheel with sdm-py's Cargo version.
+
+        That version is the Rust workspace's, which `_version.py` does not
+        see, so a release that moved only the five would ship a client wheel
+        at the old version, and "five wheels, one version" would fail only
+        when CI built it (design, "Packaging").
+        """
+        crate = tomllib.loads(
+            (REPO / 'rust/bindings/sdm-py/Cargo.toml').read_text()
+        )['package']['version']
+        if crate == {'workspace': True}:
+            crate = tomllib.loads((REPO / 'rust/Cargo.toml').read_text())[
+                'workspace'
+            ]['package']['version']
+        from packaging.version import Version
+
+        assert Version(crate) == Version(self._declared_version()), (
+            f'sdm-py is at {crate}, the five at {self._declared_version()}'
+        )
+        client = _pyproject('structured-data-models-client')
+        assert client['build-system']['build-backend'] == 'maturin'
+        assert client['project']['dynamic'] == ['version']
+
+    def test_the_java_library_is_versioned_with_the_five(self):
+        import xml.etree.ElementTree as ET
+
+        pom = ET.parse(REPO / 'java/pom.xml').getroot()
+        version = pom.findtext('{http://maven.apache.org/POM/4.0.0}version')
+        assert version == self._declared_version(), (
+            f'java/pom.xml is at {version}, the five at '
+            f'{self._declared_version()}'
+        )
+
+    def test_every_floor_on_frames_and_arrow_is_the_supported_one(self):
+        """pandas, NumPy and pyarrow carry one floor wherever they are named.
+
+        The core takes Arrow through the PyCapsule interface, which pyarrow
+        has from 14.0.1, and the supported versions are 's, with
+        main's pandas 2.2.2 and the NumPy 1.23.5 the Databricks runtimes ship
+        (the owner's, 2026-10-16); a distribution that named a lower floor
+        would let an install resolve to a set nothing tests. The one name
+        left unbounded is main's pyarrow in the connectors, where a floor
+        evicts a runtime's working pyarrow; the client floors it wherever
+        the core is installed.
+        """
+        from packaging.requirements import Requirement
+        from packaging.version import Version
+
+        floors = {
+            'pandas': Version('2.2.2'),
+            'numpy': Version('1.23.5'),
+            'pyarrow': Version('14.0.1'),
+        }
+        unbounded = {'structured-data-models-connectors: pyarrow'}
+        named = []
+        wrong = []
+        for name in _distributions():
+            project = _pyproject(name)['project']
+            requirements = list(project.get('dependencies', []))
+            for extra in project.get('optional-dependencies', {}).values():
+                requirements.extend(extra)
+            setup = PACKAGES / name / 'setup.py'
+            if setup.is_file():
+                requirements.extend(
+                    re.findall(
+                        r"""['"]((?:pandas|numpy|pyarrow)\b[^'"]*)['"]""",
+                        setup.read_text(),
+                    )
+                )
+            for text in requirements:
+                requirement = Requirement(text)
+                floor = floors.get(requirement.name.lower())
+                if floor is None:
+                    continue
+                named.append(f'{name}: {text}')
+                lower = [
+                    Version(s.version)
+                    for s in requirement.specifier
+                    if s.operator == '>='
+                ]
+                if not lower and f'{name}: {text}' in unbounded:
+                    continue
+                if not lower or max(lower) < floor:
+                    wrong.append(f'{name}: {text} (floor {floor})')
+        # Every place one is named, so a requirement that moves or goes is
+        # seen here rather than passing for lack of anything to check.
+        assert sorted(named) == sorted(
+            [
+                'structured-data-models-client: pandas>=2.2.2',
+                'structured-data-models-client: numpy>=1.23.5',
+                'structured-data-models-client: pyarrow>=14.0.1',
+                'structured-data-models-connectors: pandas>=2.2.2',
+                'structured-data-models-connectors: pyarrow',
+            ]
+        ), named
+        assert not wrong, 'below the supported floor:\n' + '\n'.join(wrong)
+
     def test_every_distribution_declares_the_same_licence(self):
         licences = {
             name: _pyproject(name)['project'].get('license')
@@ -1186,20 +1335,21 @@ class TestDistributionCoherence:
         known = set(_distributions())
         for extra, requirements in client['optional-dependencies'].items():
             for requirement in requirements:
-                name = (
-                    requirement.split('[')[0]
-                    .split('==')[0]
-                    .split('>=')[0]
-                    .strip()
-                )
-                # databricks-sdk and structured-data-models are imported by the
-                # client's own transports, so the client is the distribution
-                # that declares them.
+                from packaging.requirements import Requirement
+
+                name = Requirement(requirement).name
+                # databricks-sdk is imported by the client's own serving
+                # transport, so the client is the distribution that declares it.
                 assert name in known or name in {
                     'pytest',
+                    'pytest-xdist',
+                    'psutil',
                     'requests-mock',
+                    'jsonschema',
+                    'pyyaml',
+                    'pytz',  # explicit timezone fixtures, including DST folds
                     'databricks-sdk',
-                    'structured-data-models',
+                    'structured-data-models',  # optional local model runtime
                 }, (
                     f'extra {extra!r} requires {name!r}, which is not one of '
                     f"this repository's distributions"
@@ -1219,7 +1369,7 @@ class TestDistributionCoherence:
             'optional-dependencies'
         ]
         assert (
-            'structured-data-models-connectors[databricks]==1.0.0'
+            f'structured-data-models-connectors[databricks]=={self._declared_version()}'
             in client['databricks']
         )
         connectors = _pyproject('structured-data-models-connectors')['project']
@@ -1230,7 +1380,7 @@ class TestDistributionCoherence:
         assert 'pyyaml' in names
 
     def test_the_lakebase_extra_brings_plain_psycopg_and_a_postgres_sdk(self):
-        """`lakebase()` calls `WorkspaceClient.postgres`, added in 0.89.
+        """`lakebase` calls `WorkspaceClient.postgres`, added in 0.89.
 
         Plain psycopg, because the binary wheel's OpenSSL fails its FIPS
         self-test on Databricks' aarch64 hosts and aborts the process.
@@ -1239,7 +1389,7 @@ class TestDistributionCoherence:
             'optional-dependencies'
         ]
         assert client['lakebase'] == [
-            'structured-data-models-connectors[lakebase]==1.0.0'
+            f'structured-data-models-connectors[lakebase]=={self._declared_version()}'
         ]
         (everything,) = client['all']
         assert 'lakebase' in everything.partition('[')[2].rstrip(']').split(',')
@@ -1269,51 +1419,6 @@ class TestConfigurationTellsTheTruth:
             assert baseline <= narrowed or 'select' not in config.get(
                 'lint', {}
             ), f'{name} narrows the shared lint baseline to {narrowed}'
-
-    def test_the_ignore_list_sorts_itself_the_way_its_headings_say(self):
-        """The engine's ignore list is written in two labelled blocks.
-
-        One is rules the shared baseline really does select, so listing them
-        here silences something; the other is a record of rules nothing selects
-        anywhere. An earlier note called the whole list inert, which was wrong
-        """
-        source = (
-            PACKAGES
-            / 'structured-data-models-relational-engine'
-            / 'pyproject.toml'
-        ).read_text()
-        root = tomllib.loads((REPO / 'pyproject.toml').read_text())
-        selected = root['tool']['ruff']['lint']['select']
-        engine = _pyproject('structured-data-models-relational-engine')['tool'][
-            'ruff'
-        ]['lint']
-        effective = list(selected) + list(engine.get('extend-select', []))
-
-        active_block, _, backlog_block = source.partition(
-            '--- Recorded backlog'
-        )
-        _, _, active_block = active_block.partition('--- Active exemptions')
-        assert active_block and backlog_block, (
-            'the ignore list no longer carries both headings this test reads'
-        )
-
-        def listed(block: str) -> set[str]:
-            return {
-                rule
-                for rule in engine.get('ignore', [])
-                if f'"{rule}"' in block
-            }
-
-        for rule in listed(active_block):
-            assert _covered_by(rule, effective), (
-                f'{rule} sits under "Active exemptions" but nothing selects '
-                f'it, so ignoring it silences nothing'
-            )
-        for rule in listed(backlog_block):
-            assert not _covered_by(rule, selected), (
-                f'{rule} sits under "Recorded backlog", which says the shared '
-                f'baseline does not select it, but {selected} does'
-            )
 
     def test_the_tabular_task_kinds_match_what_the_model_declares(self):
         """`TABULAR_TASK_KINDS` restates what `models.py` says, and says so.
@@ -1389,7 +1494,9 @@ class TestConfigurationTellsTheTruth:
 
         checked, missing = 0, []
         for module in named:
-            present = self._module_is_on_disk(module)
+            # Mypy's package.* override includes the package itself as well
+            # as its descendants; the wildcard is not a literal filename.
+            present = self._module_is_on_disk(module.removesuffix('.*'))
             if present is None:
                 continue  # the distribution is absent from this job
             checked += 1
@@ -1403,53 +1510,6 @@ class TestConfigurationTellsTheTruth:
         assert not missing, (
             f'the mypy baseline names modules that do not exist: {missing}. '
             f'Delete the entry, or point it at whatever the code became.'
-        )
-
-    def test_the_recorded_style_backlog_is_clean_where_the_note_says_it_is(
-        self,
-    ):
-        """The engine's ignore list records a backlog and names where it is clean.
-
-        That claim used to be wrong in both halves, the rules were not
-        selected anywhere, and the two packages named did not pass clean under
-        them. A comment cannot be wrong for long if a test reads it.
-        """
-        engine = _pyproject('structured-data-models-relational-engine')['tool'][
-            'ruff'
-        ]['lint']
-        root = tomllib.loads((REPO / 'pyproject.toml').read_text())
-        selected = root['tool']['ruff']['lint']['select']
-        backlog = [
-            rule
-            for rule in engine.get('ignore', [])
-            if _linter_of(rule) != 'D' and not _covered_by(rule, selected)
-        ]
-        assert backlog, 'the recorded style backlog vanished; update this test'
-
-        ruff = pathlib.Path(sys.executable).parent / 'ruff'
-        if not ruff.exists():  # pragma: no cover - ruff not installed
-            import pytest
-
-            pytest.skip('ruff is not installed in this environment')
-
-        result = subprocess.run(
-            [
-                str(ruff),
-                'check',
-                '--no-cache',
-                '--quiet',
-                '--select',
-                ','.join(backlog),
-                str(PACKAGES / 'structured-data-models-client' / 'src'),
-                str(PACKAGES / 'structured-data-models-connectors' / 'src'),
-            ],
-            capture_output=True,
-            text=True,
-        )
-        assert result.returncode == 0, (
-            'structured-data-models-client and structured-data-models-connectors no longer pass clean under the '
-            'style backlog the engine records, so the note beside that ignore '
-            f'list is now wrong:\n{result.stdout}{result.stderr}'
         )
 
 
@@ -1630,73 +1690,3 @@ class TestInterpreterSupportIsStated:
                 f'{project["requires-python"]!r} but does not classify them, so '
                 f'an index reports it unsupported on an interpreter it runs on'
             )
-
-    def test_an_extra_narrower_than_its_parent_says_so(self):
-        """The relational extra does not resolve on every Python the client does.
-
-        That is correct, the engine is a native build with a shorter wheel
-        matrix, but pip's error names a distribution, not a reason. Anything
-        that narrow has to be explained where someone reads it.
-        """
-        client = _pyproject('structured-data-models-client')
-        engine = _pyproject('structured-data-models-relational-engine')
-        if (
-            client['project']['requires-python']
-            == engine['project']['requires-python']
-        ):
-            return
-        source = (
-            PACKAGES / 'structured-data-models-client' / 'pyproject.toml'
-        ).read_text()
-        # The engine's own bound, not a literal: this read `'3.14' in source`
-        # while the engine stopped at 3.13, so once 3.14 became supported the
-        # comment named it for a different reason and the test proved nothing.
-        # What has to be written down is where the extra now stops.
-        bound = engine['project']['requires-python']
-        edge = re.search(r'<\s*(\d+\.\d+)', bound)
-        assert edge is not None, (
-            f'the engine no longer carries an upper bound ({bound!r}), so what '
-            f'this test reads as the edge of the matrix is gone'
-        )
-        assert edge.group(1) in source and 'native build' in source, (
-            f'structured-data-models-client admits interpreters its [relational] extra cannot '
-            f'install on, and its pyproject does not say the extra stops below '
-            f'{edge.group(1)}'
-        )
-        install_doc = (
-            REPO / 'docs' / 'get-started' / 'installation.md'
-        ).read_text()
-        assert 'relational' in install_doc, (
-            'the installation guide does not mention the relational extra'
-        )
-
-
-@pytest.mark.parametrize(
-    ('suffix', 'refused'),
-    [
-        ('', False),
-        ('-client', False),
-        ('-api', False),
-        ('-pql', False),
-        ('-connectors', False),
-        ('-relational-engine', False),
-        ('-nim', True),
-        ('-serving', True),
-        ('-client-nim', True),
-        ('-api-internal', True),
-        ('-relational-engine-nim', True),
-        ('-client_nim', True),
-    ],
-)
-def test_only_a_published_distribution_may_be_named(suffix, refused):
-    """The bare name is the public model package, and the five suffixes are
-    what this repository publishes. Any other suffix is an internal build a
-    reader cannot look up, and naming one in a shipped file is a leak.
-
-    The names are assembled rather than spelled, because spelling one here
-    would be the very thing the rule refuses.
-    """
-    hygiene = _loaded('check_repo_hygiene')
-    name = 'structured-data-models' + suffix
-    matched = any(pattern.search(name) for pattern in hygiene.INTERNAL_PATTERNS)
-    assert matched is refused

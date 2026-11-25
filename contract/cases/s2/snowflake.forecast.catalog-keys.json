@@ -1,0 +1,55 @@
+{
+  "format": "sdm-case/1",
+  "id": "snowflake.forecast.catalog-keys",
+  "status": "acceptance",
+  "slice": "S2",
+  "warehouses": [
+    "snowflake"
+  ],
+  "paths": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "routes": [
+    "schema.from-source/all-tables/snowflake",
+    "schema.from-source/catalog-keys/snowflake",
+    "query.materialize/indices-binary/snowflake",
+    "query.materialize/indices-multiclass/snowflake",
+    "query.materialize/indices-regression/snowflake",
+    "query.materialize/indices-link-prediction/snowflake",
+    "query.materialize/indices-ranking/snowflake",
+    "query.materialize/indices-forecast/snowflake",
+    "client.predict/binary/snowflake",
+    "client.predict/multiclass/snowflake",
+    "client.predict/regression/snowflake",
+    "client.predict/link-prediction/snowflake",
+    "client.predict/ranking/snowflake",
+    "client.predict/forecast/snowflake"
+  ],
+  "cells": [
+    "int8/primary-key",
+    "int8/foreign-key",
+    "timestamp-us/time-column"
+  ],
+  "input": {
+    "base": "declared",
+    "pql": "PREDICT SUM(orders.price, 0, 7, days) FORECAST 2 TIMEFRAMES FOR EACH users.uid",
+    "materialize": {
+      "indices": [
+        0,
+        1
+      ],
+      "anchor_time": "2023-03-01"
+    },
+    "quantiles": true
+  },
+  "until": "predict",
+  "expect": {
+    "outcome": "success",
+    "stage": "predict"
+  },
+  "why": "Snowflake forecasting over catalog-declared keys and relationships; explicitly indexed entities are fetched by key.",
+  "source": "Correctness case snowflake.forecast.catalog-keys using the declared fixture."
+}
