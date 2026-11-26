@@ -7,6 +7,14 @@ these packages. The three Python distributions share one version.
 
 ## Unreleased
 
+### Fixed
+
+- **Errors could not cross a process boundary.**
+  `NimRequestError`, `UnknownModelError`, `MissingExtraError` and the connectors' `MissingBackendError` failed to unpickle or copy with `TypeError: __init__() missing ... arguments`, so a process pool, multiprocessing, Spark, Ray or joblib that raised one lost it and could break the pool.
+  Every client and connector error now survives `pickle` and `copy.copy`/`copy.deepcopy` with its class, message, code, details and other attributes.
+- **Java errors lost their details when serialized.**
+  A deserialized `StructuredDataException` or `ModelEndpointException` returned `null` from `details()`; it now keeps its details, including the rows answered before a later call failed.
+
 ## 2.0.0 - 2026-11-25
 
 2.0 moves the client's core logic into one shared Rust engine and adds Java support.

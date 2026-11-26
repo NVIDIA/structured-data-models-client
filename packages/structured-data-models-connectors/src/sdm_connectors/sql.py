@@ -10,11 +10,17 @@ import pathlib
 import re
 from collections.abc import Collection, Iterator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, SupportsIndex
 
 _TABLE_IDENTIFIER_RE = re.compile(
     r'^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*)*$',
 )
+
+
+def _rebuild(cls: type[Exception], args: tuple[Any, ...]) -> Exception:
+    r"""An instance of ``cls`` holding ``args``, made without running its
+    ``__init__``; unpickling and copying then restore its attributes."""
+    return cls.__new__(cls, *args)
 
 
 class ConnectorError(Exception):
@@ -36,6 +42,17 @@ class ConnectorError(Exception):
         self.message = message
         self.code = code
         self.details = details or {}
+
+    def __reduce_ex__(self, protocol: SupportsIndex) -> str | tuple[Any, ...]:
+        # Pickling and copying rebuild an exception by calling its class
+        # with ``args``, which is only the message: a subclass whose
+        # ``__init__`` takes other arguments could not be rebuilt. Make the
+        # instance without ``__init__`` and restore every attribute from
+        # the state ``__reduce__`` gives instead.
+        reduced = self.__reduce__()
+        if not isinstance(reduced, tuple) or reduced[0] is not type(self):
+            return reduced
+        return (_rebuild, (type(self), self.args), *reduced[2:])
 
 
 class MissingBackendError(ConnectorError, ModuleNotFoundError):
