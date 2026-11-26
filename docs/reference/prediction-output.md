@@ -85,7 +85,10 @@ ranking = scores.sort_values('probability_True', ascending=False)
 
 The relational model predicts a distribution for a regression, and `prediction` is its median.
 That matches what the engine returns.
-Pass `materialize(..., prediction_statistic='mean')` for the mean instead.
+Pass `materialize(..., prediction_statistic='mean')` for the mean instead; in Java, `MaterializeOptions.builder().option("prediction_statistic", "mean")`.
+Each step of a forecast is a regression and reports the same statistic.
+A request gathered by `materialize_examples` always reports the median, since that method takes no statistic option in either language.
+The client sends the statistic on every regression and forecast call, so the answer never depends on an endpoint's own default, which differs between servers.
 
 Choose `'mean'` when predictions will be added up across entities, such as total demand over products.
 Means add up and medians don't, so on a right-skewed target the sum of the medians understates the total.

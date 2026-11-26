@@ -7,6 +7,12 @@ these packages. The three Python distributions share one version.
 
 ## Unreleased
 
+### Changed
+
+- **Forecasts always name their statistic.**
+  A forecast from `materialize_examples` was sent without `prediction_statistic`, leaving the statistic to the endpoint's own default.
+  The client now sends it on every regression and forecast call, in Python and Java, the median unless the mean is chosen, so the answer no longer depends on a deployment's default, which differs between servers.
+
 ## 2.0.0 - 2026-11-25
 
 2.0 moves the client's core logic into one shared Rust engine and adds Java support.

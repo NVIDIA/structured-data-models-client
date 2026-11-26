@@ -75,8 +75,12 @@ const CALLED: [&str; 5] = [
 ];
 
 /// The statistic a regression's point prediction reports unless one was
-/// chosen.
+/// chosen. It is always sent, so a deployment's own default never decides it.
 pub const DEFAULT_STATISTIC: &str = "median";
+
+/// The task kinds answered from a predicted distribution, whose call carries
+/// a statistic: a regression, and a forecast, a regression at each step.
+const SUMMARISED: [&str; 2] = ["regression", "forecasting"];
 
 /// The inference-config keys the client forwards to `kumo-relational`
 /// (`KUMO_RELATIONAL.runtime.inference_options`); the engine's others are
@@ -738,10 +742,13 @@ pub fn body(
     envelope.remove("client_analysis_delta");
     envelope.set("model", Value::text(model));
 
-    // The outputs, and a regression's statistic: the one the payload
-    // carries, the median unless one was chosen (`_output_for`).
+    // The outputs, and a regression's or a forecast's statistic: the one the
+    // payload carries, the median unless one was chosen (`_output_for`).
+    // It is always sent, so the answer never depends on a deployment's own
+    // default, which differs between servers.
     let fields = Value::Array(outputs.iter().map(|f| Value::text(f)).collect());
-    if kind != "regression" {
+    let summarised = SUMMARISED.contains(&kind);
+    if !summarised {
         envelope.set(
             "output",
             Value::Object(vec![("fields".to_owned(), fields.clone())]),
@@ -759,7 +766,7 @@ pub fn body(
             .cloned(),
         Some(_) => return Err(bad_payload("output")),
     };
-    if kind == "regression" {
+    if summarised {
         envelope.set(
             "output",
             Value::Object(vec![
@@ -2401,6 +2408,33 @@ mod tests {
                 .as_text(),
             Some(query.as_str())
         );
+    }
+
+    #[test]
+    fn every_call_answered_from_a_distribution_sends_its_statistic() {
+        let sent = |payload: &[u8]| {
+            let payload = sdm_wire::json::read(payload).unwrap();
+            body(&payload, RELATIONAL, "request", &["prediction".into()], &[])
+                .unwrap()
+                .get("output")
+                .and_then(|output| output.get("prediction_statistic"))
+                .cloned()
+        };
+        // A forecast is a regression at each step, and names its statistic
+        // as a regression does.
+        for kind in ["regression", "forecasting"] {
+            let unchosen = format!(r#"{{"task":{{"kind":"{kind}"}}}}"#);
+            assert_eq!(
+                sent(unchosen.as_bytes()),
+                Some(Value::text("median")),
+                "{kind}"
+            );
+            let chosen = format!(
+                r#"{{"task":{{"kind":"{kind}"}},"output":{{"fields":["prediction"],"prediction_statistic":"mean"}}}}"#
+            );
+            assert_eq!(sent(chosen.as_bytes()), Some(Value::text("mean")), "{kind}");
+        }
+        assert_eq!(sent(br#"{"task":{"kind":"binary_classification"}}"#), None);
     }
 
     #[test]
