@@ -102,10 +102,12 @@ public class StructuredDataException extends RuntimeException {
   }
 
   /**
-   * The exception a data source raised, behind a {@code PROVIDER_ERROR}: its own message, such as
-   * which input it could not read, is there. It is neither this error's cause nor in its message
-   * or details, so a logged stack trace never quotes it, since a driver's message can hold data
-   * values or connection settings; read it here to show it. Empty for any other error.
+   * The exception a data source threw while answering a data request, behind the {@code
+   * PROVIDER_ERROR} that failure became: its own message, such as which input it could not read, is
+   * there. It is neither this error's cause nor in its message or details, so a logged stack trace
+   * never quotes it, since a driver's message can hold data values or connection settings; read it
+   * here to show it. It is not serialized. Holding this error keeps that exception alive. Empty for
+   * any other error.
    */
   public Optional<Exception> sourceError() {
     return Optional.ofNullable(sourceError);

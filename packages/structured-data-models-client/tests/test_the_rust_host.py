@@ -516,7 +516,12 @@ def test_a_failed_call_s_counts_reach_the_caller_s_exception() -> None:
     assert not hasattr(untouched, 'details')
 
 
+class OperationalError(Exception):
+    r"""A driver's failure."""
+
+
 def test_details_carry_the_fields_kind_and_retryability() -> None:
+    failure = OperationalError('serialization failure')
     fields = {
         'sqlstate': {'t': 'utf8', 'v': '40001'},
         'line': {'t': 'u64', 'v': '18446744073709551615'},
@@ -531,7 +536,7 @@ def test_details_carry_the_fields_kind_and_retryability() -> None:
             retryable=True,
         ),
         {},
-        driver_class='driver.OperationalError',
+        source_error=failure,
     )
     assert error.details == {
         'sqlstate': '40001',
@@ -539,8 +544,9 @@ def test_details_carry_the_fields_kind_and_retryability() -> None:
         'names': ['a', None],
         'kind': 'data_source',
         'retryable': True,
-        'driver_class': 'driver.OperationalError',
+        'driver_class': f'{__name__}.OperationalError',
     }
+    assert error.source_error is failure
     whole = _error('INTERNAL_ERROR', 'x' * 70_000)
     attached = json.dumps({'message': 'attached', 'attachment': 1}).encode()
     assert errors.error_from_core(attached, {1: whole}).code == 'INTERNAL_ERROR'

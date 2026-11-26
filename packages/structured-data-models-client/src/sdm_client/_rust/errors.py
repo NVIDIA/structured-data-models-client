@@ -598,19 +598,28 @@ def _instance(
     return error
 
 
+def driver_class(failure: BaseException) -> str:
+    r"""The class of a data source's exception, by its qualified name: the
+    ``driver_class`` a ``PROVIDER_ERROR`` names."""
+    kind = type(failure)
+    return f'{kind.__module__}.{kind.__qualname__}'
+
+
 def error_from_core(
     control: bytes,
     attachments: dict[int, Any],
     *,
-    driver_class: str | None = None,
+    source_error: Exception | None = None,
 ) -> StructuredDataError:
     r"""The exception an ``error`` control message raises as, saying the
     core's sentence; the sentence's name is kept on it (``_sentence``), so
     a caller holding values the core does not can say it again with them
     (func:`render`).
 
-    ``driver_class`` names the class of the driver exception behind a
-    ``PROVIDER_ERROR``, which the run loop saw and the core never does.
+    ``source_error`` is the exception a data source raised behind a
+    ``PROVIDER_ERROR``, which the run loop saw and the core never does: a
+    ``PROVIDER_ERROR`` names its class (``details['driver_class']``) and
+    carries it (``source_error``); any other error ignores it.
     """
     message = codec.read(control, attachments)
     error = message['error']
@@ -622,8 +631,9 @@ def error_from_core(
         'kind': error['kind'],
         'retryable': bool(error.get('retryable', False)),
     }
-    if code == 'PROVIDER_ERROR' and driver_class is not None:
-        details['driver_class'] = driver_class
+    carried = source_error if code == 'PROVIDER_ERROR' else None
+    if carried is not None:
+        details['driver_class'] = driver_class(carried)
     if (code, details.get('rule')) in AS_THE_BASE_CLASS:
         cls = StructuredDataError
     sentence = error['sentence']
@@ -660,6 +670,8 @@ def error_from_core(
         cls = StructuredDataError
     made = _instance(cls, said, code, details)
     made._sentence = sentence
+    if carried is not None:
+        made.source_error = carried
     return made
 
 
@@ -672,13 +684,9 @@ def _detail(value: Any) -> Any:
 def raise_from_core(
     control: bytes,
     attachments: dict[int, Any],
-    *,
-    driver_class: str | None = None,
 ) -> NoReturn:
     r"""Raises the exception an ``error`` control message is, ``from None``."""
-    raise error_from_core(
-        control, attachments, driver_class=driver_class
-    ) from None
+    raise error_from_core(control, attachments) from None
 
 
 def refusal(control: bytes, attachments: dict[int, Any]) -> StructuredDataError:

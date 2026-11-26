@@ -395,7 +395,7 @@ public final class Host {
           trace.failed(failed.kind(), failed.code());
         }
         Map<String, Object> details = new LinkedHashMap<>();
-        Exception sourceError = "PROVIDER_ERROR".equals(failed.code()) ? driverFailure : null;
+        Exception sourceError = sourceError(failed.code(), driverFailure);
         if (sourceError != null) {
           details.put("driver_class", sourceError.getClass().getName());
         }
@@ -451,23 +451,31 @@ public final class Host {
       }
       // A provider's failure is named by its driver's class, and carried, only for the
       // step that failed: the core may carry on past one, and a later error is no other step's.
+      // Where several of a step's requests fail, the first failure is the one carried, as the
+      // Python host carries it.
       driverFailure = null;
       for (Object item : (List<Object>) read.get("requests")) {
         Map<String, Object> request = (Map<String, Object>) item;
-        Exception failed = fetch(run, request, call.provider());
-        if (failed != null) {
+        Exception failed = fetch(run, request, call.provider(), driverFailure);
+        if (driverFailure == null) {
           driverFailure = failed;
         }
       }
     }
   }
 
-  /** Answers one fetch request; the driver's exception when it failed, else null. */
+  /**
+   * Answers one fetch request; the driver's exception when it failed, thrown by {@code answer} or
+   * by the reader it answered with as the core read it, else null. {@code earlier} is the failure
+   * of an earlier request of the same step, which an error the reply ends with carries first.
+   */
   @SuppressWarnings("unchecked")
-  private static Exception fetch(Run run, Map<String, Object> request, Provider provider) {
+  private static Exception fetch(
+      Run run, Map<String, Object> request, Provider provider, Exception earlier) {
     Map<String, Object> outcome = new LinkedHashMap<>();
     Map<Integer, Object> attached = new LinkedHashMap<>();
     Exception driverFailure = null;
+    RecordingReader recording = null;
     BufferAllocator allocator = ArrowData.allocator();
     Map<Integer, ArrowReader> keys = new LinkedHashMap<>();
     ArrowArrayStream stream = null;
@@ -478,7 +486,8 @@ public final class Host {
         keys = keySets(run, plan, allocator);
       }
       ArrowReader answer = provider.answer(request, keys, allocator);
-      stream = ArrowExchange.export(allocator, answer);
+      recording = new RecordingReader(allocator, answer);
+      stream = ArrowExchange.export(allocator, recording);
       outcome.put("outcome", "data");
       outcome.put("data", 1);
       attached.put(1, stream);
@@ -512,7 +521,10 @@ public final class Host {
       run.reply(fetchControl(reply), attached);
     } catch (NativeError e) {
       told(e);
-      Exception sourceError = "PROVIDER_ERROR".equals(e.code()) ? driverFailure : null;
+      if (driverFailure == null && recording != null) {
+        driverFailure = recording.failure();
+      }
+      Exception sourceError = sourceError(e.code(), earlier != null ? earlier : driverFailure);
       throw error(
           e,
           Map.of(),
@@ -523,7 +535,19 @@ public final class Host {
         stream.close();
       }
     }
+    // A lazy reader's failure is known once the core has read it, as the reply is handed over.
+    if (driverFailure == null && recording != null) {
+      driverFailure = recording.failure();
+    }
     return driverFailure;
+  }
+
+  /**
+   * The source's exception an error of {@code code} carries: {@code failure}, behind a {@code
+   * PROVIDER_ERROR}; null behind any other error, which names no driver class either.
+   */
+  static Exception sourceError(String code, Exception failure) {
+    return "PROVIDER_ERROR".equals(code) ? failure : null;
   }
 
   /**

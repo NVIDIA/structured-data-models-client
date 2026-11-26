@@ -40,9 +40,11 @@ and class), and names.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
+
+import pyarrow as pa
 
 if TYPE_CHECKING:
     # Named for annotations only: the warehouse package is an optional
@@ -181,19 +183,41 @@ def _driver(
 ) -> tuple[dict[str, Any], str]:
     r"""A source's failure as the contract's ``ProviderError``
     (:func:`provider_error`), and its class."""
-    kind = type(error)
-    named = f'{kind.__module__}.{kind.__qualname__}'
-    return provider_error(error, provider), named
+    return provider_error(error, provider), errors.driver_class(error)
 
 
-def _with_source_error(
-    error: StructuredDataError, failure: Exception | None
-) -> StructuredDataError:
-    r"""``error``, carrying the source's own exception behind a
-    ``PROVIDER_ERROR`` as its ``source_error``; any other error as it is."""
-    if failure is not None and error.code == 'PROVIDER_ERROR':
-        error.source_error = failure
-    return error
+class _Recorded:
+    r"""The first exception a source's lazy reader raised while the core
+    read its batches, kept so the run's error can carry it as an exception
+    ``answer`` raised itself is carried; the core sees only that the
+    stream failed."""
+
+    def __init__(self) -> None:
+        self.failure: Exception | None = None
+
+    def reading(self, answer: Any) -> Any:
+        r"""``answer``, a ``RecordBatchReader`` read through a generator
+        that records its exception; any other answer as it is, since a
+        ``Table`` holds its batches already and another stream's batches
+        are not pyarrow's to read."""
+        if not isinstance(answer, pa.RecordBatchReader):
+            return answer
+        return pa.RecordBatchReader.from_batches(
+            answer.schema, self._batches(answer)
+        )
+
+    def _batches(self, reader: pa.RecordBatchReader) -> Iterator[Any]:
+        with reader:
+            while True:
+                try:
+                    batch = reader.read_next_batch()
+                except StopIteration:
+                    return
+                except Exception as failure:
+                    if self.failure is None:
+                        self.failure = failure
+                    raise
+                yield batch
 
 
 class Finished:
@@ -315,7 +339,6 @@ def _steps(
     model_endpoints: ModelEndpoints | None = None,
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
-    driver_class: str | None = None
     driver_failure: Exception | None = None
     refused: Refused | None = None
     cleanup_refusal = False
@@ -327,7 +350,7 @@ def _steps(
         except core.CoreError as failed:
             _warn(handle, quiet, given, kept)
             error = errors.error_from_core(
-                failed.control, failed.attachments, driver_class=driver_class
+                failed.control, failed.attachments, source_error=driver_failure
             )
             _answered(handle, failed, error)
         if error is not None:
@@ -352,7 +375,7 @@ def _steps(
             if transport is not None and error.code == 'TRANSPORT_ERROR':
                 error.message = f'{error.message}: {transport.message}'
                 error.details = {**transport.details, **error.details}
-            raise _with_source_error(error, driver_failure) from None
+            raise error from None
         _warn(handle, quiet, given, kept)
         step = codec.read(control, sent)
         if step['message'] != 'step':
@@ -391,11 +414,12 @@ def _steps(
         # A provider's failure is named by its driver's class, and carried,
         # only for the step that failed: the core may carry on past
         # one (a whole-table read it falls back from), and a later error is
-        # no other step's.
-        driver_class = None
+        # no other step's. Where several of a step's requests fail, the
+        # first failure is the one carried, as the Java host carries it.
         driver_failure = None
         for request in step['requests']:
             attached: dict[int, Any] = {}
+            recorded = _Recorded()
             try:
                 # A later page's step names the key sets the first took.
                 keys = (
@@ -406,10 +430,10 @@ def _steps(
                 answer = provider(request, keys)
                 outcome: dict[str, Any] = {'outcome': 'data', 'data': 1}
                 if isinstance(answer, Page):
-                    attached[1] = answer.data
+                    attached[1] = recorded.reading(answer.data)
                     outcome['continuation'] = answer.continuation
                 else:
-                    attached[1] = answer
+                    attached[1] = recorded.reading(answer)
             except NativeBoundaryError:
                 # The route itself failed (an import of the old engine on
                 # it, say), which is no provider's error to hand the core.
@@ -422,8 +446,8 @@ def _steps(
                     # the core gives (a built-in source's SQL kit, say).
                     outcome = {'outcome': 'refused', 'error': refusal}
                 else:
-                    provided, driver_class = _driver(failure, provider)
-                    driver_failure = failure
+                    provided, _ = _driver(failure, provider)
+                    recorded.failure = failure
                     outcome = {'outcome': 'error', 'error': provided}
             reply = codec.encode(
                 {
@@ -435,12 +459,17 @@ def _steps(
             try:
                 handle.reply(reply, attached)
             except core.CoreError as refused:
-                error = errors.error_from_core(
+                if driver_failure is None:
+                    driver_failure = recorded.failure
+                raise errors.error_from_core(
                     refused.control,
                     refused.attachments,
-                    driver_class=driver_class,
-                )
-                raise _with_source_error(error, driver_failure) from None
+                    source_error=driver_failure,
+                ) from None
+            # A lazy reader's failure is known once the core has read it,
+            # as the reply is handed over.
+            if driver_failure is None:
+                driver_failure = recorded.failure
 
 
 def _call(
