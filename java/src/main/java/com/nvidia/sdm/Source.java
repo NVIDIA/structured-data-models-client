@@ -50,7 +50,7 @@ public interface Source {
    *     names, in order, typed as the source stores them
    * @param allocator the allocator the answer's vectors are allocated from
    * @throws Exception any failure; the operation then fails with {@code PROVIDER_ERROR}, carrying
-   *     what {@link #failure} tells of it
+   *     what {@link #failure} tells of it, and this exception as its {@code sourceError()}
    */
   ArrowReader answer(DataRequest request, Optional<Schema> expected, BufferAllocator allocator)
       throws Exception;

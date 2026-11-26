@@ -13,9 +13,10 @@ cache, so a change to the ``logging`` configuration takes effect
 
 A provider's failure reaches the core as the contract's ``ProviderError``:
 kind, ``retryable``, SQLSTATE, vendor code and an internal driver diagnostic; the
-exception the run then ends with names the driver's class and is raised
-``from None``. A failure is retryable when the provider's
-exception says so, by a ``retryable`` attribute that is ``True``, and not
+exception the run then ends with names the driver's class, carries the
+driver's exception as its ``source_error``, and is raised ``from None``,
+so a logged traceback never quotes the driver's message. A failure is
+retryable when the provider's exception says so, by a ``retryable`` attribute that is ``True``, and not
 otherwise.
 
 A provider may answer a fetch one page at a time: it returns a:class:`Page`, one page with more following, and the
@@ -185,6 +186,16 @@ def _driver(
     return provider_error(error, provider), named
 
 
+def _with_source_error(
+    error: StructuredDataError, failure: Exception | None
+) -> StructuredDataError:
+    r"""``error``, carrying the source's own exception behind a
+    ``PROVIDER_ERROR`` as its ``source_error``; any other error as it is."""
+    if failure is not None and error.code == 'PROVIDER_ERROR':
+        error.source_error = failure
+    return error
+
+
 class Finished:
     r"""A finished run: its result, and the attachments it still holds."""
 
@@ -305,6 +316,7 @@ def _steps(
 ) -> Finished:
     r"""The run's steps, each answered, to its result."""
     driver_class: str | None = None
+    driver_failure: Exception | None = None
     refused: Refused | None = None
     cleanup_refusal = False
     transport: StructuredDataError | None = None
@@ -340,7 +352,7 @@ def _steps(
             if transport is not None and error.code == 'TRANSPORT_ERROR':
                 error.message = f'{error.message}: {transport.message}'
                 error.details = {**transport.details, **error.details}
-            raise error from None
+            raise _with_source_error(error, driver_failure) from None
         _warn(handle, quiet, given, kept)
         step = codec.read(control, sent)
         if step['message'] != 'step':
@@ -376,11 +388,12 @@ def _steps(
                 'answer',
                 code='INTERNAL_ERROR',
             )
-        # A provider's failure is named by its driver's class only for the
-        # step that failed: the core may carry on past one (a whole-table
-        # read it falls back from), and a later error is no other
-        # step's.
+        # A provider's failure is named by its driver's class, and carried,
+        # only for the step that failed: the core may carry on past
+        # one (a whole-table read it falls back from), and a later error is
+        # no other step's.
         driver_class = None
+        driver_failure = None
         for request in step['requests']:
             attached: dict[int, Any] = {}
             try:
@@ -410,6 +423,7 @@ def _steps(
                     outcome = {'outcome': 'refused', 'error': refusal}
                 else:
                     provided, driver_class = _driver(failure, provider)
+                    driver_failure = failure
                     outcome = {'outcome': 'error', 'error': provided}
             reply = codec.encode(
                 {
@@ -421,11 +435,12 @@ def _steps(
             try:
                 handle.reply(reply, attached)
             except core.CoreError as refused:
-                errors.raise_from_core(
+                error = errors.error_from_core(
                     refused.control,
                     refused.attachments,
                     driver_class=driver_class,
                 )
+                raise _with_source_error(error, driver_failure) from None
 
 
 def _call(

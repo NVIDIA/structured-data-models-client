@@ -67,6 +67,13 @@ class StructuredDataError(Exception):
         details: Whatever structured context the failure carried, such as the
             ``invalid_params`` entries from a NIM validation error. Empty when
             there is none.
+        source_error: The exception a data source raised, behind a
+            ``PROVIDER_ERROR``: its own message, such as which input it
+            could not read, is there. It is neither this error's
+            ``__cause__`` nor in its message or details, so a logged
+            traceback never quotes it, since a driver's message can hold
+            data values or connection settings; read it here to show it.
+            ``None`` for any other error.
     """
 
     #: Set on a transport's ``TRANSPORT_ERROR`` for an answer whose JSON is
@@ -87,6 +94,7 @@ class StructuredDataError(Exception):
     #: core as the source's refusal (``FetchOutcome::Refused``), which the
     #: operation then fails with. ``None`` on every other error.
     _refusal: dict[str, Any] | None = None
+    source_error: Exception | None = None
 
     def __init__(
         self,

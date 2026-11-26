@@ -2,8 +2,9 @@
 # All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-r"""Carried row G6: the run loop names a provider's driver class
-only on the error of the step whose fetch failed.
+r"""Carried row G6: the run loop names a provider's driver class, and
+carries the driver's exception, only on the error of the step whose fetch
+failed.
 
 ``_rust/run.py``'s ``_steps`` resets the class it keeps at every fetch
 step: the core may carry on past one failed fetch (a whole-table read it
@@ -118,6 +119,7 @@ def test_a_later_step_s_error_names_no_earlier_driver() -> None:
     error = _raised(fetches=2)
     assert error.code == 'PROVIDER_ERROR'
     assert 'driver_class' not in error.details
+    assert error.source_error is None
 
 
 def test_the_failing_step_s_error_names_its_driver() -> None:
@@ -128,3 +130,5 @@ def test_the_failing_step_s_error_names_its_driver() -> None:
     assert error.details['driver_class'] == (
         f'{OperationalError.__module__}.{OperationalError.__qualname__}'
     )
+    assert isinstance(error.source_error, OperationalError)
+    assert str(error.source_error) == 'the source refused the read'

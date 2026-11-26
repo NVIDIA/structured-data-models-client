@@ -246,11 +246,13 @@ Each seed's rows carry the seed's own batch position, so the client joins the an
 
 ## Errors
 
-A source's exception fails the operation with `PROVIDER_ERROR`.
+A source's exception fails the operation with `PROVIDER_ERROR`, which carries that exception: `error.source_error` in Python and `error.sourceError()` in Java.
+Read its message there, such as which input failed to parse.
+The error's own message, `details` and stack trace name only the exception's class (`driver_class`), and the exception is not the error's cause, since a driver's message can quote data values or connection settings that should not reach logs.
 A source may also override `failure(error)`, returning a `ProviderFailure` with the SQLSTATE, vendor code, error class and message it reads from its error, and the `FailureFacts` it means, such as a table not found or access denied; by default, the client reads a database driver's `sqlstate` and `vendor_code` attributes (Java: a `SQLException`'s state and vendor code).
 Python builds facts by keyword, `FailureFacts(not_found=True)`, and Java with `FailureFacts.builder().notFound().build()`.
 A built-in source refuses a request its database's SQL cannot answer with the client's own error, which the operation fails with.
-The message is kept internal and never shown to end users.
+The `ProviderFailure` message is kept internal: the client never puts it in an error it raises.
 
 ## Values
 

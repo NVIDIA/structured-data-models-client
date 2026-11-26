@@ -20,6 +20,7 @@ import datetime
 import enum
 import json
 import pickle
+import traceback
 import typing
 import warnings
 from collections.abc import Iterator
@@ -492,16 +493,27 @@ def test_a_lookup_asked_in_parts_is_answered_as_one(
 def test_a_provider_s_failure_is_the_operation_s_provider_error(
     duckdb_engine: Engine,
 ) -> None:
+    failure = ValueError("cannot parse date '2025-13-01' in column ts")
+
     class Failing(SqlSource):
         def answer(self, request: Any, expected: Any) -> Any:
             if isinstance(request, p.SampleEntities):
-                raise RuntimeError('the engine is down')
+                raise failure
             return super().answer(request, expected)
 
     scenario = next(s for s in scenarios() if s['id'] == 'context.where-entity')
     with pytest.raises(StructuredDataError) as raised:
         materialize(Failing(duckdb_engine), scenario)
     assert raised.value.code == 'PROVIDER_ERROR'
+    assert raised.value.details['driver_class'] == 'builtins.ValueError'
+    # The source's own exception, its message whole, is on the error for
+    # the caller to read; its message, details and traceback say only the
+    # core's.
+    assert raised.value.source_error is failure
+    assert raised.value.__cause__ is None
+    assert '2025-13-01' not in str(raised.value)
+    assert '2025-13-01' not in repr(raised.value.details)
+    assert '2025-13-01' not in ''.join(traceback.format_exception(raised.value))
 
 
 def test_the_documented_example_runs_as_written(

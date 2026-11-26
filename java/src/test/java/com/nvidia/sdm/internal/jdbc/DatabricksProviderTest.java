@@ -6,6 +6,7 @@ package com.nvidia.sdm.internal.jdbc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -121,6 +122,9 @@ class DatabricksProviderTest {
       assertEquals(SQLTransientException.class.getName(), error.details().get("driver_class"));
       assertFalse(error.getMessage().contains("secret_"));
       assertFalse(error.details().toString().contains("secret_"));
+      // The driver's own exception, its message whole, is there for the caller to read.
+      assertTrue(assertInstanceOf(SQLTransientException.class, error.sourceError().orElseThrow())
+          .getMessage().endsWith(message));
       assertEquals(0, db.statementsOpen);
     }
   }

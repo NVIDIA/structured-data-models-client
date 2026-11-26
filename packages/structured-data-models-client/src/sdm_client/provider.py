@@ -986,7 +986,8 @@ class Source(abc.ABC):
 
         Raises:
             Exception: Any failure; the operation then fails with
-                ``PROVIDER_ERROR``.
+                ``PROVIDER_ERROR``, which carries it as its
+                ``source_error``.
         """
 
     def failure(self, error: Exception) -> ProviderFailure | None:
