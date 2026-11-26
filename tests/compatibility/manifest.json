@@ -4852,6 +4852,10 @@
           "packages/structured-data-models-client/tests/test_error_contract.py::test_error_without_invalid_params_is_unchanged",
           "packages/structured-data-models-client/tests/test_error_contract.py::test_malformed_invalid_params_render_as_nothing",
           "packages/structured-data-models-client/tests/test_error_contract.py::test_partial_entries_still_render",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_every_error_class_is_shipped_below",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_an_error_survives_pickle_and_copy",
+          "packages/structured-data-models-client/tests/test_error_contract.py::test_an_error_raised_in_a_process_pool_reaches_the_caller",
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_an_error_survives_pickle_and_copy",
           "packages/structured-data-models-connectors/tests/test_errors.py::test_query_failure_maps_to_query_failed",
           "packages/structured-data-models-connectors/tests/test_errors.py::test_read_table_direct_query_failure",
           "packages/structured-data-models-connectors/tests/test_errors.py::test_invalid_table_identifier_is_not_rewrapped",
@@ -4869,6 +4873,9 @@
           "packages/structured-data-models-connectors/tests/test_errors.py::test_driver_guard_uses_type_name_for_empty_message"
         ],
         "java": [
+          "java/src/test/java/com/nvidia/sdm/ExceptionSerializationTest.java#anErrorKeepsItsDetails",
+          "java/src/test/java/com/nvidia/sdm/ExceptionSerializationTest.java#anErrorKeepsTheRowsAnsweredBeforeIt",
+          "java/src/test/java/com/nvidia/sdm/ExceptionSerializationTest.java#anEndpointRefusalKeepsItsStatusAndDetails",
           "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#aCallPast16MiBIsSentAsTheBytesGiven",
           "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#aTransientStatusIsTriedAgain",
           "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#aRefusalIsTheEndpointsAndIsNotTriedAgain",
@@ -11879,6 +11886,11 @@
       "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
       "record": "api_inventory/python/sdm_connectors.Source.namespace",
       "reason": "Removed with sdm_connectors.Source in 2.0: sdm_client.Source declares a source's traits through capabilities(); connection and namespace are on the built-in classes."
+    },
+    {
+      "base_commit": "d6fc45fe883a456e7e5e2eebfaa40e7efb1719be",
+      "record": "api_contracts/errors",
+      "reason": "Added tests that every Python client and connector error survives pickle and copy, including through a process pool, and that a Java error keeps its details when serialized."
     }
   ],
   "capabilities": [

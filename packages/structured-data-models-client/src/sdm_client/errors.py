@@ -15,7 +15,7 @@ Messages are written for people and will change; codes will not.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, SupportsIndex
 
 #: What to do about a context that teaches nothing.
 WIDEN_THE_CONTEXT = (
@@ -55,6 +55,12 @@ def format_invalid_params(params: Sequence[Any] | None) -> str:
     omitted = len(params) - len(entries)
     more = f' (and {omitted} more)' if omitted > 0 else ''
     return ' ' + '; '.join(entries) + more
+
+
+def _rebuild(cls: type[Exception], args: tuple[Any, ...]) -> Exception:
+    r"""An instance of ``cls`` holding ``args``, made without running its
+    ``__init__``; unpickling and copying then restore its attributes."""
+    return cls.__new__(cls, *args)
 
 
 class StructuredDataError(Exception):
@@ -99,6 +105,17 @@ class StructuredDataError(Exception):
         self.message = message
         self.code = code
         self.details = details or {}
+
+    def __reduce_ex__(self, protocol: SupportsIndex) -> str | tuple[Any, ...]:
+        # Pickling and copying rebuild an exception by calling its class
+        # with ``args``, which is only the message: a subclass whose
+        # ``__init__`` takes other arguments could not be rebuilt. Make the
+        # instance without ``__init__`` and restore every attribute from
+        # the state ``__reduce__`` gives instead.
+        reduced = self.__reduce__()
+        if not isinstance(reduced, tuple) or reduced[0] is not type(self):
+            return reduced
+        return (_rebuild, (type(self), self.args), *reduced[2:])
 
     def __str__(self) -> str:
         if self.code:

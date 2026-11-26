@@ -4,6 +4,11 @@
 
 package com.nvidia.sdm;
 
+import java.io.IOException;
+import java.io.InvalidObjectException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.io.OptionalDataException;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -23,8 +28,8 @@ public class StructuredDataException extends RuntimeException {
   private static final long serialVersionUID = 1L;
 
   private final String code;
-  private final transient Map<String, Object> details;
-  private final transient byte[] answeredRows;
+  private transient Map<String, Object> details;
+  private transient byte[] answeredRows;
   private final String kind;
   private final boolean retryable;
 
@@ -88,5 +93,34 @@ public class StructuredDataException extends RuntimeException {
   public String toString() {
     String name = getClass().getName();
     return code == null ? name + ": " + getMessage() : name + ": [" + code + "] " + getMessage();
+  }
+
+  /**
+   * Writes the details after the default form, which leaves them out since javac does not take a
+   * {@code Map} for serializable, so a deserialized error keeps them, as a pickled Python error
+   * does.
+   */
+  private void writeObject(ObjectOutputStream out) throws IOException {
+    out.defaultWriteObject();
+    out.writeObject(new LinkedHashMap<>(details));
+  }
+
+  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+    in.defaultReadObject();
+    Object read;
+    try {
+      read = in.readObject();
+    } catch (OptionalDataException written) {
+      // Written by a version that left the details out.
+      read = Map.of();
+    }
+    if (!(read instanceof Map<?, ?> map)) {
+      throw new InvalidObjectException("an error's details are not a map");
+    }
+    Map<String, Object> restored = new LinkedHashMap<>();
+    map.forEach((key, value) -> restored.put(String.valueOf(key), value));
+    details = Collections.unmodifiableMap(restored);
+    Object answered = details.get("answered");
+    answeredRows = answered instanceof byte[] ipc ? ipc.clone() : null;
   }
 }

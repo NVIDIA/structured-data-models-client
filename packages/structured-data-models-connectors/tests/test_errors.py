@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
+import copy
+import functools
 import importlib
+import pickle
 import sqlite3
 import sys
 
@@ -168,3 +171,52 @@ def test_driver_guard_uses_type_name_for_empty_message():
             raise RuntimeError()
     assert excinfo.value.message == 'reading: RuntimeError'
     assert excinfo.value.details['driver_error'] == 'RuntimeError'
+
+
+def _pickled(error, protocol):
+    return pickle.loads(pickle.dumps(error, protocol=protocol))
+
+
+def _missing_backend() -> MissingBackendError:
+    with pytest.raises(MissingBackendError) as excinfo:
+        require_driver('fake', 'fake-driver', 'sdm_no_such_module')
+    return excinfo.value
+
+
+@pytest.mark.parametrize(
+    'copier',
+    [
+        *(
+            functools.partial(_pickled, protocol=protocol)
+            for protocol in range(pickle.HIGHEST_PROTOCOL + 1)
+        ),
+        copy.copy,
+        copy.deepcopy,
+    ],
+    ids=[
+        *(f'pickle-{p}' for p in range(pickle.HIGHEST_PROTOCOL + 1)),
+        'copy',
+        'deepcopy',
+    ],
+)
+@pytest.mark.parametrize(
+    'make',
+    [
+        lambda: ConnectorError('failed', code='QUERY_FAILED', details={'a': 1}),
+        _missing_backend,
+    ],
+    ids=['ConnectorError', 'MissingBackendError'],
+)
+def test_an_error_survives_pickle_and_copy(make, copier):
+    r"""A connector's error handed back from another process, or copied, is
+    the same error, though its class's initializer takes other arguments
+    than its message."""
+    error = make()
+    copied = copier(error)
+    assert type(copied) is type(error)
+    assert str(copied) == str(error)
+    assert copied.args == error.args
+    assert (copied.code, copied.details) == (error.code, error.details)
+    assert vars(copied) == vars(error)
+    if isinstance(error, ImportError):
+        assert (copied.name, copied.path) == (error.name, error.path)
