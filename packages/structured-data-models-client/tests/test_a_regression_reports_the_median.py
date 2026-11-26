@@ -14,14 +14,17 @@ from __future__ import annotations
 import io
 import json
 import warnings
+from dataclasses import replace
 from typing import Any
 
 import pandas as pd
 import pytest
+from test_custom_examples import FIXTURE, frame, schema_for
 
 from sdm_client import (
     KumoRelational,
     PredictiveQuery,
+    RelationalTask,
     Relationship,
     Schema,
     SDMClient,
@@ -208,6 +211,50 @@ def test_every_step_of_a_forecast_reports_the_statistic_asked_for():
     assert {body['output']['prediction_statistic'] for body in bodies} == {
         'mean'
     }
+
+
+def test_a_forecast_from_supplied_examples_asks_for_the_median(
+    requests_mock,
+):
+    """A forecast is a regression at each step, so its call names the
+    statistic too, and the answer never depends on a deployment's own
+    default, which differs between servers."""
+    case = next(c for c in FIXTURE['cases'] if c['id'] == 'forecasting')
+    task = replace(RelationalTask(**case['task']), num_forecasts=2)
+    predictions = case['additional_prediction_examples']
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        request = schema_for(case).materialize_examples(
+            task, frame(case['context']), frame(predictions)
+        )
+
+    def forecast(sent: dict[str, Any]) -> dict[str, Any]:
+        rows = sent['predict']['instance_table']['rows']
+        return {
+            **answer(sent),
+            'predictions': [
+                {
+                    'id': str(row[0]),
+                    'row_index': i,
+                    'forecast_step': step,
+                    'prediction': 1.0,
+                }
+                for i, row in enumerate(rows)
+                for step in (1, 2)
+            ],
+        }
+
+    route = requests_mock.post(
+        f'{URL}/v1/predictions', json=lambda call, _: forecast(call.json())
+    )
+    with SDMClient(URL) as client:
+        client.predict(request, model=KumoRelational())
+
+    sent = [call.json() for call in route.request_history]
+    assert sent
+    for body in sent:
+        assert body['task']['kind'] == 'forecasting'
+        assert body['output']['prediction_statistic'] == 'median'
 
 
 def test_output_type_is_refused_and_points_at_the_option(requests_mock):

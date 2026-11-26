@@ -195,6 +195,8 @@ class CustomExamplesTest {
       List<PredictionItem> items=result.items();
       for(int row=0;row<2;row++) {
         Map<String,Object> call=object(Json.read(endpoint.received.get(row)));
+        // A forecast is a regression at each step, so it always names its statistic, never left to a deployment's default.
+        assertEquals("median",object(call.get("output")).get("prediction_statistic"));
         String anchor=object(call.get("task")).get("anchor_time_column").toString();
         assertTrue(column(instance(call,"predict"),anchor).get(0).toString().startsWith(row==0?"2024-01-07":"2024-01-09"));
         for(int step=1;step<=3;step++) {

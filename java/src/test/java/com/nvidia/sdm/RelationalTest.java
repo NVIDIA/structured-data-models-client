@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -243,6 +244,24 @@ class RelationalTest {
     try (Endpoint endpoint = new Endpoint(); SdmClient client = endpoint.client()) {
       assertEquals(2, client.predict(request, SdmClient.KUMO_RELATIONAL).rows());
       assertEquals(2, client.predict(request, SdmClient.KUMO_RELATIONAL).rows());
+    }
+  }
+
+  @Test void aRegressionAsksForTheMedianUnlessTheMeanIsChosen() throws Exception {
+    Schema schema = fixture(false, false);
+    PredictiveQuery query = PredictiveQuery.parse(SCALAR);
+    for (String chosen : Arrays.asList(null, "mean")) {
+      MaterializeOptions.Builder asked = options(1L, 2L);
+      if (chosen != null) asked.option("prediction_statistic", chosen);
+      Request request = query.materialize(schema, asked.build());
+      try (Shop.Endpoint endpoint = new Shop.Endpoint(); SdmClient client = SdmClient.connect(endpoint.url())) {
+        client.predict(request, SdmClient.KUMO_RELATIONAL);
+        assertFalse(endpoint.received.isEmpty());
+        for (byte[] sent : endpoint.received) {
+          assertEquals(chosen == null ? "median" : chosen,
+              map(map(Json.read(sent)).get("output")).get("prediction_statistic"));
+        }
+      }
     }
   }
 
