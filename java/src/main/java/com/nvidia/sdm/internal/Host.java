@@ -29,7 +29,8 @@ import org.slf4j.LoggerFactory;
  * whether it may be retried, its SQLSTATE and vendor code and an internal driver diagnostic.
  * The diagnostic is never public, and is omitted if the complete fetch reply
  * cannot fit the control budget; the error the run then ends with names the driver's exception class ({@code
- * driver_class}). A model's {@link TransportFailed} is told to the core as the contract's
+ * driver_class}) and carries that exception as its {@code sourceError()}, never its cause, so a
+ * logged stack trace never quotes the source's message. A model's {@link TransportFailed} is told to the core as the contract's
  * transport error; a {@link Refused} call is told as its status, and once the core ends the run,
  * the refusal is raised with what the core counted as answered before it.
  */
@@ -380,7 +381,7 @@ public final class Host {
   @SuppressWarnings("unchecked")
   private static Finished steps(Run run, Call call) {
     List<Map<String, Object>> warnings = new ArrayList<>();
-    String driverClass = null;
+    Exception driverFailure = null;
     Refused refused = null;
     boolean cleanupRefusal = false;
     Trace trace = Trace.installed();
@@ -394,8 +395,9 @@ public final class Host {
           trace.failed(failed.kind(), failed.code());
         }
         Map<String, Object> details = new LinkedHashMap<>();
-        if (driverClass != null && "PROVIDER_ERROR".equals(failed.code())) {
-          details.put("driver_class", driverClass);
+        Exception sourceError = sourceError(failed.code(), driverFailure);
+        if (sourceError != null) {
+          details.put("driver_class", sourceError.getClass().getName());
         }
         Map<String, Object> failedFields = Messages.fields(failed.message());
         if (failedFields.get("answered") instanceof Map<?, ?> answered) {
@@ -409,7 +411,7 @@ public final class Host {
             details.put("rows_answered", answered.get("rows"));
           }
         }
-        StructuredDataException error = error(failed, call.held(), details);
+        StructuredDataException error = error(failed, call.held(), details, sourceError);
         if (refused != null && (!cleanupRefusal
             || (refused.status != null && error.details().get("status") instanceof Number status && status.intValue() == refused.status)
             || (refused.status == null && "TRANSPORT_ERROR".equals(error.code())))) {
@@ -447,25 +449,33 @@ public final class Host {
         cancel(run);
         throw internal("the core asked for a " + kind + " step this call cannot answer");
       }
-      // A provider's failure is named by its driver's class only for the step that failed: the
-      // core may carry on past one, and a later error is no other step's.
-      driverClass = null;
+      // A provider's failure is named by its driver's class, and carried, only for the
+      // step that failed: the core may carry on past one, and a later error is no other step's.
+      // Where several of a step's requests fail, the first failure is the one carried, as the
+      // Python host carries it.
+      driverFailure = null;
       for (Object item : (List<Object>) read.get("requests")) {
         Map<String, Object> request = (Map<String, Object>) item;
-        String failedClass = fetch(run, request, call.provider());
-        if (failedClass != null) {
-          driverClass = failedClass;
+        Exception failed = fetch(run, request, call.provider(), driverFailure);
+        if (driverFailure == null) {
+          driverFailure = failed;
         }
       }
     }
   }
 
-  /** Answers one fetch request; the class of the driver's exception when it failed, else null. */
+  /**
+   * Answers one fetch request; the driver's exception when it failed, thrown by {@code answer} or
+   * by the reader it answered with as the core read it, else null. {@code earlier} is the failure
+   * of an earlier request of the same step, which an error the reply ends with carries first.
+   */
   @SuppressWarnings("unchecked")
-  private static String fetch(Run run, Map<String, Object> request, Provider provider) {
+  private static Exception fetch(
+      Run run, Map<String, Object> request, Provider provider, Exception earlier) {
     Map<String, Object> outcome = new LinkedHashMap<>();
     Map<Integer, Object> attached = new LinkedHashMap<>();
-    String driverClass = null;
+    Exception driverFailure = null;
+    RecordingReader recording = null;
     BufferAllocator allocator = ArrowData.allocator();
     Map<Integer, ArrowReader> keys = new LinkedHashMap<>();
     ArrowArrayStream stream = null;
@@ -476,7 +486,8 @@ public final class Host {
         keys = keySets(run, plan, allocator);
       }
       ArrowReader answer = provider.answer(request, keys, allocator);
-      stream = ArrowExchange.export(allocator, answer);
+      recording = new RecordingReader(allocator, answer);
+      stream = ArrowExchange.export(allocator, recording);
       outcome.put("outcome", "data");
       outcome.put("data", 1);
       attached.put(1, stream);
@@ -492,7 +503,7 @@ public final class Host {
       Map<String, Object> provided = providerError(failure, provider.failure(failure));
       outcome.put("outcome", "error");
       outcome.put("error", provided);
-      driverClass = failure.getClass().getName();
+      driverFailure = failure;
     } finally {
       for (ArrowReader reader : keys.values()) {
         try {
@@ -510,13 +521,33 @@ public final class Host {
       run.reply(fetchControl(reply), attached);
     } catch (NativeError e) {
       told(e);
-      throw error(e, Map.of(), driverClass == null ? Map.of() : Map.of("driver_class", driverClass));
+      if (driverFailure == null && recording != null) {
+        driverFailure = recording.failure();
+      }
+      Exception sourceError = sourceError(e.code(), earlier != null ? earlier : driverFailure);
+      throw error(
+          e,
+          Map.of(),
+          sourceError == null ? Map.of() : Map.of("driver_class", sourceError.getClass().getName()),
+          sourceError);
     } finally {
       if (stream != null) {
         stream.close();
       }
     }
-    return driverClass;
+    // A lazy reader's failure is known once the core has read it, as the reply is handed over.
+    if (driverFailure == null && recording != null) {
+      driverFailure = recording.failure();
+    }
+    return driverFailure;
+  }
+
+  /**
+   * The source's exception an error of {@code code} carries: {@code failure}, behind a {@code
+   * PROVIDER_ERROR}; null behind any other error, which names no driver class either.
+   */
+  static Exception sourceError(String code, Exception failure) {
+    return "PROVIDER_ERROR".equals(code) ? failure : null;
   }
 
   /**
@@ -777,13 +808,18 @@ public final class Host {
    */
   public static StructuredDataException error(
       NativeError raised, Map<String, Function<Map<String, Object>, Object>> held) {
-    return error(raised, held, Map.of());
+    return error(raised, held, Map.of(), null);
   }
 
+  /**
+   * The error {@code raised} is, with {@code more} details; {@code sourceError} is the source's
+   * own exception behind a {@code PROVIDER_ERROR}, else null.
+   */
   private static StructuredDataException error(
       NativeError raised,
       Map<String, Function<Map<String, Object>, Object>> held,
-      Map<String, Object> more) {
+      Map<String, Object> more,
+      Exception sourceError) {
     Map<String, Object> given = Messages.fields(raised.message());
     raised.message().close();
     String said = held.isEmpty() ? raised.getMessage() : Wording.said(given, held);
@@ -804,7 +840,7 @@ public final class Host {
           raised.retryable());
     }
     return new StructuredDataException(
-        said, raised.code(), details, raised.kind(), raised.retryable(), null);
+        said, raised.code(), details, raised.kind(), raised.retryable(), null, sourceError);
   }
 
   /** The code of an endpoint's refusal, which Java raises as {@link ModelEndpointException}. */

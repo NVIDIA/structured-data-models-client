@@ -413,7 +413,9 @@
           "sdm_client.errors.StructuredDataError"
         ],
         "kind": "class",
-        "public_attributes": [],
+        "public_attributes": [
+          "source_error"
+        ],
         "public_methods": {},
         "signature": "(extra: 'str', package: 'str') -> 'None'"
       },
@@ -442,7 +444,9 @@
           "sdm_client.errors.StructuredDataError"
         ],
         "kind": "class",
-        "public_attributes": [],
+        "public_attributes": [
+          "source_error"
+        ],
         "public_methods": {},
         "signature": "(status_code: 'int', *, code: 'str | None', message: 'str', details: 'dict[str, Any] | None' = None) -> 'None'"
       },
@@ -684,7 +688,9 @@
           "builtins.Exception"
         ],
         "kind": "class",
-        "public_attributes": [],
+        "public_attributes": [
+          "source_error"
+        ],
         "public_methods": {},
         "signature": "(message: 'str', *, code: 'str | None' = None, details: 'dict[str, Any] | None' = None) -> 'None'"
       },
@@ -751,7 +757,9 @@
           "sdm_client.errors.StructuredDataError"
         ],
         "kind": "class",
-        "public_attributes": [],
+        "public_attributes": [
+          "source_error"
+        ],
         "public_methods": {},
         "signature": "(model: 'str', known: 'list[str]') -> 'None'"
       },
@@ -760,7 +768,9 @@
           "sdm_client.errors.StructuredDataError"
         ],
         "kind": "class",
-        "public_attributes": [],
+        "public_attributes": [
+          "source_error"
+        ],
         "public_methods": {},
         "signature": "(message: 'str', *, details: 'dict[str, Any] | None' = None) -> 'None'"
       },

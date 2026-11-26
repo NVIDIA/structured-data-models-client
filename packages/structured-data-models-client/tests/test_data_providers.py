@@ -20,6 +20,8 @@ import datetime
 import enum
 import json
 import pickle
+import threading
+import traceback
 import typing
 import warnings
 from collections.abc import Iterator
@@ -492,16 +494,88 @@ def test_a_lookup_asked_in_parts_is_answered_as_one(
 def test_a_provider_s_failure_is_the_operation_s_provider_error(
     duckdb_engine: Engine,
 ) -> None:
+    failure = ValueError("cannot parse date '2025-13-01' in column ts")
+
     class Failing(SqlSource):
         def answer(self, request: Any, expected: Any) -> Any:
             if isinstance(request, p.SampleEntities):
-                raise RuntimeError('the engine is down')
+                raise failure
             return super().answer(request, expected)
 
     scenario = next(s for s in scenarios() if s['id'] == 'context.where-entity')
     with pytest.raises(StructuredDataError) as raised:
         materialize(Failing(duckdb_engine), scenario)
     assert raised.value.code == 'PROVIDER_ERROR'
+    assert raised.value.details['driver_class'] == 'builtins.ValueError'
+    # The source's own exception, its message whole, is on the error for
+    # the caller to read; its message, details and traceback say only the
+    # core's.
+    assert raised.value.source_error is failure
+    assert raised.value.__cause__ is None
+    assert '2025-13-01' not in str(raised.value)
+    assert '2025-13-01' not in repr(raised.value.details)
+    assert '2025-13-01' not in ''.join(traceback.format_exception(raised.value))
+
+
+def test_a_lazy_reader_s_failure_is_carried_as_an_answer_s(
+    duckdb_engine: Engine,
+) -> None:
+    r"""A source answers with a reader that fails only as its batches are
+    read: the error names and carries that failure, as it does one
+    ``answer`` raises itself."""
+    failure = ValueError("cannot parse date '2025-13-01' in column ts")
+
+    def batches() -> Iterator[pa.RecordBatch]:
+        raise failure
+        yield  # pragma: no cover - a generator that fails at once
+
+    class Lazy(SqlSource):
+        def answer(self, request: Any, expected: Any) -> Any:
+            answer = super().answer(request, expected)
+            if isinstance(request, p.SampleEntities):
+                return pa.RecordBatchReader.from_batches(
+                    pa.table(answer).schema, batches()
+                )
+            return answer
+
+    scenario = next(s for s in scenarios() if s['id'] == 'context.where-entity')
+    with pytest.raises(StructuredDataError) as raised:
+        materialize(Lazy(duckdb_engine), scenario)
+    assert raised.value.code == 'PROVIDER_ERROR'
+    assert raised.value.details['driver_class'] == 'builtins.ValueError'
+    assert raised.value.source_error is failure
+    assert '2025-13-01' not in ''.join(traceback.format_exception(raised.value))
+
+
+def test_a_source_error_is_not_pickled(duckdb_engine: Engine) -> None:
+    r"""The source's exception stays in the process: an error carrying one
+    that holds a lock pickles, without its message, and comes back with
+    none."""
+
+    class Held(Exception):
+        def __init__(self, message: str) -> None:
+            super().__init__(message)
+            self.lock = threading.Lock()
+
+    failure = Held("cannot parse date '2025-13-01' in column ts")
+
+    class Failing(SqlSource):
+        def answer(self, request: Any, expected: Any) -> Any:
+            if isinstance(request, p.SampleEntities):
+                raise failure
+            return super().answer(request, expected)
+
+    scenario = next(s for s in scenarios() if s['id'] == 'context.where-entity')
+    with pytest.raises(StructuredDataError) as raised:
+        materialize(Failing(duckdb_engine), scenario)
+    assert raised.value.source_error is failure
+    pickled = pickle.dumps(raised.value)
+    assert b'2025-13-01' not in pickled
+    restored = pickle.loads(pickled)  # noqa: S301 - this test's own bytes
+    assert type(restored) is type(raised.value)
+    assert restored.code == 'PROVIDER_ERROR'
+    assert restored.details == raised.value.details
+    assert restored.source_error is None
 
 
 def test_the_documented_example_runs_as_written(

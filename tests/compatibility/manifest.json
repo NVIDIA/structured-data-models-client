@@ -4866,7 +4866,8 @@
           "packages/structured-data-models-connectors/tests/test_errors.py::test_unexpected_connect_kwarg_maps_to_invalid_args",
           "packages/structured-data-models-connectors/tests/test_errors.py::test_a_cursor_close_failure_does_not_mask_result",
           "packages/structured-data-models-connectors/tests/test_errors.py::test_driver_guard_passes_connector_error_through",
-          "packages/structured-data-models-connectors/tests/test_errors.py::test_driver_guard_uses_type_name_for_empty_message"
+          "packages/structured-data-models-connectors/tests/test_errors.py::test_driver_guard_uses_type_name_for_empty_message",
+          "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error"
         ],
         "java": [
           "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#aCallPast16MiBIsSentAsTheBytesGiven",
@@ -4874,7 +4875,8 @@
           "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#aRefusalIsTheEndpointsAndIsNotTriedAgain",
           "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#anAnswerThatIsNoJsonObjectIsAFailedTransport",
           "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#anEmptyAnswerIsAnEmptyObject",
-          "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#anAnswerWhoseBodyIsHeldBackTimesOut"
+          "java/src/test/java/com/nvidia/sdm/internal/TransportTest.java#anAnswerWhoseBodyIsHeldBackTimesOut",
+          "java/src/test/java/com/nvidia/sdm/SourceFailureTest.java#theSourcesExceptionIsOnTheProviderErrorAndNotInItsStackTrace"
         ]
       },
       "ownership": {
@@ -6089,7 +6091,7 @@
       }
     }
   ],
-  "public_api_snapshot_sha256": "8ee637593930eff8cbe44cb1f706658a6b726af06f8a7fbe87edae3d3c21581b",
+  "public_api_snapshot_sha256": "82f712f999b1e65b268bb2f524553ee91bcd14140b494e9ea6e4c694f9e68296",
   "api_inventory": {
     "python": {
       "sdm_api.Endpoint": {
@@ -9181,6 +9183,51 @@
       },
       "sdm_connectors.resolve_sql": {
         "capability": "sql-helpers"
+      },
+      "sdm_client.StructuredDataError.source_error": {
+        "capability": "errors",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A custom source's exception is on the PROVIDER_ERROR as the source error, and its message is in neither the error's message, details, cause nor stack trace."
+          }
+        ]
+      },
+      "sdm_client.MissingExtraError.source_error": {
+        "capability": "errors",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A custom source's exception is on the PROVIDER_ERROR as the source error, and its message is in neither the error's message, details, cause nor stack trace."
+          }
+        ]
+      },
+      "sdm_client.NimRequestError.source_error": {
+        "capability": "errors",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A custom source's exception is on the PROVIDER_ERROR as the source error, and its message is in neither the error's message, details, cause nor stack trace."
+          }
+        ]
+      },
+      "sdm_client.UnknownModelError.source_error": {
+        "capability": "errors",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A custom source's exception is on the PROVIDER_ERROR as the source error, and its message is in neither the error's message, details, cause nor stack trace."
+          }
+        ]
+      },
+      "sdm_client.UnsupportedRequestError.source_error": {
+        "capability": "errors",
+        "assertions": [
+          {
+            "test": "packages/structured-data-models-client/tests/test_data_providers.py::test_a_provider_s_failure_is_the_operation_s_provider_error",
+            "behavior": "A custom source's exception is on the PROVIDER_ERROR as the source error, and its message is in neither the error's message, details, cause nor stack trace."
+          }
+        ]
       }
     },
     "java": {
@@ -11352,6 +11399,24 @@
       },
       "com.nvidia.sdm.TimeSeriesOptions$Builder#public com.nvidia.sdm.TimeSeriesOptions$Builder timestampsColumn(java.lang.String);": {
         "capability": "timeseries-preparation"
+      },
+      "com.nvidia.sdm.StructuredDataException#public com.nvidia.sdm.StructuredDataException(java.lang.String, java.lang.String, java.util.Map<java.lang.String, ?>, java.lang.String, boolean, java.lang.Throwable, java.lang.Exception);": {
+        "capability": "errors",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/SourceFailureTest.java#theSourcesExceptionIsOnTheProviderErrorAndNotInItsStackTrace",
+            "behavior": "A custom source's exception is on the PROVIDER_ERROR as the source error, and its message is in neither the error's message, details, cause nor stack trace."
+          }
+        ]
+      },
+      "com.nvidia.sdm.StructuredDataException#public java.util.Optional<java.lang.Exception> sourceError();": {
+        "capability": "errors",
+        "assertions": [
+          {
+            "test": "java/src/test/java/com/nvidia/sdm/SourceFailureTest.java#theSourcesExceptionIsOnTheProviderErrorAndNotInItsStackTrace",
+            "behavior": "A custom source's exception is on the PROVIDER_ERROR as the source error, and its message is in neither the error's message, details, cause nor stack trace."
+          }
+        ]
       }
     }
   },
@@ -11879,6 +11944,21 @@
       "base_commit": "33dfa332f45507ae2a814fc5f9f13557c84d449d",
       "record": "api_inventory/python/sdm_connectors.Source.namespace",
       "reason": "Removed with sdm_connectors.Source in 2.0: sdm_client.Source declares a source's traits through capabilities(); connection and namespace are on the built-in classes."
+    },
+    {
+      "base_commit": "d6fc45fe883a456e7e5e2eebfaa40e7efb1719be",
+      "record": "api_contracts/errors",
+      "reason": "Added the data source's own exception to PROVIDER_ERROR (Python source_error, Java sourceError()) so its message can be read, without putting it in the error's message, details, cause or stack trace."
+    },
+    {
+      "base_commit": "d6fc45fe883a456e7e5e2eebfaa40e7efb1719be",
+      "record": "api_inventory",
+      "reason": "Added the data source's own exception to PROVIDER_ERROR (Python source_error, Java sourceError()) so its message can be read, without putting it in the error's message, details, cause or stack trace."
+    },
+    {
+      "base_commit": "d6fc45fe883a456e7e5e2eebfaa40e7efb1719be",
+      "record": "public_api_snapshot_sha256",
+      "reason": "Added the data source's own exception to PROVIDER_ERROR (Python source_error, Java sourceError()) so its message can be read, without putting it in the error's message, details, cause or stack trace."
     }
   ],
   "capabilities": [

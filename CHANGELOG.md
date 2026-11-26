@@ -7,6 +7,15 @@ these packages. The three Python distributions share one version.
 
 ## Unreleased
 
+### Fixed
+
+- **A data source's own error message was lost.**
+  When a source raised while answering a request, the `PROVIDER_ERROR` named only the exception's class, so a message such as which input failed to parse could not be read.
+  The error now carries the source's exception, as `StructuredDataError.source_error` in Python and `StructuredDataException.sourceError()` in Java, also when a reader the source returned fails as its batches are read, which before named no `driver_class` either.
+  The error's message, `details` and stack trace are unchanged and still never quote the source's message, which can hold data values or connection settings, and the exception is not pickled or serialized.
+- **Java named a source's exception class on errors that were not the source's.**
+  When the core refused a failed fetch's reply with an error other than `PROVIDER_ERROR`, Java still set `details.driver_class`; it now sets it only on a `PROVIDER_ERROR`, as Python does.
+
 ## 2.0.0 - 2026-11-25
 
 2.0 moves the client's core logic into one shared Rust engine and adds Java support.

@@ -67,6 +67,15 @@ class StructuredDataError(Exception):
         details: Whatever structured context the failure carried, such as the
             ``invalid_params`` entries from a NIM validation error. Empty when
             there is none.
+        source_error: The exception a data source raised while answering a
+            data request, behind the ``PROVIDER_ERROR`` that failure
+            became: its own message, such as which input it could not
+            read, is there. It is neither this error's ``__cause__`` nor
+            in its message or details, so a logged traceback never quotes
+            it, since a driver's message can hold data values or
+            connection settings; read it here to show it. It is not
+            pickled. Holding this error keeps that exception, with its
+            traceback and frames, alive. ``None`` for any other error.
     """
 
     #: Set on a transport's ``TRANSPORT_ERROR`` for an answer whose JSON is
@@ -87,6 +96,7 @@ class StructuredDataError(Exception):
     #: core as the source's refusal (``FetchOutcome::Refused``), which the
     #: operation then fails with. ``None`` on every other error.
     _refusal: dict[str, Any] | None = None
+    source_error: Exception | None = None
 
     def __init__(
         self,
@@ -104,6 +114,17 @@ class StructuredDataError(Exception):
         if self.code:
             return f'[{self.code}] {self.message}'
         return self.message
+
+    def __reduce__(self) -> Any:
+        # The source's exception stays in this process: its message may
+        # quote data values, and it may hold what cannot be pickled (a
+        # lock, a connection).
+        reduced = super().__reduce__()
+        state = reduced[2] if len(reduced) > 2 else None
+        if isinstance(state, dict) and 'source_error' in state:
+            state = {k: v for k, v in state.items() if k != 'source_error'}
+            return (reduced[0], reduced[1], state, *reduced[3:])
+        return reduced
 
 
 class UnknownModelError(StructuredDataError):

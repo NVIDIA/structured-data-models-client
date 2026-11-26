@@ -250,6 +250,9 @@ def test_a_provider_error_raises_with_no_driver_exception_chained() -> None:
     assert error.details['driver_class'] == f'{__name__}.DriverError'
     assert error.__cause__ is None
     assert error.__suppress_context__
+    # The driver's exception is there for the caller to read, never printed.
+    assert isinstance(error.source_error, DriverError)
+    assert CANARY in str(error.source_error)
     formatted = ''.join(traceback.format_exception(error))
     assert CANARY not in formatted
     assert 'DriverError' not in formatted.split('StructuredDataError')[0]

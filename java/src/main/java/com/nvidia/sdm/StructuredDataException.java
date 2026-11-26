@@ -27,6 +27,7 @@ public class StructuredDataException extends RuntimeException {
   private final transient byte[] answeredRows;
   private final String kind;
   private final boolean retryable;
+  private final transient Exception sourceError;
 
   /** An error of {@code code} with {@code details}, raised by this client itself. */
   public StructuredDataException(
@@ -42,6 +43,22 @@ public class StructuredDataException extends RuntimeException {
       String kind,
       boolean retryable,
       Throwable cause) {
+    this(message, code, details, kind, retryable, cause, null);
+  }
+
+  /**
+   * An error the core gave, as {@link #StructuredDataException(String, String, Map, String,
+   * boolean, Throwable)}, behind the exception a data source raised, {@code sourceError}; null where
+   * there is none.
+   */
+  public StructuredDataException(
+      String message,
+      String code,
+      Map<String, ?> details,
+      String kind,
+      boolean retryable,
+      Throwable cause,
+      Exception sourceError) {
     super(message, cause);
     this.code = code;
     this.details =
@@ -50,6 +67,7 @@ public class StructuredDataException extends RuntimeException {
     this.answeredRows = answered instanceof byte[] ipc ? ipc.clone() : null;
     this.kind = kind;
     this.retryable = retryable;
+    this.sourceError = sourceError;
   }
 
   /** The contract's error code, such as {@code INVALID_REQUEST}. */
@@ -81,6 +99,18 @@ public class StructuredDataException extends RuntimeException {
   /** Whether the same call may succeed if tried again. */
   public boolean retryable() {
     return retryable;
+  }
+
+  /**
+   * The exception a data source threw while answering a data request, behind the {@code
+   * PROVIDER_ERROR} that failure became: its own message, such as which input it could not read, is
+   * there. It is neither this error's cause nor in its message or details, so a logged stack trace
+   * never quotes it, since a driver's message can hold data values or connection settings; read it
+   * here to show it. It is not serialized. Holding this error keeps that exception alive. Empty for
+   * any other error.
+   */
+  public Optional<Exception> sourceError() {
+    return Optional.ofNullable(sourceError);
   }
 
   /** {@code [CODE] message}, as Python's {@code str()} of the error. */
