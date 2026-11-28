@@ -46,7 +46,8 @@ use std::sync::Arc;
 use crate::plan::SqlParam;
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
-    Decimal128Type, Int8Type, Int16Type, Int32Type, TimestampMicrosecondType,
+    Decimal128Type, Int8Type, Int16Type, Int32Type, Time32MillisecondType, Time32SecondType,
+    Time64MicrosecondType, Time64NanosecondType, TimestampMicrosecondType,
     TimestampMillisecondType, TimestampNanosecondType, TimestampSecondType, UInt8Type, UInt16Type,
     UInt32Type,
 };
@@ -1104,11 +1105,13 @@ fn imported_keys(batches: &[RecordBatch]) -> Result<CatalogAnswer, CoreError> {
 /// Snowflake column (`SnowTable._to_dtype`, `SNOW/table.py:330-383`):
 /// `NUMBER` by the scale after its last comma, 0 an integer and any other,
 /// or none that reads, a float; `FLOAT` a float; `VARCHAR` text; `BINARY`
-/// binary; `BOOLEAN`; `DATE` and every `TIMESTAMP` a date, then `TIME` a
-/// time; a `VECTOR` of `INT` or `FLOAT` a list of it; an `ARRAY` of a type
+/// binary; `BOOLEAN`; `DATE` and every `TIMESTAMP` a date; a `VECTOR` of `INT` or `FLOAT` a list of it; an `ARRAY` of a type
 /// the list of its element's integers, floats or text; an untyped `ARRAY`,
 /// another list, `DECFLOAT`, `VARIANT`, `OBJECT`, `MAP`, `FILE` and the geo
-/// types unsupported; `None` for any other, typed by its values.
+/// types unsupported; `None` for any other, typed by its values. A `TIME`
+/// is text, where the reference types it a time: a time of day has no date,
+/// so read as a timestamp every value of the column is dropped ([`conform`]
+/// hands the values over as that text).
 pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
     let declared = declared.trim().to_uppercase();
     if declared.starts_with("NUMBER") {
@@ -1139,7 +1142,7 @@ pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
         return Some(Dtype::Date);
     }
     if declared.starts_with("TIME") {
-        return Some(Dtype::Time);
+        return Some(Dtype::String);
     }
     if declared.starts_with("VECTOR") {
         let element = declared
@@ -1187,7 +1190,8 @@ pub(crate) fn declared_dtype(declared: &str) -> Option<Dtype> {
 /// `NUMBER(p,0)` the connector hands over as a decimal as `int64` where
 /// every value fits, left a decimal otherwise; a `NUMBER(p,s)` with a
 /// fraction as a double; a zoned time (`TIMESTAMP_LTZ`, `_TZ`) at its UTC
-/// instant with no zone. `None` where nothing changes.
+/// instant with no zone; a time of day (`TIME`) as its ISO text
+/// ([`time_text`]). `None` where nothing changes.
 fn conform(schema: &SchemaRef, batches: &[RecordBatch]) -> Result<Option<Batches>, CoreError> {
     let read: Vec<Option<DataType>> = schema
         .fields()
@@ -1212,6 +1216,7 @@ fn conform(schema: &SchemaRef, batches: &[RecordBatch]) -> Result<Option<Batches
                 .then_some(DataType::Int64),
             DataType::Decimal128(_, _) => Some(DataType::Float64),
             DataType::Timestamp(unit, Some(_)) => Some(DataType::Timestamp(*unit, None)),
+            DataType::Time32(_) | DataType::Time64(_) => Some(DataType::Utf8),
             _ => None,
         })
         .collect();
@@ -1256,7 +1261,22 @@ fn converted(column: &ArrayRef) -> ArrayRef {
     fn int64<I: Into<i64> + Copy>(values: impl Iterator<Item = Option<I>>) -> ArrayRef {
         Arc::new(values.map(|v| v.map(Into::into)).collect::<Int64Array>())
     }
+    fn times<I: Into<i64>>(values: impl Iterator<Item = Option<I>>, digits: u32) -> ArrayRef {
+        Arc::new(
+            values
+                .map(|v| v.map(|v| time_text(v.into(), digits)))
+                .collect::<arrow_array::StringArray>(),
+        )
+    }
     match column.data_type() {
+        DataType::Time32(TimeUnit::Second) => {
+            times(column.as_primitive::<Time32SecondType>().iter(), 0)
+        }
+        DataType::Time32(_) => times(column.as_primitive::<Time32MillisecondType>().iter(), 3),
+        DataType::Time64(TimeUnit::Nanosecond) => {
+            times(column.as_primitive::<Time64NanosecondType>().iter(), 9)
+        }
+        DataType::Time64(_) => times(column.as_primitive::<Time64MicrosecondType>().iter(), 6),
         DataType::Int8 => int64(column.as_primitive::<Int8Type>().iter()),
         DataType::Int16 => int64(column.as_primitive::<Int16Type>().iter()),
         DataType::Int32 => int64(column.as_primitive::<Int32Type>().iter()),
@@ -1302,6 +1322,25 @@ fn converted(column: &ArrayRef) -> ArrayRef {
                 .with_timezone_opt(None::<String>),
         ),
         _ => Arc::clone(column),
+    }
+}
+
+/// A time of day counted in units of `digits` decimal places of a second, as
+/// its ISO text: `HH:MM:SS`, then the fraction of a second, to those places,
+/// only where there is one.
+fn time_text(count: i64, digits: u32) -> String {
+    let per_second = 10_i64.pow(digits);
+    let (seconds, fraction) = (count.div_euclid(per_second), count.rem_euclid(per_second));
+    let text = format!(
+        "{:02}:{:02}:{:02}",
+        seconds / 3600,
+        seconds / 60 % 60,
+        seconds % 60
+    );
+    if fraction == 0 {
+        text
+    } else {
+        format!("{text}.{fraction:0width$}", width = digits as usize)
     }
 }
 
@@ -1427,5 +1466,78 @@ mod tests {
             bound_keys(Arc::new(fraction)).unwrap(),
             ["0.1", "-0.25", "null"]
         );
+    }
+
+    #[test]
+    fn a_declared_time_of_day_is_text_and_a_timestamp_a_date() {
+        for declared in ["TIME", "TIME(9)", "time(0)"] {
+            assert_eq!(declared_dtype(declared), Some(Dtype::String), "{declared}");
+        }
+        for declared in ["DATE", "TIMESTAMP_NTZ(9)", "TIMESTAMP_TZ(3)"] {
+            assert_eq!(declared_dtype(declared), Some(Dtype::Date), "{declared}");
+        }
+    }
+
+    #[test]
+    fn times_of_day_are_read_as_iso_text_exact_to_their_unit() {
+        use arrow_array::{
+            Time32MillisecondArray, Time32SecondArray, Time64MicrosecondArray,
+            Time64NanosecondArray,
+        };
+
+        let columns: Vec<(&str, ArrayRef)> = vec![
+            (
+                "s",
+                Arc::new(Time32SecondArray::from(vec![Some(0), Some(86_399), None])),
+            ),
+            (
+                "ms",
+                Arc::new(Time32MillisecondArray::from(vec![
+                    Some(45_296_000),
+                    Some(45_296_007),
+                    None,
+                ])),
+            ),
+            (
+                "us",
+                Arc::new(Time64MicrosecondArray::from(vec![
+                    Some(45_296_000_000),
+                    Some(45_296_000_050),
+                    None,
+                ])),
+            ),
+            (
+                "ns",
+                Arc::new(Time64NanosecondArray::from(vec![
+                    Some(45_296_000_000_000),
+                    Some(45_296_123_456_789),
+                    None,
+                ])),
+            ),
+        ];
+        let schema: SchemaRef = Arc::new(Schema::new(
+            columns
+                .iter()
+                .map(|(name, column)| Field::new(*name, column.data_type().clone(), true))
+                .collect::<Vec<_>>(),
+        ));
+        let batch = RecordBatch::try_new(
+            Arc::clone(&schema),
+            columns.into_iter().map(|(_, column)| column).collect(),
+        )
+        .unwrap();
+        let (read, batches) = conform(&schema, &[batch])
+            .unwrap()
+            .expect("a time of day is read as text");
+        let expected = [
+            [Some("00:00:00"), Some("23:59:59"), None],
+            [Some("12:34:56"), Some("12:34:56.007"), None],
+            [Some("12:34:56"), Some("12:34:56.000050"), None],
+            [Some("12:34:56"), Some("12:34:56.123456789"), None],
+        ];
+        for (at, expected) in expected.iter().enumerate() {
+            assert_eq!(read.field(at).data_type(), &DataType::Utf8);
+            assert_eq!(batches[0].column(at), &strings(expected), "column {at}");
+        }
     }
 }

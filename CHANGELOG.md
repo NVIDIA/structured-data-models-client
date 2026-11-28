@@ -7,6 +7,12 @@ these packages. The three Python distributions share one version.
 
 ## Unreleased
 
+### Fixed
+
+- A Snowflake `TIME` column is now read as ISO text (`HH:MM:SS`, with the
+  fraction of a second where there is one) instead of as a timestamp, which
+  dropped every value of the column (#88).
+
 ## 2.0.0 - 2026-11-25
 
 2.0 moves the client's core logic into one shared Rust engine and adds Java support.
